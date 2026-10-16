@@ -32,10 +32,10 @@ import {
 } from './log_store_codec.js';
 
 /**
- * How many per-tag range scans a single tag query runs concurrently. Each scan reads through its own native cursor,
- * so overlapping them hides the per-scan round trip. On a 100-tag query, going from 1 to 2 cuts latency by about a
- * third and anything above 2 is flat. The bound stays well under the store's cursor budget (`maxReaders - 1`) so other
- * components can still read while a query is in flight.
+ * How many per-tag range scans a single tag query runs concurrently. The scans all read through the query's read-only
+ * snapshot, which takes one reader slot however many run at once, and the native store serves one snapshot's reads one
+ * at a time; overlapping them hides the per-scan round trip between JS and the native store. On a 100-tag query, going
+ * from 1 to 2 cuts latency by about a third and anything above 2 is flat.
  */
 const TAG_SCAN_CONCURRENCY = 4;
 
@@ -55,9 +55,8 @@ const TAG_SCAN_CONCURRENCY = 4;
  * Contract-class logs are no longer stored or served by the log store.
  *
  * Every read path runs inside `db.readOnlyTransaction`, so the `referenceBlock` reorg check and all the per-tag scans of
- * one query observe the same committed state and cannot return a torn result. On lmdb-v2 that call is still backed by
- * the store's single serial writer queue, so a query waits for queued writes (notably block ingestion) to commit
- * first; once it is backed by a native read-only snapshot, queries stop queueing behind writes with no change here.
+ * one query observe the same committed state and cannot return a torn result. On lmdb-v2 that call opens a native
+ * read-only snapshot, so a query neither waits for queued writes (notably block ingestion) nor holds them up.
  * The per-tag scans within one query run concurrently, up to {@link TAG_SCAN_CONCURRENCY} at a time.
  */
 export class LogStore {

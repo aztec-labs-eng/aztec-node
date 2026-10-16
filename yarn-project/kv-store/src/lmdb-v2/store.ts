@@ -1,5 +1,6 @@
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Semaphore, SerialQueue } from '@aztec-labs/foundation/queue';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { MsgpackChannel, NativeLMDBStore } from '@aztec-labs/native';
 import { AsyncLocalStorage } from 'async_hooks';
 import { mkdir, rm } from 'fs/promises';
@@ -29,12 +30,24 @@ import { WriteTransaction } from './write_transaction.js';
 
 export { execInReadTx, execInWriteTx } from './tx-helpers.js';
 
+/** Attempts at opening a native read transaction while the store has no reader slot to spare. */
+const START_READ_TX_ATTEMPTS = 8;
+/** Longest wait between two of those attempts. */
+const START_READ_TX_MAX_BACKOFF_MS = 64;
+
 export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
   private open = false;
   private channel: MsgpackChannel<LMDBMessageType, LMDBRequestBody, LMDBResponseBody>;
   private writerCtx = new AsyncLocalStorage<WriteTransaction>();
+  private readerCtx = new AsyncLocalStorage<ReadTransaction>();
   private writerQueue = new SerialQueue();
-  private availableCursors: Semaphore;
+  /**
+   * Reader slots handed out to read transactions and to cursors opened outside one. One slot is kept back for point
+   * reads, and the native store refuses a read transaction that would take it.
+   */
+  private availableReaders: Semaphore;
+  /** Open cursors that each hold a slot from {@link availableReaders}; cursors inside a read transaction hold none. */
+  private readerCursors = new Set<number>();
 
   private constructor(
     private dataDir: string,
@@ -44,15 +57,14 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
     private cleanup?: () => Promise<void>,
     ephemeral: boolean = false,
   ) {
-    // One reader is always kept back for point reads and the rest are handed out to cursors, so fewer than two would
-    // leave no cursor slot and every iteration would wait forever.
+    // One reader is always kept back for point reads and the rest are handed out to cursors and read transactions, so
+    // fewer than two would leave no slot for them and every iteration would wait forever.
     if (!Number.isInteger(maxReaders) || maxReaders < 2) {
       throw new Error(`maxReaders must be an integer of at least 2, got ${maxReaders}`);
     }
     this.log.info(`Starting data store with maxReaders ${maxReaders}`);
     this.channel = new MsgpackChannel(new NativeLMDBStore(dataDir, mapSize, maxReaders, ephemeral));
-    // leave one reader to always be available for regular, atomic, reads
-    this.availableCursors = new Semaphore(maxReaders - 1);
+    this.availableReaders = new Semaphore(maxReaders - 1);
   }
 
   public get dataDirectory(): string {
@@ -109,6 +121,14 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
     return currentWrite;
   }
 
+  /**
+   * Returns the transaction that reads issued from the current async context must use: the enclosing write transaction,
+   * or else the enclosing {@link readOnlyTransaction}. Callers must not close it.
+   */
+  public getCurrentTx(): ReadTransaction | undefined {
+    return this.getCurrentWriteTx() ?? this.readerCtx.getStore();
+  }
+
   openMap<K extends Key, V extends Value>(name: string): AztecAsyncMap<K, V> {
     return new LMDBMap(this, name);
   }
@@ -148,6 +168,10 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       return await callback(currentTx);
     }
 
+    if (this.readerCtx.getStore()) {
+      throw new Error('Cannot start a write transaction inside a read-only transaction');
+    }
+
     return this.writerQueue.put(async () => {
       const tx = new WriteTransaction(this);
       try {
@@ -164,15 +188,70 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
   }
 
   /**
-   * Runs the callback against a consistent view of the store: every read inside it, whether through the supplied
-   * transaction or through a container such as a map, observes the same committed state. The callback must only read.
+   * Runs the callback against a snapshot of the store: every read inside it, whether through the supplied transaction
+   * or through a container such as a map, observes the state committed when the snapshot was opened. The snapshot is a
+   * native read transaction, so the callback neither waits for queued writes nor holds up writes issued while it runs.
+   * Starting a write transaction inside the callback throws.
    *
-   * This currently delegates to {@link transactionAsync}, so the callback still goes through the single writer queue:
-   * it waits for queued writes to commit, and writes issued while it runs wait for it to finish. Nested calls behave
-   * like nested {@link transactionAsync} calls and reuse the enclosing transaction, including its uncommitted writes.
+   * The snapshot holds one reader slot until the callback settles, and reads inside it, including cursors, take no
+   * further slot. A nested call reuses the enclosing snapshot, and a call inside a write transaction reuses that
+   * transaction, uncommitted writes included.
    */
-  readOnlyTransaction<T extends Exclude<any, Promise<any>>>(callback: (tx: ReadTransaction) => Promise<T>): Promise<T> {
-    return this.transactionAsync(callback);
+  async readOnlyTransaction<T extends Exclude<any, Promise<any>>>(
+    callback: (tx: ReadTransaction) => Promise<T>,
+  ): Promise<T> {
+    if (!this.open) {
+      throw new Error('Store is closed');
+    }
+
+    const currentTx = this.getCurrentTx();
+    if (currentTx) {
+      return await callback(currentTx);
+    }
+
+    await this.availableReaders.acquire();
+    try {
+      const { txId } = await this.startReadTx();
+      const tx = new ReadTransaction(this, txId);
+      try {
+        return await this.readerCtx.run(tx, callback, tx);
+      } finally {
+        tx.close();
+        await this.closeReadTx(txId);
+      }
+    } finally {
+      this.availableReaders.release();
+    }
+  }
+
+  /**
+   * Opens a native read transaction. The native store refuses one, rather than waiting, when it would take the reader
+   * slot kept for point reads; holding an {@link availableReaders} slot rules that out except while point reads are in
+   * flight, so a refusal is retried with a short backoff.
+   */
+  private async startReadTx() {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.sendMessage(LMDBMessageType.START_READ_TX, undefined);
+      } catch (err) {
+        if (attempt >= START_READ_TX_ATTEMPTS || !String(err).includes('No reader slot available')) {
+          throw err;
+        }
+        await sleep(Math.min(2 ** attempt, START_READ_TX_MAX_BACKOFF_MS));
+      }
+    }
+  }
+
+  private async closeReadTx(txId: number) {
+    // Closing the store releases every native read transaction, so there is nothing left to close.
+    if (!this.open) {
+      return;
+    }
+    try {
+      await this.sendMessage(LMDBMessageType.CLOSE_READ_TX, { txId });
+    } catch (err) {
+      this.log.warn(`Failed to close read transaction ${txId}`, err);
+    }
   }
 
   clear(): Promise<void> {
@@ -204,8 +283,13 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       throw new Error('Store is closed');
     }
 
-    if (msgType === LMDBMessageType.START_CURSOR) {
-      await this.availableCursors.acquire();
+    // A cursor opened inside a read transaction reads through that transaction's reader slot; any other cursor opens a
+    // native read transaction of its own for as long as it stays open.
+    const takesReader =
+      msgType === LMDBMessageType.START_CURSOR &&
+      (body as LMDBRequestBody[LMDBMessageType.START_CURSOR]).txId === undefined;
+    if (takesReader) {
+      await this.availableReaders.acquire();
     }
 
     let response: LMDBResponseBody[T] | undefined = undefined;
@@ -213,14 +297,19 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       ({ response } = await this.channel.sendMessage(msgType, body));
       return response;
     } finally {
-      if (
-        (msgType === LMDBMessageType.START_CURSOR && response === undefined) ||
-        msgType === LMDBMessageType.CLOSE_CURSOR ||
+      if (takesReader) {
         // it's possible for a START_CURSOR command to not return a cursor (e.g. db is empty)
-        (msgType === LMDBMessageType.START_CURSOR &&
-          typeof (response as LMDBResponseBody[LMDBMessageType.START_CURSOR]).cursor !== 'number')
+        const cursor = (response as LMDBResponseBody[LMDBMessageType.START_CURSOR] | undefined)?.cursor;
+        if (typeof cursor === 'number') {
+          this.readerCursors.add(cursor);
+        } else {
+          this.availableReaders.release();
+        }
+      } else if (
+        msgType === LMDBMessageType.CLOSE_CURSOR &&
+        this.readerCursors.delete((body as LMDBRequestBody[LMDBMessageType.CLOSE_CURSOR]).cursor)
       ) {
-        this.availableCursors.release();
+        this.availableReaders.release();
       }
     }
   }
