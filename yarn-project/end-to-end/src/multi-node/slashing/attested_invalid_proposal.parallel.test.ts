@@ -115,6 +115,9 @@ async function advanceToEpochBeforePipelinedTargetSlot({
   const { epochDuration } = await cheatCodes.getConfig();
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // The next epoch's seed is only fixed once the current epoch's randao is checkpointed, so set the current epoch
+    // up before reading the next epoch's proposers.
+    await cheatCodes.setupEpoch();
     const currentEpoch = await cheatCodes.getEpoch();
     const nextEpoch = Number(currentEpoch) + 1;
     const firstSlotOfNextEpoch = nextEpoch * Number(epochDuration);
