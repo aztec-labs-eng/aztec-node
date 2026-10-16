@@ -50,14 +50,6 @@ describeWithAnvil('L1FeeAnalyzer', () => {
     await cheatCodes.setNextBlockBaseFeePerGas(initialBaseFee);
     await cheatCodes.evmMine();
 
-    // Anvil mines on the phase of the second at which interval mining was armed and stamps blocks with whole seconds.
-    // Armed late in a second, the block after a snapshot carries a timestamp earlier than the snapshot, and
-    // timeBeforeBlockMs goes negative. Re-arming at the top of a second keeps block timestamps within a few ms of
-    // their mining time.
-    await cheatCodes.setIntervalMining(0, { silent: true });
-    await retryUntil(() => Date.now() % 1000 < 50, 'top of a second', 2, 0.005);
-    await cheatCodes.setIntervalMining(1, { silent: true });
-
     analyzer = new L1FeeAnalyzer(l1Client, new DateProvider(), logger);
   });
 
@@ -246,7 +238,9 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       expect(completedAnalysis?.minedBlock?.blockNumber).toBeGreaterThan(
         completedAnalysis?.pendingSnapshot.latestBlockNumber || 0n,
       );
-      expect(completedAnalysis?.analysis?.timeBeforeBlockMs).toBeGreaterThan(0);
+      // Block timestamps are whole seconds, so a block mined in the same second as the snapshot reads up to 1s early.
+      // Anvil's mining phase also drifts later every block, so this cannot be avoided by aligning the miner.
+      expect(completedAnalysis?.analysis?.timeBeforeBlockMs).toBeGreaterThan(-1000);
       // Check that we have strategy results instead
       expect(completedAnalysis?.computedPrices.strategyResults).toBeDefined();
       expect(completedAnalysis?.computedPrices.strategyResults!.length).toBeGreaterThan(0);
@@ -337,7 +331,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
 
       const stats = analyzer.getAnalysisStats();
       expect(stats.totalAnalyses).toBe(3);
-      expect(stats.avgTimeBeforeBlockMs).toBeGreaterThan(0);
+      expect(stats.avgTimeBeforeBlockMs).toBeGreaterThan(-1000);
       expect(stats.avgBlobsInBlock).toBeGreaterThanOrEqual(0);
       expect(stats.blocksBlobsFull).toBeGreaterThanOrEqual(0);
     }, 15000);
