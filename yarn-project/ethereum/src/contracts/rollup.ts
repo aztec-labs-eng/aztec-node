@@ -1862,6 +1862,8 @@ export class RollupContract {
         l1BlockNumber: log.blockNumber!,
         l1BlockHash: Buffer32.fromString(log.blockHash!),
         l1TransactionHash: log.transactionHash!,
+        l1TransactionIndex: log.transactionIndex!,
+        l1LogIndex: log.logIndex!,
         args: {
           checkpointNumber: CheckpointNumber.fromBigInt(log.args.checkpointNumber!),
           archive: Fr.fromString(log.args.archive!),
