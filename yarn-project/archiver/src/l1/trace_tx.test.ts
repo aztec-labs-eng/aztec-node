@@ -1,4 +1,4 @@
-import type { TraceTransactionResponse, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import type { TraceCallResponse, TraceTransactionResponse, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
 import type { Hex } from 'viem';
@@ -330,7 +330,7 @@ describe('getSuccessfulCallsFromTrace', () => {
     const selector = '0x12345678';
     const proposeInput: Hex = `${selector}00000000000000000000000000000000000000000000000000000000000000aa`;
 
-    const wrapperCall = (subtraces: number, error?: string): TraceTransactionResponse => ({
+    const wrapperCall = (subtraces: number, error?: string): TraceCallResponse => ({
       type: 'call',
       action: { from: sender, to: wrapper, callType: 'call', input: '0xabcd0000', gas: '0x100000', value: '0x0' },
       result: { gasUsed: '0x50000', output: '0x' },
@@ -339,7 +339,7 @@ describe('getSuccessfulCallsFromTrace', () => {
       traceAddress: [],
     });
 
-    const rollupCall = (traceAddress: number[]): TraceTransactionResponse => ({
+    const rollupCall = (traceAddress: number[]): TraceCallResponse => ({
       type: 'call',
       action: { from: wrapper, to: rollup, callType: 'call', input: proposeInput, gas: '0x5000', value: '0x0' },
       result: { gasUsed: '0x1000', output: '0x' },
@@ -391,31 +391,33 @@ describe('getSuccessfulCallsFromTrace', () => {
     });
 
     it('returns the rollup call when a sibling call halted with a null result', async () => {
-      const results = await getRollupCalls([
-        wrapperCall(2),
-        {
-          type: 'call',
-          action: {
-            from: wrapper,
-            to: '0x5000000000000000000000000000000000000005',
-            callType: 'call',
-            input: '0x',
-            gas: '0x10',
-            value: '0x0',
-          },
-          result: null,
-          error: 'Out of gas',
-          subtraces: 0,
-          traceAddress: [0],
+      const haltedCall: TraceCallResponse = {
+        type: 'call',
+        action: {
+          from: wrapper,
+          to: '0x5000000000000000000000000000000000000005',
+          callType: 'call',
+          input: '0x',
+          gas: '0x10',
+          value: '0x0',
         },
-        rollupCall([1]),
-      ]);
+        result: null,
+        error: 'Out of gas',
+        subtraces: 0,
+        traceAddress: [0],
+      };
+      const results = await getRollupCalls([wrapperCall(2), haltedCall, rollupCall([1])]);
       expect(results).toEqual([expectedRollupCall]);
     });
 
-    it('skips a rollup call nested under a reverted create entry', async () => {
-      const results = await getRollupCalls([wrapperCall(1), createEntry([0], 1, 'Reverted'), rollupCall([0, 0])]);
-      expect(results).toEqual([]);
+    it('skips a rollup call nested under a reverted create entry but keeps its successful sibling', async () => {
+      const results = await getRollupCalls([
+        wrapperCall(2),
+        createEntry([0], 1, 'Reverted'),
+        rollupCall([0, 0]),
+        rollupCall([1]),
+      ]);
+      expect(results).toEqual([expectedRollupCall]);
     });
 
     it('skips a rollup call when the root entry errored', async () => {
