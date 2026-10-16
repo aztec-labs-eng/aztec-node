@@ -18,7 +18,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { first } from '@aztec-labs/foundation/iterable';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { type Logger, createLogger, getLogLevel, setLogLevel } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { count } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -878,12 +878,14 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public getConfig(): Promise<AztecNodeAdminConfig> {
-    const schema = AztecNodeAdminConfigSchema;
-    const keys = schema.keyof().options;
-    return Promise.resolve(pick(this.config, ...keys));
+    const keys = AztecNodeAdminConfigSchema.omit({ logLevel: true }).keyof().options;
+    return Promise.resolve({ ...pick(this.config, ...keys), logLevel: getLogLevel() });
   }
 
   public async setConfig(config: Partial<AztecNodeAdminConfig>): Promise<void> {
+    if (config.logLevel !== undefined) {
+      setLogLevel(config.logLevel);
+    }
     const newConfig = { ...this.config, ...config };
     // If the sequencer is currently paused via pauseSequencer(), record the caller's desired
     // minTxsPerBlock as the restore value (so resumeSequencer applies it) and keep the freeze
