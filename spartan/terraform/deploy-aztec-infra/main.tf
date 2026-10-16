@@ -304,7 +304,7 @@ locals {
     "validator.node.env.SEQ_BUILD_CHECKPOINT_IF_EMPTY"                            = var.SEQ_BUILD_CHECKPOINT_IF_EMPTY
     "validator.node.env.AZTEC_EPOCHS_LAG"                                         = var.AZTEC_EPOCHS_LAG
     "validator.node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG"                       = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
-    "validator.node.env.L1_GAS_LIMIT_BUFFER_PERCENTAGE"                         = var.VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE
+    "validator.node.env.L1_GAS_LIMIT_BUFFER_PERCENTAGE"                           = var.VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_BUMP_PERCENTAGE"                          = var.VALIDATOR_L1_PRIORITY_FEE_BUMP_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE"                    = var.VALIDATOR_L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE
     "validator.node.env.BLOB_ALLOW_EMPTY_SOURCES"                                 = var.BLOB_ALLOW_EMPTY_SOURCES
@@ -319,7 +319,7 @@ locals {
     "validator.node.env.P2P_GOSSIPSUB_DLO"                                        = var.P2P_GOSSIPSUB_DLO
     "validator.node.env.P2P_GOSSIPSUB_DHI"                                        = var.P2P_GOSSIPSUB_DHI
     "validator.node.env.P2P_DROP_TX_CHANCE"                                       = var.P2P_DROP_TX_CHANCE
-    "validator.node.env.WS_NUM_HISTORIC_CHECKPOINTS"                              = var.WS_NUM_HISTORIC_CHECKPOINTS
+    "validator.node.env.WS_HISTORY_RETENTION"                                     = var.WS_HISTORY_RETENTION
     "validator.node.env.TX_COLLECTION_FILE_STORE_URLS"                            = var.TX_COLLECTION_FILE_STORE_URLS
     "validator.node.env.SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT"                      = var.SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT
     "validator.node.env.L1_TX_FAILED_STORE"                                       = var.L1_TX_FAILED_STORE
@@ -514,7 +514,7 @@ locals {
           "node.node.env.P2P_DROP_TX_CHANCE"                    = var.P2P_DROP_TX_CHANCE
           "node.node.env.P2P_MAX_PENDING_TX_COUNT"              = var.P2P_MAX_PENDING_TX_COUNT
           "node.node.env.P2P_MIN_TX_POOL_AGE_MS"                = var.P2P_MIN_TX_POOL_AGE_MS
-          "node.node.env.WS_NUM_HISTORIC_CHECKPOINTS"           = var.WS_NUM_HISTORIC_CHECKPOINTS
+          "node.node.env.WS_HISTORY_RETENTION"                  = var.WS_HISTORY_RETENTION
           "node.node.env.TX_COLLECTION_FILE_STORE_URLS"         = var.TX_COLLECTION_FILE_STORE_URLS
           "node.service.p2p.nodePortEnabled"                    = var.P2P_NODEPORT_ENABLED
           "node.service.p2p.hostPortEnabled"                    = var.P2P_HOSTPORT_ENABLED
@@ -576,7 +576,7 @@ locals {
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.BLOB_FILE_STORE_UPLOAD_URL"         = var.BLOB_FILE_STORE_UPLOAD_URL
         "node.env.TX_FILE_STORE_ENABLED"              = var.TX_FILE_STORE_ENABLED
         "node.env.TX_FILE_STORE_URL"                  = var.TX_FILE_STORE_URL
@@ -611,7 +611,7 @@ locals {
         "service.p2p.port"                            = local.p2p_port_fisherman
         "node.proverRealProofs"                       = var.PROVER_REAL_PROOFS
         "node.env.BLOB_ALLOW_EMPTY_SOURCES"           = var.BLOB_ALLOW_EMPTY_SOURCES
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG" = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
@@ -666,7 +666,7 @@ locals {
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.TX_COLLECTION_FILE_STORE_URLS"      = var.TX_COLLECTION_FILE_STORE_URLS
       }
       boot_node_host_path  = "node.env.BOOT_NODE_HOST"
