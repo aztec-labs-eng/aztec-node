@@ -524,7 +524,7 @@ describe('HA Full Setup', () => {
 
       try {
         // Use our actual cleanupOldDuties method
-        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000); // 1 hour
+        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000);
 
         // Should NOT delete the duty we just created (it uses DB's clock, not node's)
         expect(numCleaned).toBe(0);
@@ -596,7 +596,7 @@ describe('HA Full Setup', () => {
 
       try {
         // Use our actual cleanupOldDuties method - should delete based on DB time
-        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000); // 1 hour
+        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000);
         expect(numCleaned).toBeGreaterThanOrEqual(1);
       } finally {
         // Reset dateProvider back to real time

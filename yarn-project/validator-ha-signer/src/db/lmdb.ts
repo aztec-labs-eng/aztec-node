@@ -264,18 +264,7 @@ export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabas
   }
 
   /**
-   * Cleanup duties with outdated rollup address.
-   *
-   * This is always a no-op for the LMDB implementation: the underlying store is created via
-   * DatabaseVersionManager (in factory.ts), which already resets the entire data directory at
-   * startup whenever the rollup address changes.
-   */
-  public cleanupOutdatedRollupDuties(_currentRollupAddress: EthAddress): Promise<number> {
-    return Promise.resolve(0);
-  }
-
-  /**
-   * Cleanup old signed duties older than maxAgeMs.
+   * Cleanup duties across all rollups whose signing started more than maxAgeMs ago, regardless of status.
    */
   public cleanupOldDuties(maxAgeMs: number): Promise<number> {
     const cutoffMs = this.dateProvider.now() - maxAgeMs;
@@ -283,11 +272,7 @@ export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabas
     return this.store.transactionAsync(async () => {
       const keysToDelete: string[] = [];
       for await (const [key, record] of this.duties.entriesAsync()) {
-        if (
-          record.status === DutyStatus.SIGNED &&
-          record.completedAtMs !== undefined &&
-          record.completedAtMs < cutoffMs
-        ) {
+        if (record.startedAtMs < cutoffMs) {
           keysToDelete.push(key);
         }
       }

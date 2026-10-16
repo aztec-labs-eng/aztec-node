@@ -16,6 +16,9 @@ import {
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
+/** Default retention for signed duties, in hours. */
+export const DEFAULT_SIGNED_DUTIES_RETENTION_HOURS = 24;
+
 /**
  * Base signing protection configuration shared by both HA (Postgres) and local (LMDB) signers.
  */
@@ -40,7 +43,7 @@ export type BaseSignerConfig = {
   signerCallTimeoutMs?: number;
   /** Maximum age of a stuck duty in ms (defaults to 2x hardcoded Aztec slot duration if not set) */
   maxStuckDutiesAgeMs?: number;
-  /** Optional: clean up old duties after this many hours (disabled if not set) */
+  /** Duty retention in hours from signing start, with a minimum of two slots (defaults to 24). */
   cleanupOldDutiesAfterHours?: number;
 } & Pick<L1ContractAddresses, 'rollupAddress'>;
 
@@ -72,8 +75,9 @@ export const baseSignerConfigMappings: ConfigMappingsType<BaseSignerConfig> = {
   },
   cleanupOldDutiesAfterHours: {
     env: 'VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H',
-    description: 'Optional: clean up old duties after this many hours (disabled if not set)',
-    ...optionalNumberConfigHelper(),
+    description: 'Duty retention in hours from signing start (must be positive; minimum two slots)',
+    defaultValue: DEFAULT_SIGNED_DUTIES_RETENTION_HOURS,
+    parseEnv: (value: string) => z.coerce.number().int().positive().parse(value),
   },
   ...pickL1ContractAddressMappings('rollupAddress'),
 };
@@ -84,7 +88,7 @@ export const BaseSignerConfigSchema = z.object({
   peerSigningTimeoutMs: z.number().min(0),
   signerCallTimeoutMs: z.number().min(0).optional(),
   maxStuckDutiesAgeMs: z.number().min(0).optional(),
-  cleanupOldDutiesAfterHours: z.number().min(0).optional(),
+  cleanupOldDutiesAfterHours: z.number().positive().optional(),
   ...pickL1ContractAddressesSchema('rollupAddress'),
 }) satisfies ZodFor<BaseSignerConfig>;
 

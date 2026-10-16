@@ -8,7 +8,11 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
-import type { BaseSignerConfig } from '@aztec-labs/stdlib/ha-signing';
+import {
+  type BaseSignerConfig,
+  BaseSignerConfigSchema,
+  DEFAULT_SIGNED_DUTIES_RETENTION_HOURS,
+} from '@aztec-labs/stdlib/ha-signing';
 
 import {
   type CheckAndRecordParams,
@@ -49,6 +53,7 @@ export class SlashingProtectionService {
   private readonly pollingIntervalMs: number;
   private readonly peerSigningTimeoutMs: number;
   private readonly maxStuckDutiesAgeMs: number;
+  private readonly maxOldDutiesAgeMs: number;
 
   private readonly metrics: HASignerMetrics;
   private readonly dateProvider: DateProvider;
@@ -65,6 +70,10 @@ export class SlashingProtectionService {
     this.pollingIntervalMs = config.pollingIntervalMs;
     this.peerSigningTimeoutMs = config.peerSigningTimeoutMs;
     this.maxStuckDutiesAgeMs = config.maxStuckDutiesAgeMs ?? DEFAULT_MAX_STUCK_DUTIES_AGE_MS;
+    const retentionHours =
+      BaseSignerConfigSchema.shape.cleanupOldDutiesAfterHours.parse(config.cleanupOldDutiesAfterHours) ??
+      DEFAULT_SIGNED_DUTIES_RETENTION_HOURS;
+    this.maxOldDutiesAgeMs = Math.max(retentionHours * 60 * 60 * 1000, DEFAULT_MAX_STUCK_DUTIES_AGE_MS);
 
     this.cleanupRunningPromise = new RunningPromise(this.cleanup.bind(this), this.log, this.maxStuckDutiesAgeMs);
     this.metrics = deps.metrics;
@@ -239,20 +248,12 @@ export class SlashingProtectionService {
    */
   /**
    * Start the background cleanup task.
-   * Also performs one-time cleanup of duties with outdated rollup addresses.
    */
-  async start() {
-    // One-time cleanup at startup: remove duties from previous rollup versions
-    const numOutdatedRollupDuties = await this.db.cleanupOutdatedRollupDuties(this.config.rollupAddress);
-    if (numOutdatedRollupDuties > 0) {
-      this.log.info(`Cleaned up ${numOutdatedRollupDuties} duties with outdated rollup address at startup`, {
-        currentRollupAddress: this.config.rollupAddress.toString(),
-      });
-      this.metrics.recordCleanup('outdated_rollup', numOutdatedRollupDuties);
-    }
-
+  start(): Promise<void> {
+    // Other replicas may still serve a different rollup, whose signing history must survive our startup.
     this.cleanupRunningPromise.start();
     this.log.info('Slashing protection service started', { nodeId: this.config.nodeId });
+    return Promise.resolve();
   }
 
   /**
@@ -273,7 +274,7 @@ export class SlashingProtectionService {
   }
 
   /**
-   * Periodic cleanup of stuck duties and optionally old signed duties.
+   * Periodic cleanup of stuck duties and old duties across all rollups.
    * Runs in the background via RunningPromise.
    */
   private async cleanup() {
@@ -290,23 +291,13 @@ export class SlashingProtectionService {
       this.metrics.recordCleanup('stuck', numStuckDuties);
     }
 
-    // 2. Clean up old signed duties if configured
-    // we shouldn't run this as often as stuck duty cleanup.
-    if (this.config.cleanupOldDutiesAfterHours !== undefined) {
-      const maxAgeMs = this.config.cleanupOldDutiesAfterHours * 60 * 60 * 1000;
-      const nowMs = this.dateProvider.now();
-      const shouldRun =
-        this.lastOldDutiesCleanupAtMs === undefined || nowMs - this.lastOldDutiesCleanupAtMs >= maxAgeMs;
-      if (shouldRun) {
-        const numOldDuties = await this.db.cleanupOldDuties(maxAgeMs);
-        this.lastOldDutiesCleanupAtMs = nowMs;
-        if (numOldDuties > 0) {
-          this.log.verbose(`Cleaned up ${numOldDuties} old signed duties`, {
-            cleanupOldDutiesAfterHours: this.config.cleanupOldDutiesAfterHours,
-            maxAgeMs,
-          });
-          this.metrics.recordCleanup('old', numOldDuties);
-        }
+    const nowMs = this.dateProvider.now();
+    if (this.lastOldDutiesCleanupAtMs === undefined || nowMs - this.lastOldDutiesCleanupAtMs >= 60 * 60 * 1000) {
+      const numOldDuties = await this.db.cleanupOldDuties(this.maxOldDutiesAgeMs);
+      this.lastOldDutiesCleanupAtMs = nowMs;
+      if (numOldDuties > 0) {
+        this.log.verbose(`Cleaned up ${numOldDuties} old duties`, { maxAgeMs: this.maxOldDutiesAgeMs });
+        this.metrics.recordCleanup('old', numOldDuties);
       }
     }
   }
