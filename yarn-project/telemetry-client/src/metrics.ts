@@ -415,6 +415,15 @@ export const ARCHIVER_BLOCK_PROPOSAL_TX_TARGET_COUNT: MetricDefinition = {
   valueType: ValueType.INT,
 };
 
+export const ARCHIVER_CHECKPOINT_CALLDATA_UNAVAILABLE_COUNT: MetricDefinition = {
+  name: 'aztec.archiver.checkpoint_calldata_unavailable_count',
+  description:
+    'Number of attempts to read a checkpoint whose L1 propose calldata could not be extracted because neither ' +
+    'trace_transaction nor debug_traceTransaction succeeded. L1 sync retries the checkpoint, so this keeps rising ' +
+    'while the archiver is stuck on it.',
+  valueType: ValueType.INT,
+};
+
 export const ARCHIVER_CHECKPOINT_L1_INCLUSION_DELAY: MetricDefinition = {
   name: 'aztec.archiver.checkpoint_l1_inclusion_delay',
   description: 'Seconds into the L2 slot when the checkpoint L1 tx was included',

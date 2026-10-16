@@ -17,6 +17,7 @@ import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { Buffer } from 'buffer';
 import { type Hex, type Transaction, decodeFunctionData, hexToBytes, multicall3Abi, toFunctionSelector } from 'viem';
 
+import { CheckpointCalldataUnavailableError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
 import { getSuccessfulCallsFromDebug } from './debug_tx.js';
 import { getCallsFromSpireProposer } from './spire_proposer.js';
@@ -127,7 +128,7 @@ export class CalldataRetriever {
       `Failed to decode multicall3, direct propose, or Spire proposer for L1 tx ${tx.hash}, falling back to trace for checkpoint ${checkpointNumber}`,
     );
     this.instrumentation?.recordBlockProposalTxTarget(tx.to ?? EthAddress.ZERO.toString(), true);
-    const tracedCalldata = await this.extractCalldataViaTrace(tx.hash);
+    const tracedCalldata = await this.extractCalldataViaTrace(tx.hash, checkpointNumber);
     const tracedResult = this.tryDecodeAndVerifyPropose(
       tracedCalldata,
       expectedHashes,
@@ -331,9 +332,11 @@ export class CalldataRetriever {
    * This is the definitive fallback that works for any transaction pattern.
    * Tries trace_transaction first, then falls back to debug_traceTransaction.
    * @param txHash - The transaction hash to trace
+   * @param checkpointNumber - The checkpoint the tx is expected to propose, for error reporting
    * @returns The propose calldata from the successful call
+   * @throws CheckpointCalldataUnavailableError if neither trace_transaction nor debug_traceTransaction succeeds
    */
-  protected async extractCalldataViaTrace(txHash: Hex): Promise<Hex> {
+  protected async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
     const rollupAddress = this.rollupAddress;
     const selector = PROPOSE_SELECTOR;
 
@@ -369,7 +372,8 @@ export class CalldataRetriever {
           debugError,
           txHash,
         });
-        throw new Error(`Failed to trace transaction ${txHash} to extract propose calldata`);
+        this.instrumentation?.recordCheckpointCalldataUnavailable();
+        throw new CheckpointCalldataUnavailableError(txHash, checkpointNumber);
       }
     }
 
