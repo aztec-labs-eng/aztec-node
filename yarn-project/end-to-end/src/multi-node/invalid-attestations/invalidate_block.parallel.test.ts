@@ -4,7 +4,7 @@ import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
-import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient, ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
@@ -427,7 +427,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         candidate++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('EpochNotStable')) {
+        if (!(err instanceof CommitteeNotStableError) && !msg.includes('EpochNotStable')) {
           throw err;
         }
         const block = await test.l1Client.getBlock({ includeTransactions: false });
