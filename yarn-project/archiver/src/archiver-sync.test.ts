@@ -1175,6 +1175,66 @@ describe('Archiver Sync', () => {
       expect(statusAfter.checkpoint.checkpointNumber).toEqual(2);
       expect(statusAfter.checkpoint.archive).toEqual(replacementCp2.archive.root);
     }, 15_000);
+
+    describe('a checkpoint invalidated and re-posted with valid attestations', () => {
+      let signers: Secp256k1Signer[];
+      let cp2: Checkpoint;
+
+      beforeEach(async () => {
+        fake.setTargetCommitteeSize(3);
+        signers = times(3, Secp256k1Signer.random);
+        const committee = signers.map(signer => signer.address);
+        epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+
+        await fake.addCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 70n,
+          messagesL1BlockNumber: 50n,
+          numL1ToL2Messages: 3,
+          signers,
+        });
+
+        // Checkpoint 2 lands first with one attestation from outside the committee.
+        const badSigners = [signers[0], ...times(2, Secp256k1Signer.random)];
+        ({ checkpoint: cp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 80n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+        }));
+      });
+
+      /** Invalidates checkpoint 2, re-posts it with the committee's attestations, and builds two more on top. */
+      async function repostAndExtend() {
+        await fake.repostCheckpoint(CheckpointNumber(2), { l1BlockNumber: 81n, signers });
+        await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 90n, numL1ToL2Messages: 0, signers });
+        await fake.addCheckpoint(CheckpointNumber(4), { l1BlockNumber: 95n, numL1ToL2Messages: 0, signers });
+      }
+
+      async function expectSyncedToCheckpoint4() {
+        fake.setL1BlockNumber(100n);
+        await archiver.syncImmediate();
+
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(4));
+        const [storedCp2] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
+        expect(storedCp2.checkpoint.archive.root).toEqual(cp2.archive.root);
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toBeUndefined();
+      }
+
+      it('syncs past the re-posted checkpoint when reading the whole sequence in one pass', async () => {
+        await repostAndExtend();
+        await expectSyncedToCheckpoint4();
+      }, 15_000);
+
+      it('syncs past the re-posted checkpoint when the invalid post was read in an earlier pass', async () => {
+        fake.setL1BlockNumber(80n);
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toBeDefined();
+
+        await repostAndExtend();
+        await expectSyncedToCheckpoint4();
+      }, 15_000);
+    });
   });
 
   describe('escape hatch checkpoints', () => {
