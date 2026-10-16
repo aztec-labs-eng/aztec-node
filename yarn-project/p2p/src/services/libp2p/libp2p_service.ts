@@ -1,5 +1,4 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
+import { type EpochCacheInterface, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
 import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
 import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
@@ -823,21 +822,13 @@ export class LibP2PService extends WithTracer implements P2PService {
    * proposer. While the slot's committee is not stable on L1 there is no expected proposer yet either.
    */
   private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
-    let expectedProposer: EthAddress | undefined;
-    try {
-      expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
-    } catch (err) {
-      if (err instanceof CommitteeNotStableError) {
-        this.logger.debug(`Not attributing duplicate proposal at slot ${slot}: committee not stable on L1 yet`, {
-          slot,
-          epoch: err.epoch,
-        });
-        return false;
-      }
-      throw err;
-    }
+    const expectedProposer = await this.epochCache
+      .getProposerAttesterAddressInSlot(slot)
+      .catch(unlessCommitteeNotStable(undefined));
     if (expectedProposer === undefined) {
-      this.logger.warn(`Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty committee)`);
+      this.logger.warn(
+        `Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty or not yet stable committee)`,
+      );
       return false;
     }
     return true;

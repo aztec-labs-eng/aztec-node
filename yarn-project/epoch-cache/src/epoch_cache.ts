@@ -47,6 +47,16 @@ export type EpochCommitteeInfo = {
 
 export type SlotTag = 'now' | 'next' | SlotNumber;
 
+/** `.catch` handler: yields `fallback` when the committee is not stable yet, rethrows anything else. */
+export const unlessCommitteeNotStable =
+  <T>(fallback: T) =>
+  (err: unknown): T => {
+    if (err instanceof CommitteeNotStableError) {
+      return fallback;
+    }
+    throw err;
+  };
+
 /** Minimal L1 block info used for cache provenance. */
 type L1BlockInfo = { number: bigint; hash: `0x${string}`; timestamp: bigint };
 

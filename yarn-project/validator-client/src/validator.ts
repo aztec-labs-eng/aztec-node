@@ -1,5 +1,5 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
-import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { type EpochCache, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
 import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -385,18 +385,11 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
     const myAddresses = this.getValidatorAddresses();
     this.log.info(`Started validator with addresses: ${myAddresses.map(a => a.toString()).join(', ')}`);
-    try {
-      const inCommittee = await this.epochCache.filterInCommittee('now', myAddresses);
-      if (inCommittee.length > 0) {
-        this.log.info(`Addresses in current validator committee: ${inCommittee.map(a => a.toString()).join(', ')}`);
-      }
-    } catch (err) {
-      if (!(err instanceof CommitteeNotStableError)) {
-        throw err;
-      }
-      this.log.verbose(`Current committee is not stable on L1 yet, so committee membership is not logged at start`, {
-        epoch: err.epoch,
-      });
+    const inCommittee = await this.epochCache
+      .filterInCommittee('now', myAddresses)
+      .catch(unlessCommitteeNotStable<EthAddress[]>([]));
+    if (inCommittee.length > 0) {
+      this.log.info(`Addresses in current validator committee: ${inCommittee.map(a => a.toString()).join(', ')}`);
     }
     this.epochCacheUpdateLoop.start();
 
