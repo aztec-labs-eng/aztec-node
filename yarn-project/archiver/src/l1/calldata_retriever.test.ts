@@ -253,6 +253,66 @@ describe('CalldataRetriever', () => {
       expect(instrumentation.recordBlockProposalTxTarget).toHaveBeenCalledWith(wrongAddress.toString(), true);
     });
 
+    it('should retrieve the checkpoint via trace_transaction alone when the trace contains a create entry', async () => {
+      const proposeCalldata = makeProposeCalldata();
+      const hashes = mockHashComputation();
+
+      const wrapperAddress = EthAddress.random().toString();
+      const wrapperInput: Hex = '0xabcd0000';
+      const tx = {
+        input: wrapperInput,
+        to: wrapperAddress,
+        blockHash,
+        hash: txHash,
+      } as Transaction;
+
+      publicClient.getTransaction.mockResolvedValue(tx);
+
+      debugClient.request.mockResolvedValueOnce([
+        {
+          type: 'call',
+          action: {
+            from: EthAddress.random().toString(),
+            to: wrapperAddress,
+            callType: 'call',
+            input: wrapperInput,
+            value: '0x0',
+            gas: '0x100000',
+          },
+          result: { output: '0x', gasUsed: '0x50000' },
+          subtraces: 2,
+          traceAddress: [],
+        },
+        {
+          type: 'create',
+          action: { from: wrapperAddress, gas: '0x10000', init: '0x60006000', value: '0x0' },
+          result: { address: EthAddress.random().toString(), code: '0x00', gasUsed: '0x1000' },
+          subtraces: 0,
+          traceAddress: [0],
+        },
+        {
+          type: 'call',
+          action: {
+            from: wrapperAddress,
+            to: rollupAddress.toString(),
+            callType: 'call',
+            input: proposeCalldata,
+            value: '0x0',
+            gas: '0x50000',
+          },
+          result: { output: '0x', gasUsed: '0x5208' },
+          subtraces: 0,
+          traceAddress: [1],
+        },
+      ]);
+      debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
+
+      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes);
+
+      expect(result.checkpointNumber).toBe(checkpointNumber);
+      expect(result.header).toBeInstanceOf(CheckpointHeader);
+    });
+
     it('should throw a calldata unavailable error and count it when tracing fails', async () => {
       const proposeCalldata = makeProposeCalldata();
       const hashes = mockHashComputation();
