@@ -733,6 +733,90 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     );
   });
 
+  // A proposer collects valid attestations but first publishes its checkpoint with a fake one, then invalidates it and
+  // publishes the same checkpoint again with the valid attestations, all within its slot. The chain carries on on top
+  // of the republished checkpoint. A node started afterwards reads that whole range from L1 in one go, so it sees the
+  // rejected post, the republished one and its children together, and must still reach the tip the network is at.
+  it('node syncing from L1 follows a checkpoint invalidated and republished within its slot', async () => {
+    const sequencers = nodes.map(node => node.getSequencer()!);
+    sequencers.forEach(s =>
+      s.updateConfig({
+        secondsBeforeInvalidatingBlockAsNonCommitteeMember: Number.MAX_SAFE_INTEGER,
+        minTxsPerBlock: 0,
+        buildCheckpointIfEmpty: true,
+      }),
+    );
+
+    // Pick a slot whose proposer did not propose the slot before, so warping to the build window of that previous
+    // slot makes the republishing node's first job the intended one.
+    const {
+      slots: [previousSlot, badSlot],
+      proposers: [, proposer],
+    } = await test.findSlotsWithProposers(2, ([previous, bad]) => !previous.equals(bad));
+    const proposerNode = nodes.find(n => n.getSequencer()!.validatorAddresses!.some(a => a.equals(proposer)))!;
+    await proposerNode.setConfig({ republishAfterFakeAttestation: true });
+    logger.warn(`Configured proposer ${proposer} to republish its checkpoint at slot ${badSlot}`);
+
+    const badCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
+    test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
+      if (l2SlotNumber === badSlot) {
+        badCheckpointPromise.resolve(checkpointNumber);
+      }
+    });
+    const invalidationPromise = awaitCheckpointInvalidationEvent();
+    const fromL1Block = await l1Client.getBlockNumber();
+
+    await test.warpToBuildWindowForSlot(previousSlot);
+    await Promise.all(sequencers.map(s => s.start()));
+
+    const badCheckpointNumber = await executeTimeout(
+      () => badCheckpointPromise.promise,
+      test.L2_SLOT_DURATION_IN_S * 8 * 1000,
+      `Waiting for the checkpoint at slot ${badSlot}`,
+    );
+    const { checkpointNumber: invalidatedCheckpointNumber, event: invalidationEvent } = await invalidationPromise;
+    await proposerNode.setConfig({ republishAfterFakeAttestation: false });
+    expect(invalidatedCheckpointNumber).toEqual(badCheckpointNumber);
+
+    // The checkpoint was posted twice with the same archive and different attestations, invalidated in between.
+    const proposals = await retryUntil(
+      async () => {
+        const events = await rollupContract.getCheckpointProposedEvents(fromL1Block, await l1Client.getBlockNumber());
+        const forBad = events.filter(e => e.args.checkpointNumber === badCheckpointNumber);
+        return forBad.length >= 2 ? forBad : undefined;
+      },
+      'two CheckpointProposed events for the republished checkpoint',
+      test.L2_SLOT_DURATION_IN_S * 2,
+      0.5,
+    );
+    expect(proposals).toHaveLength(2);
+    const [first, second] = proposals;
+    expect(second.args.archive).toEqual(first.args.archive);
+    expect(second.args.attestationsHash).not.toEqual(first.args.attestationsHash);
+    expect(invalidationEvent.blockNumber!).toBeGreaterThanOrEqual(first.l1BlockNumber);
+    expect(second.l1BlockNumber).toBeGreaterThanOrEqual(invalidationEvent.blockNumber!);
+
+    // The chain carries on on top of the republished checkpoint, and the nodes that were online follow it.
+    const targetCheckpointNumber = CheckpointNumber(badCheckpointNumber + 2);
+    logger.warn(`Waiting for checkpoint ${targetCheckpointNumber} on L1 and on every live node`);
+    await test.waitUntilCheckpointNumber(targetCheckpointNumber, test.L2_SLOT_DURATION_IN_S * 8);
+    await test.waitForAllNodesToReachCheckpoint(targetCheckpointNumber, { nodes });
+
+    // A fresh node syncs the whole range from L1.
+    logger.warn(`Starting a fresh node to sync from L1`);
+    const lateNode = await test.createNonValidatorNode();
+    const getLateNodeCheckpoint = async () => (await lateNode.getChainTips()).checkpointed.checkpoint.number;
+    await retryUntil(
+      async () => (await getLateNodeCheckpoint()) >= targetCheckpointNumber,
+      'fresh node syncs past the republished checkpoint',
+      test.L2_SLOT_DURATION_IN_S * 4,
+      0.5,
+    ).catch(err => logger.warn(`Fresh node did not sync past the republished checkpoint`, { err }));
+    expect(await getLateNodeCheckpoint()).toBeGreaterThanOrEqual(targetCheckpointNumber);
+
+    logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
+  });
+
   // All sequencers skip attestation collection and invalidation-as-proposer. Waits for the first
   // bad checkpoint to land, then waits for a committee member to trigger invalidation after the
   // configured delay. Asserts the invalidation happened at or after the slot's timestamp plus the

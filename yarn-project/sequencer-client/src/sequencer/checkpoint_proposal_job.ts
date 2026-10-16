@@ -21,6 +21,7 @@ import { type TypedEventEmitter, isErrorClass } from '@aztec-labs/foundation/typ
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import {
+  CommitteeAttestation,
   CommitteeAttestationsAndSigners,
   L2Block,
   type L2BlockSink,
@@ -53,7 +54,7 @@ import type {
   CheckpointProposalOptions,
   CoordinationSignatureContext,
 } from '@aztec-labs/stdlib/p2p';
-import { orderAttestations, trimAttestations } from '@aztec-labs/stdlib/p2p';
+import { getCoordinationSignatureTypedData, orderAttestations, trimAttestations } from '@aztec-labs/stdlib/p2p';
 import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import type { L2BlockBuiltStats } from '@aztec-labs/stdlib/stats';
 import type { ProposerTimetable, SubslotSelection } from '@aztec-labs/stdlib/timetable';
@@ -62,6 +63,7 @@ import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
 import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
 import { CheckpointBuilder, type FullNodeCheckpointsBuilder, type ValidatorClient } from '@aztec-labs/validator-client';
 import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyType } from '@aztec-labs/validator-ha-signer/types';
 
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
@@ -395,6 +397,13 @@ export class CheckpointProposalJob implements Traceable {
           simulationOverridesPlan,
         );
         if (bucketHint !== undefined && (await this.checkpointBlocksAreStillLocal(checkpoint))) {
+          if (this.config.republishAfterFakeAttestation) {
+            await this.publishWithFakeAttestationAndEnqueueInvalidation(
+              checkpoint,
+              signedAttestations.attestations,
+              bucketHint,
+            );
+          }
           await this.enqueueCheckpointForSubmission({ checkpoint, ...signedAttestations, bucketHint });
         }
       }
@@ -682,6 +691,63 @@ export class CheckpointProposalJob implements Traceable {
     await this.publisher.enqueueProposeCheckpoint(checkpoint, attestations, attestationsSignature, bucketHint, {
       txTimeoutAt,
     });
+  }
+
+  /**
+   * Test-only (`republishAfterFakeAttestation`): publishes the checkpoint with one of the collected attestations
+   * replaced by a fake one, waits for the local archiver to flag it, and enqueues its invalidation, so the next send
+   * bundles the invalidation with the checkpoint carrying the collected attestations.
+   */
+  private async publishWithFakeAttestationAndEnqueueInvalidation(
+    checkpoint: Checkpoint,
+    collected: CommitteeAttestationsAndSigners,
+    bucketHint: bigint,
+  ): Promise<void> {
+    const logCtx = { slot: this.targetSlot, checkpointNumber: this.checkpointNumber };
+    const { committee, seed, epoch } = await this.epochCache.getCommittee(this.targetSlot);
+    const fakeAttestations = manipulateAttestations({
+      config: { injectFakeAttestation: true },
+      epochCache: this.epochCache,
+      signatureContext: this.getSignatureContext(),
+      log: this.log,
+      slotNumber: this.targetSlot,
+      epoch,
+      seed,
+      committee: committee ?? [],
+      // Copies, since the manipulation overwrites a signature in place and the collected set is published afterwards.
+      attestations: collected.attestations.map(a => new CommitteeAttestation(a.address, a.signature)),
+    });
+
+    // The slot's slashing-protected signature already covers the collected attestations, and the protection would
+    // refuse a second payload for the slot, so this throwaway set is signed under an unprotected context.
+    const signer = this.proposer ?? this.publisher.getSenderAddress();
+    const fakeAttestationsSignature = await this.validatorClient.signWithAddress(
+      signer,
+      getCoordinationSignatureTypedData(fakeAttestations),
+      { dutyType: DutyType.AUTH_REQUEST },
+    );
+
+    await this.publisher.enqueueProposeCheckpoint(checkpoint, fakeAttestations, fakeAttestationsSignature, bucketHint, {
+      txTimeoutAt: this.getL1PublishDeadline(),
+    });
+    this.log.warn(`Publishing checkpoint ${this.checkpointNumber} with a fake attestation`, logCtx);
+    const response = await this.publisher.sendRequests(this.targetSlot);
+    if (!response?.successfulActions.includes('propose')) {
+      this.log.warn(`Checkpoint ${this.checkpointNumber} with a fake attestation did not land`, logCtx);
+      return;
+    }
+
+    const deadlineMs = this.getL1PublishDeadline().getTime();
+    while (this.dateProvider.now() < deadlineMs) {
+      const status = await this.l2BlockSource.getPendingChainValidationStatus();
+      if (!status.valid && status.checkpoint.checkpointNumber === this.checkpointNumber) {
+        this.log.warn(`Invalidating checkpoint ${this.checkpointNumber} before publishing it again`, logCtx);
+        await this.enqueueInvalidation(status);
+        return;
+      }
+      await this.awaitInterruptibleSleep(ARCHIVER_SYNC_POLLING_MS);
+    }
+    this.log.warn(`Archiver did not flag checkpoint ${this.checkpointNumber} before the publish deadline`, logCtx);
   }
 
   /**
