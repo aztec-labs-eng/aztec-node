@@ -2,7 +2,6 @@ import { Encoder } from 'msgpackr';
 
 import type { Key, Range, Value } from '../interfaces/common.js';
 import type { AztecAsyncMap } from '../interfaces/map.js';
-import { GET_CHUNK_SIZE } from './message.js';
 import type { ReadTransaction } from './read_transaction.js';
 import type { AztecLMDBStoreV2 } from './store.js';
 import { execInReadTx, execInWriteTx } from './tx-helpers.js';
@@ -72,18 +71,15 @@ export class LMDBMap<K extends Key, V extends Value> implements AztecAsyncMap<K,
   }
 
   /**
-   * Reads values in input order. Keys are sent {@link GET_CHUNK_SIZE} per request. Outside a transaction, a call that
-   * needs more than one request runs in the writer queue so that no commit lands between its requests; it does not use
-   * a read-only snapshot, which would need a reader slot that an enclosing scan may be holding.
+   * Reads values in input order. Keys are sent `GET_CHUNK_SIZE` per request. Outside a transaction a call that
+   * needs more than one request is not atomic: a commit can land between two requests. Call it inside
+   * `readOnlyTransaction` to read every key from one committed state.
    */
   getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
-    const read = async (tx: ReadTransaction) => {
+    return execInReadTx(this.store, async tx => {
       const values = await tx.getMany(keys.map(key => serializeKey(this.prefix, key)));
       return values.map(value => (value ? this.encoder.unpack(value) : undefined));
-    };
-    return keys.length > GET_CHUNK_SIZE && !this.store.getCurrentTx()
-      ? this.store.transactionAsync(read)
-      : execInReadTx(this.store, read);
+    });
   }
 
   hasAsync(key: K): Promise<boolean> {

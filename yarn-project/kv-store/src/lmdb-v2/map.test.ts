@@ -1,5 +1,4 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
-import { sleep } from '@aztec-labs/foundation/sleep';
 import { vi } from 'vitest';
 
 import { describeAztecMap } from '../interfaces/map_test_suite.js';
@@ -29,7 +28,7 @@ describe('LMDBMap bulk reads', () => {
     }
   });
 
-  it('reads every chunk of a multi-request call from the same committed state', async () => {
+  it('reads every chunk of a multi-request call inside a read-only transaction from the same committed state', async () => {
     const store = await openTmpStore('bulk-snapshot');
     try {
       const map = store.openMap<number, string>('test');
@@ -40,7 +39,7 @@ describe('LMDBMap bulk reads', () => {
         }
       });
 
-      // Hold the call after its first GET and issue a write to a key of the second chunk, giving it time to commit.
+      // Hold the call after its first GET, commit a write to a key of the second chunk, then let it continue.
       const firstChunkRead = promiseWithResolvers<void>();
       const resume = promiseWithResolvers<void>();
       const sendMessage = store.sendMessage.bind(store);
@@ -54,14 +53,12 @@ describe('LMDBMap bulk reads', () => {
         return response;
       });
 
-      const read = map.getManyAsync(keys);
+      const read = store.readOnlyTransaction(() => map.getManyAsync(keys));
       await firstChunkRead.promise;
-      const write = map.set(GET_CHUNK_SIZE, 'new');
-      await Promise.race([write, sleep(50)]);
+      await map.set(GET_CHUNK_SIZE, 'new');
       resume.resolve();
 
       expect(await read).toEqual(keys.map(() => 'old'));
-      await write;
       expect(await map.getAsync(GET_CHUNK_SIZE)).toBe('new');
     } finally {
       vi.restoreAllMocks();
