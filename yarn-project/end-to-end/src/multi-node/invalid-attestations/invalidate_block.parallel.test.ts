@@ -733,10 +733,8 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     );
   });
 
-  // A proposer collects valid attestations but first publishes its checkpoint with a fake one, then invalidates it and
-  // publishes the same checkpoint again with the valid attestations, all within its slot. The chain carries on on top
-  // of the republished checkpoint. A node started afterwards reads that whole range from L1 in one go, so it sees the
-  // rejected post, the republished one and its children together, and must still reach the tip the network is at.
+  // A proposer publishes its checkpoint with a fake attestation, invalidates it and republishes it within its slot.
+  // Checks that a node syncing from L1 afterwards reaches the same checkpointed tip as the network.
   it('node syncing from L1 follows a checkpoint invalidated and republished within its slot', async () => {
     const sequencers = nodes.map(node => node.getSequencer()!);
     sequencers.forEach(s =>
@@ -747,12 +745,13 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       }),
     );
 
-    // Pick a slot whose proposer did not propose the slot before, so warping to the build window of that previous
-    // slot makes the republishing node's first job the intended one.
+    // Pick a slot whose proposer proposes neither the slot before nor the slot after, so warping to the build window
+    // of the previous slot makes the republishing node's first job the intended one, and no later job of that node
+    // picks up the flag before it is cleared.
     const {
       slots: [previousSlot, badSlot],
       proposers: [, proposer],
-    } = await test.findSlotsWithProposers(2, ([previous, bad]) => !previous.equals(bad));
+    } = await test.findSlotsWithProposers(3, ([previous, bad, next]) => !previous.equals(bad) && !next.equals(bad));
     const proposerNode = nodes.find(n => n.getSequencer()!.validatorAddresses!.some(a => a.equals(proposer)))!;
     await proposerNode.setConfig({ republishAfterFakeAttestation: true });
     logger.warn(`Configured proposer ${proposer} to republish its checkpoint at slot ${badSlot}`);
@@ -802,9 +801,12 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     await test.waitUntilCheckpointNumber(targetCheckpointNumber, test.L2_SLOT_DURATION_IN_S * 8);
     await test.waitForAllNodesToReachCheckpoint(targetCheckpointNumber, { nodes });
 
-    // A fresh node syncs the whole range from L1.
-    logger.warn(`Starting a fresh node to sync from L1`);
-    const lateNode = await test.createNonValidatorNode();
+    // A fresh node syncs the whole range from L1. Its archiver batch spans every L1 block mined so far, so the
+    // republished checkpoint and its descendants are read in a single batch.
+    const l1BlocksSoFar = Number(await l1Client.getBlockNumber());
+    const archiverBatchSize = Math.ceil((l1BlocksSoFar * test.L1_BLOCK_TIME_IN_S) / test.L2_SLOT_DURATION_IN_S) + 1;
+    logger.warn(`Starting a fresh node to sync from L1`, { l1BlocksSoFar, archiverBatchSize });
+    const lateNode = await test.createNonValidatorNode({ archiverBatchSize });
     const getLateNodeCheckpoint = async () => (await lateNode.getChainTips()).checkpointed.checkpoint.number;
     await retryUntil(
       async () => (await getLateNodeCheckpoint()) >= targetCheckpointNumber,
