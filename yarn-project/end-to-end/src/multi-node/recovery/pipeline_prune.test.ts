@@ -50,6 +50,7 @@ describe('multi-node/recovery/pipeline_prune', () => {
     // Same wide-slot prover-backed cluster as block-production, under adverse gossip latency with node 0's
     // checkpoint promotion disabled (see setupBlockProductionWithProver).
     fixture = await setupBlockProductionWithProver({
+      keepEpochsSetUp: true,
       syncChainTip: 'checkpointed',
       minTxsPerBlock: 1,
       maxTxsPerBlock: 2,

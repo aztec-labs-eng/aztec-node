@@ -47,6 +47,7 @@ describe('multi-node/block-production/multi_validator_node', () => {
     }
 
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...MOCK_GOSSIP_MULTI_VALIDATOR_OPTS,
       initialValidators: validators,
       aztecTargetCommitteeSize: COMMITTEE_SIZE,
