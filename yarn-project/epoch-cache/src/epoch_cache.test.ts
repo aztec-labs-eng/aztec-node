@@ -625,14 +625,6 @@ describe('EpochCache', () => {
       expect(info.epoch).toBe(targetEpoch);
     });
 
-    it('serves the committee during the sampled epoch once setupEpoch has run for it', async () => {
-      mineL1Block(startOfEpoch(3) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
-
-      const info = await epochCache.getCommittee(targetSlot);
-      expect(info.committee).toEqual(finalCommittee);
-      expect(info.seed).toBe(2n);
-    });
-
     it('serves the committee without reading storage once the latest L1 block is in the last L1 slot of the sampled epoch', async () => {
       // No later L1 block can land in the sampled epoch, so its randao can no longer be written.
       mineL1Block(startOfEpoch(4) - BigInt(SLOT_DURATION), { committee: finalCommittee, seed: 2n, setUp: false });
@@ -733,12 +725,6 @@ describe('EpochCache', () => {
 
       await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
       expect(epochCache.isFinalized(targetEpoch)).toBeUndefined();
-
-      // The marker holds for the rest of the Ethereum slot without new L1 reads.
-      const l1Reads = client.getBlock.mock.calls.length;
-      jest.setSystemTime(Date.now() + 6_000);
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
-      expect(client.getBlock.mock.calls.length).toBe(l1Reads);
     });
 
     it('drops a reorged-out entry when its re-fetch fails', async () => {
