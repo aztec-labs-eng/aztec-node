@@ -231,6 +231,98 @@ describe('AztecLMDBStoreV2', () => {
       await store.close();
       await expect(store.readOnlyTransaction(() => Promise.resolve(1))).rejects.toThrow('Store is closed');
     });
+
+    it('does not wait for a write transaction that is still running', async () => {
+      const map = store.openMap<string, string>('ro-skips-writer-queue');
+      await map.set('k', 'v1');
+
+      const writeStaged = promiseWithResolvers<void>();
+      const finishWrite = promiseWithResolvers<void>();
+      const write = store.transactionAsync(async () => {
+        await map.set('k', 'v2');
+        writeStaged.resolve();
+        await finishWrite.promise;
+      });
+      await writeStaged.promise;
+
+      // The write holds the writer queue until it is told to finish, so this only settles if the snapshot skips it.
+      await expect(store.readOnlyTransaction(() => map.getAsync('k'))).resolves.toBe('v1');
+
+      finishWrite.resolve();
+      await write;
+      await expect(map.getAsync('k')).resolves.toBe('v2');
+    });
+
+    it('lets writes commit while it is open', async () => {
+      const map = store.openMap<string, string>('ro-does-not-block-writes');
+      await map.set('k', 'v1');
+
+      const opened = promiseWithResolvers<void>();
+      const finishRead = promiseWithResolvers<void>();
+      const read = store.readOnlyTransaction(async () => {
+        opened.resolve();
+        await finishRead.promise;
+        return map.getAsync('k');
+      });
+      await opened.promise;
+
+      await map.set('k', 'v2');
+      await expect(map.getAsync('k')).resolves.toBe('v2');
+
+      finishRead.resolve();
+      await expect(read).resolves.toBe('v1');
+    });
+
+    it('rejects a write started inside it', async () => {
+      const map = store.openMap<string, string>('ro-rejects-writes');
+      await map.set('k', 'v1');
+
+      await expect(store.readOnlyTransaction(() => map.set('k', 'v2'))).rejects.toThrow(
+        'Cannot start a write transaction inside a read-only transaction',
+      );
+      await expect(map.getAsync('k')).resolves.toBe('v1');
+    });
+
+    describe('with a single reader slot', () => {
+      let smallStore: AztecLMDBStoreV2;
+
+      beforeEach(async () => {
+        smallStore = await openTmpStore('test-one-reader-slot', true, 10 * 1024 * 1024, 2, undefined);
+      });
+
+      afterEach(async () => {
+        await smallStore.delete();
+      });
+
+      it('returns the slot when the callback throws', async () => {
+        const map = smallStore.openMap<string, string>('ro-slot-on-error');
+        await map.set('k', 'v');
+
+        await expect(smallStore.readOnlyTransaction(() => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+        await expect(smallStore.readOnlyTransaction(() => map.getAsync('k'))).resolves.toBe('v');
+      });
+
+      it('runs concurrent multi-page scans inside one snapshot, and queues further snapshots', async () => {
+        const map = smallStore.openMap<number, number>('ro-scans');
+        const count = 50;
+        await smallStore.transactionAsync(async () => {
+          for (let i = 0; i < count; i++) {
+            await map.set(i, i);
+          }
+        });
+        const expected = Array.from({ length: count }, (_, i) => [i, i]);
+
+        // Cursors inside a snapshot read through its slot; if they waited for slots of their own, the only one would
+        // already be held by the snapshot and every scan would wait forever.
+        const query = () =>
+          smallStore.readOnlyTransaction(() => Promise.all([1, 2, 3, 4].map(() => toArray(map.entriesAsync()))));
+        const results = await Promise.all([query(), query(), query()]);
+
+        expect(results).toEqual(Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => expected)));
+        // Scans outside a snapshot take the slot back once every snapshot has released it.
+        await expect(toArray(map.entriesAsync())).resolves.toEqual(expected);
+      });
+    });
   });
 
   it('should serialize writes correctly', async () => {

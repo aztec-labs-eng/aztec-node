@@ -88,7 +88,7 @@ export class LMDBArray<T extends Value> implements AztecAsyncArray<T> {
       return;
     }
 
-    let tx: ReadTransaction | undefined = this.store.getCurrentWriteTx();
+    let tx: ReadTransaction | undefined = this.store.getCurrentTx();
     const shouldClose = !tx;
     tx ??= this.store.getReadTx();
 

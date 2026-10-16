@@ -31,6 +31,9 @@ export enum LMDBMessageType {
 
   CLOSE,
   COPY_STORE,
+
+  START_READ_TX,
+  CLOSE_READ_TX,
 }
 
 type Key = Uint8Array;
@@ -44,7 +47,15 @@ interface OpenDatabaseRequest {
   uniqueKeys?: boolean;
 }
 
-interface GetRequest {
+/**
+ * Requests that can run against a read transaction opened with START_READ_TX. Omit `txId` to read the latest committed
+ * state; it must never be `undefined`, which msgpack does not encode as nil.
+ */
+interface InReadTx {
+  txId?: number;
+}
+
+interface GetRequest extends InReadTx {
   keys: Key[];
   db: string;
 }
@@ -53,12 +64,12 @@ interface GetResponse {
   values: OptionalValues;
 }
 
-interface HasRequest {
+interface HasRequest extends InReadTx {
   entries: KeyOptionalValues[];
   db: string;
 }
 
-interface StartCursorRequest {
+interface StartCursorRequest extends InReadTx {
   key: Key;
   reverse: boolean;
   count: number | null;
@@ -83,6 +94,10 @@ interface CloseCursorRequest {
 interface CopyStoreRequest {
   dstPath: string;
   compact: boolean;
+}
+
+interface CloseReadTxRequest {
+  txId: number;
 }
 
 export interface Batch {
@@ -111,6 +126,9 @@ export type LMDBRequestBody = {
 
   [LMDBMessageType.CLOSE]: void;
   [LMDBMessageType.COPY_STORE]: CopyStoreRequest;
+
+  [LMDBMessageType.START_READ_TX]: void;
+  [LMDBMessageType.CLOSE_READ_TX]: CloseReadTxRequest;
 };
 
 interface GetResponse {
@@ -134,6 +152,10 @@ interface AdvanceCursorResponse {
 interface AdvanceCursorCountResponse {
   count: number;
   done: boolean;
+}
+
+interface StartReadTxResponse {
+  txId: number;
 }
 
 interface BatchResponse {
@@ -172,6 +194,9 @@ export type LMDBResponseBody = {
   [LMDBMessageType.CLOSE]: BoolResponse;
 
   [LMDBMessageType.COPY_STORE]: BoolResponse;
+
+  [LMDBMessageType.START_READ_TX]: StartReadTxResponse;
+  [LMDBMessageType.CLOSE_READ_TX]: BoolResponse;
 };
 
 export interface LMDBMessageChannel {

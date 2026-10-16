@@ -130,8 +130,9 @@ export interface AztecAsyncKVStore {
    * so no write can land between two of them. The callback must only read. Nested calls reuse the enclosing
    * transaction, as with {@link transactionAsync}; inside a write transaction the callback sees its uncommitted writes.
    *
-   * Every backend currently implements this with {@link transactionAsync}. On lmdb-v2 that means the callback still
-   * goes through the single writer queue, so it waits for queued writes and blocks writes issued while it runs.
+   * On lmdb-v2 the view is a native read snapshot, so the callback neither waits for queued writes nor blocks writes
+   * issued while it runs, and starting a write inside it throws. The other backends run it with
+   * {@link transactionAsync}, which goes through their write path.
    * @param callback - The callback to execute against the consistent view
    */
   readOnlyTransaction<T extends Exclude<any, Promise<any>>>(callback: () => Promise<T>): Promise<T>;

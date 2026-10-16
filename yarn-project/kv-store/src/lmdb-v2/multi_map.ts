@@ -89,7 +89,7 @@ export class LMDBMultiMap<K extends Key, V extends Value> implements AztecAsyncM
     const endKey =
       range?.end !== undefined ? serializeKey(this.prefix, range.end) : reverse ? maxKey(this.prefix) : undefined;
 
-    let tx: ReadTransaction | undefined = this.store.getCurrentWriteTx();
+    let tx: ReadTransaction | undefined = this.store.getCurrentTx();
     const shouldClose = !tx;
     tx ??= this.store.getReadTx();
 

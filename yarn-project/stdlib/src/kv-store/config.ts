@@ -25,7 +25,8 @@ export const dataConfigMappings: ConfigMappingsType<DataStoreConfig> = {
   },
   dataStoreMaxReaders: {
     env: 'DATA_STORE_MAX_READERS',
-    description: 'Maximum number of concurrent readers (cursors) on a data store DB. Must be at least 2.',
+    description:
+      'Maximum number of concurrent readers on a data store DB: one is kept for point reads, the rest go to cursors and read-only snapshots. Must be at least 2.',
     ...numberConfigHelper(DEFAULT_DATA_STORE_MAX_READERS),
   },
   ...pickL1ContractAddressMappings('rollupAddress'),

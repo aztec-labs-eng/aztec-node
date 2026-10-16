@@ -12,7 +12,20 @@ import {
 export class ReadTransaction {
   protected open = true;
 
-  constructor(protected channel: LMDBMessageChannel) {}
+  /** Spread into every read request, so reads run against the native read transaction when there is one. */
+  private readonly txField: { txId?: number };
+
+  /**
+   * @param channel - Channel to the native store.
+   * @param txId - Native read transaction, from START_READ_TX, to run every read against. Without one each request
+   * reads the latest committed state on its own.
+   */
+  constructor(
+    protected channel: LMDBMessageChannel,
+    txId?: number,
+  ) {
+    this.txField = txId === undefined ? {} : { txId };
+  }
 
   public close(): void {
     if (!this.open) {
@@ -39,7 +52,11 @@ export class ReadTransaction {
     this.assertIsOpen();
     const results: (Uint8Array | undefined)[] = [];
     for (const keysChunk of chunk(keys, GET_CHUNK_SIZE)) {
-      const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys: keysChunk, db: Database.DATA });
+      const response = await this.channel.sendMessage(LMDBMessageType.GET, {
+        keys: keysChunk,
+        db: Database.DATA,
+        ...this.txField,
+      });
       for (let i = 0; i < keysChunk.length; i++) {
         results.push(response.values[i]?.[0] ?? undefined);
       }
@@ -49,7 +66,11 @@ export class ReadTransaction {
 
   public async getIndex(key: Uint8Array): Promise<Uint8Array[]> {
     this.assertIsOpen();
-    const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys: [key], db: Database.INDEX });
+    const response = await this.channel.sendMessage(LMDBMessageType.GET, {
+      keys: [key],
+      db: Database.INDEX,
+      ...this.txField,
+    });
     return response.values[0] ?? [];
   }
 
@@ -100,6 +121,7 @@ export class ReadTransaction {
         count: singlePageLimit ?? CURSOR_PAGE_SIZE,
         onePage: singlePageLimit !== undefined,
         db,
+        ...this.txField,
       });
 
       cursor = response.cursor ?? undefined;
@@ -159,6 +181,7 @@ export class ReadTransaction {
         count: 0,
         onePage: false,
         db,
+        ...this.txField,
       });
 
       cursor = response.cursor ?? undefined;

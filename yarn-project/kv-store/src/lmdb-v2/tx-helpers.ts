@@ -15,9 +15,9 @@ export async function execInReadTx<T>(
   store: AztecLMDBStoreV2,
   fn: (tx: ReadTransaction) => T | Promise<T>,
 ): Promise<T> {
-  const currentWrite = store.getCurrentWriteTx();
-  if (currentWrite) {
-    return await fn(currentWrite);
+  const currentTx = store.getCurrentTx();
+  if (currentTx) {
+    return await fn(currentTx);
   } else {
     const tx = store.getReadTx();
     try {
