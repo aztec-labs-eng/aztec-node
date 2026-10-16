@@ -28,7 +28,7 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
       await Promise.allSettled([
         client.getBlock({ blockTag: 'latest' }),
         isBlobTx ? client.getBlobBaseFee() : Promise.resolve(undefined),
-        client.estimateMaxPriorityFeePerGas().catch(() => 0n),
+        client.estimateMaxPriorityFeePerGas(),
         client.getBlock({ blockTag: 'pending', includeTransactions: true }).catch(() => null),
         client
           .getFeeHistory({
@@ -140,6 +140,16 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
       });
       competitiveFee = maxReasonableFee;
       debugInfo.cappedToGwei = formatGwei(maxReasonableFee);
+    } else if (networkEstimateResult.status === 'fulfilled' && networkEstimate === 0n && competitiveFee > 0n) {
+      logger?.warn(
+        'L1 RPC returned a zero priority fee estimate, disabling the competitive fee sanity cap. ' +
+          'You may be overpaying L1 transaction fees. Review your L1 RPC gas price oracle settings; ' +
+          'if using Reth, consider setting --gpo.ignoreprice=2 to exclude zero- and one-wei tips.',
+        {
+          networkEstimateGwei: formatGwei(networkEstimate),
+          competitiveFeeGwei: formatGwei(competitiveFee),
+        },
+      );
     }
 
     // Log final decision
