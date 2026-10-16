@@ -322,4 +322,120 @@ describe('getSuccessfulCallsFromTrace', () => {
     expect(results).toHaveLength(1);
     expect(results[0].from).toEqual(EthAddress.fromString('0xca11bde05977b3631167028862be2a173976ca11'));
   });
+
+  describe('with non-call and failed entries', () => {
+    const rollup = '0x0000000000000000000000000000000000001111';
+    const wrapper = '0x2000000000000000000000000000000000000002';
+    const sender = '0x1000000000000000000000000000000000000001';
+    const selector = '0x12345678';
+    const proposeInput: Hex = `${selector}00000000000000000000000000000000000000000000000000000000000000aa`;
+
+    const wrapperCall = (subtraces: number, error?: string): TraceTransactionResponse => ({
+      type: 'call',
+      action: { from: sender, to: wrapper, callType: 'call', input: '0xabcd0000', gas: '0x100000', value: '0x0' },
+      result: { gasUsed: '0x50000', output: '0x' },
+      ...(error ? { error } : {}),
+      subtraces,
+      traceAddress: [],
+    });
+
+    const rollupCall = (traceAddress: number[]): TraceTransactionResponse => ({
+      type: 'call',
+      action: { from: wrapper, to: rollup, callType: 'call', input: proposeInput, gas: '0x5000', value: '0x0' },
+      result: { gasUsed: '0x1000', output: '0x' },
+      subtraces: 0,
+      traceAddress,
+    });
+
+    const createEntry = (traceAddress: number[], subtraces: number, error?: string): TraceTransactionResponse => ({
+      type: 'create',
+      action: { from: wrapper, gas: '0x100000', init: '0x60006000', value: '0x0' },
+      result: error
+        ? { gasUsed: '0x1000', output: '0x' }
+        : { address: '0x3000000000000000000000000000000000000003', code: '0x00', gasUsed: '0x1000' },
+      ...(error ? { error } : {}),
+      subtraces,
+      traceAddress,
+    });
+
+    const expectedRollupCall = {
+      from: EthAddress.fromString(wrapper),
+      gasUsed: 0x1000n,
+      input: proposeInput,
+      value: 0n,
+    };
+
+    const getRollupCalls = (trace: TraceTransactionResponse[]) => {
+      (mockClient.request as any).mockResolvedValue(trace);
+      return getSuccessfulCallsFromTrace(mockClient, '0xabc', EthAddress.fromString(rollup), selector);
+    };
+
+    it('returns the rollup call when the trace contains a create entry', async () => {
+      const results = await getRollupCalls([wrapperCall(2), createEntry([0], 0), rollupCall([1])]);
+      expect(results).toEqual([expectedRollupCall]);
+    });
+
+    it('returns the rollup call when the trace contains a suicide entry with a null result', async () => {
+      const results = await getRollupCalls([
+        wrapperCall(2),
+        {
+          type: 'suicide',
+          action: { address: '0x4000000000000000000000000000000000000004', refundAddress: wrapper, balance: '0x0' },
+          result: null,
+          subtraces: 0,
+          traceAddress: [0],
+        },
+        rollupCall([1]),
+      ]);
+      expect(results).toEqual([expectedRollupCall]);
+    });
+
+    it('returns the rollup call when a sibling call halted with a null result', async () => {
+      const results = await getRollupCalls([
+        wrapperCall(2),
+        {
+          type: 'call',
+          action: {
+            from: wrapper,
+            to: '0x5000000000000000000000000000000000000005',
+            callType: 'call',
+            input: '0x',
+            gas: '0x10',
+            value: '0x0',
+          },
+          result: null,
+          error: 'Out of gas',
+          subtraces: 0,
+          traceAddress: [0],
+        },
+        rollupCall([1]),
+      ]);
+      expect(results).toEqual([expectedRollupCall]);
+    });
+
+    it('skips a rollup call nested under a reverted create entry', async () => {
+      const results = await getRollupCalls([wrapperCall(1), createEntry([0], 1, 'Reverted'), rollupCall([0, 0])]);
+      expect(results).toEqual([]);
+    });
+
+    it('skips a rollup call when the root entry errored', async () => {
+      const results = await getRollupCalls([wrapperCall(1, 'Reverted'), rollupCall([0])]);
+      expect(results).toEqual([]);
+    });
+
+    it('rejects a call entry without a call type', async () => {
+      await expect(
+        getRollupCalls([
+          wrapperCall(1),
+          {
+            type: 'call',
+            action: { from: wrapper, to: rollup, input: proposeInput },
+            result: { gasUsed: '0x1000', output: '0x' },
+            subtraces: 0,
+            traceAddress: [0],
+          },
+        ]),
+      ).rejects.toThrow();
+    });
+  });
 });
