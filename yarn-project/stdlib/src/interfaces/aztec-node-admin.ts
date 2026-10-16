@@ -97,8 +97,9 @@ export type AztecNodeAdminConfig = Omit<ValidatorClientFullConfig, keyof L1Contr
     preferredPeers?: string[];
     /**
      * Log level spec in `LOG_LEVEL` env var format (e.g. `info` or `debug;trace:sequencer,p2p`). Setting it updates
-     * all loggers in the node process immediately; spawned processes keep their own configuration. Not persisted:
-     * a restart reverts to the `LOG_LEVEL` env var.
+     * all loggers in the node's main thread immediately; worker threads and spawned processes keep their own
+     * configuration. Updates only accept plain module names as filters (optionally with `|`, `^` and `$`), not
+     * arbitrary regexes. Not persisted: a restart reverts to the `LOG_LEVEL` env var.
      */
     logLevel?: string;
   };
@@ -118,13 +119,19 @@ export const AztecNodeAdminConfigSchema = SequencerConfigSchema.merge(ProverConf
       maxPendingTxCount: z.number(),
       skipIncomingProposals: z.boolean().optional(),
       preferredPeers: z.array(z.string()).optional(),
-      logLevel: z.string().refine(isValidLogLevelSpec, 'Invalid log level spec').optional(),
+      logLevel: z.string().optional(),
     }),
   );
 
+// Only updates are restricted to safe log level specs: the current spec may come from a LOG_LEVEL env var that uses
+// arbitrary regex filters, and getConfig must still be able to report it.
+const AztecNodeAdminConfigUpdateSchema = AztecNodeAdminConfigSchema.partial().extend({
+  logLevel: z.string().refine(isValidLogLevelSpec, 'Invalid log level spec').optional(),
+});
+
 export const AztecNodeAdminApiSchema: ApiSchemaFor<AztecNodeAdmin> = {
   getConfig: z.function({ input: z.tuple([]), output: AztecNodeAdminConfigSchema }),
-  setConfig: z.function({ input: z.tuple([AztecNodeAdminConfigSchema.partial()]), output: z.void() }),
+  setConfig: z.function({ input: z.tuple([AztecNodeAdminConfigUpdateSchema]), output: z.void() }),
   startSnapshotUpload: z.function({ input: z.tuple([z.string()]), output: z.void() }),
   rollbackTo: z.function({
     input: z.tuple([z.number(), optional(z.boolean()), optional(z.boolean())]),

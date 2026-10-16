@@ -34,13 +34,15 @@ describe('AztecNodeAdminApiSchema', () => {
     expect(config).toMatchObject({
       coinbase: expect.any(EthAddress),
       maxPendingTxCount: expect.any(Number),
-      logLevel: 'info',
+      logLevel: 'info;debug:p2p.*',
     });
   });
 
   it('setConfig', async () => {
     await context.client.setConfig({ coinbase: EthAddress.random(), logLevel: 'debug;trace:p2p' });
-    await expect(context.client.setConfig({ logLevel: 'loud' })).rejects.toThrow();
+    await expect(context.client.setConfig({ coinbase: EthAddress.random(), logLevel: 'loud' })).rejects.toThrow(
+      /Invalid log level spec/,
+    );
   });
 
   it('startSnapshotUpload', async () => {
@@ -107,7 +109,7 @@ class MockAztecNodeAdmin implements AztecNodeAdmin {
       SlasherConfig & { maxPendingTxCount: number; logLevel: string }
   > {
     return Promise.resolve({
-      logLevel: 'info',
+      logLevel: 'info;debug:p2p.*',
       realProofs: false,
       proverTestDelayType: 'fixed',
       proverTestDelayMs: 100,

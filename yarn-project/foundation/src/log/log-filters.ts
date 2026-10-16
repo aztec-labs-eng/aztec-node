@@ -55,11 +55,18 @@ export function formatLogLevelSpec(defaultLevel: LogLevel, filters: LogFilters):
   return [defaultLevel, ...statements].join(';');
 }
 
-/** Returns whether the given string is a valid log level spec in the `LOG_LEVEL` env var format. */
+// Module filters are evaluated as regexes, so filters from untrusted sources are restricted to characters that cannot
+// form quantifiers or groups, which is what catastrophic backtracking needs.
+const SAFE_MODULE_FILTER = /^[\w:.\-/|^$]+$/;
+
+/**
+ * Returns whether the given string is a valid log level spec in the `LOG_LEVEL` env var format whose module filters
+ * are safe to evaluate: plain module names, optionally with `|` alternatives and `^`/`$` anchors.
+ */
 export function isValidLogLevelSpec(spec: string): boolean {
   try {
-    parseLogLevelEnvVar(spec, 'info');
-    return true;
+    const [, filters] = parseLogLevelEnvVar(spec, 'info');
+    return filters.every(([module]) => SAFE_MODULE_FILTER.test(module));
   } catch {
     return false;
   }
@@ -87,13 +94,14 @@ function parseFilters(definition: string | undefined): LogFilters {
     const sanitizedLevel = level.trim().toLowerCase();
     assertValidLogLevel(sanitizedLevel);
     for (const module of modules.split(',')) {
-      filters.push([
-        module
-          .trim()
-          .toLowerCase()
-          .replace(/^aztec:/, ''),
-        sanitizedLevel as LogLevel | 'silent',
-      ]);
+      const sanitizedModule = module
+        .trim()
+        .toLowerCase()
+        .replace(/^aztec:/, '');
+      // An empty module would compile to a regex matching every module, and could not be formatted back into a spec.
+      if (sanitizedModule) {
+        filters.push([sanitizedModule, sanitizedLevel as LogLevel | 'silent']);
+      }
     }
   }
   return filters.reverse();

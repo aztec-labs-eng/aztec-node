@@ -13,6 +13,7 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import { getLogLevel, setLogLevel } from '@aztec-labs/foundation/log';
 import type { Hex } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
@@ -590,6 +591,34 @@ describe('aztec node', () => {
         const config = await node.getConfig();
         expect(config.maxPendingTxCount).toEqual(nodeConfig.maxPendingTxCount);
         expect('nonExistingConfig' in config).toBe(false);
+      });
+
+      describe('log level', () => {
+        let originalSpec: string;
+
+        beforeEach(() => {
+          originalSpec = getLogLevel();
+        });
+
+        afterEach(() => {
+          setLogLevel(originalSpec);
+        });
+
+        it('applies and reports a log level update', async () => {
+          await node.setConfig({ logLevel: 'warn;debug:p2p' });
+          expect((await node.getConfig()).logLevel).toBe('warn;debug:p2p');
+        });
+
+        it('rejects an unsafe log level spec without applying it', async () => {
+          await expect(node.setConfig({ logLevel: 'info;debug:(.+)+z' })).rejects.toThrow(BadRequestError);
+          expect(getLogLevel()).toBe(originalSpec);
+        });
+
+        it('leaves the log level untouched when another update fails', async () => {
+          p2p.updateP2PConfig.mockRejectedValueOnce(new Error('bad peers'));
+          await expect(node.setConfig({ logLevel: 'warn' })).rejects.toThrow('bad peers');
+          expect(getLogLevel()).toBe(originalSpec);
+        });
       });
     });
 

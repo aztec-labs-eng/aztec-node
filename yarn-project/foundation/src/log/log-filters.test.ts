@@ -54,6 +54,12 @@ describe('formatLogLevelSpec', () => {
     expect(formatLogLevelSpec('info', [])).toBe('info');
   });
 
+  it('drops empty modules so the spec can be formatted back', () => {
+    const [level, filters] = parseLogLevelEnvVar('info;debug:foo, ;trace: ', 'info');
+    expect(filters).toEqual([['foo', 'debug']]);
+    expect(formatLogLevelSpec(level, filters)).toBe('info;debug:foo');
+  });
+
   it('round-trips through parseLogLevelEnvVar', () => {
     const [level, filters] = parseLogLevelEnvVar('debug;warn:module1,module2;error:module3', 'info');
     const spec = formatLogLevelSpec(level, filters);
@@ -70,5 +76,11 @@ describe('isValidLogLevelSpec', () => {
   it('rejects invalid specs', () => {
     expect(isValidLogLevelSpec('loud')).toBe(false);
     expect(isValidLogLevelSpec('debug;trace:')).toBe(false);
+  });
+
+  it('rejects module filters that could backtrack catastrophically', () => {
+    expect(isValidLogLevelSpec('info;debug:(.+)+z')).toBe(false);
+    expect(isValidLogLevelSpec('info;debug:p2p.*')).toBe(false);
+    expect(isValidLogLevelSpec('info;debug:^p2p$|sequencer:checkpoint-proposal')).toBe(true);
   });
 });
