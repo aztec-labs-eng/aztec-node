@@ -16,6 +16,14 @@ export type L1EventLog<T> = {
   args: T;
 };
 
+/** Orders L1 event logs by their position on L1: block number, then transaction index, then log index. */
+export function compareL1LogPosition(a: L1EventLog<unknown>, b: L1EventLog<unknown>): number {
+  if (a.l1BlockNumber !== b.l1BlockNumber) {
+    return a.l1BlockNumber < b.l1BlockNumber ? -1 : 1;
+  }
+  return a.l1TransactionIndex - b.l1TransactionIndex || a.l1LogIndex - b.l1LogIndex;
+}
+
 /**
  * Message fragments providers use to refuse a log query for being too wide or returning too much, the failures a
  * narrower range is known to fix. Matched on text because the JSON-RPC boundary leaves no error class or code behind

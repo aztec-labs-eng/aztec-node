@@ -16,6 +16,7 @@ import {
   type RollupContract,
   type ViemCommitteeAttestations,
   type ViemHeader,
+  compareL1LogPosition,
   fetchLogsBisectingRange,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
@@ -239,14 +240,6 @@ export async function retrieveCheckpointCalldataFromRollup(
 
 /** A checkpoint retrieved from calldata, with the L1 log that announced it. */
 type RetrievedCheckpointWithLog = { log: CheckpointProposedLog; checkpoint: RetrievedCheckpointFromCalldata };
-
-/** Orders L1 event logs by their position on L1: block number, then transaction index, then log index. */
-function compareL1LogPosition(a: CheckpointProposedLog, b: CheckpointProposedLog): number {
-  if (a.l1BlockNumber !== b.l1BlockNumber) {
-    return a.l1BlockNumber < b.l1BlockNumber ? -1 : 1;
-  }
-  return a.l1TransactionIndex - b.l1TransactionIndex || a.l1LogIndex - b.l1LogIndex;
-}
 
 /**
  * Processes CheckpointProposed logs, fetching only calldata (no blobs).
