@@ -137,6 +137,8 @@ export function setupSimpleBlockProduction(opts: {
  */
 export async function setupBlockProductionWithProver(opts: {
   syncChainTip: 'proposed' | 'checkpointed';
+  /** Keeps every epoch set up on L1 until teardown, as `keepEpochsSetUp` does on the test context. */
+  keepEpochsSetUp?: boolean;
   minTxsPerBlock?: number;
   maxTxsPerBlock?: number;
   maxTxsPerCheckpoint?: number;
