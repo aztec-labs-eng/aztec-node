@@ -343,6 +343,7 @@ export type CheckpointProposedArgs = {
 export type CheckpointProposedLog = L1EventLog<CheckpointProposedArgs>;
 
 const INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR = 'ValidatorSelection__InsufficientValidatorSetSize';
+const EPOCH_NOT_STABLE_ERROR = 'ValidatorSelection__EpochNotStable';
 
 /** SlasherUpdated events are rare governance operations, so their watcher polls well below the client's interval. */
 const SLASHER_UPDATED_POLLING_INTERVAL_MS = 60_000;
@@ -353,6 +354,11 @@ function isValidatorSelectionError(err: unknown, errorName: string): boolean {
     getErrorCause(err, ContractFunctionRevertedError)?.data?.errorName === errorName ||
     decodeRpcRequestErrorName(err) === errorName
   );
+}
+
+/** Whether a rollup read reverted because the requested epoch's committee or seed can still change. */
+export function isEpochNotStableError(err: unknown): boolean {
+  return isValidatorSelectionError(err, EPOCH_NOT_STABLE_ERROR);
 }
 
 function decodeRpcRequestErrorName(err: unknown): string | undefined {
@@ -654,15 +660,18 @@ export class RollupContract {
    * This function is intentionally defensive: any failure to query the escape hatch
    * (RPC issues, transient errors, etc.) is treated as "closed" to avoid callers
    * needing to sprinkle try/catch everywhere.
+   *
+   * `options.blockNumber` pins only the hatch's `isHatchOpen` read: the escape hatch address is always resolved at the
+   * latest L1 block.
    */
-  async isEscapeHatchOpen(epoch: EpochNumber): Promise<boolean> {
+  async isEscapeHatchOpen(epoch: EpochNumber, options?: { blockNumber?: bigint }): Promise<boolean> {
     try {
       const escapeHatch = await this.getEscapeHatchContract();
       if (!escapeHatch) {
         return false;
       }
 
-      const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)]);
+      const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)], options);
       return isOpen;
     } catch (err) {
       this.logger.warn('isEscapeHatchOpen failed (treating as closed); RPC or contract error may cause liveness risk', {
@@ -754,13 +763,14 @@ export class RollupContract {
     return this.rollup.read.getEthPerFeeAsset();
   }
 
-  async getCommitteeAt(timestamp: bigint): Promise<EthAddress[] | undefined> {
+  async getCommitteeAt(timestamp: bigint, options?: { blockNumber?: bigint }): Promise<EthAddress[] | undefined> {
     const { result } = await this.client
       .simulateContract({
         address: this.address,
         abi: RollupAbi,
         functionName: 'getCommitteeAt',
         args: [timestamp],
+        blockNumber: options?.blockNumber,
       })
       .catch(e => {
         if (isValidatorSelectionError(e, INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR)) {
@@ -772,8 +782,8 @@ export class RollupContract {
     return result ? result.map(addr => EthAddress.fromString(addr)) : undefined;
   }
 
-  async getSampleSeedAt(timestamp: bigint): Promise<Buffer32> {
-    return Buffer32.fromBigInt(await this.rollup.read.getSampleSeedAt([timestamp]));
+  async getSampleSeedAt(timestamp: bigint, options?: { blockNumber?: bigint }): Promise<Buffer32> {
+    return Buffer32.fromBigInt(await this.rollup.read.getSampleSeedAt([timestamp], options));
   }
 
   async getCurrentSampleSeed(): Promise<Buffer32> {
@@ -785,17 +795,22 @@ export class RollupContract {
   }
 
   /**
-   * Whether `setupEpoch` has already run for the epoch at the latest L1 block, i.e. its committee commitment is stored.
+   * Whether `setupEpoch` has already run for the epoch, i.e. its committee commitment is stored, as of
+   * `options.blockNumber` (the latest L1 block by default).
    * Read straight from storage because `getEpochCommitteeCommitment` computes the commitment when it is not stored.
    */
-  async isEpochSetUp(epoch: EpochNumber): Promise<boolean> {
+  async isEpochSetUp(epoch: EpochNumber, options?: { blockNumber?: bigint }): Promise<boolean> {
     const slot = keccak256(
       encodeAbiParameters(
         [{ type: 'uint256' }, { type: 'uint256' }],
         [BigInt(epoch), BigInt(RollupContract.validatorSelectionStorageSlot)],
       ),
     );
-    const value = await this.client.getStorageAt({ address: this.address, slot, blockTag: 'latest' });
+    const value = await this.client.getStorageAt(
+      options?.blockNumber === undefined
+        ? { address: this.address, slot, blockTag: 'latest' }
+        : { address: this.address, slot, blockNumber: options.blockNumber },
+    );
     return value !== undefined && hexToBigInt(value) !== 0n;
   }
 

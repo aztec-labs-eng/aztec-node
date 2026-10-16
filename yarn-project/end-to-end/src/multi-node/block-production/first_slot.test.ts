@@ -108,10 +108,17 @@ describe('multi-node/block-production/first_slot', () => {
     // the next L1 block. Subtracting `L2_SLOT_DURATION + L1_BLOCK_TIME` puts us one L1 block before that
     // build slot starts, so the proposer for `firstSlot` gets the full build window available
     // before the epoch boundary is crossed on L1.
+    //
+    // Nothing proposes in the previous epoch, since the sequencers only start after the warp, so its randao is never
+    // checkpointed and nodes would not serve this epoch's committee in time for its first slot. So warp one more L1
+    // block early and set the previous epoch up; mining that transaction brings L1 to the point described above.
     const [epochStart] = getTimestampRangeForEpoch(epoch, test.constants);
-    await test.context.cheatCodes.eth.warp(Number(epochStart) - test.L2_SLOT_DURATION_IN_S - test.L1_BLOCK_TIME_IN_S, {
-      resetBlockInterval: true,
-    });
+    await test.context.cheatCodes.eth.warp(
+      Number(epochStart) - test.L2_SLOT_DURATION_IN_S - 2 * test.L1_BLOCK_TIME_IN_S,
+      { resetBlockInterval: true },
+    );
+    await test.context.cheatCodes.rollup.setupEpoch();
+    expect(await test.rollup.isEpochSetUp(EpochNumber(epoch - 1))).toBe(true);
 
     // Start the sequencers
     await test.startSequencers(nodes);

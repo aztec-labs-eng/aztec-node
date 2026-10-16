@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
@@ -350,6 +350,10 @@ describe('CheckpointAttestationValidator', () => {
     // Same for the proposer-lookup helper.
     epochCache.isInCommittee.mockResolvedValue(true);
     epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 node not synced'));
+    expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
+
+    // And for a committee whose seed is not fixed on L1 yet.
+    epochCache.isInCommittee.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
     expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
   });
 

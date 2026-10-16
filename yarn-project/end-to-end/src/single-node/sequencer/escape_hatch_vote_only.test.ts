@@ -74,6 +74,7 @@ describe('single-node/sequencer/escape_hatch_vote_only', () => {
     });
 
     test = await setupBlockProducer({
+      keepEpochsSetUp: true,
       ...PIPELINING_SETUP_OPTS,
       numberOfAccounts: 1,
       anvilAccounts: 10,

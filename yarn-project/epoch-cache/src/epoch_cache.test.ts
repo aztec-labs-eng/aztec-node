@@ -1,13 +1,14 @@
-import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, type RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import type { GetBlockReturnType } from 'viem';
+import { type GetBlockReturnType, RpcRequestError, encodeErrorResult } from 'viem';
 
 import { EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from './epoch_cache.js';
 
@@ -15,6 +16,7 @@ class TestEpochCache extends EpochCache {
   /** Seeds the cache with a finalized entry so tests don't need to hit the mock rollup for known epochs. */
   public seedCache(epoch: EpochNumber, committeeInfo: EpochCommitteeInfo): void {
     this.cache.set(epoch, {
+      kind: 'committee',
       data: committeeInfo,
       lastQueryL1BlockNumber: 0n,
       lastQueryL1BlockHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
@@ -183,10 +185,10 @@ describe('EpochCache', () => {
     await epochCache.getCommittee(SlotNumber.fromBigInt(targetSlot));
 
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
-    expect(rollupContract.getCommitteeAt).toHaveBeenCalledWith(slotTimestamp);
+    expect(rollupContract.getCommitteeAt).toHaveBeenCalledWith(slotTimestamp, { blockNumber: 100n });
 
     expect(rollupContract.getSampleSeedAt).toHaveBeenCalledTimes(1);
-    expect(rollupContract.getSampleSeedAt).toHaveBeenCalledWith(slotTimestamp);
+    expect(rollupContract.getSampleSeedAt).toHaveBeenCalledWith(slotTimestamp, { blockNumber: 100n });
   });
 
   it('should cache multiple epochs', async () => {
@@ -275,7 +277,7 @@ describe('EpochCache', () => {
     expect(rollupContract.getAttesters).toHaveBeenCalledTimes(2);
   });
 
-  it('should throw error when querying committee for future epoch beyond lag', async () => {
+  it('throws CommitteeNotStableError when querying committee for future epoch beyond lag', async () => {
     const { l1GenesisTime, epochDuration } = epochCache.getL1Constants();
 
     // Mock the client to return a current L1 timestamp that's close to genesis
@@ -291,10 +293,8 @@ describe('EpochCache', () => {
     const futureEpoch = BigInt(100);
     const futureSlot = futureEpoch * BigInt(epochDuration);
 
-    // Attempt to get committee for this future slot should throw
-    await expect(epochCache.getCommittee(SlotNumber.fromBigInt(futureSlot))).rejects.toThrow(
-      /Cannot query committee for future epoch.*sampling timestamp.*beyond latest L1 block/,
-    );
+    // Attempt to get committee for this future slot should throw: its sampled epoch has not even started on L1
+    await expect(epochCache.getCommittee(SlotNumber.fromBigInt(futureSlot))).rejects.toThrow(CommitteeNotStableError);
   });
 
   describe('TTL-based caching', () => {
@@ -383,12 +383,12 @@ describe('EpochCache', () => {
       const epoch1Slot = SlotNumber(EPOCH_DURATION);
       const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);
       const latestTs = epoch1Ts + 10000n;
-      // Finalized block is far enough that sampling ts <= finalizedTs
+      // The finalized block is the block the entry is read at
       const finalizedTs = epoch1Ts + 10000n;
 
       client.getBlock.mockImplementation((args: any) => {
         if (args?.blockTag === 'finalized') {
-          return Promise.resolve({ timestamp: finalizedTs, number: 90n, hash: '0xccc' } as any);
+          return Promise.resolve({ timestamp: finalizedTs, number: 100n, hash: '0xccc' } as any);
         }
         return Promise.resolve({ timestamp: latestTs, number: 100n, hash: '0xddd' } as any);
       });
@@ -414,28 +414,27 @@ describe('EpochCache', () => {
       const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);
       const latestTs = epoch1Ts + 10000n;
 
-      client.getBlock.mockResolvedValue({
-        timestamp: latestTs,
-        number: 100n,
-        hash: '0xeee',
-      } as any);
-
-      let resolveCommittee: (v: EthAddress[]) => void;
-      rollupContract.getCommitteeAt.mockImplementation(() => new Promise(resolve => (resolveCommittee = resolve)));
+      const latestBlock = promiseWithResolvers<GetBlockReturnType>();
+      client.getBlock.mockImplementation(((args?: { blockTag?: string }) =>
+        args?.blockTag === 'finalized'
+          ? Promise.resolve({ timestamp: latestTs, number: 100n, hash: '0xeee' } as unknown as GetBlockReturnType)
+          : latestBlock.promise) as typeof client.getBlock);
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
       rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(0n));
 
       // Fire two concurrent requests
       const p1 = epochCache.getCommittee(epoch1Slot);
       const p2 = epochCache.getCommittee(epoch1Slot);
 
-      // Only one L1 call should be in-flight
-      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
+      // Only one fetch should be in-flight
+      expect(client.getBlock).toHaveBeenCalledTimes(1);
 
-      // Resolve and both promises should return the same result
-      resolveCommittee!(testCommittee);
+      // Resolve and both promises should return the same result from a single committee read
+      latestBlock.resolve({ timestamp: latestTs, number: 100n, hash: '0xeee' } as unknown as GetBlockReturnType);
       const [r1, r2] = await Promise.all([p1, p2]);
       expect(r1.committee).toEqual(testCommittee);
       expect(r2.committee).toEqual(testCommittee);
+      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
     });
 
     it('should eventually mark a non-finalized entry as finalized on re-query', async () => {
@@ -444,7 +443,7 @@ describe('EpochCache', () => {
       const samplingTs = epoch1Ts - BigInt(2 * EPOCH_DURATION * SLOT_DURATION); // lag=2
       const nowSec = BigInt(Math.floor(Date.now() / 1000));
 
-      // First call: not finalized (finalized block behind sampling ts)
+      // First call: not finalized (finalized block behind the block the entry is read at)
       client.getBlock.mockImplementation((args: any) => {
         if (args?.blockTag === 'finalized') {
           return Promise.resolve({ timestamp: samplingTs - 1n, number: 50n, hash: '0xf1' } as any);
@@ -462,10 +461,14 @@ describe('EpochCache', () => {
       jest.setSystemTime(Date.now() + SLOT_DURATION * 1000);
       const newNowSec = BigInt(Math.floor(Date.now() / 1000));
 
-      // Second call: now finalized (finalized block caught up)
+      // Second call: now finalized (finalized block caught up with the block the entry was read at)
       client.getBlock.mockImplementation((args: any) => {
         if (args?.blockTag === 'finalized') {
-          return Promise.resolve({ timestamp: samplingTs + 1n, number: 90n, hash: '0xf3' } as any);
+          return Promise.resolve({ timestamp: samplingTs + 1n, number: 100n, hash: '0xf3' } as any);
+        }
+        // The block the entry was read at was not reorged
+        if (args?.blockNumber === 100n) {
+          return Promise.resolve({ timestamp: nowSec, number: 100n, hash: '0xf2' } as any);
         }
         return Promise.resolve({ timestamp: newNowSec, number: 110n, hash: '0xf4' } as any);
       });
@@ -498,6 +501,281 @@ describe('EpochCache', () => {
       rollupContract.getCommitteeAt.mockClear();
       await epochCache.getCommittee(epoch1Slot);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0); // lightweight refresh
+    });
+  });
+
+  describe('reads against per-block L1 state', () => {
+    const EPOCH_SECONDS = BigInt(EPOCH_DURATION * SLOT_DURATION);
+    // With lagInEpochsForRandao = 2, the seed for epoch 5 samples the randao checkpointed in epoch 3.
+    const targetEpoch = EpochNumber(5);
+    const targetSlot = SlotNumber(5 * EPOCH_DURATION);
+    const startOfEpoch = (epoch: number) => l1GenesisTime + BigInt(epoch) * EPOCH_SECONDS;
+
+    const provisionalCommittee = [4, 5, 6].map(EthAddress.fromNumber);
+    const finalCommittee = [7, 8, 9].map(EthAddress.fromNumber);
+
+    /** Rollup state as seen at one L1 block. */
+    type L1State = { committee: EthAddress[] | undefined; seed: bigint; setUp: boolean; escapeHatchOpen?: boolean };
+    type L1Block = { number: bigint; timestamp: bigint; hash: `0x${string}`; state: L1State };
+
+    let blocks: Map<bigint, L1Block>;
+    let latestNumber: bigint;
+    let finalizedNumber: bigint;
+
+    const hashOf = (number: bigint, fork = 0): `0x${string}` =>
+      `0x${fork.toString(16).padStart(8, '0')}${number.toString(16).padStart(56, '0')}`;
+
+    /** Mines an L1 block with the given rollup state and moves the local clock to its timestamp. */
+    const mineL1Block = (timestamp: bigint, state: L1State, fork = 0) => {
+      latestNumber += 1n;
+      blocks.set(latestNumber, { number: latestNumber, timestamp, hash: hashOf(latestNumber, fork), state });
+      jest.setSystemTime(Number(timestamp) * 1000);
+    };
+
+    /** Replaces the L1 block at `number` with a block on another fork, which becomes the new chain tip. */
+    const reorgL1Block = (number: bigint, state: L1State) => {
+      const { timestamp } = blockAt(number);
+      latestNumber = number;
+      blocks.set(number, { number, timestamp, hash: hashOf(number, 1), state });
+    };
+
+    const blockAt = (blockNumber: bigint | undefined) => {
+      const block = blocks.get(blockNumber ?? latestNumber);
+      if (!block) {
+        throw new Error(`Unknown L1 block ${blockNumber}`);
+      }
+      return block;
+    };
+
+    const toViemBlock = ({ number, timestamp, hash }: L1Block) =>
+      ({ number, timestamp, hash }) as unknown as GetBlockReturnType;
+
+    const getL1Block = (args?: { blockTag?: string; blockNumber?: bigint }) =>
+      Promise.resolve(toViemBlock(blockAt(args?.blockTag === 'finalized' ? finalizedNumber : args?.blockNumber)));
+
+    beforeEach(() => {
+      blocks = new Map();
+      latestNumber = 99n;
+      finalizedNumber = 0n;
+      blocks.set(0n, {
+        number: 0n,
+        timestamp: l1GenesisTime,
+        hash: hashOf(0n),
+        state: { committee: undefined, seed: 0n, setUp: false },
+      });
+
+      client.getBlock.mockImplementation(getL1Block as typeof client.getBlock);
+      rollupContract.getCommitteeAt.mockImplementation((_ts, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.committee),
+      );
+      rollupContract.getSampleSeedAt.mockImplementation((_ts, opts) =>
+        Promise.resolve(Buffer32.fromBigInt(blockAt(opts?.blockNumber).state.seed)),
+      );
+      rollupContract.isEpochSetUp.mockImplementation((_epoch, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.setUp),
+      );
+      rollupContract.isEscapeHatchOpen.mockImplementation((_epoch, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.escapeHatchOpen ?? false),
+      );
+    });
+
+    it('reads every field of an entry at the same L1 block', async () => {
+      mineL1Block(startOfEpoch(5) + 60n, {
+        committee: provisionalCommittee,
+        seed: 1n,
+        setUp: true,
+        escapeHatchOpen: false,
+      });
+      const queriedBlock = blockAt(undefined);
+
+      // A new L1 block lands right after the cache reads the latest one, with a different committee, seed and hatch.
+      client.getBlock.mockImplementation((async (args?: { blockTag?: string; blockNumber?: bigint }) => {
+        const block = await getL1Block(args);
+        if (args?.blockTag === undefined && args?.blockNumber === undefined) {
+          mineL1Block(queriedBlock.timestamp + 12n, {
+            committee: finalCommittee,
+            seed: 2n,
+            setUp: true,
+            escapeHatchOpen: true,
+          });
+        }
+        return block;
+      }) as typeof client.getBlock);
+
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toEqual({
+        committee: provisionalCommittee,
+        seed: 1n,
+        epoch: targetEpoch,
+        isEscapeHatchOpen: false,
+      });
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBe(queriedBlock.timestamp);
+    });
+
+    it('does not serve a committee whose seed can still change', async () => {
+      // L1 is in the sampled epoch and nothing has checkpointed its randao yet.
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+
+      // setupEpoch runs for the sampled epoch, which writes its randao and changes the seed.
+      mineL1Block(startOfEpoch(3) + 72n, { committee: finalCommittee, seed: 2n, setUp: true });
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info.committee).toEqual(finalCommittee);
+      expect(info.seed).toBe(2n);
+      expect(info.epoch).toBe(targetEpoch);
+    });
+
+    it('serves the committee without reading storage once the latest L1 block is in the last L1 slot of the sampled epoch', async () => {
+      // No later L1 block can land in the sampled epoch, so its randao can no longer be written.
+      mineL1Block(startOfEpoch(4) - BigInt(SLOT_DURATION), { committee: finalCommittee, seed: 2n, setUp: false });
+
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info.committee).toEqual(finalCommittee);
+      expect(rollupContract.isEpochSetUp).not.toHaveBeenCalled();
+    });
+
+    it('does not serve the committee while one more L1 block can land in the sampled epoch', async () => {
+      mineL1Block(startOfEpoch(4) - 2n * BigInt(SLOT_DURATION), {
+        committee: provisionalCommittee,
+        seed: 1n,
+        setUp: false,
+      });
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+    });
+
+    it('serves an empty committee while the seed can still change when the target committee size is zero', async () => {
+      const anyoneCanPropose = new TestEpochCache(rollupContract, {
+        ...epochCache.getL1Constants(),
+        targetCommitteeSize: 0,
+        lagInEpochsForValidatorSet: 2,
+        lagInEpochsForRandao: 2,
+      });
+      mineL1Block(startOfEpoch(3) + 60n, { committee: [], seed: 1n, setUp: false });
+
+      const info = await anyoneCanPropose.getCommittee(targetSlot);
+      expect(info.committee).toEqual([]);
+    });
+
+    it('re-checks an unstable epoch on L1 at most once per Ethereum slot', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      const l1ReadsAfterFirstCheck = client.getBlock.mock.calls.length + rollupContract.isEpochSetUp.mock.calls.length;
+
+      jest.setSystemTime(Date.now() + 6_000);
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(client.getBlock.mock.calls.length + rollupContract.isEpochSetUp.mock.calls.length).toBe(
+        l1ReadsAfterFirstCheck,
+      );
+
+      mineL1Block(startOfEpoch(3) + 72n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(rollupContract.isEpochSetUp).toHaveBeenCalledTimes(2);
+    });
+
+    it('holds an unstable marker for an Ethereum slot even when the L1 tip lags the local clock', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      jest.setSystemTime(Date.now() + 20_000);
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      const storageReadsAfterFirstCheck = rollupContract.isEpochSetUp.mock.calls.length;
+
+      jest.setSystemTime(Date.now() + 6_000);
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(rollupContract.isEpochSetUp.mock.calls.length).toBe(storageReadsAfterFirstCheck);
+    });
+
+    it('does not serve committee data read after its L1 block was reorged out mid-fetch', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
+      const queriedBlock = latestNumber;
+
+      // The block that ran setupEpoch is reorged out after the seed check, while the committee and seed are read.
+      rollupContract.getCommitteeAt.mockImplementationOnce((_ts, opts) => {
+        reorgL1Block(queriedBlock, { committee: provisionalCommittee, seed: 1n, setUp: false });
+        return Promise.resolve(blockAt(opts?.blockNumber).state.committee);
+      });
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(/reorged out/);
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBeUndefined();
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+    });
+
+    it('marks an entry finalized once the L1 block it was read at is finalized', async () => {
+      const state: L1State = { committee: finalCommittee, seed: 2n, setUp: true };
+      mineL1Block(startOfEpoch(4) + 48n, state);
+      const blockBeforeQuery = latestNumber;
+      mineL1Block(startOfEpoch(4) + 60n, state);
+      finalizedNumber = blockBeforeQuery;
+
+      await epochCache.getCommittee(targetSlot);
+      expect(epochCache.isFinalized(targetEpoch)).toBe(false);
+
+      mineL1Block(startOfEpoch(4) + 72n, state);
+      finalizedNumber = blockBeforeQuery + 1n;
+      await epochCache.getCommittee(targetSlot);
+      expect(epochCache.isFinalized(targetEpoch)).toBe(true);
+    });
+
+    it('stores an unstable marker in place of a committee whose L1 block was reorged out', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
+      expect((await epochCache.getCommittee(targetSlot)).committee).toEqual(finalCommittee);
+
+      // The block that ran setupEpoch is reorged out, and the new chain has not run it.
+      reorgL1Block(latestNumber, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      mineL1Block(startOfEpoch(3) + 72n, { committee: provisionalCommittee, seed: 1n, setUp: false }, 1);
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(epochCache.isFinalized(targetEpoch)).toBeUndefined();
+    });
+
+    it('drops a reorged-out entry when its re-fetch fails', async () => {
+      mineL1Block(startOfEpoch(4) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
+      await epochCache.getCommittee(targetSlot);
+
+      reorgL1Block(latestNumber, { committee: finalCommittee, seed: 2n, setUp: true });
+      mineL1Block(startOfEpoch(4) + 72n, { committee: finalCommittee, seed: 2n, setUp: true }, 1);
+      rollupContract.getCommitteeAt.mockRejectedValueOnce(new Error('L1 RPC unavailable'));
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow('L1 RPC unavailable');
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBeUndefined();
+    });
+
+    it('treats an EpochNotStable revert from the committee read as an unstable seed', async () => {
+      mineL1Block(startOfEpoch(4), { committee: finalCommittee, seed: 2n, setUp: true });
+      const data = encodeErrorResult({
+        abi: [
+          {
+            type: 'error',
+            name: 'ValidatorSelection__EpochNotStable',
+            inputs: [
+              { name: 'queriedEpoch', type: 'uint256' },
+              { name: 'currentTimestamp', type: 'uint32' },
+            ],
+          },
+        ],
+        errorName: 'ValidatorSelection__EpochNotStable',
+        args: [BigInt(targetEpoch), Number(startOfEpoch(4))],
+      });
+      rollupContract.getCommitteeAt.mockRejectedValueOnce(
+        new RpcRequestError({
+          body: { method: 'eth_call', params: [] },
+          error: { code: 3, data, message: 'execution reverted' },
+          url: 'http://localhost:8545',
+        }),
+      );
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+    });
+
+    it('keeps a cached entry when the lightweight refresh fails', async () => {
+      mineL1Block(startOfEpoch(4) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
+      await epochCache.getCommittee(targetSlot);
+      const lastRefresh = epochCache.getCachedLastRefreshL1Timestamp(targetEpoch);
+
+      jest.setSystemTime(Date.now() + 12_000);
+      client.getBlock.mockRejectedValueOnce(new Error('L1 RPC unavailable'));
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow('L1 RPC unavailable');
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBe(lastRefresh);
     });
   });
 
