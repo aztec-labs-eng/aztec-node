@@ -263,6 +263,38 @@ describe('TxDataValidator', () => {
       setCalldata(tx, [shared, shared, new HashedValues([], shared.hash)]);
       await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_TOO_LARGE);
     });
+
+    it('accepts one entry shared by non-revertible, revertible and teardown calls', async () => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 1,
+        numberOfRevertiblePublicCallRequests: 1,
+        hasPublicTeardownCallRequest: true,
+      });
+      const shared = tx.publicFunctionCalldata[0];
+      const requests = [
+        ...tx.data.getNonRevertiblePublicCallRequests(),
+        ...tx.data.getRevertiblePublicCallRequests(),
+        tx.data.getTeardownPublicCallRequest()!,
+      ];
+      expect(requests).toHaveLength(3);
+      for (const request of requests) {
+        request.calldataHash = shared.hash;
+      }
+      setCalldata(tx, [shared]);
+      await expectValid([tx]);
+    });
+
+    it('accepts shared calldata listed once that calls receive exactly up to the limit', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2);
+      setCalldata(tx, [shared]);
+      await expectValid([tx]);
+    });
+
+    it('rejects shared calldata listed once that calls receive beyond the limit', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2 + 1);
+      setCalldata(tx, [shared]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_TOO_LARGE);
+    });
   });
 
   it('accepts txs whose calldata entries are listed in any order', async () => {
