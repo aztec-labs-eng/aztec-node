@@ -16,6 +16,7 @@ import { P2P_STORE_NAME } from '@aztec-labs/p2p';
 import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
+import { DatabaseVersion } from '@aztec-labs/stdlib/database-version/version';
 import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import {
@@ -36,7 +37,7 @@ import {
   getWorldStateHistoryStartCheckpoint,
   validateWorldStateHistory,
 } from '@aztec-labs/world-state';
-import { copyFile, mkdir, mkdtemp, rename, stat, unlink } from 'fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rename, stat, unlink } from 'fs/promises';
 import { join } from 'path';
 
 import type { SharedNodeConfig } from '../config/index.js';
@@ -68,7 +69,7 @@ export async function trySnapshotSync(config: SnapshotSyncConfig, log: Logger, g
   if (
     historyStartCheckpoint !== undefined &&
     worldStateDirectory &&
-    (await hasWorldStateDatabase(worldStateDirectory))
+    (await hasWorldStateDatabase(worldStateDirectory, rollupAddress))
   ) {
     await validateLocalWorldStateHistory(config, log, genesis);
     log.info('Using existing world-state database with compatible retained history', { historyStartCheckpoint });
@@ -399,7 +400,18 @@ async function moveSnapshotFile(source: string, destination: string) {
   }
 }
 
-async function hasWorldStateDatabase(dataDirectory: string): Promise<boolean> {
+async function hasWorldStateDatabase(dataDirectory: string, rollupAddress: EthAddress): Promise<boolean> {
+  const versionPath = join(dataDirectory, WORLD_STATE_DIR, DatabaseVersionManager.VERSION_FILE);
+  let storedVersion: DatabaseVersion;
+  try {
+    storedVersion = DatabaseVersion.fromBuffer(await readFile(versionPath));
+  } catch {
+    return false;
+  }
+  if (!storedVersion.equals(new DatabaseVersion(WORLD_STATE_DB_VERSION, rollupAddress))) {
+    return false;
+  }
+
   const sizes = await Promise.all(
     NATIVE_WORLD_STATE_DBS.map(async ([, directory]) => {
       try {

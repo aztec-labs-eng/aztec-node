@@ -26,6 +26,14 @@ function parseHistoryRetention(value: string): WorldStateHistoryRetention {
     : { type: 'pinned', checkpoint: CheckpointNumber(count) };
 }
 
+function migrateLegacyHistoryRetention(value: string): string {
+  const checkpoints = Number(value);
+  if (!value.trim() || !Number.isSafeInteger(checkpoints)) {
+    throw new Error(`Invalid legacy history retention '${value}'; expected a whole number`);
+  }
+  return checkpoints < 1 ? 'archive' : `rolling:${checkpoints}`;
+}
+
 /** World State synchronizer configuration values. */
 export interface WorldStateConfig {
   /** The frequency in which to check. */
@@ -111,6 +119,11 @@ export const worldStateConfigMappings: ConfigMappingsType<WorldStateConfig> = {
   },
   worldStateHistoryRetention: {
     env: 'WS_HISTORY_RETENTION',
+    fallback: ['WS_NUM_HISTORIC_CHECKPOINTS', 'WS_NUM_HISTORIC_BLOCKS'],
+    deprecatedFallback: [
+      { env: 'WS_NUM_HISTORIC_CHECKPOINTS', transform: migrateLegacyHistoryRetention },
+      { env: 'WS_NUM_HISTORIC_BLOCKS', transform: migrateLegacyHistoryRetention },
+    ],
     description:
       'World-state history retention: rolling:N retains N finalized checkpoints, pinned:N retains checkpoint N onwards, archive retains all history.',
     parseEnv: parseHistoryRetention,
