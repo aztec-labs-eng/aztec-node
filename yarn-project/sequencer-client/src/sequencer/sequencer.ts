@@ -1,5 +1,5 @@
 import { getKzg } from '@aztec-labs/blob-lib';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
 import {
   CommitteeNotStableError,
   type InboxContract,
@@ -1393,20 +1393,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     };
 
     // A committee that is not stable on L1 yet cannot tell whether we are in it, so treat that as not being in it.
-    const getCurrentCommittee = async () => {
-      try {
-        return (await this.epochCache.getCommittee(currentSlot)).committee;
-      } catch (err) {
-        if (err instanceof CommitteeNotStableError) {
-          this.log.debug(`Committee for slot ${currentSlot} is not stable on L1 yet`, {
-            currentSlot,
-            epoch: err.epoch,
-          });
-          return undefined;
-        }
-        throw err;
-      }
-    };
+    const getCurrentCommittee = async () =>
+      (await this.epochCache.getCommittee(currentSlot).catch(unlessCommitteeNotStable(undefined)))?.committee;
     const inCurrentCommittee = async () =>
       (await getCurrentCommittee())?.some(member => ourValidatorAddresses.some(addr => addr.equals(member)));
 
