@@ -140,6 +140,24 @@ describe('VersionManager', () => {
         expect(wasReset).toEqual(true);
         expect(upgradeSpy).not.toHaveBeenCalled();
       });
+
+      it('unless rollup-address changes are configured to throw', async () => {
+        fs.readFile.mockResolvedValueOnce(new DatabaseVersion(currentVersion, EthAddress.random()).toBuffer());
+        versionManager = createManager({ rollupAddressChangePolicy: 'throw' });
+        expectVersionFileWritten = false;
+
+        await expect(versionManager.open()).rejects.toThrow(/was created for rollup address .* but this node resolved/);
+        expect(fs.rm).not.toHaveBeenCalled();
+        expect(openSpy).not.toHaveBeenCalled();
+      });
+
+      it("opens fresh on a first boot even when rollup-address policy is 'throw' (no version file yet)", async () => {
+        fs.readFile.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+        versionManager = createManager({ rollupAddressChangePolicy: 'throw' });
+        const [_, wasReset] = await versionManager.open();
+        expect(wasReset).toEqual(true);
+        expect(openSpy).toHaveBeenCalled();
+      });
     });
 
     describe('version file read-failure policy', () => {

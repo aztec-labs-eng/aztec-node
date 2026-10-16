@@ -18,6 +18,14 @@ export type SchemaVersionMismatchPolicy = 'reset' | 'throw';
  * filesystem error. A genuinely missing file (ENOENT) is a first boot and is never affected by this.
  */
 export type VersionFileReadFailurePolicy = 'reset' | 'throw';
+/**
+ * How to react when the stored data was created for a different rollup address - a readable version marker that names
+ * another deployment. `'reset'` (default) wipes the data directory and starts fresh, correct for a cache of one
+ * deployment's chain. `'throw'` refuses to open and leaves the data untouched, required for a safety ledger (e.g.
+ * signing protection) that must fail closed rather than be wiped. Distinct from `VersionFileReadFailurePolicy`, which
+ * covers an unreadable version file; a genuinely missing file (ENOENT) is a first boot and is never affected.
+ */
+export type RollupAddressChangePolicy = 'reset' | 'throw';
 
 export type DatabaseVersionManagerOptions<T> = {
   schemaVersion: number;
@@ -27,6 +35,7 @@ export type DatabaseVersionManagerOptions<T> = {
   onUpgrade?: (dataDir: string, currentVersion: number, latestVersion: number) => Promise<void>;
   schemaVersionMismatchPolicy?: SchemaVersionMismatchPolicy;
   versionFileReadFailurePolicy?: VersionFileReadFailurePolicy;
+  rollupAddressChangePolicy?: RollupAddressChangePolicy;
   fileSystem?: DatabaseVersionManagerFs;
   log?: Logger;
 };
@@ -47,6 +56,7 @@ export class DatabaseVersionManager<T> {
   private onUpgrade?: (dataDir: string, currentVersion: number, latestVersion: number) => Promise<void>;
   private schemaVersionMismatchPolicy: SchemaVersionMismatchPolicy;
   private versionFileReadFailurePolicy: VersionFileReadFailurePolicy;
+  private rollupAddressChangePolicy: RollupAddressChangePolicy;
   private fileSystem: DatabaseVersionManagerFs;
   private log: Logger;
 
@@ -62,6 +72,7 @@ export class DatabaseVersionManager<T> {
    *   onUpgrade but before the marker is written re-runs onUpgrade on the next start.
    * @param schemaVersionMismatchPolicy - Whether schema mismatches should reset data or throw
    * @param versionFileReadFailurePolicy - Whether an unreadable (non-missing) version file should reset data or throw
+   * @param rollupAddressChangePolicy - Whether a resolved rollup-address change should reset data or throw
    * @param fileSystem - An interface to access the filesystem
    * @param log - Optional custom logger
    * @param options - Configuration options
@@ -74,6 +85,7 @@ export class DatabaseVersionManager<T> {
     onUpgrade,
     schemaVersionMismatchPolicy = 'reset',
     versionFileReadFailurePolicy = 'reset',
+    rollupAddressChangePolicy = 'reset',
     fileSystem = fs,
     log = createLogger(`foundation:version-manager`),
   }: DatabaseVersionManagerOptions<T>) {
@@ -89,6 +101,7 @@ export class DatabaseVersionManager<T> {
     this.onUpgrade = onUpgrade;
     this.schemaVersionMismatchPolicy = schemaVersionMismatchPolicy;
     this.versionFileReadFailurePolicy = versionFileReadFailurePolicy;
+    this.rollupAddressChangePolicy = rollupAddressChangePolicy;
     this.fileSystem = fileSystem;
     this.log = log;
   }
@@ -195,6 +208,13 @@ export class DatabaseVersionManager<T> {
         }
         needsReset = true;
       }
+    } else if (this.rollupAddressChangePolicy === 'throw' && !storedVersion.equals(DatabaseVersion.empty())) {
+      // The stored data belongs to a different rollup deployment. A store that opts into this policy is a safety
+      // ledger (the single-node double-signing protection), not a cache, so refuse to open rather than wipe it.
+      throw new Error(
+        `Database at ${this.dataDirectory} was created for rollup address ${storedVersion.rollupAddress} but this node resolved ${this.currentVersion.rollupAddress}. ` +
+          `Refusing to open the database; data was NOT reset. Point the node at the correct data directory or rollup, then retry.`,
+      );
     } else {
       if (shouldLogDataReset) {
         this.log.warn('Rollup address has changed, resetting data directory', {
