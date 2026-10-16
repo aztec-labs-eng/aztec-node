@@ -115,12 +115,21 @@ The proposer always builds for the *next* slot rather than the current one
 lead time to assemble and propagate the block. The "target slot" methods on the
 epoch cache apply this offset automatically.
 
-### Empty Committees
+### Committee Lookups
 
-If the committee is empty (i.e., `targetCommitteeSize` is 0), anyone can propose.
-The proposer methods return `undefined` in this case rather than throwing. If the
-committee should exist but doesn't (insufficient validators registered), a
-`NoCommitteeError` is thrown.
+Every committee getter returns a lookup with a `state` that callers match on:
+
+- `members`: the epoch has a non-empty committee, and the lookup carries it (or the
+  proposer, or the membership asked for).
+- `open`: `targetCommitteeSize` is 0, so anyone can propose and nobody attests.
+- `none`: the committee should exist but doesn't, because too few validators are
+  registered.
+- `unstable`: the epoch's sample seed can still change on L1, so the committee is not
+  known yet. Never treat it as `open` or `none`: p2p, for one, accepts any signer in
+  `open` and penalizes the peer in `none`, but must ignore without a penalty here.
+
+Callers that cannot act without a known committee and rely on a thrown error to retry
+use `requireStableCommittee`, which throws `CommitteeNotStableError` for `unstable`.
 
 ## Escape Hatch
 
@@ -144,7 +153,7 @@ The escape hatch has its own candidate pool, separate from the main validator se
 
 The epoch cache queries `isHatchOpen(epoch)` on the escape hatch contract and
 caches the result alongside the committee info for each epoch. This flag is
-exposed via `isEscapeHatchOpen(epoch)` and `isEscapeHatchOpenAtSlot(slot)`,
+exposed via `lookupEscapeHatch(epoch)` and `lookupEscapeHatchAtSlot(slot)`,
 used by the sequencer to decide whether to require committee attestations.
 
 ## TTL-based Caching with Finalization Tracking

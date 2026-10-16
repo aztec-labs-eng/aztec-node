@@ -10,11 +10,12 @@ This module validates `CheckpointAttestation` gossipsub messages. Attestations a
 |---|------|-------------|----------|------|
 | 1 | **Slot timeliness**: `currentSlot` or `nextSlot`. Previous slot within 500ms: IGNORE. Older: REJECT. | REJECT or IGNORE | HighToleranceError | `attestation_validator.ts` |
 | 2 | **Attester signature**: `getSender()` must recover valid address | REJECT | LowToleranceError | same |
-| 3 | **Attester in committee**: recovered address in committee for slot | REJECT | HighToleranceError | same |
-| 4 | **Proposer exists**: `getProposerAttesterAddressInSlot` must return defined | REJECT | HighToleranceError | same |
+| 3 | **Attester in committee**: recovered address in the slot's committee (an `open` or `none` committee has no members) | REJECT | HighToleranceError | same |
+| 4 | **Proposer exists**: `lookupProposer` must not be `open` | REJECT | HighToleranceError | same |
 | 5 | **Proposer signature**: `getProposer()` must recover valid address | REJECT | LowToleranceError | same |
 | 6 | **Proposer matches expected**: recovered proposer = expected for slot | REJECT | HighToleranceError | same |
-| 7 | **NoCommitteeError**: committee unavailable | REJECT | LowToleranceError | same |
+| 7 | **No committee**: proposer lookup is `none` | REJECT | LowToleranceError | same |
+| 8 | **Committee not stable**: either lookup is `unstable` (seed not fixed on L1), or it throws locally | IGNORE | none | same |
 
 **Fisherman mode extension** (`FishermanAttestationValidator`): if a checkpoint proposal for the same archive exists in pool, the attestation's `ConsensusPayload` must `.equals()` the stored proposal's payload. On mismatch: REJECT + LowToleranceError.
 
