@@ -2,7 +2,11 @@ import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import type { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import {
+  CommitteeNotStableError,
+  type RollupContract,
+  type SlashingProposerContract,
+} from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { unique } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -152,7 +156,8 @@ export async function awaitCommitteeExists({
  * parities, which matters because the per-slot proposer is a different RANDAO-shuffled committee
  * member: searching only a fixed offset within each epoch can leave a 1-of-N target unexamined when
  * the epoch is short. A candidate in an epoch whose committee isn't sampled yet makes the proposer
- * lookup revert with EpochNotStable; this warps one epoch forward and continues, keeping the
+ * lookup revert with EpochNotStable, and one whose seed can still change makes the epoch cache throw
+ * CommitteeNotStableError; either way this warps one epoch forward and continues, keeping the
  * candidate at least `minLeadSlots` ahead of the new current slot. Throws after `maxSlotsToScan`.
  *
  * Unlike {@link advanceToEpochBeforeProposer}, this does not stop an epoch early — callers that want
@@ -182,7 +187,9 @@ export function findUpcomingProposerSlot({
       try {
         proposer = await epochCache.getProposerAttesterAddressInSlot(SlotNumber(candidate));
       } catch (err) {
-        if (!(err instanceof Error) || !err.message.includes('EpochNotStable')) {
+        const notStable =
+          err instanceof CommitteeNotStableError || (err instanceof Error && err.message.includes('EpochNotStable'));
+        if (!notStable) {
           throw err;
         }
         await cheatCodes.advanceToNextEpoch();
@@ -246,6 +253,9 @@ export function advanceToEpochBeforeProposer({
     const { epochDuration } = await cheatCodes.getConfig();
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // The next epoch's seed is only fixed once the current epoch's randao is checkpointed, and with sequencers
+      // stopped nothing proposes to do it. Set the current epoch up so the next epoch's committee can be read.
+      await cheatCodes.setupEpoch();
       const currentEpoch = await cheatCodes.getEpoch();
       // Check the NEXT epoch's slots so we stay one epoch before the target,
       // giving the caller time to start sequencers before the target epoch arrives.
