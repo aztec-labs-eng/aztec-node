@@ -136,7 +136,7 @@ describe('ValidatorClient Integration', () => {
       worldStateBlockCheckIntervalMS: 20,
       worldStateBlockRequestBatchSize: 10,
       worldStateDbMapSizeKb: 1024 * 1024,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' as const },
     };
     const worldStateDb = await NativeWorldStateService.tmp(true, genesis);
     const archiver = await createNoopL1Archiver(

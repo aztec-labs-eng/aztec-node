@@ -33,6 +33,7 @@ import type { WorldStateStatusFull } from '../native/message.js';
 import type { MerkleTreeAdminDatabase } from '../world-state-db/merkle_tree_db.js';
 import type { WorldStateConfig } from './config.js';
 import { WorldStateSynchronizerError } from './errors.js';
+import { validateWorldStateHistory } from './history.js';
 
 export type { SnapshotDataKeys };
 
@@ -48,7 +49,6 @@ export class ServerWorldStateSynchronizer
   implements WorldStateSynchronizer, L2BlockStreamLocalDataProvider, L2BlockStreamEventHandler
 {
   private latestBlockNumberAtStart = BlockNumber.ZERO;
-  private historyToKeep: number | undefined;
   private currentState: WorldStateRunningState = WorldStateRunningState.IDLE;
 
   private syncPromise = promiseWithResolvers<void>();
@@ -74,12 +74,7 @@ export class ServerWorldStateSynchronizer
     private readonly log: Logger = createLogger('world_state'),
   ) {
     this.mutationQueue.start();
-    this.historyToKeep = config.worldStateCheckpointHistory < 1 ? undefined : config.worldStateCheckpointHistory;
-    this.log.info(
-      `Created world state synchroniser with block history of ${
-        this.historyToKeep === undefined ? 'infinity' : this.historyToKeep
-      }`,
-    );
+    this.log.info('Created world state synchronizer', { historyRetention: config.worldStateHistoryRetention });
   }
 
   public getCommitted(): MerkleTreeReadOperations {
@@ -164,6 +159,16 @@ export class ServerWorldStateSynchronizer
     if (this.currentState !== WorldStateRunningState.IDLE) {
       return this.syncPromise;
     }
+
+    const summary = await this.merkleTreeDb.getStatusSummary();
+    if (this.config.worldStateHistoryRetention.type !== 'rolling') {
+      await validateWorldStateHistory(this.config, summary, this.l2BlockSource);
+    }
+    this.log.info('World state history available at startup', {
+      oldestHistoricBlock: summary.oldestHistoricalBlock,
+      latestBlock: summary.unfinalizedBlockNumber,
+      historyRetention: this.config.worldStateHistoryRetention,
+    });
 
     // Get the current latest block number
     this.latestBlockNumberAtStart = BlockNumber(await this.l2BlockSource.getBlockNumber());
@@ -504,7 +509,8 @@ export class ServerWorldStateSynchronizer
       return;
     }
     const summary = await this.merkleTreeDb.setFinalized(blockNumber);
-    if (this.historyToKeep === undefined) {
+    const policy = this.config.worldStateHistoryRetention;
+    if (policy.type === 'archive') {
       return;
     }
     const finalisedBlockData = await this.l2BlockSource.getBlockData({ number: summary.finalizedBlockNumber });
@@ -515,7 +521,10 @@ export class ServerWorldStateSynchronizer
       return;
     }
     // Compute the required historic checkpoint number
-    const newHistoricCheckpointNumber = finalisedBlockData.checkpointNumber - this.historyToKeep + 1;
+    const newHistoricCheckpointNumber =
+      policy.type === 'rolling'
+        ? finalisedBlockData.checkpointNumber - policy.checkpoints + 1
+        : Math.min(policy.checkpoint, finalisedBlockData.checkpointNumber);
     if (newHistoricCheckpointNumber <= 1) {
       return;
     }

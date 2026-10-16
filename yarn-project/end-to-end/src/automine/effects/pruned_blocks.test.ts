@@ -15,7 +15,7 @@ import { AutomineTestContext } from '../automine_test_context.js';
 // Tests PXE interacting with a node that has pruned relevant blocks, preventing usage of the archive API (which PXE
 // should not rely on).
 //
-// Uses a single node with AutomineSequencer, worldStateCheckpointHistory=2, and
+// Uses a single node with AutomineSequencer, worldStateHistoryRetention=rolling:2, and
 // aztecProofSubmissionEpochs=1024 (effectively no reorg). markAsProven + extra L1 blocks cause world-state
 // to prune old block data; the test then verifies that PXE can still discover notes from pruned blocks.
 describe('automine/effects/pruned_blocks', () => {
@@ -53,7 +53,7 @@ describe('automine/effects/pruned_blocks', () => {
     } = (
       await AutomineTestContext.setup({
         numberOfAccounts: 3,
-        worldStateCheckpointHistory: WORLD_STATE_CHECKPOINT_HISTORY,
+        worldStateHistoryRetention: { type: 'rolling', checkpoints: WORLD_STATE_CHECKPOINT_HISTORY },
         worldStateBlockCheckIntervalMS: WORLD_STATE_CHECK_INTERVAL_MS,
         archiverPollingIntervalMS: ARCHIVER_POLLING_INTERVAL_MS,
         aztecProofSubmissionEpochs: 1024, // effectively do not reorg
