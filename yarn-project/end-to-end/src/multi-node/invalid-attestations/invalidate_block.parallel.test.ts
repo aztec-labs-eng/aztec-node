@@ -29,6 +29,7 @@ import {
   MultiNodeTestContext,
   type RegisteredValidator,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 10);
@@ -391,11 +392,14 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         const preBadTargetSlots = times(preBadSlotCount, i => SlotNumber.add(candidateWarpSlot, i + 1));
         const candidateSlot1 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 1);
         const candidateSlot2 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 2);
-        const [preBadProposers, p1, p2] = await Promise.all([
-          Promise.all(preBadTargetSlots.map(slot => test.epochCache.getProposerAttesterAddressInSlot(slot))),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot1),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot2),
-        ]);
+        const readProposer = (slot: SlotNumber) =>
+          getProposerFixingSeed(test.epochCache, test.context.cheatCodes.rollup, slot);
+        const preBadProposers: (EthAddress | undefined)[] = [];
+        for (const slot of preBadTargetSlots) {
+          preBadProposers.push(await readProposer(slot));
+        }
+        const p1 = await readProposer(candidateSlot1);
+        const p2 = await readProposer(candidateSlot2);
 
         logger.warn(`Checking bad checkpoint slots ${candidateSlot1} and ${candidateSlot2}`, {
           candidateWarpSlot,

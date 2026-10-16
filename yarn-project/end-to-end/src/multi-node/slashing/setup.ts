@@ -20,7 +20,7 @@ import { jest } from '@jest/globals';
 import { testSpan } from '../../fixtures/timing.js';
 import { submitTxsTo } from '../../shared/submit-transactions.js';
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
-import type { MultiNodeTestContext } from '../multi_node_test_context.js';
+import { type MultiNodeTestContext, getProposerFixingSeed } from '../multi_node_test_context.js';
 
 const TEST_TIMEOUT = 600_000; // 10 minutes
 
@@ -185,7 +185,7 @@ export function findUpcomingProposerSlot({
     for (let scanned = 0; scanned < maxSlotsToScan; scanned++) {
       let proposer: EthAddress | undefined;
       try {
-        proposer = await epochCache.getProposerAttesterAddressInSlot(SlotNumber(candidate));
+        proposer = await getProposerFixingSeed(epochCache, cheatCodes, SlotNumber(candidate));
       } catch (err) {
         const notStable =
           err instanceof CommitteeNotStableError || (err instanceof Error && err.message.includes('EpochNotStable'));
@@ -253,9 +253,6 @@ export function advanceToEpochBeforeProposer({
     const { epochDuration } = await cheatCodes.getConfig();
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      // The next epoch's seed is only fixed once the current epoch's randao is checkpointed, and with sequencers
-      // stopped nothing proposes to do it. Set the current epoch up so the next epoch's committee can be read.
-      await cheatCodes.setupEpoch();
       const currentEpoch = await cheatCodes.getEpoch();
       // Check the NEXT epoch's slots so we stay one epoch before the target,
       // giving the caller time to start sequencers before the target epoch arrives.
@@ -271,7 +268,7 @@ export function advanceToEpochBeforeProposer({
       );
 
       for (let s = startSlot; s < endSlot; s++) {
-        const proposer = await epochCache.getProposerAttesterAddressInSlot(SlotNumber(s));
+        const proposer = await getProposerFixingSeed(epochCache, cheatCodes, SlotNumber(s));
         if (proposer && proposer.equals(targetProposer)) {
           logger.warn(
             `Found target proposer ${targetProposer} in slot ${s} of epoch ${nextEpoch}. Staying at epoch ${currentEpoch} to allow sequencer startup.`,

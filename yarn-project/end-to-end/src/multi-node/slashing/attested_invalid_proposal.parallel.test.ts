@@ -23,6 +23,7 @@ import {
   MultiNodeTestContext,
   SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
 import { SENTINEL_TIMING, awaitCommitteeExists, findSlashOffense } from './setup.js';
 
@@ -115,17 +116,14 @@ async function advanceToEpochBeforePipelinedTargetSlot({
   const { epochDuration } = await cheatCodes.getConfig();
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // The next epoch's seed is only fixed once the current epoch's randao is checkpointed, so set the current epoch
-    // up before reading the next epoch's proposers.
-    await cheatCodes.setupEpoch();
     const currentEpoch = await cheatCodes.getEpoch();
     const nextEpoch = Number(currentEpoch) + 1;
     const firstSlotOfNextEpoch = nextEpoch * Number(epochDuration);
     // The prior pipelined target can start first after the epoch warp and consume the bad proposer config.
     const priorPipelinedTargetSlot = SlotNumber(firstSlotOfNextEpoch);
     const pipelinedTargetSlot = SlotNumber(firstSlotOfNextEpoch + 1);
-    const priorProposer = await epochCache.getProposerAttesterAddressInSlot(priorPipelinedTargetSlot);
-    const proposer = await epochCache.getProposerAttesterAddressInSlot(pipelinedTargetSlot);
+    const priorProposer = await getProposerFixingSeed(epochCache, cheatCodes, priorPipelinedTargetSlot);
+    const proposer = await getProposerFixingSeed(epochCache, cheatCodes, pipelinedTargetSlot);
 
     logger.info(
       `Checking pipelined target slot ${pipelinedTargetSlot} in epoch ${nextEpoch} for proposer ${targetProposer}`,
