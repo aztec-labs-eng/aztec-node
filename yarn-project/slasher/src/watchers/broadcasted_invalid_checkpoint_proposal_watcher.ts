@@ -2,7 +2,6 @@ import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, pick } from '@aztec-labs/foundation/collection';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { FifoSet } from '@aztec-labs/foundation/fifo-set';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -15,6 +14,7 @@ import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEm
 
 const BroadcastedInvalidCheckpointProposalWatcherConfigKeys = [
   'slashBroadcastedInvalidCheckpointProposalPenalty',
+  'slashDuplicateProposalPenalty',
 ] as const;
 
 const SCAN_SLOT_LAG = 1;
@@ -33,14 +33,23 @@ type SignedBlockProposal = {
   signer: EthAddress;
 };
 
-/** Detects truncated-checkpoint proposal offenses from retained signed P2P proposals. */
+/**
+ * Detects offenses in retained signed P2P proposals once their slot has closed: truncated checkpoint proposals, and
+ * duplicate proposals, where one signer signed two different payloads for the same block index or for the slot's
+ * checkpoint. Offenses are attributed to the signer recovered from each proposal, so payloads from different signers
+ * at the same position are never counted against each other.
+ */
 export class BroadcastedInvalidCheckpointProposalWatcher
   extends (EventEmitter as new () => WatcherEmitter)
   implements Watcher
 {
   private readonly log: Logger = createLogger('broadcasted-invalid-checkpoint-proposal-watcher');
   private readonly runningPromise: RunningPromise;
-  private readonly emittedOffenses: FifoSet<string>;
+  /**
+   * Keys of offenses already emitted, by slot. Several signers can offend in one slot, so entries are pruned as their
+   * slot leaves the scan window rather than capped at a fixed count, which could evict a slot that is still rescanned.
+   */
+  private readonly emittedOffensesBySlot = new Map<SlotNumber, Set<string>>();
   private readonly scanSlotLookback: number;
   private config: BroadcastedInvalidCheckpointProposalWatcherConfig;
   private lastScannedSlot: SlotNumber | undefined;
@@ -56,11 +65,6 @@ export class BroadcastedInvalidCheckpointProposalWatcher
     const constants = epochCache.getL1Constants();
     this.config = pick(config, ...BroadcastedInvalidCheckpointProposalWatcherConfigKeys);
     this.scanSlotLookback = Math.max(1, scanSlotLookback);
-
-    // Bound emitted offenses to the number of slots we rescan. This watcher currently tracks one offense type,
-    // and at most one offense of that type can be emitted per slot.
-    const offenseTypes = 1;
-    this.emittedOffenses = FifoSet.withLimit<string>(offenseTypes * this.scanSlotLookback);
 
     const intervalMs = Math.max(1000, (constants.ethereumSlotDuration * 1000) / 4);
     this.runningPromise = new RunningPromise(() => this.scan(), this.log, intervalMs);
@@ -98,6 +102,7 @@ export class BroadcastedInvalidCheckpointProposalWatcher
     const oldestUnscannedSlot =
       this.lastScannedSlot === undefined ? oldestLookbackSlot : SlotNumber(this.lastScannedSlot + 1);
     const oldestSlot = SlotNumber(Math.min(oldestLookbackSlot, oldestUnscannedSlot));
+    this.pruneEmittedOffensesBefore(oldestSlot);
     for (let slot = oldestSlot; slot <= newestSlotToConsider; slot++) {
       await this.scanSlot(SlotNumber(slot));
     }
@@ -112,7 +117,7 @@ export class BroadcastedInvalidCheckpointProposalWatcher
       return;
     }
 
-    this.log.info(`Detected broadcasted invalid checkpoint proposal offense`, {
+    this.log.info(`Detected broadcasted proposal offense`, {
       slot,
       offenses: slashArgs.map(args => ({
         validator: args.validator.toString(),
@@ -125,17 +130,64 @@ export class BroadcastedInvalidCheckpointProposalWatcher
   }
 
   private getSlashArgsForProposals(slot: SlotNumber, proposals: ProposalsForSlot): WantToSlashArgs[] {
-    const offenders = this.findOffenders(proposals.blockProposals, proposals.checkpointProposals);
-    // we expect one proposer per slot today.
-    return [...offenders.values()].map(validator => ({
-      validator,
-      amount: this.config.slashBroadcastedInvalidCheckpointProposalPenalty,
-      offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
-      epochOrSlot: BigInt(slot),
-    }));
+    const { blockProposals, checkpointProposals } = proposals;
+    const truncators = this.findTruncatedCheckpointSigners(blockProposals, checkpointProposals);
+    const equivocators = this.findEquivocators(blockProposals, checkpointProposals);
+    return [
+      ...[...truncators.values()].map(validator => ({
+        validator,
+        amount: this.config.slashBroadcastedInvalidCheckpointProposalPenalty,
+        offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: BigInt(slot),
+      })),
+      ...[...equivocators.values()].map(validator => ({
+        validator,
+        amount: this.config.slashDuplicateProposalPenalty,
+        offenseType: OffenseType.DUPLICATE_PROPOSAL,
+        epochOrSlot: BigInt(slot),
+      })),
+    ];
   }
 
-  private findOffenders(blockProposals: BlockProposal[], checkpointProposals: CheckpointProposalCore[]) {
+  /**
+   * Returns the signers that signed two or more distinct payloads at one position: the same block index, or the
+   * slot's checkpoint. A signer that equivocates at several positions is returned once.
+   */
+  private findEquivocators(
+    blockProposals: BlockProposal[],
+    checkpointProposals: CheckpointProposalCore[],
+  ): Map<string, EthAddress> {
+    const groups = new Map<string, { signer: EthAddress; payloadHashes: Set<string> }>();
+    const track = (signer: EthAddress | undefined, position: string, payloadHash: string) => {
+      if (!signer) {
+        return;
+      }
+      const groupKey = `${signer.toString()}-${position}`;
+      const group = groups.get(groupKey) ?? { signer, payloadHashes: new Set<string>() };
+      group.payloadHashes.add(payloadHash);
+      groups.set(groupKey, group);
+    };
+
+    for (const proposal of blockProposals) {
+      track(proposal.getSender(), `block-${proposal.indexWithinCheckpoint}`, proposal.getPayloadHash().toString());
+    }
+    for (const checkpoint of checkpointProposals) {
+      track(checkpoint.getSender(), 'checkpoint', checkpoint.getPayloadHash().toString());
+    }
+
+    const equivocators = new Map<string, EthAddress>();
+    for (const { signer, payloadHashes } of groups.values()) {
+      if (payloadHashes.size > 1) {
+        equivocators.set(signer.toString(), signer);
+      }
+    }
+    return equivocators;
+  }
+
+  private findTruncatedCheckpointSigners(
+    blockProposals: BlockProposal[],
+    checkpointProposals: CheckpointProposalCore[],
+  ) {
     const blocksBySigner = this.getSignedBlocksBySigner(blockProposals);
     const offenders = new Map<string, EthAddress>();
 
@@ -185,7 +237,22 @@ export class BroadcastedInvalidCheckpointProposalWatcher
   }
 
   private markAsNewOffense(args: WantToSlashArgs): boolean {
-    const key = `${args.validator.toString()}-${args.offenseType}-${args.epochOrSlot}`;
-    return this.emittedOffenses.addIfAbsent(key);
+    const slot = SlotNumber(Number(args.epochOrSlot));
+    const key = `${args.validator.toString()}-${args.offenseType}`;
+    const emitted = this.emittedOffensesBySlot.get(slot) ?? new Set<string>();
+    if (emitted.has(key)) {
+      return false;
+    }
+    emitted.add(key);
+    this.emittedOffensesBySlot.set(slot, emitted);
+    return true;
+  }
+
+  private pruneEmittedOffensesBefore(oldestSlot: SlotNumber): void {
+    for (const slot of this.emittedOffensesBySlot.keys()) {
+      if (slot < oldestSlot) {
+        this.emittedOffensesBySlot.delete(slot);
+      }
+    }
   }
 }
