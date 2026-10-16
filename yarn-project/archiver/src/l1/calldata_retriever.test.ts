@@ -1077,6 +1077,7 @@ describe('CalldataRetriever', () => {
         CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(instrumentation.recordCheckpointCalldataUnavailable).toHaveBeenCalledTimes(2);
 
       warnSpy.mockRestore();
     });
