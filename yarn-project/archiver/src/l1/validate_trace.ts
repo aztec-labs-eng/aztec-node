@@ -52,6 +52,8 @@ export interface TraceAvailability {
   debugTraceOld: boolean;
   /** Whether trace_transaction works for old blocks (512 blocks ago) */
   traceTransactionOld: boolean;
+  /** Whether no recent block had a transaction to probe with, so availability could not be determined */
+  noTxToProbe: boolean;
 }
 
 /**
@@ -71,6 +73,7 @@ export async function validateTraceAvailability(
     traceTransactionRecent: false,
     debugTraceOld: false,
     traceTransactionOld: false,
+    noTxToProbe: false,
   };
 
   try {
@@ -86,6 +89,7 @@ export async function validateTraceAvailability(
 
     if (!hasTxs(latestBlock)) {
       logger.warn('No blocks with transactions found from latest back to genesis, cannot validate trace availability');
+      result.noTxToProbe = true;
       return result;
     }
 
@@ -213,16 +217,21 @@ export async function validateAndLogTraceAvailability(
     logger.warn(
       `Ethereum client only supports trace methods for recent blocks (${methods.join(', ')}). Historical transaction traces may not be available.`,
     );
+  } else if (availability.noTxToProbe) {
+    // An idle dev or test chain can have no recent transaction to trace, which says nothing about the endpoint
+    logger.warn('Starting without confirming that the Ethereum debug client supports trace methods');
   } else {
     // Error case: no support at all
     const errorMessage =
-      'Ethereum debug client does not support debug_traceTransaction or trace_transaction methods. Transaction tracing will not be available. This may impact archiver syncing.';
+      'Ethereum debug client does not support debug_traceTransaction or trace_transaction methods. ' +
+      'The archiver needs a trace to read checkpoints published through contracts it does not recognize, ' +
+      'and stops syncing at the first one it cannot read. Point ETHEREUM_DEBUG_HOSTS at a trace-capable endpoint.';
 
     if (ethereumAllowNoDebugHosts) {
       logger.warn(`${errorMessage} Continuing because ETHEREUM_ALLOW_NO_DEBUG_HOSTS is set to true.`);
     } else {
       logger.error(errorMessage);
-      throw new Error(`${errorMessage} Set ETHEREUM_ALLOW_NO_DEBUG_HOSTS=true to bypass this check.`);
+      throw new Error(`${errorMessage} Set ETHEREUM_ALLOW_NO_DEBUG_HOSTS=true to start anyway.`);
     }
   }
 }
