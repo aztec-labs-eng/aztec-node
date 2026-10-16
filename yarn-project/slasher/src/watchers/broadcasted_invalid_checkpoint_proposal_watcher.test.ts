@@ -42,6 +42,7 @@ describe('BroadcastedInvalidCheckpointProposalWatcher', () => {
     config = {
       ...DefaultSlasherConfig,
       slashBroadcastedInvalidCheckpointProposalPenalty: 11n,
+      slashDuplicateProposalPenalty: 23n,
     };
     watcher = new BroadcastedInvalidCheckpointProposalWatcher(p2pClient, l2BlockSource, epochCache, config, 4);
     handler = jest.fn();
@@ -305,5 +306,204 @@ describe('BroadcastedInvalidCheckpointProposalWatcher', () => {
       SlotNumber(10),
       SlotNumber(11),
     ]);
+  });
+
+  describe('duplicate proposals', () => {
+    const slot = SlotNumber(10);
+
+    const makeBlockAt = (signer: Secp256k1Signer, index: number): Promise<BlockProposal> =>
+      makeBlockProposal({
+        signer,
+        blockHeader: makeBlockHeader(index + 1, { slotNumber: slot }),
+        archiveRoot: Fr.random(),
+        indexWithinCheckpoint: IndexWithinCheckpoint(index),
+      });
+
+    const makeCheckpointAt = async (signer: Secp256k1Signer): Promise<CheckpointProposalCore> =>
+      (
+        await makeCheckpointProposal({
+          signer,
+          checkpointHeader: makeCheckpointHeader(1, { slotNumber: slot }),
+          archiveRoot: Fr.random(),
+        })
+      ).toCore();
+
+    const emittedOffenses = () => handler.mock.calls.flatMap(([args]) => args);
+
+    const duplicateOffense = (signer: Secp256k1Signer) => ({
+      validator: signer.address,
+      amount: 23n,
+      offenseType: OffenseType.DUPLICATE_PROPOSAL,
+      epochOrSlot: BigInt(slot),
+    });
+
+    it('slashes a signer with two block payloads at the same index', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
+    it('does not slash two signers with one payload each at the same index', async () => {
+      const first = Secp256k1Signer.random();
+      const second = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(first, 0), await makeBlockAt(second, 0)], []);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([]);
+    });
+
+    it('slashes a signer with two checkpoint payloads in the slot', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [], [await makeCheckpointAt(signer), await makeCheckpointAt(signer)]);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
+    it('does not slash two signers with one checkpoint payload each in the slot', async () => {
+      const first = Secp256k1Signer.random();
+      const second = Secp256k1Signer.random();
+      mockProposals(slot, [], [await makeCheckpointAt(first), await makeCheckpointAt(second)]);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([]);
+    });
+
+    it('emits a single offense when a signer duplicates both a block and the checkpoint', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(
+        slot,
+        [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)],
+        [await makeCheckpointAt(signer), await makeCheckpointAt(signer)],
+      );
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
+    it('does not slash a signer with payloads at different indexes', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 1)], []);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([]);
+    });
+
+    it('ignores proposals with no recoverable signer', async () => {
+      const unsignedBlocks = [
+        await makeBlockAt(Secp256k1Signer.random(), 0),
+        await makeBlockAt(Secp256k1Signer.random(), 0),
+      ];
+      const unsignedCheckpoints = [
+        await makeCheckpointAt(Secp256k1Signer.random()),
+        await makeCheckpointAt(Secp256k1Signer.random()),
+      ];
+      for (const proposal of [...unsignedBlocks, ...unsignedCheckpoints]) {
+        jest.spyOn(proposal, 'getSender').mockReturnValue(undefined);
+      }
+      mockProposals(slot, unsignedBlocks, unsignedCheckpoints);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([]);
+    });
+
+    it('does not emit the same offense again when rescanning the slot', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+      await watcher.scanSlot(slot);
+      await watcher.scanSlot(slot);
+      await watcher.scan();
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
+    it('emits each offense once when several signers offend in one slot across the scan window', async () => {
+      const equivocators = Array.from({ length: 5 }, () => Secp256k1Signer.random());
+      const duplicateBlocks = (
+        await Promise.all(
+          equivocators.map(async (signer, index) => [
+            await makeBlockAt(signer, index),
+            await makeBlockAt(signer, index),
+          ]),
+        )
+      ).flat();
+      const truncator = Secp256k1Signer.random();
+      const truncatorBlocks = await makeBlocks(truncator, slot, 4);
+      const truncatedCheckpoint = await makeCheckpointCore(truncator, slot, truncatorBlocks[1]);
+      mockProposals(slot, [...duplicateBlocks, ...truncatorBlocks], [truncatedCheckpoint]);
+
+      // Slot 10 stays in the scan window while the archiver syncs slots 12 through 15, and leaves it at 16.
+      for (let syncedSlot = 12; syncedSlot <= 16; syncedSlot++) {
+        l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(syncedSlot));
+        await watcher.scan();
+        await watcher.scan();
+      }
+
+      const offenses = emittedOffenses();
+      expect(offenses).toHaveLength(equivocators.length + 1);
+      expect(offenses).toEqual(
+        expect.arrayContaining([
+          ...equivocators.map(duplicateOffense),
+          {
+            validator: truncator.address,
+            amount: 11n,
+            offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+            epochOrSlot: BigInt(slot),
+          },
+        ]),
+      );
+    });
+
+    it('slashes a truncated checkpoint and a duplicate block from the same signer in one slot', async () => {
+      const signer = Secp256k1Signer.random();
+      const blocks = await makeBlocks(signer, slot, 4);
+      const checkpoint = await makeCheckpointCore(signer, slot, blocks[1]);
+      const duplicateBlock = await makeBlockAt(signer, 2);
+      mockProposals(slot, [...blocks, duplicateBlock], [checkpoint]);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([
+        {
+          validator: signer.address,
+          amount: 11n,
+          offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+          epochOrSlot: BigInt(slot),
+        },
+        duplicateOffense(signer),
+      ]);
+    });
+
+    it('does not emit an offense again when the archiver anchor moves back after the slot left the window', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+      for (const syncedSlot of [12, 16, 15]) {
+        l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(syncedSlot));
+        await watcher.scan();
+      }
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
+    it('picks up a duplicate proposal penalty change', async () => {
+      const signer = Secp256k1Signer.random();
+      watcher.updateConfig({ slashDuplicateProposalPenalty: 0n });
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+      await watcher.scanSlot(slot);
+
+      expect(emittedOffenses()).toEqual([{ ...duplicateOffense(signer), amount: 0n }]);
+    });
   });
 });

@@ -184,7 +184,10 @@ export class LibP2PService extends WithTracer implements P2PService {
   private protocolVersion = '';
   private topicStrings: Record<TopicType, string> = {} as Record<TopicType, string>;
 
-  /** Callback invoked when a duplicate proposal is detected (triggers slashing). */
+  /**
+   * Callback invoked when a second proposal is seen at one position, so the slot is marked as equivocated. It does not
+   * slash: the slasher attributes DUPLICATE_PROPOSAL per signer from the retained proposals.
+   */
   private duplicateProposalCallback?: (info: {
     slot: SlotNumber;
     proposer: EthAddress;
