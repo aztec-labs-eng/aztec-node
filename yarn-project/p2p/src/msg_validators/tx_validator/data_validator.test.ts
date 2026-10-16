@@ -4,7 +4,7 @@ import {
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS,
 } from '@aztec-labs/constants';
-import { timesParallel } from '@aztec-labs/foundation/collection';
+import { times, timesParallel } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
@@ -15,6 +15,7 @@ import { LogHash, ScopedLogHash } from '@aztec-labs/stdlib/kernel';
 import { ContractClassLog, ContractClassLogFields, PrivateLog } from '@aztec-labs/stdlib/logs';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
+  HashedValues,
   TX_ERROR_CALLDATA_COUNT_MISMATCH,
   TX_ERROR_CALLDATA_COUNT_TOO_LARGE,
   TX_ERROR_CONTRACT_CLASS_LOGS,
@@ -167,18 +168,139 @@ describe('TxDataValidator', () => {
     await expectInvalid(badTxs[1], TX_ERROR_INCORRECT_CALLDATA);
   });
 
-  it('rejects txs with mismatch number of calldata', async () => {
+  it('rejects txs with a public call that has no calldata entry', async () => {
     const goodTxs = await mockTxs(3);
-    const badTxs = await mockTxs(2);
-    // Missing a calldata.
-    const calldata = badTxs[0].publicFunctionCalldata.pop()!;
-    // Having an extra calldata.
-    badTxs[1].publicFunctionCalldata.push(calldata);
+    const [badTx] = await mockTxs(1);
+    badTx.publicFunctionCalldata.pop();
 
     await expectValid(goodTxs);
 
-    await expectInvalid(badTxs[0], TX_ERROR_CALLDATA_COUNT_MISMATCH);
-    await expectInvalid(badTxs[1], TX_ERROR_CALLDATA_COUNT_MISMATCH);
+    await expectInvalid(badTx, TX_ERROR_INCORRECT_CALLDATA);
+  });
+
+  it('rejects txs with more calldata entries than public calls use', async () => {
+    const goodTxs = await mockTxs(3);
+    const [badTx] = await mockTxs(1);
+    badTx.publicFunctionCalldata.push(badTx.publicFunctionCalldata.at(-1)!);
+
+    await expectValid(goodTxs);
+
+    await expectInvalid(badTx, TX_ERROR_CALLDATA_COUNT_MISMATCH);
+  });
+
+  describe('calldata shared by several public calls', () => {
+    /** Builds a tx whose non-revertible public calls all receive the same calldata, listed once per call. */
+    const mockTxWithSharedCalldata = async (numCalls: number, calldataSize = 2) => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: numCalls,
+        numberOfRevertiblePublicCallRequests: 0,
+        hasPublicTeardownCallRequest: false,
+        publicCalldataSize: calldataSize,
+      });
+      const shared = tx.publicFunctionCalldata[0];
+      for (const request of tx.data.getNonRevertiblePublicCallRequests()) {
+        request.calldataHash = shared.hash;
+      }
+      setCalldata(
+        tx,
+        times(numCalls, () => shared),
+      );
+      return { tx, shared };
+    };
+
+    const setCalldata = (tx: Tx, calldata: HashedValues[]) =>
+      tx.publicFunctionCalldata.splice(0, tx.publicFunctionCalldata.length, ...calldata);
+
+    it('accepts the shared calldata listed once per call', async () => {
+      const { tx } = await mockTxWithSharedCalldata(2);
+      await expectValid([tx]);
+    });
+
+    it('accepts the shared calldata listed once', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [shared]);
+      await expectValid([tx]);
+    });
+
+    it('rejects an entry that no call uses in place of a copy of the shared calldata', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [new HashedValues([Fr.random(), Fr.random()], Fr.random()), shared]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_MISMATCH);
+    });
+
+    it('rejects a correctly hashed entry that no call uses', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [shared, await HashedValues.fromCalldata([Fr.random()])]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_MISMATCH);
+    });
+
+    it('rejects more copies of the shared calldata than calls that use it', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [shared, shared, shared]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_MISMATCH);
+    });
+
+    it('counts the shared calldata once per call against the limit', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(3, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2);
+      setCalldata(tx, [shared, new HashedValues([], Fr.random()), new HashedValues([], Fr.random())]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_TOO_LARGE);
+    });
+
+    it('rejects a copy labeled with the shared hash but carrying other values, listed first', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [new HashedValues([], shared.hash), shared]);
+      await expectInvalid(tx, TX_ERROR_INCORRECT_CALLDATA);
+    });
+
+    it('rejects a copy labeled with the shared hash but carrying other values, listed last', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2);
+      setCalldata(tx, [shared, new HashedValues([], shared.hash)]);
+      await expectInvalid(tx, TX_ERROR_INCORRECT_CALLDATA);
+    });
+
+    it('limits the listed calldata even when a mislabeled copy makes the calls receive less', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(3, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2 + 1);
+      setCalldata(tx, [shared, shared, new HashedValues([], shared.hash)]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_TOO_LARGE);
+    });
+
+    it('accepts one entry shared by non-revertible, revertible and teardown calls', async () => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 1,
+        numberOfRevertiblePublicCallRequests: 1,
+        hasPublicTeardownCallRequest: true,
+      });
+      const shared = tx.publicFunctionCalldata[0];
+      const requests = [
+        ...tx.data.getNonRevertiblePublicCallRequests(),
+        ...tx.data.getRevertiblePublicCallRequests(),
+        tx.data.getTeardownPublicCallRequest()!,
+      ];
+      expect(requests).toHaveLength(3);
+      for (const request of requests) {
+        request.calldataHash = shared.hash;
+      }
+      setCalldata(tx, [shared]);
+      await expectValid([tx]);
+    });
+
+    it('accepts shared calldata listed once that calls receive exactly up to the limit', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2);
+      setCalldata(tx, [shared]);
+      await expectValid([tx]);
+    });
+
+    it('rejects shared calldata listed once that calls receive beyond the limit', async () => {
+      const { tx, shared } = await mockTxWithSharedCalldata(2, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS / 2 + 1);
+      setCalldata(tx, [shared]);
+      await expectInvalid(tx, TX_ERROR_CALLDATA_COUNT_TOO_LARGE);
+    });
+  });
+
+  it('accepts txs whose calldata entries are listed in any order', async () => {
+    const [tx] = await mockTxs(1);
+    tx.publicFunctionCalldata.reverse();
+    await expectValid([tx]);
   });
 
   it('rejects txs with mismatch number of contract class logs', async () => {
