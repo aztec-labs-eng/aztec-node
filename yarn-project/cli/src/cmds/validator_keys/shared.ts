@@ -16,7 +16,12 @@ import { dirname, isAbsolute, join } from 'path';
 import { mnemonicToAccount } from 'viem/accounts';
 import { Worker } from 'worker_threads';
 
-import { type BlsKeyDerivationPolicy, resolveBlsKeyDerivationPolicy, selectBlsKey } from './bls_key_derivation.js';
+import {
+  type BlsKeyDerivationPolicy,
+  type GeneratedMnemonic,
+  resolveBlsKeyDerivationPolicy,
+  selectBlsKey,
+} from './bls_key_derivation.js';
 import { defaultBlsPath } from './utils.js';
 
 type EthJsonV3WorkerResult = { json: string } | { error: { message: string; name?: string; stack?: string } };
@@ -93,8 +98,8 @@ export type BuildValidatorsInput = {
   remoteSigner?: string;
   /** Defaults to the policy used when no BLS key derivation flag is given. */
   blsKeyDerivation?: BlsKeyDerivationPolicy;
-  /** Whether the CLI generated `mnemonic` in this run. */
-  mnemonicGenerated?: boolean;
+  /** Set when the CLI generated `mnemonic` in this run. */
+  generatedMnemonic?: GeneratedMnemonic;
 };
 
 export function withValidatorIndex(path: string, accountIndex: number = 0, addressIndex: number = 0) {
@@ -170,7 +175,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
     coinbase,
     remoteSigner,
     blsKeyDerivation = resolveBlsKeyDerivationPolicy({}),
-    mnemonicGenerated,
+    generatedMnemonic,
   } = input;
 
   const summaries: ValidatorSummary[] = [];
@@ -183,7 +188,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
 
       const blsKey =
         ikm || mnemonic
-          ? selectBlsKey(blsKeyDerivation, { mnemonic, ikm, perValidatorPath, mnemonicGenerated })
+          ? selectBlsKey(blsKeyDerivation, { mnemonic, ikm, perValidatorPath, generatedMnemonic })
           : undefined;
       const blsPrivKey = blsKey?.privateKey;
       const blsPubCompressed = blsPrivKey ? await computeBlsPublicKeyCompressed(blsPrivKey) : undefined;
@@ -355,11 +360,12 @@ export async function writeBn254BlsKeystore(
 
 /**
  * Replace plaintext BLS keys in validators with { path, password } pointing to BN254 keystore files. Each file records
- * the key's derivation path from `derivationPaths` (keyed by compressed public key), falling back to `blsPath`.
+ * the key's derivation path from `derivationPaths` (keyed by compressed public key), or an empty path for keys missing
+ * from it, such as keys that were already in a keystore file, whose origin is unknown.
  */
 export async function writeBlsBn254ToFile(
   validators: ValidatorKeyStore[],
-  options: { outDir: string; password: string; blsPath?: string; derivationPaths?: Map<string, string> },
+  options: { outDir: string; password: string; derivationPaths?: Map<string, string> },
 ): Promise<void> {
   await Promise.all(
     validators.map(async (v, i) => {
@@ -375,7 +381,7 @@ export async function writeBlsBn254ToFile(
       }
 
       const pub = await computeBlsPublicKeyCompressed(blsKey);
-      const path = options.derivationPaths?.get(pub) ?? options.blsPath ?? defaultBlsPath;
+      const path = options.derivationPaths?.get(pub) ?? '';
       const fileBase = `${String(i + 1)}_${pub.slice(2, 18)}`;
       const keystorePath = await writeBn254BlsKeystore(options.outDir, fileBase, options.password, blsKey, pub, path);
 

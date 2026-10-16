@@ -9,7 +9,7 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { Buffer } from 'buffer';
 import { generateMnemonic, mnemonicToAccount, privateKeyToAddress } from 'viem/accounts';
 
-import { processAttesterAccounts } from './staker.js';
+import { assertWithinProofOfPossessionGasLimit, processAttesterAccounts } from './staker.js';
 
 // Utility functions to generate random test data
 function generateRandomMnemonic(): string {
@@ -323,6 +323,65 @@ describe('staker command', () => {
       // Check proof of possession format (may be variable length)
       expect(output.proofOfPossession.x).toMatch(/^0x[0-9a-fA-F]+$/);
       expect(output.proofOfPossession.y).toMatch(/^0x[0-9a-fA-F]+$/);
+    });
+  });
+
+  describe('assertWithinProofOfPossessionGasLimit', () => {
+    const TEST_MNEMONIC =
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    // With TEST_MNEMONIC, the BLS key at m/12381/3600/0/0/384795 is estimated at 271,106 gas, and the one at
+    // m/12381/3600/0/0/1 at 143,916.
+    const EXPENSIVE_GAS = 271_106;
+
+    const outputsFor = async (paths: string[]) => {
+      const attesters = paths.map((path, i) => ({
+        eth: ('0x' + (i + 1).toString(16).padStart(64, '0')) as EthAccount,
+        bls: deriveBlsKeyFromMnemonic(TEST_MNEMONIC, path) as BLSAccount,
+      }));
+      return await processAttesterAccounts(attesters, mockGse);
+    };
+
+    const gseWithLimit = (limit: bigint) =>
+      ({
+        ...mockGse,
+        address: { toString: () => '0x' + '12'.repeat(20) },
+        client: {
+          readContract: ({ functionName }: { functionName: string }) => {
+            if (functionName !== 'proofOfPossessionGasLimit') {
+              throw new Error(`Unexpected call to ${functionName}`);
+            }
+            return Promise.resolve(limit);
+          },
+        },
+      }) as unknown as GSEContract;
+
+    it('accepts keys estimated within the GSE proof-of-possession gas limit', async () => {
+      const outputs = await outputsFor(['m/12381/3600/0/0/1', 'm/12381/3600/0/0/384795']);
+      await expect(
+        assertWithinProofOfPossessionGasLimit(gseWithLimit(BigInt(EXPENSIVE_GAS)), outputs),
+      ).resolves.toBeUndefined();
+    });
+
+    it('names the attesters whose keys need more gas than the GSE gives', async () => {
+      const outputs = await outputsFor(['m/12381/3600/0/0/1', 'm/12381/3600/0/0/384795']);
+      const error = await assertWithinProofOfPossessionGasLimit(gseWithLimit(250_000n), outputs).then(
+        () => undefined,
+        (err: Error) => err.message,
+      );
+      expect(error).toContain(`gives each proof-of-possession check 250000 gas`);
+      expect(error).toContain(`${outputs[1].attester} (estimated at ${EXPENSIVE_GAS} gas)`);
+      expect(error).not.toContain(outputs[0].attester);
+      expect(error).toContain('--bls-key-derivation-v6 --bls-key-derivation-max-gas 250000');
+    });
+
+    it('suggests v6 alone when the GSE limit is at least the v6 budget', async () => {
+      const outputs = await outputsFor(['m/12381/3600/0/0/384795']);
+      const error = await assertWithinProofOfPossessionGasLimit(gseWithLimit(270_500n), outputs).then(
+        () => undefined,
+        (err: Error) => err.message,
+      );
+      expect(error).toContain('passing --bls-key-derivation-v6 to validator-keys new or add');
+      expect(error).not.toContain('--bls-key-derivation-max-gas');
     });
   });
 });

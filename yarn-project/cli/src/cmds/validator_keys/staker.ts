@@ -1,4 +1,11 @@
+import { GSEAbi } from '@aztec-foundation/l1-artifacts/GSEAbi';
+
 import { prettyPrintJSON } from '@aztec-labs/cli/utils';
+import {
+  AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL,
+  computeBn254RegistrationDigest,
+  estimateProofOfPossessionGas,
+} from '@aztec-labs/ethereum/bn254';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { GSEContract } from '@aztec-labs/ethereum/contracts';
 import { decryptBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
@@ -20,6 +27,8 @@ import { readFileSync, writeFileSync } from 'fs';
 import { basename, dirname, join } from 'path';
 import { createPublicClient, fallback, http } from 'viem';
 import { privateKeyToAddress } from 'viem/accounts';
+
+import { LATEST_BLS_KEY_DERIVATION } from './bls_key_derivation.js';
 
 export type StakerOptions = {
   from: string;
@@ -248,6 +257,48 @@ export async function processAttesterAccounts(
 }
 
 /**
+ * Throws when registering any of `outputs` would fail because the proof-of-possession check of its BLS key needs more
+ * gas than the GSE gives it. Governance sets that limit and can change it, so it is read from L1.
+ */
+export async function assertWithinProofOfPossessionGasLimit(gse: GSEContract, outputs: StakerOutput[]): Promise<void> {
+  const gasLimit = Number(
+    await gse.client.readContract({
+      address: gse.address.toString(),
+      abi: GSEAbi,
+      functionName: 'proofOfPossessionGasLimit',
+    }),
+  );
+
+  const overLimit = outputs
+    .map(output => {
+      const { attempts, sqrtCalls } = computeBn254RegistrationDigest({
+        x: BigInt(output.publicKeyG1.x),
+        y: BigInt(output.publicKeyG1.y),
+      });
+      return {
+        attester: output.attester,
+        estimatedGas: estimateProofOfPossessionGas(AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL, attempts, sqrtCalls),
+      };
+    })
+    .filter(({ estimatedGas }) => estimatedGas > gasLimit);
+  if (overLimit.length === 0) {
+    return;
+  }
+
+  const { version, budget } = LATEST_BLS_KEY_DERIVATION;
+  const flags =
+    gasLimit < budget
+      ? `--bls-key-derivation-v${version} --bls-key-derivation-max-gas ${gasLimit}`
+      : `--bls-key-derivation-v${version}`;
+  throw new Error(
+    `Registering these validators would fail: the GSE at ${gse.address} gives each proof-of-possession check ` +
+      `${gasLimit} gas, and the BLS keys of these attesters are estimated to need more: ` +
+      `${overLimit.map(({ attester, estimatedGas }) => `${attester} (estimated at ${estimatedGas} gas)`).join(', ')}. ` +
+      `Derive BLS keys that fit by passing ${flags} to validator-keys new or add, which changes their BLS keys.`,
+  );
+}
+
+/**
  * Main staker command function
  */
 export async function generateStakerJson(options: StakerOptions, log: LogFn): Promise<void> {
@@ -292,6 +343,8 @@ export async function generateStakerJson(options: StakerOptions, log: LogFn): Pr
     log('No attesters with BLS keys found (skipping mnemonics and encrypted keystores without password)');
     return;
   }
+
+  await assertWithinProofOfPossessionGasLimit(gse, allOutputs);
 
   // Write a single JSON file with all staker outputs
   const stakerOutputPath = join(outputDir, `${keystoreBaseName}_staker_output.json`);
