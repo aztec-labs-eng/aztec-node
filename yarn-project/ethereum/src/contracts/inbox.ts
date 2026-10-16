@@ -192,6 +192,8 @@ export class InboxContract {
     blockNumber: bigint | null;
     blockHash: `0x${string}` | null;
     transactionHash: `0x${string}` | null;
+    transactionIndex: number | null;
+    logIndex: number | null;
     args: {
       hash?: `0x${string}`;
       inboxRollingHash?: `0x${string}`;
@@ -210,6 +212,8 @@ export class InboxContract {
       l1BlockNumber: log.blockNumber!,
       l1BlockHash: Buffer32.fromString(log.blockHash!),
       l1TransactionHash: log.transactionHash!,
+      l1TransactionIndex: log.transactionIndex!,
+      l1LogIndex: log.logIndex!,
       args: {
         index: message.index,
         leaf: Fr.fromString(log.args.hash!),
