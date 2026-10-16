@@ -1,6 +1,5 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
-import { type EpochCache, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
-import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
+import { type EpochCache, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -68,6 +67,7 @@ import type { TypedDataDefinition } from 'viem';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
+import { warnCommitteeNotStable } from './committee_not_stable.js';
 import { ValidationService } from './duties/validation_service.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
@@ -185,11 +185,19 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
   private async handleEpochCommitteeUpdate() {
     try {
-      const { committee, epoch } = await this.epochCache.getCommittee('next');
-      if (!committee) {
+      const lookup = await this.epochCache.getCommittee('next');
+      if (lookup.state === 'unstable') {
+        this.log.trace(`Committee for epoch ${lookup.epoch} is not stable on L1 yet, retrying on the next tick`, {
+          epoch: lookup.epoch,
+        });
+        return;
+      }
+      if (lookup.state === 'none') {
         this.log.trace(`No committee found for slot`);
         return;
       }
+      const { epoch } = lookup;
+      const committee = lookup.state === 'members' ? lookup.committee : [];
       this.metrics.setCurrentEpoch(epoch);
       if (epoch !== this.lastEpochForCommitteeUpdateLoop) {
         const me = this.getValidatorAddresses();
@@ -207,12 +215,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         this.lastEpochForCommitteeUpdateLoop = epoch;
       }
     } catch (err) {
-      if (err instanceof CommitteeNotStableError) {
-        this.log.trace(`Committee for epoch ${err.epoch} is not stable on L1 yet, retrying on the next tick`, {
-          epoch: err.epoch,
-        });
-        return;
-      }
       this.log.error(`Error updating epoch committee`, err);
     }
   }
@@ -376,11 +378,11 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
     const myAddresses = this.getValidatorAddresses();
     this.log.info(`Started validator with addresses: ${myAddresses.map(a => a.toString()).join(', ')}`);
-    const inCommittee = await this.epochCache
-      .filterInCommittee('now', myAddresses)
-      .catch(unlessCommitteeNotStable<EthAddress[]>([]));
-    if (inCommittee.length > 0) {
-      this.log.info(`Addresses in current validator committee: ${inCommittee.map(a => a.toString()).join(', ')}`);
+    const membership = await this.epochCache.filterInCommittee('now', myAddresses);
+    if (membership.state === 'members' && membership.inCommittee.length > 0) {
+      this.log.info(
+        `Addresses in current validator committee: ${membership.inCommittee.map(a => a.toString()).join(', ')}`,
+      );
     }
     this.epochCacheUpdateLoop.start();
 
@@ -448,7 +450,12 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
     // Note: During escape hatch, we still want to "validate" proposals for observability,
     // but we intentionally reject them and disable slashing invalid block and attestation flow.
-    const escapeHatchOpen = await this.epochCache.isEscapeHatchOpenAtSlot(slotNumber);
+    const escapeHatch = await this.epochCache.lookupEscapeHatchAtSlot(slotNumber);
+    if (escapeHatch.state === 'unstable') {
+      warnCommitteeNotStable(this.log, escapeHatch, slotNumber, 'block proposal');
+      return false;
+    }
+    const escapeHatchOpen = escapeHatch.isEscapeHatchOpen;
 
     const proposer = proposal.getSender();
 
@@ -467,8 +474,12 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     }
 
     // Check if we're in the committee (for metrics purposes)
-    const inCommittee = await this.epochCache.filterInCommittee(slotNumber, this.getValidatorAddresses());
-    const partOfCommittee = inCommittee.length > 0;
+    const membership = await this.epochCache.filterInCommittee(slotNumber, this.getValidatorAddresses());
+    if (membership.state === 'unstable') {
+      warnCommitteeNotStable(this.log, membership, slotNumber, 'block proposal');
+      return false;
+    }
+    const partOfCommittee = membership.state === 'members' && membership.inCommittee.length > 0;
 
     const proposalInfo = { ...proposal.toBlockInfo(), proposer: proposer.toString() };
     this.log.info(`Received block proposal for slot ${slotNumber}`, {
@@ -545,7 +556,12 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     const proposer = proposal.getSender();
 
     // If escape hatch is open for this slot's epoch, do not attest.
-    if (await this.epochCache.isEscapeHatchOpenAtSlot(proposalSlotNumber)) {
+    const escapeHatch = await this.epochCache.lookupEscapeHatchAtSlot(proposalSlotNumber);
+    if (escapeHatch.state === 'unstable') {
+      warnCommitteeNotStable(this.log, escapeHatch, proposalSlotNumber, 'checkpoint proposal');
+      return undefined;
+    }
+    if (escapeHatch.isEscapeHatchOpen) {
       this.log.warn(`Escape hatch open for slot ${proposalSlotNumber}, skipping checkpoint attestation handling`);
       return undefined;
     }
@@ -565,7 +581,13 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     }
 
     // Check that I have any address in the committee where this checkpoint will land before attesting
-    const inCommittee = await this.epochCache.filterInCommittee(proposalSlotNumber, this.getValidatorAddresses());
+    const membership = await this.epochCache.filterInCommittee(proposalSlotNumber, this.getValidatorAddresses());
+    if (membership.state === 'unstable') {
+      warnCommitteeNotStable(this.log, membership, proposalSlotNumber, 'checkpoint proposal');
+      return undefined;
+    }
+    // An open committee and a missing one have no members, so none of our validators is on it.
+    const inCommittee = membership.state === 'members' ? membership.inCommittee : [];
     const partOfCommittee = inCommittee.length > 0;
 
     const proposalInfo = {
@@ -1054,7 +1076,12 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     checkpointNumber: CheckpointNumber,
   ): Promise<CheckpointAttestation[]> {
     const slot = proposal.slotNumber;
-    const inCommittee = await this.epochCache.filterInCommittee(slot, this.getValidatorAddresses());
+    // Our own proposal resolved this committee already, so it can only be unstable after an L1 reorg. Throw rather than
+    // return no attestations, so the caller cannot mistake it for a committee we are not on.
+    const membership = requireStableCommittee(
+      await this.epochCache.filterInCommittee(slot, this.getValidatorAddresses()),
+    );
+    const inCommittee = membership.state === 'members' ? membership.inCommittee : [];
     this.log.debug(`Collecting ${inCommittee.length} self-attestations for slot ${slot}`, { inCommittee });
     const attestations = await this.createCheckpointAttestationsFromProposal(proposal, inCommittee, checkpointNumber);
 

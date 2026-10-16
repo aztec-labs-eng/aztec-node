@@ -1,11 +1,11 @@
 import { getKzg } from '@aztec-labs/blob-lib';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
 import {
-  CommitteeNotStableError,
-  type InboxContract,
-  NoCommitteeError,
-  type RollupContract,
-} from '@aztec-labs/ethereum/contracts';
+  type EpochCache,
+  PROPOSER_PIPELINING_SLOT_OFFSET,
+  type ProposerLookup,
+  requireStableCommittee,
+} from '@aztec-labs/epoch-cache';
+import type { InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, omit, pick } from '@aztec-labs/foundation/collection';
@@ -567,7 +567,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // If escape hatch is open for the target epoch, do not start checkpoint proposal work and do not attempt invalidations.
     // Still perform governance/slashing voting (as proposer) once per slot.
     // When pipelining, we check the target epoch (slot+1's epoch) since that's the epoch we're building for.
-    const isEscapeHatchOpen = await this.epochCache.isEscapeHatchOpen(targetEpoch);
+    // checkCanPropose has already skipped the slot if its committee is not stable.
+    const { isEscapeHatchOpen } = requireStableCommittee(await this.epochCache.lookupEscapeHatch(targetEpoch));
 
     if (isEscapeHatchOpen) {
       if (canPropose) {
@@ -1105,23 +1106,26 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
    * target slot's committee is not stable on L1 yet, in which case the slot must be skipped altogether.
    */
   protected async checkCanPropose(targetSlot: SlotNumber): Promise<[boolean, EthAddress | undefined] | undefined> {
-    let proposer: EthAddress | undefined;
-
+    let lookup: ProposerLookup;
     try {
-      proposer = await this.epochCache.getProposerAttesterAddressInSlot(targetSlot);
+      lookup = await this.epochCache.lookupProposer(targetSlot);
     } catch (e) {
-      if (e instanceof CommitteeNotStableError) {
+      this.log.error(`Error getting proposer for target slot ${targetSlot}`, e);
+      return [false, undefined];
+    }
+
+    switch (lookup.state) {
+      case 'unstable':
         if (this.lastSlotForCommitteeNotStableLog !== targetSlot) {
           this.lastSlotForCommitteeNotStableLog = targetSlot;
           this.log.verbose(`Skipping target slot ${targetSlot}: its committee is not stable on L1 yet`, {
             targetSlot,
-            epoch: e.epoch,
-            l1BlockNumber: e.l1BlockNumber,
+            epoch: lookup.epoch,
+            l1BlockNumber: lookup.l1BlockNumber,
           });
         }
         return undefined;
-      }
-      if (e instanceof NoCommitteeError) {
+      case 'none': {
         const targetEpoch = getEpochAtSlot(targetSlot, this.l1Constants);
         if (this.lastEpochForNoCommitteeLog !== targetEpoch) {
           this.lastEpochForNoCommitteeLog = targetEpoch;
@@ -1136,14 +1140,13 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
         }
         return [false, undefined];
       }
-      this.log.error(`Error getting proposer for target slot ${targetSlot}`, e);
-      return [false, undefined];
+      case 'open':
+        return [true, undefined];
+      case 'members':
+        break;
     }
 
-    // If proposer is undefined, then the committee is empty and anyone may propose
-    if (proposer === undefined) {
-      return [true, undefined];
-    }
+    const { proposer } = lookup;
     // In fisherman mode, just return the current proposer
     if (this.config.fishermanMode) {
       return [true, proposer];
@@ -1392,9 +1395,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       currentSlot,
     };
 
-    // A committee that is not stable on L1 yet cannot tell whether we are in it, so treat that as not being in it.
-    const getCurrentCommittee = async () =>
-      (await this.epochCache.getCommittee(currentSlot).catch(unlessCommitteeNotStable(undefined)))?.committee;
+    // Only a committee with members can include us. A committee that is not stable on L1 yet cannot tell whether we
+    // are in it, so treat that as not being in it.
+    const getCurrentCommittee = async () => {
+      const lookup = await this.epochCache.getCommittee(currentSlot);
+      return lookup.state === 'members' ? lookup.committee : undefined;
+    };
     const inCurrentCommittee = async () =>
       (await getCurrentCommittee())?.some(member => ourValidatorAddresses.some(addr => addr.equals(member)));
 

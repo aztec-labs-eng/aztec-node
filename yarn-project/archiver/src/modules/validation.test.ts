@@ -1,5 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
-import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { makeCommitteeLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
+import { CommitteeNotStableError, type ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
@@ -77,12 +78,14 @@ describe('validateCheckpointAttestations', () => {
   };
 
   const setCommittee = (committee: EthAddress[], isEscapeHatchOpen = false) => {
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen,
-    });
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen,
+      }),
+    );
   };
 
   beforeEach(() => {
@@ -136,6 +139,27 @@ describe('validateCheckpointAttestations', () => {
         logger,
       );
       expect(result.valid).toBe(true);
+    });
+
+    it('validates a checkpoint if L1 has no committee', async () => {
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee: undefined }));
+      const checkpoint = await makeCheckpoint(signers, committee);
+      const result = await validateCheckpointAttestations(
+        checkpoint,
+        epochCache,
+        constants,
+        TEST_COORDINATION_SIGNATURE_CONTEXT,
+        logger,
+      );
+      expect(result.valid).toBe(true);
+    });
+
+    it('throws rather than accept a checkpoint whose committee is not stable', async () => {
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeUnstableCommittee(EpochNumber(0), 100n));
+      const checkpoint = await makeCheckpoint(signers, committee);
+      await expect(
+        validateCheckpointAttestations(checkpoint, epochCache, constants, TEST_COORDINATION_SIGNATURE_CONTEXT, logger),
+      ).rejects.toThrow(CommitteeNotStableError);
     });
   });
 
@@ -399,12 +423,14 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
     signers = times(5, () => Secp256k1Signer.random());
     committee = signers.map(signer => signer.address);
     logger = createLogger('archiver:test');
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen: false,
+      }),
+    );
   });
 
   /** Builds a calldata-only checkpoint, defaulting its packed tuple to the one the signers would post. */
@@ -455,12 +481,14 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
 
   it('returns no attestations without decoding when the escape hatch is open', async () => {
     // One signature bit but no signature bytes, so any committee-sized decode throws.
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: true,
-    });
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen: true,
+      }),
+    );
     const checkpoint = await makeCalldataCheckpoint(signers, {
       signatureIndices: '0x80',
       signaturesOrAddresses: '0xab',
@@ -473,12 +501,14 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
   });
 
   it('returns no attestations when the epoch has no committee', async () => {
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee: [],
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee: [],
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen: false,
+      }),
+    );
     const checkpoint = await makeCalldataCheckpoint(signers);
 
     const { attestations, validationResult } = await resolve(checkpoint);

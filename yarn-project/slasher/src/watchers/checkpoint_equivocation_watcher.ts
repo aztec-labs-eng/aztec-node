@@ -20,7 +20,7 @@ type CheckpointEquivocationWatcherConfig = Pick<
 >;
 
 type EquivocationEventSource = Pick<L2BlockSourceEventEmitter, 'events'>;
-type ProposerLookup = Pick<EpochCacheInterface, 'getProposerAttesterAddressInSlot'>;
+type ProposerSource = Pick<EpochCacheInterface, 'lookupProposer'>;
 
 /**
  * Slashes the slot proposer for DUPLICATE_PROPOSAL when the archiver detects that a
@@ -35,7 +35,7 @@ export class CheckpointEquivocationWatcher extends (EventEmitter as new () => Wa
 
   constructor(
     private readonly l2BlockSource: EquivocationEventSource,
-    private readonly epochCache: ProposerLookup,
+    private readonly epochCache: ProposerSource,
     config: CheckpointEquivocationWatcherConfig,
   ) {
     super();
@@ -65,14 +65,16 @@ export class CheckpointEquivocationWatcher extends (EventEmitter as new () => Wa
 
   /** Public for tests. */
   public async onEquivocationDetected(event: CheckpointEquivocationDetectedEvent): Promise<void> {
-    const proposer = await this.epochCache.getProposerAttesterAddressInSlot(event.slotNumber);
-    if (!proposer) {
+    const lookup = await this.epochCache.lookupProposer(event.slotNumber);
+    if (lookup.state !== 'members') {
       this.log.warn(`Cannot attribute checkpoint equivocation: no proposer for slot ${event.slotNumber}`, {
         slotNumber: event.slotNumber,
         checkpointNumber: event.checkpointNumber,
+        committeeState: lookup.state,
       });
       return;
     }
+    const { proposer } = lookup;
 
     const slashArgs: WantToSlashArgs = {
       validator: proposer,

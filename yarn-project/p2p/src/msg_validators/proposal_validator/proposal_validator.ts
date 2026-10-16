@@ -1,4 +1,4 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { EpochCacheInterface, ProposerLookup } from '@aztec-labs/epoch-cache';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
-import { mapEpochCacheLookupFailure } from '../epoch_cache_lookup.js';
+import { ignoreUnstableCommittee, mapEpochCacheLookupFailure, rejectNoCommittee } from '../epoch_cache_lookup.js';
 import { classifyReceiveWindowArrival } from '../receive_window.js';
 
 /** Validates header-level and tx-level fields of block and checkpoint proposals. */
@@ -117,22 +117,31 @@ export class ProposalValidator {
       }
     }
 
-    // An undefined proposer means an empty committee (anyone may propose), so skip the
-    // proposer-equality check and keep validating. Only this lookup can fail on a receiver-local
-    // cause (L1 RPC down, or this node behind); mapEpochCacheLookupFailure ignores that (it is not the
-    // relaying peer's fault) and rejects a missing committee (which is).
-    let expectedProposer;
+    // Only this lookup can fail on a receiver-local cause (L1 RPC down, or this node behind), which
+    // mapEpochCacheLookupFailure ignores as it is not the relaying peer's fault.
+    let expectedProposer: ProposerLookup;
     try {
-      expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
+      expectedProposer = await this.epochCache.lookupProposer(slotNumber);
     } catch (e) {
       return mapEpochCacheLookupFailure(e, this.logger, 'proposal', slotNumber);
     }
-    if (expectedProposer !== undefined && !proposer.equals(expectedProposer)) {
-      this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
-        expectedProposer,
-        proposer: proposer.toString(),
-      });
-      return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
+    switch (expectedProposer.state) {
+      case 'unstable':
+        return ignoreUnstableCommittee(expectedProposer, this.logger, 'proposal', slotNumber);
+      case 'none':
+        return rejectNoCommittee();
+      case 'open':
+        // Anyone may propose, so there is no proposer to check the signer against.
+        break;
+      case 'members':
+        if (!proposer.equals(expectedProposer.proposer)) {
+          this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
+            expectedProposer: expectedProposer.proposer,
+            proposer: proposer.toString(),
+          });
+          return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
+        }
+        break;
     }
 
     return { result: 'accept' };

@@ -1,4 +1,4 @@
-import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { type EpochCache, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import {
   CheckpointNumber,
   CheckpointProposalHash,
@@ -241,15 +241,18 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
 
   protected async computeEpochPerformance(epoch: EpochNumber): Promise<ValidatorsEpochPerformance> {
     const [fromSlot, toSlot] = getSlotRangeForEpoch(epoch, this.epochCache.getL1Constants());
-    const { committee, isEscapeHatchOpen } = await this.epochCache.getCommittee(fromSlot);
-    if (isEscapeHatchOpen) {
+    // An unstable committee throws, so the work loop retries the epoch once its seed is fixed.
+    const lookup = requireStableCommittee(await this.epochCache.getCommittee(fromSlot));
+    if (lookup.isEscapeHatchOpen) {
       this.logger.info(`Skipping epoch performance for epoch ${epoch} - escape hatch is open`);
       return {};
     }
-    if (!committee) {
+    if (lookup.state === 'none') {
       this.logger.trace(`No committee found for slot ${fromSlot}`);
       return {};
     }
+    // An open committee has no members, so its stats cover no validators.
+    const committee = lookup.state === 'members' ? lookup.committee : [];
 
     const stats = await this.computeStats({
       fromSlot,
@@ -460,17 +463,20 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    * and updates overall stats.
    */
   protected async processSlot(slot: SlotNumber) {
-    const { epoch, seed, committee, isEscapeHatchOpen } = await this.epochCache.getCommittee(slot);
-    if (isEscapeHatchOpen) {
+    // An unstable committee throws, so the work loop retries the slot once its seed is fixed.
+    const lookup = requireStableCommittee(await this.epochCache.getCommittee(slot));
+    const { epoch } = lookup;
+    if (lookup.isEscapeHatchOpen) {
       this.logger.info(`Skipping slot ${slot} at epoch ${epoch} - escape hatch is open`);
       this.lastProcessedSlot = slot;
       return;
     }
-    if (!committee || committee.length === 0) {
-      this.logger.trace(`No committee found for slot ${slot} at epoch ${epoch}`);
+    if (lookup.state !== 'members') {
+      this.logger.trace(`No committee found for slot ${slot} at epoch ${epoch}`, { committeeState: lookup.state });
       this.lastProcessedSlot = slot;
       return;
     }
+    const { committee, seed } = lookup;
     const proposerIndex = this.epochCache.computeProposerIndex(slot, epoch, seed, BigInt(committee.length));
     const proposer = committee[Number(proposerIndex)];
     const stats = await this.getSlotActivity(slot, epoch, proposer, committee);

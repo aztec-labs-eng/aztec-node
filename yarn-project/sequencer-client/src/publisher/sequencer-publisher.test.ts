@@ -3,6 +3,7 @@ import { EmpireBaseAbi, RollupAbi } from '@aztec-foundation/l1-artifacts';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   type GovernanceProposerContract,
@@ -201,12 +202,14 @@ describe('SequencerPublisher', () => {
     epochCache.getEpochAndSlotNow.mockReturnValue({ epoch: EpochNumber(1), slot: SlotNumber(2), ts: 3n, nowMs: 3000n });
     epochCache.getL1Constants.mockReturnValue(EmptyL1RollupConstants);
     epochCache.getSlotNow.mockReturnValue(SlotNumber(2));
-    epochCache.getCommittee.mockResolvedValue({
-      committee: [],
-      seed: 1n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee: [],
+        seed: 1n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
 
     dateProvider = new TestDateProvider();
 
@@ -537,12 +540,14 @@ describe('SequencerPublisher', () => {
       });
       epochCache.getSlotNow.mockReturnValue(SlotNumber(2));
       epochCache.getL1Constants.mockReturnValue(EmptyL1RollupConstants);
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [],
-        seed: 1n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [],
+          seed: 1n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       rotatingPublisher = new SequencerPublisher(
         {

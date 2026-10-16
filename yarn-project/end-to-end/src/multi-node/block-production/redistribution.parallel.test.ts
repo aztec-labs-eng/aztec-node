@@ -299,7 +299,8 @@ describe('multi-node/block-production/redistribution', () => {
 
           // Identify the proposer for this checkpoint's slot via EpochCache.
           const slot = pc.checkpoint.header.slotNumber;
-          const proposer = await test.epochCache.getProposerAttesterAddressInSlot(slot);
+          const proposerLookup = await test.epochCache.lookupProposer(slot);
+          const proposer = proposerLookup.state === 'members' ? proposerLookup.proposer : undefined;
           if (!proposer) {
             logger.warn(`Checkpoint ${pc.checkpoint.number}: could not determine proposer for slot ${slot}`);
             continue;
