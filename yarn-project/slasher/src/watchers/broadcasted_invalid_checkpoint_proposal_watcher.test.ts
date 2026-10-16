@@ -484,6 +484,18 @@ describe('BroadcastedInvalidCheckpointProposalWatcher', () => {
       ]);
     });
 
+    it('does not emit an offense again when the archiver anchor moves back after the slot left the window', async () => {
+      const signer = Secp256k1Signer.random();
+      mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+      for (const syncedSlot of [12, 16, 15]) {
+        l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(syncedSlot));
+        await watcher.scan();
+      }
+
+      expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+    });
+
     it('picks up a duplicate proposal penalty change', async () => {
       const signer = Secp256k1Signer.random();
       watcher.updateConfig({ slashDuplicateProposalPenalty: 0n });
