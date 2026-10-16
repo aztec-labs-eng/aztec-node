@@ -5,6 +5,7 @@
   "exports": {
     "./account": "./dest/account.js",
     "./blob-tx": "./dest/blob_tx.js",
+    "./bn254": "./dest/bn254/index.js",
     "./chain": "./dest/chain.js",
     "./client": "./dest/client.js",
     "./config": "./dest/config.js",
@@ -77,7 +78,8 @@
   "files": [
     "dest",
     "src",
-    "!*.test.*"
+    "!*.test.*",
+    "!src/bn254/fixtures"
   ],
   "types": "./dest/types.d.ts",
   "jest": {
