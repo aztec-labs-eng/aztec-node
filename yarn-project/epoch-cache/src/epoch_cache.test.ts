@@ -633,12 +633,23 @@ describe('EpochCache', () => {
       expect(info.seed).toBe(2n);
     });
 
-    it('serves the committee without reading storage once the sampled epoch is over', async () => {
-      mineL1Block(startOfEpoch(4), { committee: finalCommittee, seed: 2n, setUp: false });
+    it('serves the committee without reading storage once the latest L1 block is in the last L1 slot of the sampled epoch', async () => {
+      // No later L1 block can land in the sampled epoch, so its randao can no longer be written.
+      mineL1Block(startOfEpoch(4) - BigInt(SLOT_DURATION), { committee: finalCommittee, seed: 2n, setUp: false });
 
       const info = await epochCache.getCommittee(targetSlot);
       expect(info.committee).toEqual(finalCommittee);
       expect(rollupContract.isEpochSetUp).not.toHaveBeenCalled();
+    });
+
+    it('does not serve the committee while one more L1 block can land in the sampled epoch', async () => {
+      mineL1Block(startOfEpoch(4) - 2n * BigInt(SLOT_DURATION), {
+        committee: provisionalCommittee,
+        seed: 1n,
+        setUp: false,
+      });
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
     });
 
     it('serves an empty committee while the seed can still change when the target committee size is zero', async () => {

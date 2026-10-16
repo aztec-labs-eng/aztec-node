@@ -395,10 +395,11 @@ export class EpochCache implements EpochCacheInterface {
   /**
    * Whether the sample seed for `epoch` is fixed as of the given L1 block. The seed for epoch E hashes the randao
    * that L1 checkpoints in epoch S = E - lagInEpochsForRandao, under the key start(S). It is fixed once that randao
-   * is written, or once S is over, since any later checkpoint is keyed at a later epoch's start.
+   * is written, or once no later L1 block can land in S, since any later checkpoint is keyed at a later epoch's start.
    */
   private async isSeedFixed(epoch: EpochNumber, block: L1BlockInfo): Promise<boolean> {
-    const { targetCommitteeSize, lagInEpochsForRandao, epochDuration, slotDuration } = this.l1constants;
+    const { targetCommitteeSize, lagInEpochsForRandao, epochDuration, slotDuration, ethereumSlotDuration } =
+      this.l1constants;
 
     // The seed is irrelevant when the committee is empty and anyone may propose.
     if (targetCommitteeSize === 0) {
@@ -411,9 +412,13 @@ export class EpochCache implements EpochCacheInterface {
       return true;
     }
 
+    // The block is S's last possible L1 block once it sits in S's last L1 slot. This relies on L1 blocks being at least
+    // one Ethereum slot apart, as slot-aligned timestamps guarantee on Ethereum, so the block's state already reflects
+    // every randao write S can get. A pipelined proposer must decide on E's second slot while the latest block is
+    // still in S, so waiting for a block past the end of S would cost that slot too.
     const samplingEpochStart = this.getSamplingTimestamp(epoch);
     const samplingEpochEnd = samplingEpochStart + BigInt(epochDuration) * BigInt(slotDuration);
-    if (block.timestamp >= samplingEpochEnd) {
+    if (block.timestamp + BigInt(ethereumSlotDuration) >= samplingEpochEnd) {
       return true;
     }
     if (block.timestamp < samplingEpochStart) {
@@ -423,7 +428,7 @@ export class EpochCache implements EpochCacheInterface {
     // The v6 rollup's committee and seed views do not revert while the sampled epoch's randao can still change, so
     // infer the randao write from storage: setupEpoch is the only writer of the sampled epoch's committee commitment,
     // and it checkpoints that epoch's randao before storing the commitment. A bare checkpointRandao call goes
-    // undetected and falls back to the end-of-epoch rule above. This read can be dropped once every supported rollup
+    // undetected and falls back to the last-block rule above. This read can be dropped once every supported rollup
     // reverts with ValidatorSelection__EpochNotStable instead (v7 onwards).
     return await this.rollup.isEpochSetUp(EpochNumber.fromBigInt(samplingEpoch), { blockNumber: block.number });
   }
