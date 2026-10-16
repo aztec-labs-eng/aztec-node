@@ -14,6 +14,8 @@ export class ReadTransaction {
 
   /** Spread into every read request, so reads run against the native read transaction when there is one. */
   private readonly txField: { txId?: number };
+  /** Cursors this transaction opened that are still open. */
+  private readonly openCursors = new Set<number>();
 
   /**
    * @param channel - Channel to the native store.
@@ -32,6 +34,16 @@ export class ReadTransaction {
       return;
     }
     this.open = false;
+  }
+
+  /**
+   * Closes every cursor this transaction still has open, such as one left by an iterator that was abandoned before it
+   * finished. An iterator whose cursor is closed this way throws on its next page. Errors closing a cursor are thrown.
+   */
+  public async closeOpenCursors(): Promise<void> {
+    const cursors = [...this.openCursors];
+    this.openCursors.clear();
+    await Promise.all(cursors.map(cursor => this.channel.sendMessage(LMDBMessageType.CLOSE_CURSOR, { cursor })));
   }
 
   protected assertIsOpen() {
@@ -125,6 +137,9 @@ export class ReadTransaction {
       });
 
       cursor = response.cursor ?? undefined;
+      if (typeof cursor === 'number') {
+        this.openCursors.add(cursor);
+      }
       let entries = response.entries;
       let done = typeof cursor !== 'number';
       let count = 0;
@@ -153,6 +168,9 @@ export class ReadTransaction {
         if (typeof cursor !== 'number' || done) {
           break;
         }
+        if (!this.openCursors.has(cursor)) {
+          throw new Error('Cursor was closed with its transaction');
+        }
 
         const response = await this.channel.sendMessage(LMDBMessageType.ADVANCE_CURSOR, {
           cursor,
@@ -163,8 +181,8 @@ export class ReadTransaction {
         entries = response.entries;
       }
     } finally {
-      // we might not have anything to close
-      if (typeof cursor === 'number') {
+      // we might not have anything to close, or the transaction may have closed it already
+      if (typeof cursor === 'number' && this.openCursors.delete(cursor)) {
         await this.channel.sendMessage(LMDBMessageType.CLOSE_CURSOR, { cursor });
       }
     }
@@ -185,9 +203,10 @@ export class ReadTransaction {
       });
 
       cursor = response.cursor ?? undefined;
-      if (!cursor) {
+      if (typeof cursor !== 'number') {
         return 0;
       }
+      this.openCursors.add(cursor);
 
       const advanceResponse = await this.channel.sendMessage(LMDBMessageType.ADVANCE_CURSOR_COUNT, {
         cursor,
@@ -196,8 +215,8 @@ export class ReadTransaction {
 
       return advanceResponse.count;
     } finally {
-      // we might not have anything to close
-      if (typeof cursor === 'number') {
+      // we might not have anything to close, or the transaction may have closed it already
+      if (typeof cursor === 'number' && this.openCursors.delete(cursor)) {
         await this.channel.sendMessage(LMDBMessageType.CLOSE_CURSOR, { cursor });
       }
     }

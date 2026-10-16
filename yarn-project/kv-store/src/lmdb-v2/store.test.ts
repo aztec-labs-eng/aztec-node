@@ -7,8 +7,10 @@ import { join } from 'path';
 import { vi } from 'vitest';
 
 import { openStoreAt, openTmpStore } from './factory.js';
+import { LMDBMessageType } from './message.js';
 import type { ReadTransaction } from './read_transaction.js';
 import { AztecLMDBStoreV2 } from './store.js';
+import { WriteTransaction } from './write_transaction.js';
 
 const testMaxReaders = 4;
 
@@ -151,23 +153,20 @@ describe('AztecLMDBStoreV2', () => {
       await map.set('k', 'v1');
 
       const opened = promiseWithResolvers<void>();
-      const writeIssued = promiseWithResolvers<void>();
+      const writeCommitted = promiseWithResolvers<void>();
 
       const snapshotReads = store.readOnlyTransaction(async () => {
         const first = await map.getAsync('k');
         opened.resolve();
-        await writeIssued.promise;
-        // Give the write a chance to commit; whether it can do so while this callback runs is up to the backend.
-        await sleep(20);
+        await writeCommitted.promise;
         return [first, await map.getAsync('k'), await map.hasAsync('k')];
       });
 
       await opened.promise;
-      const write = map.set('k', 'v2');
-      writeIssued.resolve();
+      await map.set('k', 'v2');
+      writeCommitted.resolve();
 
       await expect(snapshotReads).resolves.toEqual(['v1', 'v1', true]);
-      await write;
       await expect(map.getAsync('k')).resolves.toBe('v2');
     });
 
@@ -179,19 +178,18 @@ describe('AztecLMDBStoreV2', () => {
       });
 
       const opened = promiseWithResolvers<void>();
-      const writeIssued = promiseWithResolvers<void>();
+      const writeCommitted = promiseWithResolvers<void>();
 
       const snapshotEntries = store.readOnlyTransaction(async () => {
         await map.getAsync('a');
         opened.resolve();
-        await writeIssued.promise;
-        await sleep(20);
+        await writeCommitted.promise;
         return { entries: await toArray(map.entriesAsync()), size: await map.sizeAsync() };
       });
 
       await opened.promise;
-      const write = map.set('c', '3');
-      writeIssued.resolve();
+      await map.set('c', '3');
+      writeCommitted.resolve();
 
       await expect(snapshotEntries).resolves.toEqual({
         entries: [
@@ -200,7 +198,6 @@ describe('AztecLMDBStoreV2', () => {
         ],
         size: 2,
       });
-      await write;
       await expect(map.sizeAsync()).resolves.toBe(3);
     });
 
@@ -283,6 +280,25 @@ describe('AztecLMDBStoreV2', () => {
       await expect(map.getAsync('k')).resolves.toBe('v1');
     });
 
+    it('falls back to the writer queue when the native store has no reader to spare', async () => {
+      const map = store.openMap<string, string>('ro-fallback');
+      await map.set('k', 'v');
+
+      const sendMessage = store.sendMessage.bind(store);
+      vi.spyOn(store, 'sendMessage').mockImplementation((msgType, body) =>
+        msgType === LMDBMessageType.START_READ_TX
+          ? Promise.reject(new Error('No reader slot available to start a read transaction'))
+          : sendMessage(msgType, body),
+      );
+
+      await expect(
+        store.readOnlyTransaction(async tx => ({
+          writeTx: tx instanceof WriteTransaction,
+          value: await map.getAsync('k'),
+        })),
+      ).resolves.toEqual({ writeTx: true, value: 'v' });
+    });
+
     describe('with a single reader slot', () => {
       let smallStore: AztecLMDBStoreV2;
 
@@ -292,6 +308,56 @@ describe('AztecLMDBStoreV2', () => {
 
       afterEach(async () => {
         await smallStore.delete();
+      });
+
+      it('closes cursors left open by its callback and frees the slot for the next snapshot', async () => {
+        const map = smallStore.openMap<number, number>('ro-abandoned-cursor');
+        await smallStore.transactionAsync(async () => {
+          for (let i = 0; i < 50; i++) {
+            await map.set(i, i);
+          }
+        });
+
+        const abandoned = await smallStore.readOnlyTransaction(async () => {
+          const iterator = map.entriesAsync()[Symbol.asyncIterator]();
+          await iterator.next();
+          return iterator;
+        });
+
+        // The next snapshot must be a real one: if the abandoned cursor still held the only reader, it would fall back
+        // to the writer queue and wait behind this unfinished write.
+        const writeStaged = promiseWithResolvers<void>();
+        const finishWrite = promiseWithResolvers<void>();
+        const write = smallStore.transactionAsync(async () => {
+          await map.set(0, -1);
+          writeStaged.resolve();
+          await finishWrite.promise;
+        });
+        await writeStaged.promise;
+        await expect(smallStore.readOnlyTransaction(() => map.getAsync(0))).resolves.toBe(0);
+        finishWrite.resolve();
+        await write;
+
+        await expect(toArray({ [Symbol.asyncIterator]: () => abandoned })).rejects.toThrow(
+          'Cursor was closed with its transaction',
+        );
+      });
+
+      it('rejects snapshots still waiting for the slot when the store closes', async () => {
+        const opened = promiseWithResolvers<void>();
+        const finish = promiseWithResolvers<void>();
+        const first = smallStore.readOnlyTransaction(async () => {
+          opened.resolve();
+          await finish.promise;
+        });
+        await opened.promise;
+
+        const queued = smallStore.readOnlyTransaction(() => Promise.resolve('never'));
+        await smallStore.close();
+        await expect(queued).rejects.toThrow('Store is closed');
+
+        finish.resolve();
+        await first;
       });
 
       it('returns the slot when the callback throws', async () => {

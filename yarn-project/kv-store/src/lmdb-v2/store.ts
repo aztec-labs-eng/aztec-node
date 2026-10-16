@@ -30,7 +30,7 @@ import { WriteTransaction } from './write_transaction.js';
 
 export { execInReadTx, execInWriteTx } from './tx-helpers.js';
 
-/** Attempts at opening a native read transaction while the store has no reader slot to spare. */
+/** Attempts at opening a native read transaction before a read-only transaction falls back to the writer queue. */
 const START_READ_TX_ATTEMPTS = 8;
 /** Longest wait between two of those attempts. */
 const START_READ_TX_MAX_BACKOFF_MS = 64;
@@ -194,8 +194,11 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
    * Starting a write transaction inside the callback throws.
    *
    * The snapshot holds one reader slot until the callback settles, and reads inside it, including cursors, take no
-   * further slot. A nested call reuses the enclosing snapshot, and a call inside a write transaction reuses that
-   * transaction, uncommitted writes included.
+   * further slot. Cursors still open when the callback settles are closed with the snapshot. A nested call reuses the
+   * enclosing snapshot, and a call inside a write transaction reuses that transaction, uncommitted writes included.
+   *
+   * If the native store keeps refusing to open a snapshot because every reader is busy, the callback runs as a
+   * {@link transactionAsync} instead: still consistent, but queued with the writes.
    */
   async readOnlyTransaction<T extends Exclude<any, Promise<any>>>(
     callback: (tx: ReadTransaction) => Promise<T>,
@@ -209,43 +212,70 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       return await callback(currentTx);
     }
 
-    await this.availableReaders.acquire();
+    await this.acquireReader();
     try {
-      const { txId } = await this.startReadTx();
-      const tx = new ReadTransaction(this, txId);
-      try {
-        return await this.readerCtx.run(tx, callback, tx);
-      } finally {
-        tx.close();
-        await this.closeReadTx(txId);
+      const txId = await this.startReadTx();
+      if (txId !== undefined) {
+        const tx = new ReadTransaction(this, txId);
+        try {
+          return await this.readerCtx.run(tx, callback, tx);
+        } finally {
+          tx.close();
+          await this.closeReadTx(tx, txId);
+        }
       }
     } finally {
       this.availableReaders.release();
     }
+
+    this.log.warn(
+      `No reader slot to open a read-only snapshot after ${START_READ_TX_ATTEMPTS} attempts, running it in the writer queue`,
+    );
+    return this.transactionAsync(callback);
   }
 
-  /**
-   * Opens a native read transaction. The native store refuses one, rather than waiting, when it would take the reader
-   * slot kept for point reads; holding an {@link availableReaders} slot rules that out except while point reads are in
-   * flight, so a refusal is retried with a short backoff.
-   */
-  private async startReadTx() {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await this.sendMessage(LMDBMessageType.START_READ_TX, undefined);
-      } catch (err) {
-        if (attempt >= START_READ_TX_ATTEMPTS || !String(err).includes('No reader slot available')) {
-          throw err;
-        }
-        await sleep(Math.min(2 ** attempt, START_READ_TX_MAX_BACKOFF_MS));
-      }
+  /** Takes a slot from {@link availableReaders}, failing if the store was closed while waiting for it. */
+  private async acquireReader() {
+    await this.availableReaders.acquire();
+    if (!this.open) {
+      // pass the slot on, so every other waiter wakes up and fails too
+      this.availableReaders.release();
+      throw new Error('Store is closed');
     }
   }
 
-  private async closeReadTx(txId: number) {
-    // Closing the store releases every native read transaction, so there is nothing left to close.
+  /**
+   * Opens a native read transaction and returns its id, or undefined if the store had no reader to spare. The native
+   * store refuses one, rather than waiting, when it would take the reader slot kept for point reads; holding an
+   * {@link availableReaders} slot rules that out except while point reads are in flight, so a refusal is retried with
+   * a short backoff.
+   */
+  private async startReadTx(): Promise<number | undefined> {
+    for (let attempt = 1; attempt <= START_READ_TX_ATTEMPTS; attempt++) {
+      try {
+        return (await this.sendMessage(LMDBMessageType.START_READ_TX, undefined)).txId;
+      } catch (err) {
+        if (!String(err).includes('No reader slot available')) {
+          throw err;
+        }
+        if (attempt < START_READ_TX_ATTEMPTS) {
+          await sleep(Math.min(2 ** attempt, START_READ_TX_MAX_BACKOFF_MS));
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private async closeReadTx(tx: ReadTransaction, txId: number) {
+    // Closing the store releases every native read transaction and cursor, so there is nothing left to close.
     if (!this.open) {
       return;
+    }
+    try {
+      // a cursor keeps its native read transaction alive, so the snapshot only frees its reader once they are closed
+      await tx.closeOpenCursors();
+    } catch (err) {
+      this.log.warn(`Failed to close cursors of read transaction ${txId}`, err);
     }
     try {
       await this.sendMessage(LMDBMessageType.CLOSE_READ_TX, { txId });
@@ -271,6 +301,8 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       return;
     }
     this.open = false;
+    // wake the callers waiting for a reader slot, which fail now that the store is closed
+    this.availableReaders.release();
     await this.writerQueue.cancel();
     await this.channel.sendMessage(LMDBMessageType.CLOSE, undefined);
   }
@@ -289,7 +321,7 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       msgType === LMDBMessageType.START_CURSOR &&
       (body as LMDBRequestBody[LMDBMessageType.START_CURSOR]).txId === undefined;
     if (takesReader) {
-      await this.availableReaders.acquire();
+      await this.acquireReader();
     }
 
     let response: LMDBResponseBody[T] | undefined = undefined;
