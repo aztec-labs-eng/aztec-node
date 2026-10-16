@@ -88,7 +88,8 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
     coinbase,
     remoteSigner,
     blsKeyDerivation,
-    mnemonicGenerated: !mnemonic,
+    // `add` never prints the mnemonic it generates.
+    generatedMnemonic: mnemonic ? undefined : 'hidden',
   });
 
   keystore.validators.push(...validators);
@@ -107,7 +108,6 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
     await writeBlsBn254ToFile(keystore.validators, {
       outDir: targetDir,
       password,
-      blsPath,
       derivationPaths: getBlsDerivationPaths(summaries),
     });
   }

@@ -24,7 +24,7 @@ import {
   writeEthJsonV3ToFile,
   writeKeystoreFile,
 } from './shared.js';
-import { processAttesterAccounts } from './staker.js';
+import { type StakerOutput, assertWithinProofOfPossessionGasLimit, processAttesterAccounts } from './staker.js';
 import {
   validateBlsPathOptions,
   validateFundingAccountOptions,
@@ -196,8 +196,9 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
   });
   const shouldEncryptKeystores = ethPassword !== undefined && blsPassword !== undefined;
   const mnemonic = _mnemonic ?? generateMnemonic(wordlist);
+  const showGeneratedMnemonic = !_mnemonic && !json && !shouldEncryptKeystores;
 
-  if (!_mnemonic && !json && !shouldEncryptKeystores) {
+  if (showGeneratedMnemonic) {
     log('No mnemonic provided, generating new one...');
     log(`Using new mnemonic:`);
     log('');
@@ -222,8 +223,33 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     coinbase,
     remoteSigner,
     blsKeyDerivation,
-    mnemonicGenerated: !_mnemonic,
+    generatedMnemonic: _mnemonic ? undefined : showGeneratedMnemonic ? 'shown' : 'hidden',
   });
+
+  // Generate staker outputs if requested, from the plaintext keys and before writing anything, so that keys the GSE
+  // would reject leave no files behind.
+  const allStakerOutputs: StakerOutput[] = [];
+  if (stakerOutput && gseAddress && l1RpcUrls && l1ChainId !== undefined) {
+    const chain = createEthereumChain(l1RpcUrls, l1ChainId);
+    const publicClient = createPublicClient({
+      chain: chain.chainInfo,
+      transport: fallback(l1RpcUrls.map(url => http(url, { batch: false }))),
+    });
+    const gse = new GSEContract(publicClient, gseAddress);
+
+    // Process each validator
+    for (let i = 0; i < validators.length; i++) {
+      const validator = validators[i];
+      const outputs = await processAttesterAccounts(validator.attester, gse);
+
+      // Collect all staker outputs
+      for (let j = 0; j < outputs.length; j++) {
+        allStakerOutputs.push(outputs[j]);
+      }
+    }
+
+    await assertWithinProofOfPossessionGasLimit(gse, allStakerOutputs);
+  }
 
   let resolvedFundingAccount = fundingAccount ? resolveFundingAccount(fundingAccount, remoteSigner) : undefined;
 
@@ -253,35 +279,12 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
 
   await writeKeystoreFile(outputPath, keystore);
 
-  // Generate staker outputs if requested
-  const allStakerOutputs: any[] = [];
-  if (stakerOutput && gseAddress && l1RpcUrls && l1ChainId !== undefined) {
-    const chain = createEthereumChain(l1RpcUrls, l1ChainId);
-    const publicClient = createPublicClient({
-      chain: chain.chainInfo,
-      transport: fallback(l1RpcUrls.map(url => http(url, { batch: false }))),
-    });
-    const gse = new GSEContract(publicClient, gseAddress);
-
+  // Write a single JSON file with all staker outputs
+  if (allStakerOutputs.length > 0) {
     // Extract keystore base name without extension for unique staker output filenames
     const keystoreBaseName = basename(outputPath, '.json');
-
-    // Process each validator
-    for (let i = 0; i < validators.length; i++) {
-      const validator = validators[i];
-      const outputs = await processAttesterAccounts(validator.attester, gse);
-
-      // Collect all staker outputs
-      for (let j = 0; j < outputs.length; j++) {
-        allStakerOutputs.push(outputs[j]);
-      }
-    }
-
-    // Write a single JSON file with all staker outputs
-    if (allStakerOutputs.length > 0) {
-      const stakerOutputPath = join(keystoreOutDir, `${keystoreBaseName}_staker_output.json`);
-      await writeFile(stakerOutputPath, prettyPrintJSON(allStakerOutputs), 'utf-8');
-    }
+    const stakerOutputPath = join(keystoreOutDir, `${keystoreBaseName}_staker_output.json`);
+    await writeFile(stakerOutputPath, prettyPrintJSON(allStakerOutputs), 'utf-8');
   }
 
   const blsKeyCandidates = getBlsKeyCandidates(summaries);
