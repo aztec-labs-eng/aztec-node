@@ -1,4 +1,4 @@
-import { parseLogLevelEnvVar } from './log-filters.js';
+import { formatLogLevelSpec, isValidLogLevelSpec, parseLogLevelEnvVar } from './log-filters.js';
 
 describe('parseEnv', () => {
   const defaultLevel = 'info';
@@ -46,5 +46,35 @@ describe('parseEnv', () => {
     const defaultLevel = 'info';
     const env = 'debug;warn:module1;error:';
     expect(() => parseLogLevelEnvVar(env, defaultLevel)).toThrow('Invalid log filter statement: error');
+  });
+});
+
+describe('formatLogLevelSpec', () => {
+  it('renders a level without filters', () => {
+    expect(formatLogLevelSpec('info', [])).toBe('info');
+  });
+
+  it('drops empty modules so the spec can be formatted back', () => {
+    const [level, filters] = parseLogLevelEnvVar('info;debug:foo, ;trace: ', 'info');
+    expect(filters).toEqual([['foo', 'debug']]);
+    expect(formatLogLevelSpec(level, filters)).toBe('info;debug:foo');
+  });
+
+  it('round-trips through parseLogLevelEnvVar', () => {
+    const [level, filters] = parseLogLevelEnvVar('debug;warn:module1,module2;error:module3', 'info');
+    const spec = formatLogLevelSpec(level, filters);
+    expect(parseLogLevelEnvVar(spec, 'info')).toEqual([level, filters]);
+  });
+});
+
+describe('isValidLogLevelSpec', () => {
+  it('accepts valid specs', () => {
+    expect(isValidLogLevelSpec('info')).toBe(true);
+    expect(isValidLogLevelSpec('debug;trace:sequencer,p2p;warn:archiver')).toBe(true);
+  });
+
+  it('rejects invalid specs', () => {
+    expect(isValidLogLevelSpec('loud')).toBe(false);
+    expect(isValidLogLevelSpec('debug;trace:')).toBe(false);
   });
 });
