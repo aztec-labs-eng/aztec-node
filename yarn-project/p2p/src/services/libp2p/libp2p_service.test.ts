@@ -490,6 +490,89 @@ describe('LibP2PService', () => {
         expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
       });
     });
+
+    describe('slot-boundary timestamp drift', () => {
+      // The harness mocks the next-slot timestamp at 100 and the slot duration at 36 (see
+      // createTestLibP2PService), so a tx counts as expiring "within the last slot" when its expiration is >= 64.
+      const receiverTimestamp = 100n;
+
+      /** The real stage-1 timestamp validator for a node whose next-slot timestamp is `receiverTimestamp`. */
+      function createGossipTimestampValidator(): Record<string, TransactionValidator<GossipValidationFailure>> {
+        const worldState = mock<WorldStateSynchronizer>();
+        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
+        const validators = createFirstStageTxValidationsForGossipedTransactions(
+          receiverTimestamp,
+          BlockNumber(2),
+          worldState,
+          computeGossipMinFees(GasFees.empty(), GasFees.empty()),
+          1,
+          1,
+          Fr.ZERO,
+          mock<ContractDataSource>(),
+          true,
+        );
+        return { timestampValidator: validators.timestampValidator };
+      }
+
+      async function mockTxExpiringAt(expirationTimestamp: bigint) {
+        const tx = await mockTx();
+        tx.data.expirationTimestamp = expirationTimestamp;
+        await tx.recomputeHash();
+        return tx;
+      }
+
+      beforeEach(() => {
+        txService.firstStageValidatorsOverride = createGossipTimestampValidator();
+      });
+
+      it('ignores a tx that expired within the last slot without penalizing the relayer', async () => {
+        const tx = await mockTxExpiringAt(receiverTimestamp - 1n);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+        expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+        // Short-circuited on the stage-1 drift exception, before the pool.
+        expect(txPool.canAddPendingTx).not.toHaveBeenCalled();
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('treats the exact one-slot-ago boundary as drift and ignores it', async () => {
+        const tx = await mockTxExpiringAt(receiverTimestamp - 36n);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+        expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes a tx that expired more than a slot ago', async () => {
+        const tx = await mockTxExpiringAt(receiverTimestamp - 37n);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.HighToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('still penalizes when a within-slot-expired tx also fails another check at the same severity', async () => {
+        // The timestamp drift alone would be ignored; a co-occurring header failure of equal severity must not be masked.
+        txService.firstStageValidatorsOverride = {
+          ...createGossipTimestampValidator(),
+          blockHeaderValidator: {
+            validator: { validateTx: () => Promise.resolve({ result: 'invalid', reason: ['unknown anchor block'] }) },
+            severity: PeerErrorSeverity.HighToleranceError,
+          },
+        };
+        const tx = await mockTxExpiringAt(receiverTimestamp - 1n);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.HighToleranceError);
+      });
+    });
   });
 
   describe('gossip min fee resolution', () => {
