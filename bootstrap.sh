@@ -680,9 +680,12 @@ case "$cmd" in
   # VARIANTS ON NORMAL PULL-REQUEST CI #
   ######################################
   "ci-fast")
+    # Both keep a value already set: ci3/source_refname sets CI_FULL=1 for a version or the default
+    # branch as REF_NAME, so a release runs the full test set, and ci3/source_release_target turns
+    # the test cache off for a private release.
     export CI=1
-    export USE_TEST_CACHE=1
-    export CI_FULL=0
+    export USE_TEST_CACHE=${USE_TEST_CACHE:-1}
+    export CI_FULL=${CI_FULL:-0}
     build_and_test fast
     ;;
   "ci-full")
@@ -933,7 +936,7 @@ case "$cmd" in
   # RELEASES #
   ############
   "ci-release")
-    # Single command that tests and publishes a release.
+    # Builds and publishes a release; ci.sh release runs the tests on the same tree first.
     # DRY_RUN=1 exercises the whole flow without publishing — this is how releases are tested in CI.
     export CI=1
     export USE_TEST_CACHE=1

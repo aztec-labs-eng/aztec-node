@@ -1,7 +1,8 @@
 # The release target: where a release reads its packages from, and where it publishes.
 #
-# Sourced by `bootstrap.sh ci-release` before the build and again by `bootstrap.sh release`, so a
-# misconfigured environment fails in seconds instead of after a full build. RELEASE_TARGET is a
+# Sourced on the runner at the start of `ci.sh release`, so a misconfigured environment fails in
+# seconds, before any instance starts; then by ci3/bootstrap_ec2 on each build instance before any
+# command runs, and again by the release steps that read it. RELEASE_TARGET is a
 # literal in the release workflow, never a GitHub variable, so no variable edit can flip a flow;
 # everything else is either supplied by the workflow's environment or derived here.
 #
@@ -97,6 +98,10 @@ case "$RELEASE_TARGET" in
     # run would restore a public run's entries and skip both installs — publishing artifacts built
     # against npmjs while reporting success.
     export NO_CACHE=1
+    # The test cache likewise: a test's key is its dependency hash, which is the same for a build
+    # against npmjs, so a hit would skip the test on the strength of a pass against other packages.
+    # NO_CACHE_UPLOAD also stops this run recording its own passes (ci3/run_test_cmd).
+    export USE_TEST_CACHE=0
     ;;
   *)
     echo_stderr "Unknown RELEASE_TARGET '$RELEASE_TARGET' (expected public or private)."
