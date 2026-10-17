@@ -175,6 +175,10 @@ export class SentinelStore {
         return 7;
       case 'checkpoint-unvalidated':
         return 8;
+      case 'checkpoint-unpublished':
+        return 9;
+      case 'checkpoint-orphaned':
+        return 10;
       default: {
         const _exhaustive: never = status;
         throw new Error(`Unknown status: ${status}`);
@@ -200,6 +204,10 @@ export class SentinelStore {
         return 'checkpoint-invalid';
       case 8:
         return 'checkpoint-unvalidated';
+      case 9:
+        return 'checkpoint-unpublished';
+      case 10:
+        return 'checkpoint-orphaned';
       default:
         throw new Error(`Unknown status: ${status}`);
     }
