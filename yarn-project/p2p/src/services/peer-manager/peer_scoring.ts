@@ -56,6 +56,12 @@ const MIN_SCORE_BEFORE_BAN = -100;
 const MIN_SCORE_BEFORE_DISCONNECT = -50;
 const SCORE_CLEANUP_THRESHOLD = 0.1;
 
+// Upper bounds on retained scoring state so a remote peer churning throwaway identities cannot grow the
+// heartbeat-scanned maps without limit. Both sit far above any healthy non-connected count (maxPeerCount
+// defaults to 100). Over the cap, the least-recently-updated score and the earliest-expiring ban are evicted.
+const MAX_RETAINED_SCORED_PEERS = 4096;
+const MAX_RETAINED_BANS = 4096;
+
 /** An active ban: the score the peer held when banned, and the timestamp at which the ban lifts. */
 type BanRecord = { score: number; expiry: number };
 
@@ -123,8 +129,13 @@ export class PeerScoring {
     // Apply new score delta
     currentScore += scoreDelta;
 
+    // Re-insert so the most recently updated peer moves to the end of iteration order; the first entry is
+    // then the least-recently-updated (most-decayed) peer, which is the one evicted when over the cap.
+    this.scores.delete(peerId);
+    this.lastUpdateTime.delete(peerId);
     this.scores.set(peerId, currentScore);
     this.lastUpdateTime.set(peerId, currentTime);
+    this.evictLeastRecentScoreIfOverCap(peerId);
 
     this.maybeBanPeer(peerId, currentScore);
 
@@ -143,6 +154,7 @@ export class PeerScoring {
     }
     const record: BanRecord = { score, expiry: this.dateProvider.now() + this.banDurationMs };
     this.bannedPeers.set(peerId, record);
+    this.evictEarliestBanIfOverCap(peerId);
     this.logger.verbose(`Banning peer ${peerId} until ${new Date(record.expiry).toISOString()}`, {
       peerId,
       score,
@@ -192,6 +204,37 @@ export class PeerScoring {
   removePeer(peerId: string): void {
     this.scores.delete(peerId);
     this.lastUpdateTime.delete(peerId);
+  }
+
+  /**
+   * Bounds the score maps. When retention exceeds MAX_RETAINED_SCORED_PEERS, drops the least-recently-updated
+   * peer (front of iteration order) - its score has decayed longest and is closest to healthy - never the peer
+   * just updated. Keeps a reconnecting recent offender's penalty while capping churn-driven growth.
+   */
+  private evictLeastRecentScoreIfOverCap(keep: string): void {
+    while (this.scores.size > MAX_RETAINED_SCORED_PEERS) {
+      const oldest = this.scores.keys().next().value;
+      if (oldest === undefined || oldest === keep) {
+        break;
+      }
+      this.scores.delete(oldest);
+      this.lastUpdateTime.delete(oldest);
+    }
+  }
+
+  /**
+   * Bounds the ban map. Bans share a fixed duration, so insertion order is expiry order; when over
+   * MAX_RETAINED_BANS the first entry is the earliest-expiring, so dropping it lifts the ban closest to
+   * expiring rather than letting identity churn grow the map without limit.
+   */
+  private evictEarliestBanIfOverCap(keep: string): void {
+    while (this.bannedPeers.size > MAX_RETAINED_BANS) {
+      const earliest = this.bannedPeers.keys().next().value;
+      if (earliest === undefined || earliest === keep) {
+        break;
+      }
+      this.bannedPeers.delete(earliest);
+    }
   }
 
   /**
