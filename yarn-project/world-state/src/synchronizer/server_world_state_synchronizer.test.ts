@@ -649,6 +649,115 @@ describe('ServerWorldStateSynchronizer', () => {
       expect(snapshot.getLeafValue).not.toHaveBeenCalled();
     });
   });
+
+  describe('archive block hash cache', () => {
+    let archive: Map<bigint, Fr>;
+    let nextRead: Promise<Fr | undefined> | undefined;
+    let synchronizer: ServerWorldStateSynchronizer;
+
+    // Serves archive leaves from `archive`, or the pending `nextRead` once when a test needs to hold a read open.
+    const readArchive = ((_treeId: MerkleTreeId, index: bigint) => {
+      const read = nextRead ?? Promise.resolve(archive.get(BigInt(index)) ?? Fr.ZERO);
+      nextRead = undefined;
+      return read;
+    }) as MerkleTreeReadOperations['getLeafValue'];
+
+    const readsAt = (index: bigint) =>
+      merkleTreeRead.getLeafValue.mock.calls.filter(([treeId, i]) => treeId === MerkleTreeId.ARCHIVE && i === index)
+        .length;
+
+    beforeEach(() => {
+      archive = new Map([
+        [3n, new Fr(3n)],
+        [5n, new Fr(5n)],
+      ]);
+      nextRead = undefined;
+      merkleTreeRead.getLeafValue.mockImplementation(readArchive);
+      merkleTreeDb.getStatusSummary.mockResolvedValue({
+        unfinalizedBlockNumber: BlockNumber(5),
+        finalizedBlockNumber: BlockNumber(3),
+        oldestHistoricalBlock: BlockNumber.ZERO,
+        treesAreSynched: true,
+      } satisfies WorldStateStatusSummary);
+      merkleTreeDb.unwindBlocks.mockResolvedValue(buildEmptyWorldStateStatusFull());
+
+      // Use the real getL2Tips rather than the test subclass override.
+      synchronizer = new ServerWorldStateSynchronizer(merkleTreeDb, blockAndMessagesSource, {
+        worldStateBlockCheckIntervalMS: 100,
+        worldStateDbMapSizeKb: 1024 * 1024,
+        worldStateHistoryRetention: { type: 'archive' },
+      });
+    });
+
+    afterEach(async () => {
+      await synchronizer.stop();
+    });
+
+    const prune = (toBlock: number) =>
+      synchronizer.handleBlockStreamEvent({
+        type: 'chain-pruned',
+        block: { number: BlockNumber(toBlock), hash: BlockHash.random().toString() },
+        checkpointed: {
+          block: { number: BlockNumber(toBlock), hash: '' },
+          checkpoint: { number: CheckpointNumber(1), hash: '' },
+        },
+        proven: {
+          block: { number: BlockNumber(toBlock), hash: '' },
+          checkpoint: { number: CheckpointNumber(1), hash: '' },
+        },
+      });
+
+    it('re-reads the proposed tip on every poll but serves the finalized tip and walk-back from memory', async () => {
+      for (let i = 0; i < 3; i++) {
+        const tips = await synchronizer.getL2Tips();
+        expect(tips.proposed.hash).toEqual(new Fr(5n).toString());
+        expect(tips.finalized.block.hash).toEqual(new Fr(3n).toString());
+        await expect(synchronizer.getL2BlockHash(BlockNumber(5))).resolves.toEqual(new Fr(5n).toString());
+      }
+
+      expect(readsAt(5n)).toBe(3);
+      expect(readsAt(3n)).toBe(1);
+    });
+
+    it('returns the new hash after a chain prune replaces a block', async () => {
+      await expect(synchronizer.getL2BlockHash(BlockNumber(5))).resolves.toEqual(new Fr(5n).toString());
+
+      await prune(4);
+      archive.set(5n, new Fr(55n));
+
+      await expect(synchronizer.getL2BlockHash(BlockNumber(5))).resolves.toEqual(new Fr(55n).toString());
+    });
+
+    it('returns the new hash after the world state is cleared', async () => {
+      await expect(synchronizer.getL2BlockHash(BlockNumber(3))).resolves.toEqual(new Fr(3n).toString());
+
+      await synchronizer.clear();
+      archive.set(3n, new Fr(33n));
+
+      await expect(synchronizer.getL2BlockHash(BlockNumber(3))).resolves.toEqual(new Fr(33n).toString());
+    });
+
+    it('does not cache a hash read that overlaps a chain prune', async () => {
+      const staleRead = promiseWithResolvers<Fr | undefined>();
+      nextRead = staleRead.promise;
+      const inFlight = synchronizer.getL2BlockHash(BlockNumber(5));
+
+      await prune(4);
+      archive.set(5n, new Fr(55n));
+      staleRead.resolve(new Fr(5n));
+
+      await expect(inFlight).resolves.toEqual(new Fr(5n).toString());
+      await expect(synchronizer.getL2BlockHash(BlockNumber(5))).resolves.toEqual(new Fr(55n).toString());
+    });
+
+    it('does not cache a missing block', async () => {
+      await expect(synchronizer.getL2BlockHash(BlockNumber(6))).resolves.toBeUndefined();
+
+      archive.set(6n, new Fr(6n));
+
+      await expect(synchronizer.getL2BlockHash(BlockNumber(6))).resolves.toEqual(new Fr(6n).toString());
+    });
+  });
 });
 
 class TestWorldStateSynchronizer extends ServerWorldStateSynchronizer {
