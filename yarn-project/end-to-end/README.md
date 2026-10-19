@@ -202,6 +202,14 @@ Tests with **no Aztec node** that exercise one package belong in that package, n
 
 These run in their own package's test lane (both packages already run anvil-backed integration tests).
 
+### L1 block spacing while validators run
+
+The epoch cache treats a committee as final once the latest L1 block is in the last L1 slot of the epoch
+its seed is sampled from, which assumes L1 blocks are at least one Ethereum slot apart. Once validators are
+running, don't call `ethCheatCodes.mine(n)` (blocks one second apart) or `warp` without
+`resetBlockInterval`: a randao written by a block that lands too soon after can leave nodes on a wrong
+committee. See the epoch cache README's "Cache Behaviour" section.
+
 ### Support directories (not test categories)
 
 - `fixtures/` — the shared `setup()`, option presets (`fixtures.ts`), the named node-level waiters
