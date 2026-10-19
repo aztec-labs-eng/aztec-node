@@ -194,6 +194,21 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
   /** Largest epoch number for which the end-of-epoch aggregator has run. */
   protected lastEvaluatedEpoch: EpochNumber | undefined;
 
+  /** Bumped on every history write so cached stats are never served from before the write. */
+  private historyGeneration = 0;
+  /**
+   * Stats for the default window, shared by every caller until the next processed slot or history write. Computing them
+   * scans and deserializes the full history of every validator, while the inputs only change once per slot.
+   */
+  private defaultStatsCache:
+    | {
+        lastProcessedSlot: SlotNumber;
+        initialSlot: SlotNumber | undefined;
+        historyGeneration: number;
+        stats: Promise<ValidatorsStats>;
+      }
+    | undefined;
+
   constructor(
     protected epochCache: EpochCache,
     protected archiver: L2BlockSource,
@@ -758,16 +773,56 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
   }
 
   /** Push the status for each slot for each validator. */
-  protected updateValidators(slot: SlotNumber, stats: Record<`0x${string}`, ValidatorStatusInSlot | undefined>) {
-    return this.store.updateValidators(slot, stats);
+  protected async updateValidators(slot: SlotNumber, stats: Record<`0x${string}`, ValidatorStatusInSlot | undefined>) {
+    this.historyGeneration++;
+    try {
+      await this.store.updateValidators(slot, stats);
+    } finally {
+      this.historyGeneration++;
+    }
   }
 
-  /** Computes stats to be returned based on stored data. */
-  public async computeStats({
+  /**
+   * Computes stats to be returned based on stored data. Calls without arguments cover the default window ending at the
+   * last processed slot and are served from a cache that is refreshed whenever that slot or the stored history changes.
+   */
+  public computeStats(
+    args: { fromSlot?: SlotNumber; toSlot?: SlotNumber; validators?: EthAddress[] } = {},
+  ): Promise<ValidatorsStats> {
+    const isDefaultWindow = args.fromSlot === undefined && args.toSlot === undefined && args.validators === undefined;
+    // Before the first processed slot the default window ends at the wall-clock slot, which moves without any write.
+    if (!isDefaultWindow || this.lastProcessedSlot === undefined) {
+      return this.computeStatsUncached(args);
+    }
+
+    const { lastProcessedSlot, initialSlot, historyGeneration } = this;
+    if (
+      this.defaultStatsCache?.lastProcessedSlot !== lastProcessedSlot ||
+      this.defaultStatsCache.initialSlot !== initialSlot ||
+      this.defaultStatsCache.historyGeneration !== historyGeneration
+    ) {
+      const stats = this.computeStatsUncached(args);
+      const entry = { lastProcessedSlot, initialSlot, historyGeneration, stats };
+      this.defaultStatsCache = entry;
+      // A failed computation is dropped so the next caller retries instead of receiving the cached rejection.
+      stats.catch(() => {
+        if (this.defaultStatsCache === entry) {
+          this.defaultStatsCache = undefined;
+        }
+      });
+    }
+    return this.defaultStatsCache.stats;
+  }
+
+  private async computeStatsUncached({
     fromSlot,
     toSlot,
     validators,
-  }: { fromSlot?: SlotNumber; toSlot?: SlotNumber; validators?: EthAddress[] } = {}): Promise<ValidatorsStats> {
+  }: {
+    fromSlot?: SlotNumber;
+    toSlot?: SlotNumber;
+    validators?: EthAddress[];
+  }): Promise<ValidatorsStats> {
     const histories = validators
       ? fromEntries(await Promise.all(validators.map(async v => [v.toString(), await this.store.getHistory(v)])))
       : await this.store.getHistories();
