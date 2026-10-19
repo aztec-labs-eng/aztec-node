@@ -52,7 +52,7 @@ import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
 import { NodeKeystoreAdapter } from './key_store/node_keystore_adapter.js';
 import { ValidatorMetrics } from './metrics.js';
-import { ProposalHandler } from './proposal_handler.js';
+import { type CheckpointOpeningFeeSource, ProposalHandler } from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 describe('ValidatorClient HA Integration', () => {
@@ -242,6 +242,7 @@ describe('ValidatorClient HA Integration', () => {
       config,
       blobClient,
       new CheckpointReexecutionTracker(),
+      mock<CheckpointOpeningFeeSource>(),
       metrics,
       dateProvider,
       getTelemetryClient(),

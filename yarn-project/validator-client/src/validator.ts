@@ -77,6 +77,7 @@ import { ValidatorMetrics } from './metrics.js';
 import {
   type BlockProposalObservers,
   type BlockProposalValidationFailureReason,
+  type CheckpointOpeningFeeSource,
   type CheckpointProposalValidationFailureResult,
   ProposalHandler,
   SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT,
@@ -231,6 +232,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     keyStoreManager: KeystoreManager,
     blobClient: BlobClientInterface,
     reexecutionTracker: CheckpointReexecutionTracker,
+    checkpointFeeSource: CheckpointOpeningFeeSource,
     dateProvider: DateProvider = new DateProvider(),
     telemetry: TelemetryClient = getTelemetryClient(),
     slashingProtectionDb?: SlashingProtectionDatabase,
@@ -253,6 +255,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       config,
       blobClient,
       reexecutionTracker,
+      checkpointFeeSource,
       metrics,
       dateProvider,
       telemetry,
