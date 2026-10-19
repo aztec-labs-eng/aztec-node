@@ -437,7 +437,7 @@ export class ProverNodePublisher {
       });
       return gasLimit > revertedGasLimit ? gasLimit : undefined;
     } catch (err) {
-      this.log.verbose(`Not resending reverted epoch proof: gas estimation fails at the latest state`, {
+      this.log.warn(`Not resending reverted epoch proof: gas estimation fails at the latest state`, {
         fromCheckpoint: args.fromCheckpoint,
         toCheckpoint: args.toCheckpoint,
         err,
