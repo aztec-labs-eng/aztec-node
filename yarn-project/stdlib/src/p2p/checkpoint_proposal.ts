@@ -310,9 +310,11 @@ export class CheckpointProposal extends Gossipable implements Signable {
 
     // Decoding is lenient on purpose, for forward compatibility: trailing bytes are ignored and any non-zero
     // presence flag reads as present, so a newer version can append fields that older nodes skip over. Rejecting
-    // them would make every wire extension a coordinated upgrade. Lenient decoding does not let one proposal take
-    // several identities, since the P2P message identifier and the signature both cover the signed payload rather
-    // than the raw bytes.
+    // them would make every wire extension a coordinated upgrade. One signed payload can therefore reach the
+    // network under several encodings, each with its own P2P message identifier, which hashes the raw bytes. In
+    // particular the signature and the payload hash cover the checkpoint header, archive and fee modifier but not
+    // the embedded last block, so the same signed payload can travel with or without that block. The gossip layer
+    // must not treat a stored payload hash as covering the embedded block.
 
     const checkpointHeader = reader.readObject(CheckpointHeader);
     const archive = reader.readObject(Fr);

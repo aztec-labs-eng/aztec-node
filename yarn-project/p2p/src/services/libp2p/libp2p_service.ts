@@ -169,6 +169,16 @@ type ReceivedMessageValidationResult<T, M = undefined> =
   | { obj: T; result: Exclude<TopicValidatorResult, TopicValidatorResult.Reject>; metadata?: M }
   | { obj?: T; result: TopicValidatorResult.Reject; metadata?: M; severity: PeerErrorSeverity };
 
+/** Outcome details of validating and storing a gossiped checkpoint proposal. */
+type CheckpointProposalValidationMetadata = {
+  isEquivocated: boolean;
+  /** The embedded final block was stored and should be handed to block processing. */
+  processBlock: boolean;
+  isOversized: boolean;
+  /** The checkpoint was stored and processed from an earlier copy; this copy only delivered its final block. */
+  checkpointAlreadyStored?: boolean;
+};
+
 /**
  * Lib P2P implementation of the P2PService interface.
  */
@@ -1610,11 +1620,8 @@ export class LibP2PService extends WithTracer implements P2PService {
     const {
       result,
       obj: checkpoint,
-      metadata: { isEquivocated, processBlock, isOversized } = {},
-    } = await this.validateReceivedMessage<
-      CheckpointProposal,
-      { isEquivocated: boolean; processBlock: boolean; isOversized: boolean }
-    >(
+      metadata: { isEquivocated, processBlock, isOversized, checkpointAlreadyStored } = {},
+    } = await this.validateReceivedMessage<CheckpointProposal, CheckpointProposalValidationMetadata>(
       () => this.validateAndStoreCheckpointProposal(source, CheckpointProposal.fromBuffer(payloadData)),
       msgId,
       source,
@@ -1622,9 +1629,10 @@ export class LibP2PService extends WithTracer implements P2PService {
     );
 
     // An oversized checkpoint is re-broadcast as slashing evidence but never attested or processed.
-    // Process checkpoint proposal if valid and neither equivocated nor oversized.
+    // Process checkpoint proposal if valid and neither equivocated nor oversized. A copy accepted only for
+    // the final block it delivers was already processed when its checkpoint was first stored.
     const processCheckpointFn = () =>
-      result === TopicValidatorResult.Accept && checkpoint && !isEquivocated && !isOversized
+      result === TopicValidatorResult.Accept && checkpoint && !isEquivocated && !isOversized && !checkpointAlreadyStored
         ? this.processValidCheckpointProposal(ValidatedCheckpointProposalCore(checkpoint.toCore()), source)
         : Promise.resolve();
 
@@ -1661,16 +1669,22 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async validateAndStoreCheckpointProposal(
     peerId: PeerId,
     checkpoint: CheckpointProposal,
-  ): Promise<
-    ReceivedMessageValidationResult<
-      CheckpointProposal,
-      { isEquivocated: boolean; processBlock: boolean; isOversized: boolean }
-    >
-  > {
+  ): Promise<ReceivedMessageValidationResult<CheckpointProposal, CheckpointProposalValidationMetadata>> {
     // Dedup on already-accepted content before validation: an exact signed checkpoint payload already
     // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. A
     // different payload hash at the same slot is not stored, so equivocation still takes the full path.
-    if (await this.mempools.attestationPool.hasCheckpointProposal(checkpoint.slotNumber, checkpoint.getPayloadHash())) {
+    // The payload hash does not cover the embedded final block, and one signed payload can travel with or
+    // without it, so a copy whose final block is not stored yet takes the full path to deliver that block.
+    const embeddedBlock = checkpoint.getBlockProposal();
+    if (
+      (await this.mempools.attestationPool.hasCheckpointProposal(checkpoint.slotNumber, checkpoint.getPayloadHash())) &&
+      (!embeddedBlock ||
+        (await this.mempools.attestationPool.hasBlockProposal(
+          embeddedBlock.slotNumber,
+          embeddedBlock.indexWithinCheckpoint,
+          embeddedBlock.getPayloadHash(),
+        )))
+    ) {
       return { result: TopicValidatorResult.Ignore, obj: checkpoint };
     }
 
@@ -1730,6 +1744,20 @@ export class LibP2PService extends WithTracer implements P2PService {
     const tryAddResult = await this.mempools.attestationPool.tryAddCheckpointProposal(checkpointCore);
     const { added, alreadyExists, count } = tryAddResult;
     const isEquivocated = count !== undefined && count > 1;
+
+    // Already-stored checkpoint whose copy delivered a new final block: re-broadcast it so peers that only
+    // saw a copy without that block receive it too, but do not process the checkpoint a second time.
+    if (alreadyExists && processBlock) {
+      this.logger.debug(`Accepting already-stored checkpoint proposal that delivered its final block`, {
+        ...checkpoint.toCheckpointInfo(),
+        source: peerId.toString(),
+      });
+      return {
+        result: TopicValidatorResult.Accept,
+        obj: checkpoint,
+        metadata: { isEquivocated, processBlock, isOversized, checkpointAlreadyStored: true },
+      };
+    }
 
     // Duplicate proposal received, do not re-broadcast
     if (alreadyExists) {

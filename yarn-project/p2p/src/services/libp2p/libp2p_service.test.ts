@@ -15,7 +15,12 @@ import type {
   MerkleTreeReadOperations,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import {
+  BlockProposal,
+  type CheckpointAttestation,
+  CheckpointProposal,
+  PeerErrorSeverity,
+} from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
@@ -1220,6 +1225,113 @@ describe('LibP2PService', () => {
         TopicValidatorResult.Ignore,
       );
       expect(addSpy).not.toHaveBeenCalled();
+    });
+
+    /** A checkpoint proposal with an embedded final block, plus a copy of the same signed payload without it. */
+    const makeFullAndWithoutFinalBlock = async () => {
+      const checkpointHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });
+      const blockHeader = makeBlockHeader(1, { slotNumber: targetSlot });
+      const full = await makeCheckpointProposal({ signer, checkpointHeader, lastBlock: { blockHeader } });
+      const withoutFinalBlock = new CheckpointProposal(
+        full.checkpointHeader,
+        full.archive,
+        full.feeAssetPriceModifier,
+        full.signature,
+        full.signatureContext,
+      );
+      expect(withoutFinalBlock.getPayloadHash()).toEqual(full.getPayloadHash());
+      expect(withoutFinalBlock.toBuffer().equals(full.toBuffer())).toBe(false);
+      return { full, withoutFinalBlock };
+    };
+
+    it('a checkpoint copy without its final block does not shadow the full copy', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+      const finalBlockArchive = full.getBlockProposal()!.archive.toString();
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-without-block',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(blockReceivedCallback).not.toHaveBeenCalled();
+
+      // The full copy delivers the final block from the already-stored checkpoint and is forwarded, but the
+      // checkpoint itself is not processed again.
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect((blockReceivedCallback.mock.calls[0][0] as BlockProposal).archive.toString()).toBe(finalBlockArchive);
+      expect(await attestationPool.getBlockProposalByArchive(finalBlockArchive)).toBeDefined();
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+
+      // Another full copy carries nothing new.
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full-again', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full-again',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('skipCheckpointProposalValidation: a copy without its final block does not shadow the full copy', async () => {
+      service = createTestLibP2PServiceWithPools(
+        mockPeerManager,
+        reportMessageValidationResultSpy,
+        attestationPool,
+        mockTxPool,
+        mockEpochCache,
+        { skipCheckpointProposalValidation: true },
+      );
+      service.registerBlockReceivedCallback(blockReceivedCallback as any);
+      service.registerValidatorCheckpointReceivedCallback(validatorCheckpointReceivedCallback as any);
+      service.registerAllNodesCheckpointReceivedCallback(allNodesCheckpointReceivedCallback as any);
+
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('ignores a checkpoint copy without its final block after the full copy', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-without-block',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
     it('processes valid checkpoint: invokes callback and propagates attestations', async () => {
