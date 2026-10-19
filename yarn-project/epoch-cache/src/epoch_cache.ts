@@ -20,8 +20,8 @@ import {
   getSlotAtNextL1Block,
   getSlotAtTimestamp,
   getSlotRangeForEpoch,
-  getStartTimestampForEpoch,
   getTimestampForSlot,
+  getTimestampRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import { createPublicClient, encodeAbiParameters, keccak256 } from 'viem';
 
@@ -390,21 +390,13 @@ export class EpochCache implements EpochCacheInterface {
     return entry.lastRefreshL1Timestamp;
   }
 
-  /** Computes the sampling timestamp for an epoch's committee data. */
-  private getSamplingTimestamp(epoch: EpochNumber): bigint {
-    const { lagInEpochsForRandao, epochDuration, slotDuration } = this.l1constants;
-    const epochStartTs = getStartTimestampForEpoch(epoch, this.l1constants);
-    return epochStartTs - BigInt(lagInEpochsForRandao) * BigInt(epochDuration) * BigInt(slotDuration);
-  }
-
   /**
    * Whether the sample seed for `epoch` is fixed as of the given L1 block. The seed for epoch E hashes the randao
    * that L1 checkpoints in epoch S = E - lagInEpochsForRandao, under the key start(S). It is fixed once that randao
    * is written, or once no later L1 block can land in S, since any later checkpoint is keyed at a later epoch's start.
    */
   private async isSeedFixed(epoch: EpochNumber, block: L1BlockInfo): Promise<boolean> {
-    const { targetCommitteeSize, lagInEpochsForRandao, epochDuration, slotDuration, ethereumSlotDuration } =
-      this.l1constants;
+    const { targetCommitteeSize, lagInEpochsForRandao } = this.l1constants;
 
     // The seed is irrelevant when the committee is empty and anyone may propose.
     if (targetCommitteeSize === 0) {
@@ -419,9 +411,11 @@ export class EpochCache implements EpochCacheInterface {
 
     // A block in S's last L1 slot is S's last block, as L1 blocks are at least one Ethereum slot apart. Waiting for a
     // block past S would also cost E's second slot, which a pipelined proposer decides on while the tip is still in S.
-    const samplingEpochStart = this.getSamplingTimestamp(epoch);
-    const samplingEpochEnd = samplingEpochStart + BigInt(epochDuration) * BigInt(slotDuration);
-    if (block.timestamp + BigInt(ethereumSlotDuration) >= samplingEpochEnd) {
+    const [samplingEpochStart, samplingEpochLastL1Slot] = getTimestampRangeForEpoch(
+      EpochNumber.fromBigInt(samplingEpoch),
+      this.l1constants,
+    );
+    if (block.timestamp >= samplingEpochLastL1Slot) {
       return true;
     }
     if (block.timestamp < samplingEpochStart) {
