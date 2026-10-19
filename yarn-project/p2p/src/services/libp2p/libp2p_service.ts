@@ -175,7 +175,10 @@ type CheckpointProposalValidationMetadata = {
   /** The embedded final block was stored and should be handed to block processing. */
   processBlock: boolean;
   isOversized: boolean;
-  /** The checkpoint was stored and processed from an earlier copy; this copy only delivered its final block. */
+  /**
+   * The checkpoint was already stored from an earlier copy and this copy only delivered its final block, so it must
+   * not trigger another processing attempt.
+   */
   checkpointAlreadyStored?: boolean;
 };
 
@@ -1630,7 +1633,8 @@ export class LibP2PService extends WithTracer implements P2PService {
 
     // An oversized checkpoint is re-broadcast as slashing evidence but never attested or processed.
     // Process checkpoint proposal if valid and neither equivocated nor oversized. A copy accepted only for
-    // the final block it delivers was already processed when its checkpoint was first stored.
+    // the final block it delivers carries a checkpoint already stored from an earlier copy, so it must not
+    // trigger another processing attempt.
     const processCheckpointFn = () =>
       result === TopicValidatorResult.Accept && checkpoint && !isEquivocated && !isOversized && !checkpointAlreadyStored
         ? this.processValidCheckpointProposal(ValidatedCheckpointProposalCore(checkpoint.toCore()), source)
@@ -1671,8 +1675,8 @@ export class LibP2PService extends WithTracer implements P2PService {
     checkpoint: CheckpointProposal,
   ): Promise<ReceivedMessageValidationResult<CheckpointProposal, CheckpointProposalValidationMetadata>> {
     // Dedup on already-accepted content before validation: an exact signed checkpoint payload already
-    // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. A
-    // different payload hash at the same slot is not stored, so equivocation still takes the full path.
+    // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. An
+    // unseen payload hash at the same slot is not stored, so equivocation still takes the full path.
     // The payload hash does not cover the embedded final block, and one signed payload can travel with or
     // without it, so a copy whose final block is not stored yet takes the full path to deliver that block.
     const embeddedBlock = checkpoint.getBlockProposal();
@@ -1746,7 +1750,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     const isEquivocated = count !== undefined && count > 1;
 
     // Already-stored checkpoint whose copy delivered a new final block: re-broadcast it so peers that only
-    // saw a copy without that block receive it too, but do not process the checkpoint a second time.
+    // saw a copy without that block receive it too, but do not trigger another checkpoint processing attempt.
     if (alreadyExists && processBlock) {
       this.logger.debug(`Accepting already-stored checkpoint proposal that delivered its final block`, {
         ...checkpoint.toCheckpointInfo(),

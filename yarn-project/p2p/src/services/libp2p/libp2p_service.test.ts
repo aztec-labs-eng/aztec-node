@@ -6,6 +6,7 @@ import { getDefaultConfig } from '@aztec-labs/foundation/config';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
@@ -26,6 +27,7 @@ import {
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointAttestation,
+  makeCheckpointAttestationFromProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
   mockTx,
@@ -1310,6 +1312,56 @@ describe('LibP2PService', () => {
       expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
       expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
       expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('a full copy delivers the final block while the checkpoint from a copy without it is in flight', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+      const attestation = makeCheckpointAttestationFromProposal(full, Secp256k1Signer.random());
+      const addOwnAttestationsSpy = jest.spyOn(attestationPool, 'addOwnCheckpointAttestations');
+      const propagateSpy = jest.spyOn(service, 'propagate').mockResolvedValue();
+
+      let firstHandlerSettled = false;
+      let blockReceivedWhileFirstHandlerPending = false;
+      const finalBlockReceived = promiseWithResolvers<void>();
+      blockReceivedCallback.mockImplementation(() => {
+        blockReceivedWhileFirstHandlerPending = !firstHandlerSettled;
+        finalBlockReceived.resolve();
+        return Promise.resolve(true);
+      });
+
+      // The validator waits for the final block before attesting, as it does when re-executing the checkpoint.
+      const checkpointWaiting = promiseWithResolvers<void>();
+      validatorCheckpointReceivedCallback.mockImplementation(async () => {
+        checkpointWaiting.resolve();
+        await finalBlockReceived.promise;
+        return [attestation];
+      });
+
+      const firstHandled = service
+        .handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId)
+        .then(() => {
+          firstHandlerSettled = true;
+        });
+      await checkpointWaiting.promise;
+
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(blockReceivedWhileFirstHandlerPending).toBe(true);
+
+      await firstHandled;
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(addOwnAttestationsSpy).toHaveBeenCalledTimes(1);
+      expect(addOwnAttestationsSpy).toHaveBeenCalledWith([attestation]);
+      expect(propagateSpy).toHaveBeenCalledTimes(1);
+      expect(propagateSpy).toHaveBeenCalledWith(attestation);
+      expect(await attestationPool.getCheckpointAttestationsForSlot(targetSlot)).toHaveLength(1);
       expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
