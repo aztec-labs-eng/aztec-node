@@ -287,6 +287,10 @@ export class CheckpointIngestor {
     validation: PendingChainValidationTracker,
   ): Promise<ResolvedCheckpointFromCalldata[]> {
     const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
+    // Archive roots accepted earlier in this batch. The store only drops a rejected entry for a root when the batch
+    // is persisted, so an accepted checkpoint whose root was also rejected (an earlier post of the same checkpoint
+    // with invalid attestations) would otherwise still look rejected to the children that follow it in this batch.
+    const acceptedArchiveRoots = new Set<string>();
 
     for (const { checkpoint: calldataCheckpoint, validationResult: resolvedValidationResult } of resolvedCheckpoints) {
       // Check the attestations uploaded by the publisher to L1 are correct.
@@ -300,9 +304,10 @@ export class CheckpointIngestor {
       // this, addCheckpoints would throw InitialCheckpointNumberNotSequentialError when the
       // ancestor was skipped earlier (e.g. due to invalid attestations), the catch handler
       // would roll back the L1 sync point, and the next iteration would re-fetch and re-throw.
-      const rejectedAncestor = await this.deps.stores.blocks.getRejectedCheckpointByArchiveRoot(
-        calldataCheckpoint.header.lastArchiveRoot,
-      );
+      const parentArchiveRoot = calldataCheckpoint.header.lastArchiveRoot;
+      const rejectedAncestor = acceptedArchiveRoots.has(parentArchiveRoot.toString())
+        ? undefined
+        : await this.deps.stores.blocks.getRejectedCheckpointByArchiveRoot(parentArchiveRoot);
 
       validation.observe(validationResult, { hasRejectedAncestor: rejectedAncestor !== undefined });
 
@@ -363,6 +368,7 @@ export class CheckpointIngestor {
       }
 
       checkpointsToIngest.push(calldataCheckpoint);
+      acceptedArchiveRoots.add(calldataCheckpoint.archiveRoot.toString());
     }
 
     return checkpointsToIngest;

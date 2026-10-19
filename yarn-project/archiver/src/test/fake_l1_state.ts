@@ -486,6 +486,40 @@ export class FakeL1State {
   }
 
   /**
+   * Simulates the latest entry for a checkpoint number being invalidated on L1 and the identical checkpoint being
+   * proposed again at a later L1 block with a different set of signers. Both entries share the same archive root, and
+   * both remain visible as CheckpointProposed events.
+   */
+  async repostCheckpoint(
+    checkpointNumber: CheckpointNumber,
+    opts: { l1BlockNumber: bigint; signers: Secp256k1Signer[] },
+  ): Promise<void> {
+    const previous = this.checkpoints.findLast(cpData => cpData.checkpointNumber === checkpointNumber);
+    if (!previous) {
+      throw new Error(`Checkpoint ${checkpointNumber} not found`);
+    }
+    previous.pruned = true;
+
+    const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
+      previous.checkpoint,
+      opts.signers,
+      false,
+    );
+    this.checkpoints.push({
+      ...previous,
+      pruned: false,
+      l1BlockNumber: opts.l1BlockNumber,
+      // The tx hash defaults to the archive root, which both entries share, so give the repost its own.
+      tx: { ...tx, hash: `0x${opts.l1BlockNumber.toString(16).padStart(64, '0')}` },
+      signers: opts.signers,
+      attestationsHash,
+      payloadDigest,
+      verbatimAttestations,
+    });
+    this.updatePendingCheckpointNumber();
+  }
+
+  /**
    * Moves messages at a given L1 block to a new L1 block.
    * Useful for simulating partial message visibility (messages at higher L1 blocks won't be fetched).
    */
