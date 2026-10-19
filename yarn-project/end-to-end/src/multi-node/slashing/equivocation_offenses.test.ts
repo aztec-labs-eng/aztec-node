@@ -183,7 +183,8 @@ describe('multi-node/slashing/duplicate_attestation', () => {
       const offenseSlot = SlotNumber(Number(offense.epochOrSlot));
       const committeeInfo = await epochCache.getCommittee(offenseSlot);
       test.logger.info(`Offense slot ${offenseSlot}: committee includes attester ${maliciousAddress.toString()}`);
-      expect(committeeInfo.committee?.map(addr => addr.toString())).toContain(maliciousAddress.toString());
+      const committee = committeeInfo.state === 'members' ? committeeInfo.committee : [];
+      expect(committee.map(addr => addr.toString())).toContain(maliciousAddress.toString());
     }
 
     test.logger.warn('Duplicate attestation offense correctly detected and recorded');
@@ -237,7 +238,8 @@ describe('multi-node/slashing/duplicate_proposal', () => {
     // Verify that for each offense, the proposer for that slot is the malicious validator.
     for (const offense of proposalOffenses) {
       const offenseSlot = SlotNumber(Number(offense.epochOrSlot));
-      const proposerForSlot = await epochCache.getProposerAttesterAddressInSlot(offenseSlot);
+      const proposerLookup = await epochCache.lookupProposer(offenseSlot);
+      const proposerForSlot = proposerLookup.state === 'members' ? proposerLookup.proposer : undefined;
       test.logger.info(`Offense slot ${offenseSlot}: proposer is ${proposerForSlot?.toString()}`);
       expect(proposerForSlot?.toString()).toEqual(maliciousAddress.toString());
     }

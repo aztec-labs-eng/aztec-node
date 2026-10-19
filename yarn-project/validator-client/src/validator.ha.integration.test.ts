@@ -6,6 +6,7 @@
  */
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeMembershipLookup } from '@aztec-labs/epoch-cache/test';
 import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -113,7 +114,9 @@ describe('ValidatorClient HA Integration', () => {
       ethereumSlotDuration: 4,
     } as any);
     // Default mock: return all addresses passed (all are in committee)
-    epochCache.filterInCommittee.mockImplementation((_slot, addresses) => Promise.resolve(addresses));
+    epochCache.filterInCommittee.mockImplementation((_slot, addresses) =>
+      Promise.resolve(makeMembershipLookup(addresses)),
+    );
     blockSource = mock<L2BlockSource & L2BlockSink>();
     l1ToL2MessageSource = mock<L1ToL2MessageSource>();
     txProvider = mock<TxProvider>();

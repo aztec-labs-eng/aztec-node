@@ -1,4 +1,6 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
+import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -818,12 +820,14 @@ describe('sentinel', () => {
       const validator3 = EthAddress.random();
       const [fromSlot, toSlot] = getSlotRangeForEpoch(epochNumber, l1Constants);
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [validator1, validator2, validator3],
-        seed: 0n,
-        epoch: epochNumber,
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [validator1, validator2, validator3],
+          seed: 0n,
+          epoch: epochNumber,
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       const statsResult: ValidatorsStats = {
         stats: {
@@ -888,12 +892,14 @@ describe('sentinel', () => {
       const validator2 = EthAddress.random();
       const committee = [validator1, validator2];
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 0n,
-        epoch,
-        isEscapeHatchOpen: true,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 0n,
+          epoch,
+          isEscapeHatchOpen: true,
+        }),
+      );
 
       const updateSpy = jest.spyOn(store, 'updateValidators');
 
@@ -905,17 +911,42 @@ describe('sentinel', () => {
       expect(sentinel.getLastProcessedSlot()).toEqual(slot);
     });
 
+    it.each([
+      ['open', []],
+      ['none', undefined],
+    ] as const)('processSlot skips tracking but advances when the committee is %s', async (_, committee) => {
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({ committee: committee && [...committee], epoch, isEscapeHatchOpen: false }),
+      );
+      const updateSpy = jest.spyOn(store, 'updateValidators');
+
+      await sentinel.doProcessSlot(slot);
+
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(sentinel.getLastProcessedSlot()).toEqual(slot);
+    });
+
+    it('processSlot throws without advancing when the committee is not stable, so the slot is retried', async () => {
+      epochCache.getCommittee.mockResolvedValue(makeUnstableCommittee(epoch, 100n));
+      const lastProcessedSlot = sentinel.getLastProcessedSlot();
+
+      await expect(sentinel.doProcessSlot(slot)).rejects.toThrow(CommitteeNotStableError);
+      expect(sentinel.getLastProcessedSlot()).toEqual(lastProcessedSlot);
+    });
+
     it('processSlot tracks normally when escape hatch is closed', async () => {
       const signers = times(4, Secp256k1Signer.random);
       const validators = signers.map(s => s.address);
       const committee = [...validators];
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 0n,
-        epoch,
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 0n,
+          epoch,
+          isEscapeHatchOpen: false,
+        }),
+      );
       epochCache.computeProposerIndex.mockReturnValue(0n);
       p2p.getCheckpointAttestationsForSlot.mockResolvedValue([]);
 
@@ -932,12 +963,14 @@ describe('sentinel', () => {
       const epochNumber = EpochNumber(2);
       const validator1 = EthAddress.random();
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [validator1],
-        seed: 0n,
-        epoch: epochNumber,
-        isEscapeHatchOpen: true,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [validator1],
+          seed: 0n,
+          epoch: epochNumber,
+          isEscapeHatchOpen: true,
+        }),
+      );
 
       const emitSpy = jest.spyOn(sentinel, 'emit');
       const updateEpochSpy = jest.spyOn(store, 'updateEpochPerformance');

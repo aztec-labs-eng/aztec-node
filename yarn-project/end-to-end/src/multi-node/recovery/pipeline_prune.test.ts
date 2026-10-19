@@ -182,8 +182,9 @@ async function findNextProposerIndex(
   validators: { attester: EthAddress }[],
   slotToDisable: SlotNumber,
 ): Promise<{ proposerIndex: number; slot: SlotNumber }> {
-  const proposer = await epochCache.getProposerAttesterAddressInSlot(SlotNumber(slotToDisable));
-  if (proposer) {
+  const proposerLookup = await epochCache.lookupProposer(SlotNumber(slotToDisable));
+  if (proposerLookup.state === 'members') {
+    const { proposer } = proposerLookup;
     const idx = validators.findIndex(v => v.attester.equals(proposer));
     if (idx >= 0) {
       return { proposerIndex: idx, slot: SlotNumber(slotToDisable) };

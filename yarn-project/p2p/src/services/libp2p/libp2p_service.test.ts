@@ -1,4 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { makeMembershipLookup, makeProposerLookup } from '@aztec-labs/epoch-cache/test';
 import { BlockNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { getDefaultConfig } from '@aztec-labs/foundation/config';
@@ -820,7 +821,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot: targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -956,7 +957,7 @@ describe('LibP2PService', () => {
       // Add MAX_BLOCK_PROPOSALS_PER_POSITION proposals
       for (let i = 0; i < MAX_BLOCK_PROPOSALS_PER_POSITION; i++) {
         const individualSigner = Secp256k1Signer.random();
-        mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(individualSigner.address);
+        mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(individualSigner.address));
         const proposal = await makeBlockProposal({
           signer: individualSigner,
           blockHeader: header,
@@ -973,7 +974,7 @@ describe('LibP2PService', () => {
 
       // Create a proposal that would exceed the cap
       const extraSigner = Secp256k1Signer.random();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(extraSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(extraSigner.address));
       const extraProposal = await makeBlockProposal({
         signer: extraSigner,
         blockHeader: header,
@@ -1044,7 +1045,7 @@ describe('LibP2PService', () => {
       // same slot/position look like equivocation. There is no expected proposer to attribute the
       // offense to, so the duplicate callback must not fire (mirrors the checkpoint equivocation
       // watcher, which refuses to slash when the slot has no proposer).
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(undefined));
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(0);
 
@@ -1179,7 +1180,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -1406,7 +1407,7 @@ describe('LibP2PService', () => {
       // Fill checkpoint slot to MAX_CHECKPOINT_PROPOSALS_PER_SLOT
       for (let i = 0; i < MAX_CHECKPOINT_PROPOSALS_PER_SLOT; i++) {
         const individualSigner = Secp256k1Signer.random();
-        mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(individualSigner.address);
+        mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(individualSigner.address));
         const proposal = await makeCheckpointProposal({
           signer: individualSigner,
           checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
@@ -1425,7 +1426,7 @@ describe('LibP2PService', () => {
 
       // Create checkpoint with lastBlock that would exceed the cap
       const extraSigner = Secp256k1Signer.random();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(extraSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(extraSigner.address));
       const extraProposal = await makeCheckpointProposal({
         signer: extraSigner,
         checkpointHeader,
@@ -1587,7 +1588,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -1904,10 +1905,10 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposerSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposerSigner.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
-      mockEpochCache.isInCommittee.mockResolvedValue(true);
+      mockEpochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
       mockPeerManager = mock<PeerManagerInterface>();
       reportMessageValidationResultSpy = jest.fn();

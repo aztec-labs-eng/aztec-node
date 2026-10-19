@@ -1,4 +1,4 @@
-import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { type EpochCache, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { type CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -66,22 +66,25 @@ export async function resolveCheckpointAttestationsFromCalldata(
 ): Promise<ResolvedCheckpointAttestations> {
   const slot = checkpoint.header.slotNumber;
   const epoch: EpochNumber = getEpochAtSlot(slot, constants);
-  // Read the hatch flag from the same cache entry as the committee, so both come from one snapshot.
-  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
+  // Read the hatch flag from the same cache entry as the committee, so both come from one snapshot. An unstable
+  // committee throws, so the sync retries the checkpoint once the seed is fixed.
+  const lookup = requireStableCommittee(await epochCache.getCommitteeForEpoch(epoch));
 
-  if (isEscapeHatchOpen) {
+  if (lookup.isEscapeHatchOpen) {
     logger?.warn(
       `Escape hatch open for epoch ${epoch} at slot ${slot}, skipping attestations of checkpoint ${checkpoint.checkpointNumber}`,
     );
     return { attestations: [], validationResult: { valid: true } };
   }
 
-  if (!committee || committee.length === 0) {
+  if (lookup.state !== 'members') {
     logger?.warn(
       `No committee found for epoch ${epoch} at slot ${slot}. Accepting checkpoint ${checkpoint.checkpointNumber} without validation.`,
+      { committeeState: lookup.state },
     );
     return { attestations: [], validationResult: { valid: true } };
   }
+  const { committee, seed } = lookup;
 
   let attestations: CommitteeAttestation[];
   try {
@@ -131,18 +134,19 @@ export async function validateAttestations(
 ): Promise<ValidateCheckpointResult> {
   const slot = payload.header.slotNumber;
   const epoch: EpochNumber = getEpochAtSlot(slot, constants);
-  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
+  const lookup = requireStableCommittee(await epochCache.getCommitteeForEpoch(epoch));
 
-  if (isEscapeHatchOpen) {
+  if (lookup.isEscapeHatchOpen) {
     logger?.warn(`Escape hatch open for epoch ${epoch} at slot ${slot}, skipping checkpoint validation`);
     return { valid: true };
   }
 
-  if (!committee || committee.length === 0) {
+  if (lookup.state !== 'members') {
     logger?.warn(`No committee found for epoch ${epoch} at slot ${slot}. Accepting checkpoint without validation.`, {
       checkpointNumber: checkpointInfo.checkpointNumber,
       slot,
       epoch,
+      committeeState: lookup.state,
     });
     return { valid: true };
   }
@@ -152,7 +156,7 @@ export async function validateAttestations(
     attestations,
     verbatimAttestations,
     checkpointInfo,
-    { committee, seed, epoch },
+    { committee: lookup.committee, seed: lookup.seed, epoch },
     logger,
   );
 }

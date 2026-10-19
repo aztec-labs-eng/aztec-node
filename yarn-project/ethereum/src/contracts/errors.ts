@@ -5,16 +5,10 @@ export class BlockTagTooOldError extends Error {
   }
 }
 
-export class NoCommitteeError extends Error {
-  constructor() {
-    super('The committee does not exist on L1');
-    this.name = 'NoCommitteeError';
-  }
-}
-
 /**
  * The committee for an epoch cannot be served yet because its sample seed can still change on L1: the randao it
- * samples has not been checkpointed, and the epoch that would checkpoint it is not over.
+ * samples has not been checkpointed, and the epoch that would checkpoint it is not over. Thrown by callers that cannot
+ * act without the committee and retry later.
  */
 export class CommitteeNotStableError extends Error {
   constructor(

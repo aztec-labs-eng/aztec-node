@@ -17,7 +17,7 @@ import {
   MAX_PROCESSABLE_L2_GAS,
   MAX_TX_DA_GAS,
 } from '@aztec-labs/constants';
-import { EpochCache } from '@aztec-labs/epoch-cache';
+import { type CommitteeLookup, EpochCache, type ProposerLookup } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
@@ -155,6 +155,16 @@ function expectGasLimitWithin(gasLimit: bigint, max: bigint) {
   if (!isAmsterdamTestRun()) {
     expect(gasLimit).toBeLessThanOrEqual(max);
   }
+}
+
+/** A lookup's committee, or undefined when it has no members. */
+function membersOf(lookup: CommitteeLookup): EthAddress[] | undefined {
+  return lookup.state === 'members' ? lookup.committee : undefined;
+}
+
+/** A lookup's proposer, or undefined when its committee has no members. */
+function proposerOf(lookup: ProposerLookup): EthAddress | undefined {
+  return lookup.state === 'members' ? lookup.proposer : undefined;
 }
 
 // Low-level integration tests for SequencerPublisher: building checkpoints, publishing with and
@@ -465,9 +475,9 @@ describeAcrossL1Forks('L1Publisher integration', () => {
     await rollupCheatCodes.advanceToEpoch(EpochNumber(config.lagInEpochsForValidatorSet + 1));
     await rollupCheatCodes.setupEpoch();
 
-    ({ committee } = await epochCache.getCommittee());
+    committee = membersOf(await epochCache.getCommittee());
     const { currentSlot } = epochCache.getCurrentAndNextSlot();
-    proposer = await epochCache.getProposerAttesterAddressInSlot(currentSlot);
+    proposer = proposerOf(await epochCache.lookupProposer(currentSlot));
     logger.warn(`Current epoch committee and proposer`, { committee, proposer });
   };
 
@@ -572,7 +582,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
     opts: { l1ToL2Messages?: Fr[]; blockNumber?: BlockNumber } = {},
   ) => {
     const slot = await getPipelinedProposalSlot();
-    proposer = await epochCache.getProposerAttesterAddressInSlot(slot);
+    proposer = proposerOf(await epochCache.lookupProposer(slot));
     return buildSingleCheckpoint({ ...opts, slot });
   };
 
@@ -870,7 +880,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
       await rollupCheatCodes.advanceToEpoch(nextEpoch);
       await ethCheatCodes.syncDateProvider();
       expect(await rollup.isEpochSetUp(nextEpoch)).toBe(false);
-      ({ committee } = await epochCache.getCommittee(await getPipelinedProposalSlot()));
+      committee = membersOf(await epochCache.getCommittee(await getPipelinedProposalSlot()));
 
       const { checkpoint } = await buildSingleCheckpointForPipelinedProposer();
       const checkpointAttestations = validators.map(v => makeCheckpointAttestationForCurrentContext(checkpoint, v));

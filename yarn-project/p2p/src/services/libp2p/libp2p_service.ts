@@ -1,4 +1,4 @@
-import { type EpochCacheInterface, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
 import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
@@ -822,16 +822,22 @@ export class LibP2PService extends WithTracer implements P2PService {
    * proposer. While the slot's committee is not stable on L1 there is no expected proposer yet either.
    */
   private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
-    const expectedProposer = await this.epochCache
-      .getProposerAttesterAddressInSlot(slot)
-      .catch(unlessCommitteeNotStable(undefined));
-    if (expectedProposer === undefined) {
-      this.logger.warn(
-        `Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty or not yet stable committee)`,
-      );
-      return false;
+    const expectedProposer = await this.epochCache.lookupProposer(slot);
+    switch (expectedProposer.state) {
+      case 'members':
+        return true;
+      case 'open':
+      case 'unstable':
+        this.logger.warn(
+          `Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty or not yet stable committee)`,
+          { slot, committeeState: expectedProposer.state },
+        );
+        return false;
+      case 'none':
+        // The proposal validator rejects a slot without a committee before duplicates are counted, so this needs the
+        // committee to vanish in between. Throwing makes the gossip validator reject the message, as it does for that.
+        throw new Error(`No committee on L1 for slot ${slot}`);
     }
-    return true;
   }
 
   /**

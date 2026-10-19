@@ -2,6 +2,7 @@ import type { Archiver } from '@aztec-labs/archiver';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { INITIAL_L2_BLOCK_NUM, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeEscapeHatchLookup, makeProposerLookup } from '@aztec-labs/epoch-cache/test';
 import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
@@ -173,6 +174,7 @@ describe('ProposalHandler checkpoint validation', () => {
       ethereumSlotDuration: 4,
       epochDuration: 8,
     } as L1RollupConstants);
+    epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(false));
 
     dateProvider = new TestDateProvider();
     metrics = mock<ValidatorMetrics>();
@@ -2279,7 +2281,7 @@ describe('ProposalHandler checkpoint validation', () => {
       blockSource.getGenesisValues.mockResolvedValue({
         genesisArchiveRoot: proposal.blockHeader.lastArchive.root,
       } as any);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       // Slot 1's proposal receive window is [-4s, 17s]; 30s is well past its close.
       epochCache.getEpochAndSlotNow.mockReturnValue({
         epoch: EpochNumber(0),
