@@ -3,7 +3,7 @@ import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { partition, pick } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
@@ -20,7 +20,7 @@ import {
   type ProposedCheckpointData,
   PublishedCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { type L1RollupConstants, getEpochAtSlot, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import { type Tracer, execInSpan } from '@aztec-labs/telemetry-client';
 
@@ -37,7 +37,7 @@ import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { ArchiverDataStoreUpdater } from './data_store_updater.js';
 import type { ArchiverInstrumentation } from './instrumentation.js';
 import { PendingChainValidationTracker } from './pending_chain_validation_tracker.js';
-import { getCheckpointProposer, resolveCheckpointAttestationsFromCalldata } from './validation.js';
+import { resolveCheckpointAttestationsFromCalldata } from './validation.js';
 
 /** A checkpoint observed in L1 calldata this iteration, whether ingested or rejected. */
 export type SeenCheckpoint = Pick<RejectedCheckpoint, 'checkpointNumber' | 'l1'>;
@@ -588,23 +588,34 @@ export class CheckpointIngestor {
    * Reports equivocation for a local proposed checkpoint that diverges from the L1 checkpoint at the same slot, but
    * only when one key signed both. Two checkpoints for one slot from different proposers are not equivocation: a
    * proposal made before the slot's proposer was final can be superseded by the real proposer's checkpoint on L1.
+   * Never throws, so a failed lookup leaves the divergence unattributed without holding up sync.
    */
-  private reportEquivocationIfSameSigner(
+  private async reportEquivocationIfSameSigner(
     proposed: ProposedCheckpointData,
     calldataCheckpoint: ResolvedCheckpointFromCalldata,
-  ): void {
-    const l1Proposer = getCheckpointProposer(
-      calldataCheckpoint,
-      calldataCheckpoint.attestations,
-      this.getSignatureContext(),
-    );
+  ): Promise<void> {
+    const { checkpointNumber } = calldataCheckpoint;
+    const { slotNumber } = calldataCheckpoint.header;
+
+    let l1Proposer: EthAddress | undefined;
+    if (proposed.signer) {
+      try {
+        l1Proposer = await this.getL1ProposerForSlot(slotNumber);
+      } catch (err) {
+        this.deps.log.warn(`Failed to get the L1 proposer for slot ${slotNumber}`, {
+          checkpointNumber,
+          slotNumber,
+          err,
+        });
+      }
+    }
 
     if (!proposed.signer || !l1Proposer || !proposed.signer.equals(l1Proposer)) {
       this.deps.log.warn(
-        `Not attributing equivocation for checkpoint ${calldataCheckpoint.checkpointNumber}: the local proposed copy and the L1 checkpoint have no common signer`,
+        `Not attributing equivocation for checkpoint ${checkpointNumber}: the local proposed copy and the L1 checkpoint have no common signer`,
         {
-          checkpointNumber: calldataCheckpoint.checkpointNumber,
-          slotNumber: calldataCheckpoint.header.slotNumber,
+          checkpointNumber,
+          slotNumber,
           proposedSigner: proposed.signer?.toString(),
           l1Proposer: l1Proposer?.toString(),
         },
@@ -614,12 +625,30 @@ export class CheckpointIngestor {
 
     this.deps.events.emit(L2BlockSourceEvents.CheckpointEquivocationDetected, {
       type: L2BlockSourceEvents.CheckpointEquivocationDetected,
-      slotNumber: calldataCheckpoint.header.slotNumber,
-      checkpointNumber: calldataCheckpoint.checkpointNumber,
+      slotNumber,
+      checkpointNumber,
       l1ArchiveRoot: calldataCheckpoint.archiveRoot,
       proposedArchiveRoot: proposed.archive.root,
       signer: proposed.signer,
     });
+  }
+
+  /**
+   * Asks the rollup who had to sign the checkpoint it accepted for a past slot. `propose` only succeeds when the slot's
+   * proposer signed the checkpoint, and the rollup derives that proposer from history keyed by timestamp, so querying
+   * at the latest L1 block returns the address `propose` checked. The propose calldata cannot tell this: the
+   * CheckpointProposed event commits to neither the signers nor the bundle signature, so a reverted copy of the call
+   * signed by another key matches the event just as well. Returns undefined when L1 did not check the committee's
+   * proposer, because an escape hatch was open for the epoch, or when the committee was empty.
+   */
+  private async getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+    const epoch = getEpochAtSlot(slot, this.deps.l1Constants);
+    const { isEscapeHatchOpen } = await this.deps.epochCache.getCommitteeForEpoch(epoch);
+    if (isEscapeHatchOpen) {
+      return undefined;
+    }
+    const proposer = await this.deps.rollup.getProposerAt(getTimestampForSlot(slot, this.deps.l1Constants));
+    return proposer.isZero() ? undefined : proposer;
   }
 
   /**
@@ -664,7 +693,7 @@ export class CheckpointIngestor {
       // Only emit when the slots match — uncheckpointed entries are pruned above so this
       // should always hold, but guard defensively to avoid mis-attributing a slash.
       if (proposed.header.slotNumber === calldataCheckpoint.header.slotNumber) {
-        this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
+        await this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
       }
       // Return a divergence signal so the caller can evict pending >= this number
       return { kind: 'evict', fromCheckpointNumber: proposed.checkpointNumber };

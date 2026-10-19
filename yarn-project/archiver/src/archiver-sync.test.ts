@@ -2535,10 +2535,32 @@ describe('Archiver Sync', () => {
         expect(equivocationSpy).not.toHaveBeenCalled();
       }, 15_000);
 
-      it('does not blame an attester of the L1 checkpoint that a stale proposer index points at', async () => {
-        // A committee view whose seed selects signers[1], who signed the local copy and attested the L1 checkpoint.
-        epochCache.computeProposerIndex.mockReturnValue(1n);
-        await syncDivergingCheckpointTwo(signers[1].address);
+      it('does not report equivocation when the rollup names another proposer for the slot', async () => {
+        // signers[0] signed the L1 checkpoint's bundle and the local copy, but the rollup did not require its signature.
+        rollupContract.getProposerAt.mockResolvedValue(signers[1].address);
+        await syncDivergingCheckpointTwo(signers[0].address);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('does not report equivocation when the rollup names no proposer for the slot', async () => {
+        rollupContract.getProposerAt.mockResolvedValue(EthAddress.ZERO);
+        await syncDivergingCheckpointTwo(signers[0].address);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('does not report equivocation during an escape hatch, when L1 did not check the committee proposer', async () => {
+        epochCache.getCommitteeForEpoch.mockResolvedValue({
+          committee: signers.map(signer => signer.address),
+          seed: 0n,
+          isEscapeHatchOpen: true,
+        } as EpochCommitteeInfo);
+        await syncDivergingCheckpointTwo(signers[0].address);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('still evicts the local copy without reporting equivocation when the proposer lookup fails', async () => {
+        rollupContract.getProposerAt.mockRejectedValue(new Error('L1 RPC unavailable'));
+        await syncDivergingCheckpointTwo(signers[0].address);
         expect(equivocationSpy).not.toHaveBeenCalled();
       }, 15_000);
 
@@ -2558,6 +2580,26 @@ describe('Archiver Sync', () => {
           proposedArchiveRoot: cp2.archive.root,
           signer: signers[0].address,
         });
+      }, 15_000);
+
+      it('reports the proposer even when a reverted decoy propose call signed by another key comes first', async () => {
+        const cp1 = await syncCheckpointOne();
+        const { checkpoint: cp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 5000n,
+          numL1ToL2Messages: 0,
+          signers,
+          previousArchive: cp1.blocks.at(-1)!.archive,
+          decoyBundleSigner: Secp256k1Signer.random(),
+        });
+        await addProposedCheckpoint(cp2, cp2.feeAssetPriceModifier + 1n, signers[0].address);
+
+        fake.setL1BlockNumber(5010n);
+        await archiver.syncImmediate();
+
+        expect(equivocationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ checkpointNumber: CheckpointNumber(2), signer: signers[0].address }),
+        );
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
       }, 15_000);
     });
   });
@@ -4153,7 +4195,7 @@ describe('Archiver Sync', () => {
         committee: signers.map(signer => signer.address),
         seed: 0n,
       } as EpochCommitteeInfo);
-      // The fake L1 has the first signer sign the attestations bundle, so it is the L1 checkpoint's proposer.
+      // The fake rollup names the first signer as the proposer of each slot it has a checkpoint for.
       const proposer = signers[0].address;
 
       await fake.addCheckpoint(CheckpointNumber(1), {
