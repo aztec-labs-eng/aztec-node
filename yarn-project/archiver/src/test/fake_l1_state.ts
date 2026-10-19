@@ -735,6 +735,7 @@ export class FakeL1State {
         l1BlockNumber: cpData.l1BlockNumber,
         l1BlockHash: Buffer32.fromBigInt(cpData.l1BlockNumber),
         l1TransactionHash: cpData.tx.hash as `0x${string}`,
+        ...this.getPositionInL1Block(this.checkpoints, cpData),
         args: {
           checkpointNumber: cpData.checkpointNumber,
           archive: cpData.checkpoint.archive.root,
@@ -757,6 +758,7 @@ export class FakeL1State {
         l1BlockNumber: msg.l1BlockNumber,
         l1BlockHash: this.getL1BlockHash(msg.l1BlockNumber),
         l1TransactionHash: `0x${msg.l1BlockNumber.toString(16)}` as `0x${string}`,
+        ...this.getPositionInL1Block(this.messages, msg),
         args: {
           index: msg.index,
           leaf: msg.leaf,
@@ -788,6 +790,7 @@ export class FakeL1State {
       l1BlockNumber: msg.l1BlockNumber,
       l1BlockHash: this.getL1BlockHash(msg.l1BlockNumber),
       l1TransactionHash: `0x${msg.l1BlockNumber.toString(16)}` as `0x${string}`,
+      ...this.getPositionInL1Block(this.messages, msg),
       args: {
         index: msg.index,
         leaf: msg.leaf,
@@ -796,6 +799,18 @@ export class FakeL1State {
         message: this.makeFakeMessageSentMessage(msg.index),
       },
     };
+  }
+
+  /**
+   * The transaction and log index of an entry's event within its L1 block, following insertion order among the entries
+   * in that block, with one event per transaction.
+   */
+  private getPositionInL1Block<T extends { l1BlockNumber: bigint }>(
+    entries: T[],
+    entry: T,
+  ): { l1TransactionIndex: number; l1LogIndex: number } {
+    const index = entries.filter(e => e.l1BlockNumber === entry.l1BlockNumber).indexOf(entry);
+    return { l1TransactionIndex: index, l1LogIndex: index };
   }
 
   // The fake tracks only leaves, so the emitted message carries placeholder fields; nothing in the archiver

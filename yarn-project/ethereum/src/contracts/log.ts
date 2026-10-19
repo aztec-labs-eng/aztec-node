@@ -8,9 +8,21 @@ export type L1EventLog<T> = {
   l1BlockHash: Buffer32;
   /** L1 transaction hash that emitted the event. */
   l1TransactionHash: `0x${string}`;
+  /** Index of the emitting transaction within its L1 block. */
+  l1TransactionIndex: number;
+  /** Index of the log within its L1 block (not within its transaction), as `eth_getLogs` reports it. */
+  l1LogIndex: number;
   /** Event-specific arguments. */
   args: T;
 };
+
+/** Orders L1 event logs by their position on L1: block number, then transaction index, then log index. */
+export function compareL1LogPosition(a: L1EventLog<unknown>, b: L1EventLog<unknown>): number {
+  if (a.l1BlockNumber !== b.l1BlockNumber) {
+    return a.l1BlockNumber < b.l1BlockNumber ? -1 : 1;
+  }
+  return a.l1TransactionIndex - b.l1TransactionIndex || a.l1LogIndex - b.l1LogIndex;
+}
 
 /**
  * Message fragments providers use to refuse a log query for being too wide or returning too much, the failures a
