@@ -27,6 +27,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   ITxProvider,
   ValidatorClientFullConfig,
@@ -55,6 +56,7 @@ import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
   type BlockProposalObservers,
+  type CheckpointOpeningFeeSource,
   type CheckpointProposalValidationResult,
   ProposalHandler,
   SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT,
@@ -143,6 +145,7 @@ describe('ProposalHandler checkpoint validation', () => {
   let config: ValidatorClientFullConfig;
   let consensusTimetable: ConsensusTimetable;
   let reexecutionTracker: CheckpointReexecutionTracker;
+  let checkpointFeeSource: MockProxy<CheckpointOpeningFeeSource>;
 
   const proposalInfo = {};
 
@@ -186,6 +189,8 @@ describe('ProposalHandler checkpoint validation', () => {
 
     consensusTimetable = new ConsensusTimetable({ l1Constants: epochCache.getL1Constants(), blockDuration: 3 });
     reexecutionTracker = new CheckpointReexecutionTracker();
+    checkpointFeeSource = mock<CheckpointOpeningFeeSource>();
+    blockSource.getGenesisBlockHash.mockReturnValue(new BlockHash(new Fr(0x6e6e)));
 
     handler = new ProposalHandler(
       checkpointsBuilder,
@@ -199,6 +204,7 @@ describe('ProposalHandler checkpoint validation', () => {
       config,
       mock<BlobClientInterface>(),
       reexecutionTracker,
+      checkpointFeeSource,
       metrics,
       dateProvider,
     );
@@ -353,6 +359,7 @@ describe('ProposalHandler checkpoint validation', () => {
         config,
         mock<BlobClientInterface>(),
         new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
         metrics,
         dateProvider,
       );
@@ -2024,6 +2031,7 @@ describe('ProposalHandler checkpoint validation', () => {
       config,
       mock<BlobClientInterface>(),
       new CheckpointReexecutionTracker(),
+      checkpointFeeSource,
       metrics,
       dateProvider,
     );
@@ -2213,6 +2221,7 @@ describe('ProposalHandler checkpoint validation', () => {
         config,
         mock<BlobClientInterface>(),
         new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
         metrics,
         dateProvider,
       );
@@ -2262,6 +2271,125 @@ describe('ProposalHandler checkpoint validation', () => {
     });
   });
 
+  // The first block of a checkpoint carries the checkpoint's gas fees, which L1 checks against its own price when the
+  // checkpoint is published. A node must not take the fees from the proposal: it compares them with the price it
+  // reads from L1 for the same slot and parent before re-executing or storing the block.
+  describe('handleBlockProposal first block gas fees', () => {
+    // attestation_deadline(slot=1) = 40s.
+    const BEFORE_DEADLINE_MS = 38_000;
+    const PAST_DEADLINE_MS = 41_000;
+    const l1Fees = new GasFees(0, 1_000_000_000);
+
+    beforeEach(() => {
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(l1Fees);
+    });
+
+    /** A first block with no txs at slot 1 on the genesis block, carrying `gasFees`, whose re-execution succeeds. */
+    async function setupFirstBlockProposal(gasFees: GasFees, nowMs = PAST_DEADLINE_MS) {
+      const proposal = ValidatedBlockProposal(
+        await makeBlockProposal({
+          blockHeader: makeBlockHeader(1, { slotNumber: SlotNumber(1), gasFees }),
+          archiveRoot: Fr.random(),
+          txHashes: [],
+          inboxPrefixRef: InboxMessagePrefixRef.empty(),
+        }),
+      );
+      blockSource.getGenesisValues.mockResolvedValue({
+        genesisArchiveRoot: proposal.blockHeader.lastArchive.root,
+      } as any);
+      blockSource.getBlockData.mockResolvedValue(undefined);
+      dateProvider.setTime(nowMs);
+
+      const txProvider = mock<ITxProvider>();
+      txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: [] } as any);
+      const blockHandler = new ProposalHandler(
+        checkpointsBuilder,
+        mock<WorldStateSynchronizer>(),
+        blockSource,
+        l1ToL2MessageSource,
+        inbox,
+        txProvider,
+        epochCache,
+        consensusTimetable,
+        config,
+        mock<BlobClientInterface>(),
+        new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
+        metrics,
+        dateProvider,
+      );
+      // A block with no txs re-executes to the proposed header whatever fees it was built with.
+      const builtBlock = { number: BlockNumber(INITIAL_L2_BLOCK_NUM) } as unknown as L2Block;
+      jest.spyOn(blockHandler, 'reexecuteTransactions').mockResolvedValue({ block: builtBlock } as any);
+      return { proposal, blockHandler, builtBlock };
+    }
+
+    const rejection = (reason: string) => ({
+      isValid: false,
+      blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
+      reason,
+    });
+
+    it('rejects a first block whose L2 gas fee differs from the L1 price, without storing it', async () => {
+      const { proposal, blockHandler } = await setupFirstBlockProposal(new GasFees(0, 2_000_000_000));
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual(rejection('gas_fees_mismatch'));
+      expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT['gas_fees_mismatch']).toBe(false);
+      expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a first block carrying a non-zero DA gas fee', async () => {
+      const { proposal, blockHandler } = await setupFirstBlockProposal(new GasFees(1, l1Fees.feePerL2Gas));
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual(rejection('gas_fees_mismatch'));
+      expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('accepts and stores a first block whose gas fees match the L1 price', async () => {
+      const { proposal, blockHandler, builtBlock } = await setupFirstBlockProposal(l1Fees);
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toMatchObject({ isValid: true, blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM) });
+      expect(blockSource.addBlock).toHaveBeenCalledWith(builtBlock, proposal.inboxPrefixRef);
+    });
+
+    it('rejects without punishing when the L1 price cannot be determined', async () => {
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(undefined);
+      const { proposal, blockHandler } = await setupFirstBlockProposal(l1Fees);
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual(rejection('gas_fees_unavailable'));
+      expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT['gas_fees_unavailable']).toBe(false);
+      expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('rejects without punishing when the L1 read fails', async () => {
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockRejectedValue(new Error('L1 is down'));
+      const { proposal, blockHandler } = await setupFirstBlockProposal(l1Fees);
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual(rejection('gas_fees_unavailable'));
+      expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('accepts once a later archiver sync lets the node price the checkpoint', async () => {
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValueOnce(undefined);
+      const { proposal, blockHandler, builtBlock } = await setupFirstBlockProposal(l1Fees, BEFORE_DEADLINE_MS);
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toMatchObject({ isValid: true, blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM) });
+      expect(blockSource.addBlock).toHaveBeenCalledWith(builtBlock, proposal.inboxPrefixRef);
+    });
+  });
+
   describe('handleBlockProposal arrival window', () => {
     // Whether a proposal arrived in time is decided once, at p2p ingress. Re-deciding it here would make
     // the verdict depend on how long this node took to get around to processing the proposal, turning
@@ -2305,6 +2433,7 @@ describe('ProposalHandler checkpoint validation', () => {
         config,
         mock<BlobClientInterface>(),
         new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
         metrics,
         dateProvider,
       );
@@ -2345,6 +2474,7 @@ describe('ProposalHandler checkpoint validation', () => {
       const proposal = ValidatedBlockProposal(
         await makeBlockProposal({ blockHeader, archiveRoot: Fr.random(), txHashes: [], inboxPrefixRef }),
       );
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(blockHeader.globalVariables.gasFees);
       blockSource.getGenesisValues.mockResolvedValue({
         genesisArchiveRoot: proposal.blockHeader.lastArchive.root,
       } as any);
@@ -2367,6 +2497,7 @@ describe('ProposalHandler checkpoint validation', () => {
         config,
         mock<BlobClientInterface>(),
         new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
         metrics,
         dateProvider,
         undefined,

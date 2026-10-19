@@ -59,7 +59,7 @@ import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/worl
 import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
-import { AdmissionMinFeesProvider, NextBlockPredictor } from './aztec-node/next_block/index.js';
+import { AdmissionMinFeesProvider, NextBlockFeeCache, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
@@ -282,14 +282,23 @@ export async function createAztecNodeService(
     await feeProvider.start();
     started.push(feeProvider);
 
-    const nextBlockPredictor = NextBlockPredictor.create({
+    // One fee cache serves both the RPC-side predictor and the proposal handler, which checks a checkpoint's first
+    // block against the same L1 price.
+    const nextBlockLog = log.createChild('next-block-predictor');
+    const nextBlockFeeCache = new NextBlockFeeCache({
       blockSource: archiver,
       globalVariableBuilder,
       rollupContract,
       epochCache,
       signatureContext: { chainId: ethereumChain.chainInfo.id, rollupAddress: config.rollupAddress },
       dateProvider,
-      log: log.createChild('next-block-predictor'),
+      log: nextBlockLog.createChild('fee-cache'),
+    });
+    const nextBlockPredictor = new NextBlockPredictor({
+      blockSource: archiver,
+      feeCache: nextBlockFeeCache,
+      epochCache,
+      log: nextBlockLog,
     });
     nextBlockPredictor.start();
     started.push(nextBlockPredictor);
@@ -374,6 +383,7 @@ export async function createAztecNodeService(
         keyStoreManager,
         blobClient,
         reexecutionTracker,
+        checkpointFeeSource: nextBlockFeeCache,
         slashingProtectionDb: deps.slashingProtectionDb,
         blockProposalObservers: deps.blockProposalObservers,
       });
@@ -414,6 +424,7 @@ export async function createAztecNodeService(
         dateProvider,
         telemetry,
         reexecutionTracker,
+        checkpointFeeSource: nextBlockFeeCache,
         blockProposalObservers: deps.blockProposalObservers,
       });
       proposalHandler.register(p2pClient, reexecute, archiver);

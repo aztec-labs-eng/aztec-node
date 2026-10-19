@@ -23,10 +23,10 @@ import { FifoSet } from '@aztec-labs/foundation/fifo-set';
 import type { LogData } from '@aztec-labs/foundation/log';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { DateProvider, Timer, execWithSignal } from '@aztec-labs/foundation/timer';
+import { DateProvider, Timer, execWithSignal, executeTimeout } from '@aztec-labs/foundation/timer';
 import { isErrorClass } from '@aztec-labs/foundation/types';
 import type { P2P, PeerId } from '@aztec-labs/p2p';
-import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { BlockData, BlockHash, L2Block, L2BlockId, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
   getPreviousCheckpointInboxRollingHash,
@@ -34,7 +34,7 @@ import {
   validateCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas } from '@aztec-labs/stdlib/gas';
+import { Gas, type GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   ITxProvider,
   MerkleTreeWriteOperations,
@@ -90,6 +90,10 @@ export type BlockProposalValidationFailureReason =
   // Streaming Inbox per-block acceptance failures.
   | StreamingBlockCheckReason
   | 'global_variables_mismatch'
+  // The gas fees of a checkpoint's first block differ from the price this node read from L1 for that checkpoint.
+  | 'gas_fees_mismatch'
+  // This node could not read the L1 price of the checkpoint a first block opens before the attestation deadline.
+  | 'gas_fees_unavailable'
   | 'block_number_already_exists'
   | 'txs_not_available'
   | 'duplicate_txs'
@@ -385,6 +389,28 @@ export type BlockProposalObservers = {
 };
 
 /**
+ * Prices, from this node's own L1 view, the checkpoint that a block proposal opens. Every block of a checkpoint carries
+ * the checkpoint's gas fees, and L1 accepts the checkpoint only if they equal the price it computes when the checkpoint
+ * is published, so the first block's fees are checked against this price rather than taken from the proposal.
+ */
+export interface CheckpointOpeningFeeSource {
+  /**
+   * The gas fees the first block of a checkpoint at `slot` must carry when it builds on `parent`, priced the way the
+   * proposer prices them. Undefined when this node's local view cannot produce that exact price yet, for example
+   * because its proposed chain does not end at `parent`; a later archiver sync may change that. Throws when reading
+   * the price from L1 fails.
+   */
+  getCheckpointOpeningGasFees(slot: SlotNumber, parent: L2BlockId): Promise<GasFees | undefined>;
+}
+
+/**
+ * Least time the first-block fee check is given to read the L1 price, even when the attestation deadline is closer or
+ * has passed: a block whose other inputs are all local still validates after the deadline, and a price the fee source
+ * already holds answers at once. Bounded so that a stalled L1 read cannot hold the proposal open either way.
+ */
+const FIRST_BLOCK_FEE_MIN_WAIT_MS = 1_000;
+
+/**
  * Block-proposal validation failures classified by whether they constitute a slashable invalid-block offense.
  * A `Record` over the whole reason union, not a plain array, so a newly added reason - in particular one that reaches
  * `BlockProposalValidationFailureReason` through `StreamingBlockCheckReason` - fails to compile until it is classified
@@ -414,6 +440,10 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
   // consumption rewind reported as inbox_prefix_mismatch.
   ['inbox_prefix_unavailable']: false,
   ['inbox_prefix_mismatch']: false,
+  // Not slashable: the price is this node's own L1 read, so a mismatch may come from a view that differs from the
+  // proposer's rather than from the proposer, and an unavailable price is this node's own inability to check.
+  ['gas_fees_mismatch']: false,
+  ['gas_fees_unavailable']: false,
   ['block_number_already_exists']: false,
   ['txs_not_available']: false,
   ['initial_state_mismatch']: false,
@@ -544,6 +574,7 @@ export class ProposalHandler {
     private config: ValidatorClientFullConfig,
     private blobClient: BlobClientInterface,
     private reexecutionTracker: CheckpointReexecutionTracker,
+    private checkpointFeeSource: CheckpointOpeningFeeSource,
     private metrics?: ValidatorMetrics,
     private dateProvider: DateProvider = new DateProvider(),
     telemetry: TelemetryClient = getTelemetryClient(),
@@ -1040,6 +1071,19 @@ export class ProposalHandler {
       return { isValid: false, blockNumber, reason: 'txs_not_available' };
     }
 
+    // Re-execution builds the block with the fees in its own header, so a first block with any fees would reproduce
+    // its header. Later blocks are already held to their parent's fees.
+    if (proposal.indexWithinCheckpoint === 0) {
+      const parent: L2BlockId =
+        parentBlock === 'genesis'
+          ? { number: BlockNumber(blockNumber - 1), hash: this.blockSource.getGenesisBlockHash().toString() }
+          : { number: parentBlock.header.getBlockNumber(), hash: parentBlock.blockHash.toString() };
+      const feesRejection = await this.checkCheckpointOpeningGasFees(proposal, parent, proposalInfo);
+      if (feesRejection) {
+        return { isValid: false, blockNumber, reason: feesRejection };
+      }
+    }
+
     const { previousCheckpointOutHashes, previousInboxRollingHash } = await this.getCheckpointAncestryInputs(
       slotNumber,
       checkpointNumber,
@@ -1397,6 +1441,68 @@ export class ProposalHandler {
       return { reason: 'global_variables_mismatch' };
     }
 
+    return undefined;
+  }
+
+  /**
+   * Compares the gas fees of a checkpoint's first block with the price this node reads from L1 for a checkpoint at the
+   * proposal's slot built on `parent`. While the local view lacks the data for the exact price (the parent's checkpoint
+   * proposal is not processed yet, or the checkpointed tip has not reached the parent's parent checkpoint), this waits
+   * through forced archiver syncs until the attestation deadline instead of settling for an approximate price.
+   * @returns The rejection reason, or undefined when the fees match.
+   */
+  private async checkCheckpointOpeningGasFees(
+    proposal: BlockProposal,
+    parent: L2BlockId,
+    proposalInfo: LogData,
+  ): Promise<'gas_fees_mismatch' | 'gas_fees_unavailable' | undefined> {
+    const slot = proposal.slotNumber;
+    const proposedGasFees = proposal.blockHeader.globalVariables.gasFees;
+    const deadline = this.getReexecutionDeadline(slot);
+
+    // Every attempt's read failure is kept so the final rejection reports the latest one, without a warning per retry.
+    let lastReadError: string | undefined;
+    const readPrice = async (): Promise<GasFees | undefined> => {
+      const waitMs = Math.max(deadline.getTime() - this.dateProvider.now(), FIRST_BLOCK_FEE_MIN_WAIT_MS);
+      try {
+        return await executeTimeout(
+          () => this.checkpointFeeSource.getCheckpointOpeningGasFees(slot, parent),
+          waitMs,
+          'checkpoint gas fees read',
+        );
+      } catch (err) {
+        lastReadError = String(err);
+        this.log.debug(`Failed to read the L1 price of the checkpoint opened by a block proposal`, {
+          ...proposalInfo,
+          err: lastReadError,
+        });
+        return undefined;
+      }
+    };
+
+    const expectedGasFees =
+      (await readPrice()) ?? (await this.awaitLocalSync(slot, 'checkpoint gas fees', () => readPrice()));
+    if (!expectedGasFees) {
+      this.log.warn(`Could not determine the L1 price of the checkpoint opened by a block proposal, rejecting it`, {
+        ...proposalInfo,
+        parentBlockNumber: parent.number,
+        parentBlockHash: parent.hash,
+        proposedGasFees: proposedGasFees.toInspect(),
+        lastReadError,
+      });
+      return 'gas_fees_unavailable';
+    }
+
+    if (!expectedGasFees.equals(proposedGasFees)) {
+      this.log.warn(`First block in checkpoint has gas fees that differ from the L1 price, rejecting it`, {
+        ...proposalInfo,
+        parentBlockNumber: parent.number,
+        parentBlockHash: parent.hash,
+        expectedGasFees: expectedGasFees.toInspect(),
+        proposedGasFees: proposedGasFees.toInspect(),
+      });
+      return 'gas_fees_mismatch';
+    }
     return undefined;
   }
 

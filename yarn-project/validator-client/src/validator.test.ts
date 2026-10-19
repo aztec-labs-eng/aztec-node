@@ -78,6 +78,7 @@ import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import {
   type BlockProposalObservers,
+  type CheckpointOpeningFeeSource,
   type CheckpointProposalValidationFailureReason,
   ProposalHandler,
 } from './proposal_handler.js';
@@ -146,6 +147,7 @@ describe('ValidatorClient', () => {
   let keyStoreManager: KeystoreManager;
   let blobClient: MockProxy<BlobClientInterface>;
   let haKeyStore: MockProxy<HAKeyStore>;
+  let checkpointFeeSource: MockProxy<CheckpointOpeningFeeSource>;
 
   beforeEach(async () => {
     p2pClient = mock<P2P>();
@@ -218,6 +220,7 @@ describe('ValidatorClient', () => {
     txProvider = mock<TxProvider>();
     dateProvider = new TestDateProvider();
     blobClient = mock<BlobClientInterface>();
+    checkpointFeeSource = mock<CheckpointOpeningFeeSource>();
     blobClient.canUpload.mockReturnValue(false);
     blobClient.sendBlobsToFilestore.mockResolvedValue(true);
     haKeyStore = mock<HAKeyStore>();
@@ -270,6 +273,7 @@ describe('ValidatorClient', () => {
       keyStoreManager,
       blobClient,
       new CheckpointReexecutionTracker(),
+      checkpointFeeSource,
       dateProvider,
       undefined,
       undefined,
@@ -532,6 +536,7 @@ describe('ValidatorClient', () => {
       const blockHeader = makeBlockHeader(1, { blockNumber: BlockNumber(100), slotNumber: SlotNumber(100) });
       blockNumber = BlockNumber(blockHeader.globalVariables.blockNumber);
       proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, inboxPrefixRef: genesisPrefixRef }));
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(blockHeader.globalVariables.gasFees);
       // The proposal targets slot 100, which under pipelining is built during the previous slot. Set the
       // wall clock to the start of that build slot (target_slot_start - S), matching how a pipelined
       // proposer is positioned when validating an inbound block proposal. With S - 2E = 0 in this config
