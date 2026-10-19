@@ -2379,6 +2379,17 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(blockSource.addBlock).not.toHaveBeenCalled();
     });
 
+    it('rejects without punishing when the forced archiver sync fails while waiting for the price', async () => {
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(undefined);
+      blockSource.syncImmediate.mockRejectedValue(new Error('L1 RPC unavailable'));
+      const { proposal, blockHandler } = await setupFirstBlockProposal(l1Fees, BEFORE_DEADLINE_MS);
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual(rejection('gas_fees_unavailable'));
+      expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
     it('accepts once a later archiver sync lets the node price the checkpoint', async () => {
       checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValueOnce(undefined);
       const { proposal, blockHandler, builtBlock } = await setupFirstBlockProposal(l1Fees, BEFORE_DEADLINE_MS);

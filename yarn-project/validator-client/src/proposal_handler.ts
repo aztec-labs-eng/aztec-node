@@ -1480,8 +1480,16 @@ export class ProposalHandler {
       }
     };
 
-    const expectedGasFees =
-      (await readPrice()) ?? (await this.awaitLocalSync(slot, 'checkpoint gas fees', () => readPrice()));
+    const awaitPrice = async (): Promise<GasFees | undefined> => {
+      try {
+        return await this.awaitLocalSync(slot, 'checkpoint gas fees', () => readPrice());
+      } catch (err) {
+        // A forced archiver sync that fails is this node's own inability to check, not a reason to escape the check.
+        lastReadError = String(err);
+        return undefined;
+      }
+    };
+    const expectedGasFees = (await readPrice()) ?? (await awaitPrice());
     if (!expectedGasFees) {
       this.log.warn(`Could not determine the L1 price of the checkpoint opened by a block proposal, rejecting it`, {
         ...proposalInfo,
