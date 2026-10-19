@@ -629,6 +629,7 @@ describe('ProposalHandler checkpoint validation', () => {
         blockCount: 3,
         totalManaUsed: 4242n,
         feeAssetPriceModifier: 7n,
+        signer: signer.address,
       });
     });
 

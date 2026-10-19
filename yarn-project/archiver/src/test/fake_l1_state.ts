@@ -83,6 +83,12 @@ type AddCheckpointOptions = {
   spareAttestationsBitmapBit?: boolean;
   /** Overrides the posted attestations tuple, e.g. to model an escape-hatch proposer's arbitrary tuple. */
   verbatimAttestations?: ViemCommitteeAttestations;
+  /**
+   * Puts a decoy `propose` call ahead of the real one in the multicall, allowed to fail and identical except that this
+   * key signs its attestations-and-signers bundle. L1 reverts the decoy, yet it matches the CheckpointProposed event's
+   * hashes just as the real call does, since those hashes cover neither the signers nor the bundle signature.
+   */
+  decoyBundleSigner?: Secp256k1Signer;
 };
 
 /** Result from adding a checkpoint. */
@@ -108,6 +114,8 @@ type CheckpointData = {
   verbatimAttestations: ViemCommitteeAttestations;
   /** Payload digest, matching what the L1 event emits. */
   payloadDigest: Buffer32;
+  /** The slot's proposer as L1 sees it: the key that signed the attestations bundle of the executed `propose`. */
+  proposer: EthAddress;
   /** If true, archiveAt will ignore it */
   pruned?: boolean;
 };
@@ -262,11 +270,12 @@ export class FakeL1State {
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
 
     // Create the transaction, blobs, and event hashes
-    const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
+    const { tx, attestationsHash, payloadDigest, verbatimAttestations, proposer } = await this.makeRollupTx(
       checkpoint,
       signers,
       options.spareAttestationsBitmapBit ?? false,
       options.verbatimAttestations,
+      options.decoyBundleSigner,
     );
     const blobHashes = await this.makeVersionedBlobHashes(checkpoint);
     const blobs = await this.makeBlobsFromCheckpoint(checkpoint);
@@ -283,6 +292,7 @@ export class FakeL1State {
       attestationsHash,
       payloadDigest,
       verbatimAttestations,
+      proposer,
     });
 
     // Update last archive for auto-chaining
@@ -595,6 +605,14 @@ export class FakeL1State {
 
     mockRollup.canPruneAtTime.mockImplementation(() => Promise.resolve(this.canPruneResult));
 
+    mockRollup.getProposerAt.mockImplementation((timestamp: bigint) => {
+      const slot = getSlotAtTimestamp(timestamp, this.config);
+      const proposer = this.checkpoints.findLast(
+        cp => !cp.pruned && cp.checkpoint.header.slotNumber === slot,
+      )?.proposer;
+      return Promise.resolve(proposer ?? EthAddress.ZERO);
+    });
+
     // Mock the wrapper method for fetching checkpoint events
     mockRollup.getCheckpointProposedEvents.mockImplementation((fromBlock: bigint, toBlock: bigint) =>
       Promise.resolve(this.getCheckpointProposedLogs(fromBlock, toBlock)),
@@ -830,11 +848,13 @@ export class FakeL1State {
     signers: Secp256k1Signer[],
     spareAttestationsBitmapBit: boolean,
     verbatimAttestationsOverride?: ViemCommitteeAttestations,
+    decoyBundleSigner?: Secp256k1Signer,
   ): Promise<{
     tx: Transaction;
     attestationsHash: Buffer32;
     payloadDigest: Buffer32;
     verbatimAttestations: ViemCommitteeAttestations;
+    proposer: EthAddress;
   }> {
     const signatureContext = this.getSignatureContext();
     const consensusPayload = ConsensusPayload.fromCheckpoint(checkpoint, signatureContext);
@@ -855,9 +875,6 @@ export class FakeL1State {
     // don't care about the proposer identity (e.g. sync tests) still produce a
     // valid-looking signature for the attestationsAndSigners struct.
     const proposerSigner = signers[0] ?? Secp256k1Signer.random();
-    const attestationsAndSignersSignature = proposerSigner.sign(
-      getHashedSignaturePayloadTypedData(attestationsAndSigners),
-    );
 
     const packedAttestations = attestationsAndSigners.getPackedAttestations();
     const verbatimAttestations =
@@ -866,36 +883,32 @@ export class FakeL1State {
         ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
         : packedAttestations);
 
-    const rollupInput = encodeFunctionData({
-      abi: RollupAbi,
-      functionName: 'propose',
-      args: [
-        {
-          header,
-          archive,
-          oracleInput: { feeAssetPriceModifier: 0n },
-          bucketHint: 0n,
-        },
-        verbatimAttestations,
-        attestationsAndSigners.getSigners().map(signer => signer.toString()),
-        attestationsAndSignersSignature.toViemSignature(),
-        blobInput,
-      ],
+    const makeProposeCall = (bundleSigner: Secp256k1Signer, allowFailure: boolean) => ({
+      target: this.config.rollupAddress.toString(),
+      allowFailure,
+      callData: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'propose',
+        args: [
+          {
+            header,
+            archive,
+            oracleInput: { feeAssetPriceModifier: 0n },
+            bucketHint: 0n,
+          },
+          verbatimAttestations,
+          attestationsAndSigners.getSigners().map(signer => signer.toString()),
+          bundleSigner.sign(getHashedSignaturePayloadTypedData(attestationsAndSigners)).toViemSignature(),
+          blobInput,
+        ],
+      }),
     });
 
-    const multiCallInput = encodeFunctionData({
-      abi: multicall3Abi,
-      functionName: 'aggregate3',
-      args: [
-        [
-          {
-            target: this.config.rollupAddress.toString(),
-            callData: rollupInput,
-            allowFailure: false,
-          },
-        ],
-      ],
-    });
+    const calls = [
+      ...(decoyBundleSigner ? [makeProposeCall(decoyBundleSigner, true)] : []),
+      makeProposeCall(proposerSigner, false),
+    ];
+    const multiCallInput = encodeFunctionData({ abi: multicall3Abi, functionName: 'aggregate3', args: [calls] });
 
     const attestationsHash = Buffer32.fromString(computeAttestationsHash(verbatimAttestations));
 
@@ -909,7 +922,7 @@ export class FakeL1State {
       to: MULTI_CALL_3_ADDRESS as `0x${string}`,
     } as Transaction<bigint, number>;
 
-    return { tx, attestationsHash, payloadDigest, verbatimAttestations };
+    return { tx, attestationsHash, payloadDigest, verbatimAttestations, proposer: proposerSigner.address };
   }
 
   private getSignatureContext() {

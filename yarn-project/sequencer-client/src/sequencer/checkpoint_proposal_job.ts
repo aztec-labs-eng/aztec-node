@@ -1200,7 +1200,12 @@ export class CheckpointProposalJob implements Traceable {
       // checkpoint visible for pipelining the next slot. Built from local checkpoint data — never
       // from the broadcast proposal archive, which may be deliberately corrupted under test flags.
       // Fail closed: if this throws, the outer catch aborts the slot before gossiping.
-      await this.syncProposedCheckpointToArchiver(checkpoint, blocksInCheckpoint.length, feeAssetPriceModifier);
+      await this.syncProposedCheckpointToArchiver(
+        checkpoint,
+        proposal,
+        blocksInCheckpoint.length,
+        feeAssetPriceModifier,
+      );
 
       const blockProposedAt = this.dateProvider.now();
       if (this.config.skipBroadcastCheckpointProposal) {
@@ -2157,6 +2162,7 @@ export class CheckpointProposalJob implements Traceable {
    */
   private async syncProposedCheckpointToArchiver(
     checkpoint: Checkpoint,
+    proposal: CheckpointProposal,
     blockCount: number,
     feeAssetPriceModifier: bigint,
   ): Promise<void> {
@@ -2177,6 +2183,7 @@ export class CheckpointProposalJob implements Traceable {
       blockCount,
       totalManaUsed: checkpoint.header.totalManaUsed.toBigInt(),
       feeAssetPriceModifier,
+      signer: proposal.getSender(),
     });
   }
 
