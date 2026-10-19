@@ -704,16 +704,16 @@ export class CheckpointProposalJob implements Traceable {
     bucketHint: bigint,
   ): Promise<void> {
     const logCtx = { slot: this.targetSlot, checkpointNumber: this.checkpointNumber };
-    const { committee, seed, epoch } = await this.epochCache.getCommittee(this.targetSlot);
+    const lookup = requireStableCommittee(await this.epochCache.getCommittee(this.targetSlot));
     const fakeAttestations = manipulateAttestations({
       config: { injectFakeAttestation: true },
       epochCache: this.epochCache,
       signatureContext: this.getSignatureContext(),
       log: this.log,
       slotNumber: this.targetSlot,
-      epoch,
-      seed,
-      committee: committee ?? [],
+      epoch: lookup.epoch,
+      seed: lookup.seed,
+      committee: lookup.state === 'members' ? lookup.committee : [],
       // Copies, since the manipulation overwrites a signature in place and the collected set is published afterwards.
       attestations: collected.attestations.map(a => new CommitteeAttestation(a.address, a.signature)),
     });

@@ -1187,7 +1187,7 @@ describe('Archiver Sync', () => {
         fake.setTargetCommitteeSize(3);
         signers = times(3, Secp256k1Signer.random);
         const committee = signers.map(signer => signer.address);
-        epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee, seed: 0n }));
 
         await fake.addCheckpoint(CheckpointNumber(1), {
           l1BlockNumber: 70n,
