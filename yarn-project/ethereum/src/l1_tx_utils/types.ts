@@ -15,6 +15,16 @@ export interface L1TxRequest {
 
 export type L1TxConfig = Partial<L1TxUtilsConfig> & { gasLimit?: bigint; txTimeoutAt?: Date };
 
+/** Options for sending a tx and monitoring it until it is mined. */
+export type SendAndMonitorOpts = {
+  /**
+   * Awaited once the tx has been sent and before monitoring for its receipt starts, for a caller that has to act on
+   * the chain to get the tx mined (such as mining the block by hand on a dev chain). An error it throws is logged and
+   * ignored: the tx is already sent, so its fate is still decided by the monitor.
+   */
+  onTxSent?: (txHash: Hex) => Promise<void>;
+};
+
 export interface L1BlobInputs {
   blobs: Uint8Array[];
   kzg: BlobKzgInstance;

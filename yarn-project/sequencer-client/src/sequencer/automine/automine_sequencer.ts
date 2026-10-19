@@ -401,7 +401,8 @@ export class AutomineSequencer {
    * mempool poller re-enqueues a build on its next tick (see {@link maybeEnqueueBuild}).
    */
   private async runBuild({ allowEmpty }: { allowEmpty: boolean }): Promise<L2Block | undefined> {
-    if (!this.running || !this.publisher || !this.attestorAddress) {
+    const publisher = this.publisher;
+    if (!this.running || !publisher || !this.attestorAddress) {
       return undefined;
     }
     await this.reconcileDateProvider();
@@ -416,6 +417,15 @@ export class AutomineSequencer {
       return undefined;
     }
 
+    // Anvil mines nothing from here until the propose is sent: an unrelated L1 tx would otherwise take the block pinned
+    // to the target slot, and each one after it would move L1 time on by the block-timestamp interval, carrying L1 time
+    // past the slot before the archiver insert or the propose. Unrelated txs wait in the pool and are mined together
+    // with the propose. Re-enabling automine at the end leaves nothing stranded when no propose is sent.
+    return await this.deps.ethCheatCodes.execWithPausedAnvil(() => this.buildAndPublish(publisher, allowEmpty));
+  }
+
+  /** Builds and publishes one checkpoint at the next slot, see {@link runBuild}. Must run with anvil mining paused. */
+  private async buildAndPublish(publisher: SequencerPublisher, allowEmpty: boolean): Promise<L2Block | undefined> {
     // Decide target slot from the pending block's timestamp — picks up any prior
     // `setNextBlockTimestamp` call (e.g. queued by runWarp) instead of assuming +1 over
     // the last mined block.
@@ -477,7 +487,7 @@ export class AutomineSequencer {
       log: this.log,
     });
 
-    const feeAssetPriceModifier = await this.publisher.getFeeAssetPriceModifier();
+    const feeAssetPriceModifier = await publisher.getFeeAssetPriceModifier();
 
     await using fork = await this.deps.worldState.fork(syncedToBlockNumber, { closeDelayMs: 0 });
 
@@ -570,16 +580,15 @@ export class AutomineSequencer {
       feeAssetPriceModifier,
     });
 
-    await this.publisher.enqueueProposeCheckpoint(
-      checkpoint,
-      emptyAttestations,
-      emptyAttestationsSignature,
-      bucketHint,
-    );
+    await publisher.enqueueProposeCheckpoint(checkpoint, emptyAttestations, emptyAttestationsSignature, bucketHint);
     // Automine publishes synchronously in the current slot via `sendRequests`. It must NOT use the
     // production `sendRequestsAt` (or `canProposeAt`), which always apply the one-slot pipelining
     // offset — automine is the deliberate non-pipelined exception and builds/publishes in place.
-    const result = await this.publisher.sendRequests(SlotNumber(targetSlot));
+    // Anvil mining is paused, so the propose is mined by hand once sent, at the pinned slot-start timestamp, together
+    // with any unrelated L1 txs that queued up during the build.
+    const result = await publisher.sendRequests(SlotNumber(targetSlot), {
+      onTxSent: () => this.deps.ethCheatCodes.evmMine(),
+    });
 
     const proposeSucceeded = !!result?.successfulActions?.some(action => action === 'propose');
     if (!proposeSucceeded) {
@@ -646,28 +655,32 @@ export class AutomineSequencer {
   /**
    * Warps L1 timestamp to (or past) `targetTimestampSec`, rounded up to the next aztec-slot
    * boundary, by queuing an empty-checkpoint build at that slot. Mines exactly one L1 block
-   * (the propose tx auto-mined under anvil's automine mode), with the timestamp pre-set so
-   * the mined block lands on the slot boundary.
+   * (the one holding the propose tx), with the timestamp pre-set so the mined block lands on
+   * the slot boundary.
    */
   private async runWarp(targetTimestampSec: number): Promise<void> {
     await this.reconcileDateProvider();
-    const currentL1Ts = await this.deps.ethCheatCodes.lastBlockTimestamp();
-    if (targetTimestampSec <= currentL1Ts) {
-      this.log.debug(`Warp target ${targetTimestampSec} is not in the future of current L1 ts ${currentL1Ts}`);
-      return;
-    }
+    // Paused from before the timestamp pin through the propose, for the same reason as in runBuild, whose own pause
+    // nests inside this one.
+    await this.deps.ethCheatCodes.execWithPausedAnvil(async () => {
+      const currentL1Ts = await this.deps.ethCheatCodes.lastBlockTimestamp();
+      if (targetTimestampSec <= currentL1Ts) {
+        this.log.debug(`Warp target ${targetTimestampSec} is not in the future of current L1 ts ${currentL1Ts}`);
+        return;
+      }
 
-    // Round up to the next aztec-slot boundary so the next build naturally lands on a new slot.
-    const targetSlot = Number(getSlotAtTimestamp(BigInt(targetTimestampSec), this.deps.l1Constants));
-    const slotBoundaryTs = Number(getTimestampForSlot(SlotNumber(targetSlot + 1), this.deps.l1Constants));
+      // Round up to the next aztec-slot boundary so the next build naturally lands on a new slot.
+      const targetSlot = Number(getSlotAtTimestamp(BigInt(targetTimestampSec), this.deps.l1Constants));
+      const slotBoundaryTs = Number(getTimestampForSlot(SlotNumber(targetSlot + 1), this.deps.l1Constants));
 
-    // Queue the next L1 block at the slot boundary timestamp, then build (and publish) an
-    // empty L2 checkpoint. The propose tx auto-mines a single L1 block at slotBoundaryTs,
-    // and `runBuild` syncs the date provider to the new L1 timestamp.
-    await this.deps.ethCheatCodes.setNextBlockTimestamp(slotBoundaryTs);
-    await this.runBuild({ allowEmpty: true });
+      // Queue the next L1 block at the slot boundary timestamp, then build (and publish) an
+      // empty L2 checkpoint. The propose tx is mined in a single L1 block at slotBoundaryTs,
+      // and `runBuild` syncs the date provider to the new L1 timestamp.
+      await this.deps.ethCheatCodes.setNextBlockTimestamp(slotBoundaryTs);
+      await this.runBuild({ allowEmpty: true });
 
-    this.log.verbose(`Warped L1 to slot boundary`, { slot: targetSlot + 1, timestamp: slotBoundaryTs });
+      this.log.verbose(`Warped L1 to slot boundary`, { slot: targetSlot + 1, timestamp: slotBoundaryTs });
+    });
   }
 
   /**
