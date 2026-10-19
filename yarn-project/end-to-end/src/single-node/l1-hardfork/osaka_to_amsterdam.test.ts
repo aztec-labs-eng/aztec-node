@@ -7,6 +7,7 @@ import {
 } from '@aztec-labs/ethereum/l1-tx-utils';
 import { assertAnvilSupportsHardfork, restartAnvilOnHardfork } from '@aztec-labs/ethereum/test';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
 import {
   getProofSubmissionDeadlineTimestamp,
@@ -76,7 +77,17 @@ describe('single-node/l1-hardfork/osaka_to_amsterdam', () => {
     const targetSlot = SlotNumber(forkEpochStart + FORK_SLOT_INDEX);
     const restartTs = getTimestampForSlot(targetSlot, constants) - BigInt(constants.ethereumSlotDuration);
     await test.waitUntilProvenCheckpointNumber(epoch1Tip, Number(restartTs) - context.dateProvider.nowInSeconds() - 1);
-    expect(await proverNode.getJobs()).not.toContainEqual(expect.objectContaining({ status: 'publishing-proof' }));
+    // The proof can show up on L1 before the prover node reads its own receipt and marks the job completed.
+    await retryUntil(
+      async () => {
+        const jobs = await proverNode.getJobs();
+        const epoch1Done = jobs.some(job => job.epochNumber === 1 && job.status === 'completed');
+        return epoch1Done && !jobs.some(job => job.status === 'publishing-proof');
+      },
+      'epoch 1 proving job completed',
+      { deadline: new Date((Number(restartTs) - 1) * 1000), dateProvider: context.dateProvider },
+      0.1,
+    );
 
     await waitUntilL1Timestamp(l1Client, restartTs);
     const restarted = await restartAnvilOnHardfork(context.anvil!, context.cheatCodes.eth, l1Client, {
