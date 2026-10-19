@@ -14,7 +14,7 @@ function isOnCurve({ x, y }: { x: bigint; y: bigint }) {
   return Fp.eql(Fp.sqr(y), Fp.add(Fp.mul(Fp.sqr(x), x), 3n));
 }
 
-function rootOf({ y }: { y: bigint }) {
+function rootSide({ y }: { y: bigint }) {
   return y < Fp.ORDER - y ? 'low' : 'high';
 }
 
@@ -48,7 +48,7 @@ describe('BN254 hashToPoint', () => {
   ])('computes the digest of sk = $sk', ({ sk, attempts, sqrtCalls, root }) => {
     const result = computeBn254RegistrationDigestForPrivateKey(`0x${sk.toString(16).padStart(64, '0')}`);
     expect(result).toMatchObject({ attempts, sqrtCalls });
-    expect(rootOf(result.point)).toBe(root);
+    expect(rootSide(result.point)).toBe(root);
     expect(isOnCurve(result.point)).toBe(true);
   });
 

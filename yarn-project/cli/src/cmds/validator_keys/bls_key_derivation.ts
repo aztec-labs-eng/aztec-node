@@ -71,6 +71,19 @@ export type SelectedBlsKey = {
   maxGas?: number;
 };
 
+/**
+ * How the CLI handled a mnemonic it generated because none was passed: `shown` when it printed the mnemonic before key
+ * derivation, so the operator can pass it back, and `hidden` otherwise.
+ */
+export type GeneratedMnemonic = 'shown' | 'hidden';
+
+const GENERATED_MNEMONIC_HINTS: Record<GeneratedMnemonic, string> = {
+  shown:
+    ' This run generated its mnemonic, and re-running without --mnemonic generates a new one: to keep this ' +
+    'mnemonic, pass it back with --mnemonic.',
+  hidden: ' This run generated a mnemonic without showing it, so re-running derives new keys from a new mnemonic.',
+};
+
 /** Thrown when candidate 0 estimates over the budget and no flag says what to do about it. */
 export class BlsKeyOverGasBudgetError extends Error {
   constructor(
@@ -78,7 +91,7 @@ export class BlsKeyOverGasBudgetError extends Error {
     public readonly estimatedGas: number,
     public readonly version: BlsKeyDerivationVersion,
     public readonly maxGas: number | undefined,
-    mnemonicGenerated: boolean,
+    generatedMnemonic: GeneratedMnemonic | undefined,
   ) {
     const budget =
       maxGas === undefined
@@ -93,10 +106,7 @@ export class BlsKeyOverGasBudgetError extends Error {
     super(
       `The proof-of-possession check of the BLS key derived at ${path} is estimated at ${estimatedGas} gas, above ` +
         `${budget}. ${remedies}` +
-        (mnemonicGenerated
-          ? ' This run generated its mnemonic, and re-running without --mnemonic generates a new one: to keep this ' +
-            'mnemonic, pass it back with --mnemonic.'
-          : ''),
+        (generatedMnemonic ? GENERATED_MNEMONIC_HINTS[generatedMnemonic] : ''),
     );
     this.name = 'BlsKeyOverGasBudgetError';
   }
@@ -148,8 +158,8 @@ export type SelectBlsKeyInput = {
   mnemonic?: string;
   ikm?: string;
   perValidatorPath: string;
-  /** Whether the CLI generated the mnemonic in this run, to tell the operator how to keep it on error. */
-  mnemonicGenerated?: boolean;
+  /** Set when the CLI generated `mnemonic` in this run, to tell the operator how to keep or replace it on error. */
+  generatedMnemonic?: GeneratedMnemonic;
   maxCandidates?: number;
 };
 
@@ -158,7 +168,7 @@ export type SelectBlsKeyInput = {
  * and the policy decide the result, so re-running with the same inputs regenerates the same key.
  */
 export function selectBlsKey(policy: BlsKeyDerivationPolicy, input: SelectBlsKeyInput): SelectedBlsKey {
-  const { mnemonic, ikm, perValidatorPath, mnemonicGenerated = false, maxCandidates = MAX_BLS_KEY_CANDIDATES } = input;
+  const { mnemonic, ikm, perValidatorPath, generatedMnemonic, maxCandidates = MAX_BLS_KEY_CANDIDATES } = input;
   const candidate0 = { privateKey: deriveBlsPrivateKey(mnemonic, ikm, perValidatorPath), path: perValidatorPath };
   if (policy.mode === 'none') {
     return { ...candidate0, candidate: 0 };
@@ -174,7 +184,8 @@ export function selectBlsKey(policy: BlsKeyDerivationPolicy, input: SelectBlsKey
         estimatedGas,
         policy.version,
         policy.maxGas,
-        mnemonicGenerated,
+        // An IKM takes precedence over the mnemonic, so the mnemonic does not decide the BLS key.
+        ikm ? undefined : generatedMnemonic,
       );
     }
     return { ...candidate0, candidate: 0 };
