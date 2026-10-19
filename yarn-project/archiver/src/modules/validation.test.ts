@@ -26,7 +26,6 @@ import { makeSignedPublishedCheckpoint } from '../test/mock_structs.js';
 import {
   type CalldataCheckpointForAttestations,
   getAttestationInfoFromPublishedCheckpoint,
-  getCheckpointProposer,
   resolveCheckpointAttestationsFromCalldata,
   validateAttestations,
 } from './validation.js';
@@ -525,55 +524,5 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
     });
 
     await expect(resolve(checkpoint)).rejects.toThrow(CheckpointAttestationsDecodeError);
-  });
-});
-
-describe('getCheckpointProposer', () => {
-  let signers: Secp256k1Signer[];
-  let committee: EthAddress[];
-  let checkpoint: Checkpoint;
-
-  const getProposer = (attestationsAndSignersSigner: EthAddress | undefined, attestations: CommitteeAttestation[]) =>
-    getCheckpointProposer(
-      {
-        header: checkpoint.header,
-        archiveRoot: checkpoint.archive.root,
-        feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
-        attestationsAndSignersSigner,
-      },
-      attestations,
-      TEST_COORDINATION_SIGNATURE_CONTEXT,
-    );
-
-  beforeEach(async () => {
-    signers = times(5, () => Secp256k1Signer.random());
-    committee = signers.map(signer => signer.address);
-    checkpoint = await Checkpoint.random(CheckpointNumber(1), { slotNumber: SlotNumber(1) });
-  });
-
-  it('returns the bundle signer when it also attested the checkpoint', () => {
-    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    expect(getProposer(committee[2], attestations)).toEqual(committee[2]);
-  });
-
-  it('returns undefined when the bundle signature did not recover', () => {
-    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    expect(getProposer(undefined, attestations)).toBeUndefined();
-  });
-
-  it('returns undefined when the bundle signer did not attest the checkpoint', () => {
-    const others = signers.filter((_, i) => i !== 2);
-    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, others, committee);
-    expect(getProposer(committee[2], attestations)).toBeUndefined();
-  });
-
-  it('returns undefined when the attestations are for a different checkpoint', async () => {
-    const other = await Checkpoint.random(CheckpointNumber(1), { slotNumber: SlotNumber(1) });
-    const { attestations } = makeSignedPublishedCheckpoint(other, signers, committee);
-    expect(getProposer(committee[2], attestations)).toBeUndefined();
-  });
-
-  it('returns undefined when no attestations were decoded', () => {
-    expect(getProposer(committee[2], [])).toBeUndefined();
   });
 });

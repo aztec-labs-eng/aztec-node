@@ -504,7 +504,6 @@ describe('CalldataRetriever', () => {
             header: CheckpointHeader.random(),
             attestations: [],
             verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
-            attestationsAndSignersSigner: undefined,
             blockHash,
             feeAssetPriceModifier: 0n,
           };

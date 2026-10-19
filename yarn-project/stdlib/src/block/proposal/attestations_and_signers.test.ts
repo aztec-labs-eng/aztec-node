@@ -1,18 +1,15 @@
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
-import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 import { type AbiParameter, encodeAbiParameters, keccak256 } from 'viem';
 
-import { getHashedSignaturePayloadTypedData } from '../../p2p/signature_utils.js';
 import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '../../tests/mocks.js';
 import {
   CommitteeAttestationsAndSigners,
   MaliciousYParityCommitteeAttestationsAndSigners,
-  recoverAttestationsAndSignersSigner,
 } from './attestations_and_signers.js';
 import { CommitteeAttestation } from './committee_attestation.js';
 
@@ -181,48 +178,5 @@ describe('MaliciousYParityCommitteeAttestationsAndSigners', () => {
     expect(maliciousSlot.signature.r).toEqual(honestSlot.signature.r);
     expect(maliciousSlot.signature.s).toEqual(honestSlot.signature.s);
     expect(maliciousSlot.signature.v).toEqual(honestSlot.signature.v - 27);
-  });
-});
-
-describe('recoverAttestationsAndSignersSigner', () => {
-  const makeBundle = () => {
-    const attestations = [
-      new CommitteeAttestation(EthAddress.random(), Signature.random()),
-      new CommitteeAttestation(EthAddress.random(), Signature.empty()),
-      new CommitteeAttestation(EthAddress.random(), Signature.random()),
-    ];
-    return new CommitteeAttestationsAndSigners(attestations, TEST_COORDINATION_SIGNATURE_CONTEXT);
-  };
-
-  it('recovers the proposer that signed the bundle from the posted tuple and signers', () => {
-    const proposer = Secp256k1Signer.random();
-    const bundle = makeBundle();
-    const signature = proposer.sign(getHashedSignaturePayloadTypedData(bundle));
-
-    const signers = bundle.getSigners().map(signer => signer.toString());
-    expect(
-      recoverAttestationsAndSignersSigner(
-        bundle.getPackedAttestations(),
-        signers,
-        signature,
-        TEST_COORDINATION_SIGNATURE_CONTEXT,
-      ),
-    ).toEqual(proposer.address);
-  });
-
-  it('recovers someone else when the posted signers differ from the signed ones', () => {
-    const proposer = Secp256k1Signer.random();
-    const bundle = makeBundle();
-    const signature = proposer.sign(getHashedSignaturePayloadTypedData(bundle));
-
-    const signers = [EthAddress.random().toString(), EthAddress.random().toString()];
-    expect(
-      recoverAttestationsAndSignersSigner(
-        bundle.getPackedAttestations(),
-        signers,
-        signature,
-        TEST_COORDINATION_SIGNATURE_CONTEXT,
-      ),
-    ).not.toEqual(proposer.address);
   });
 });

@@ -119,39 +119,6 @@ export async function resolveCheckpointAttestationsFromCalldata(
 }
 
 /**
- * Returns the proposer of a checkpoint posted to L1: whoever signed its attestations-and-signers bundle, provided the
- * same key also signed an attestation over the checkpoint's consensus payload. Only a proposer signs the bundle, and L1
- * rejects a bundle not signed by the slot's proposer outside an escape hatch; the attestation ties the bundle to this
- * checkpoint, since a bundle L1 did not check could have been copied from another one. No committee view is involved,
- * so a stale epoch cache cannot point this at an honest attester. Returns undefined when either signature is missing,
- * which includes checkpoints whose attestations were not decoded (open escape hatch or no committee).
- *
- * @param attestations - The checkpoint's attestations decoded for its epoch committee.
- */
-export function getCheckpointProposer(
-  checkpoint: Pick<CalldataCheckpointForAttestations, 'header' | 'archiveRoot' | 'feeAssetPriceModifier'> & {
-    attestationsAndSignersSigner: EthAddress | undefined;
-  },
-  attestations: CommitteeAttestation[],
-  signatureContext: CoordinationSignatureContext,
-): EthAddress | undefined {
-  const bundleSigner = checkpoint.attestationsAndSignersSigner;
-  if (!bundleSigner) {
-    return undefined;
-  }
-  const payload = new ConsensusPayload(
-    checkpoint.header,
-    checkpoint.archiveRoot,
-    checkpoint.feeAssetPriceModifier,
-    signatureContext,
-  );
-  const attested = getAttestationInfoFromPayload(payload, attestations).some(
-    info => info.status === 'recovered-from-signature' && info.address.equals(bundleSigner),
-  );
-  return attested ? bundleSigner : undefined;
-}
-
-/**
  * Core attestation validation over a consensus payload, its attestations, and checkpoint metadata --
  * independent of whether the checkpoint's blocks have been decoded from blobs. Returns true if the
  * attestations are valid and sufficient, false otherwise.

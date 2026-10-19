@@ -27,6 +27,11 @@ First attempt to decode the transaction as a multicall3 `aggregate3` call:
 This approach works regardless of what other calls are in the multicall3 bundle, because hash
 matching identifies the correct propose call without needing an allowlist.
 
+Hash matching does not tell which candidate executed. The event hashes cover neither the `signers`
+array nor the attestations-and-signers signature, so a reverted copy of the call can carry any value
+for them. The retriever ignores both fields, and the archiver asks the rollup for a slot's proposer
+(`getProposerAt`) instead of deriving it from calldata.
+
 ### Direct Propose Call
 
 Second attempt to decode the transaction as a direct `propose` call to the rollup contract:

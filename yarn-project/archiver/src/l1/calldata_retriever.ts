@@ -11,9 +11,7 @@ import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { LruSet } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import type { Logger } from '@aztec-labs/foundation/log';
-import { recoverAttestationsAndSignersSigner } from '@aztec-labs/stdlib/block';
 import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { Buffer } from 'buffer';
@@ -39,11 +37,6 @@ export type RawCheckpointFromCalldata = {
    * rollup hashed into `attestationsHash`, and repacking decoded attestations does not reproduce it.
    */
   verbatimAttestations: ViemCommitteeAttestations;
-  /**
-   * Who signed the attestations-and-signers bundle posted with the checkpoint: L1 requires it to be the slot's
-   * proposer outside an escape hatch, and accepts any value during one. Undefined if the signature does not recover.
-   */
-  attestationsAndSignersSigner: EthAddress | undefined;
   blockHash: string;
   feeAssetPriceModifier: bigint;
 };
@@ -418,11 +411,9 @@ export class CalldataRetriever {
         return undefined;
       }
 
-      const [decodedArgs, verbatimAttestations, signers, attestationsAndSignersSignature] = args! as readonly [
+      const [decodedArgs, verbatimAttestations] = args! as readonly [
         { archive: Hex; oracleInput: { feeAssetPriceModifier: bigint }; header: ViemHeader },
         ViemCommitteeAttestations,
-        readonly Hex[],
-        ViemSignature,
         ...unknown[],
       ];
 
@@ -463,19 +454,11 @@ export class CalldataRetriever {
         verbatimAttestations,
       });
 
-      const attestationsAndSignersSigner = recoverAttestationsAndSignersSigner(
-        verbatimAttestations,
-        signers,
-        Signature.fromViemSignature(attestationsAndSignersSignature),
-        this.getSignatureContext(),
-      );
-
       return {
         checkpointNumber,
         archiveRoot,
         header,
         verbatimAttestations,
-        attestationsAndSignersSigner,
         blockHash,
         feeAssetPriceModifier,
       };

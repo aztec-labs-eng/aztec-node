@@ -1,6 +1,4 @@
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
-import { tryRecoverAddress } from '@aztec-labs/foundation/crypto/secp256k1-signer';
-import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 import { encodeAbiParameters, parseAbiParameters } from 'viem';
@@ -11,39 +9,8 @@ import {
   type CoordinationSignatureType,
   type Signable,
   coordinationSignatureContextSchema,
-  getHashedSignaturePayloadTypedData,
 } from '../../p2p/signature_utils.js';
 import { CommitteeAttestation, EthAddress } from './committee_attestation.js';
-
-/** ABI-encodes a packed attestations tuple and its signers as L1's `AttestationLib.getAttestationsAndSignersDigest` does. */
-function encodeAttestationsAndSigners(packed: ViemCommitteeAttestations, signers: readonly string[]): Buffer {
-  const abi = parseAbiParameters('(bytes,bytes),address[]');
-  return hexToBuffer(
-    encodeAbiParameters(abi, [
-      [packed.signatureIndices, packed.signaturesOrAddresses],
-      signers.map(s => s as `0x${string}`),
-    ]),
-  );
-}
-
-/**
- * Recovers who signed the attestations-and-signers bundle of a `propose` call, from the packed attestations tuple and
- * signers exactly as posted. Only a proposer signs this bundle, and outside an escape hatch L1 rejects a `propose`
- * whose bundle was not signed by the slot's proposer. Recovers strictly, as L1 does.
- */
-export function recoverAttestationsAndSignersSigner(
-  packed: ViemCommitteeAttestations,
-  signers: readonly string[],
-  signature: Signature,
-  signatureContext: CoordinationSignatureContext,
-): EthAddress | undefined {
-  const signable: Signable = {
-    primaryType: 'AttestationsAndSigners',
-    signatureContext,
-    getPayloadToSign: () => encodeAttestationsAndSigners(packed, signers),
-  };
-  return tryRecoverAddress(getHashedSignaturePayloadTypedData(signable), signature);
-}
 
 export class CommitteeAttestationsAndSigners implements Signable {
   readonly primaryType: CoordinationSignatureType = 'AttestationsAndSigners';
@@ -63,10 +30,16 @@ export class CommitteeAttestationsAndSigners implements Signable {
   }
 
   getPayloadToSign(): Buffer {
-    return encodeAttestationsAndSigners(
-      this.getPackedAttestations(),
+    // Matches the L1 abi.encode(attestations, signers) in AttestationLib.sol#getAttestationsAndSignersDigest.
+    const abi = parseAbiParameters('(bytes,bytes),address[]');
+    const packed = this.getPackedAttestations();
+
+    const encodedData = encodeAbiParameters(abi, [
+      [packed.signatureIndices, packed.signaturesOrAddresses],
       this.getSigners().map(s => s.toString()),
-    );
+    ]);
+
+    return hexToBuffer(encodedData);
   }
 
   static empty(signatureContext: CoordinationSignatureContext): CommitteeAttestationsAndSigners {
