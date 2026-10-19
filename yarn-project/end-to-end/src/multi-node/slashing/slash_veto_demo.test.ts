@@ -66,6 +66,7 @@ describe('veto slash', () => {
 
   beforeEach(async () => {
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
       ...SENTINEL_TIMING,
       blockDurationMs: 2000,

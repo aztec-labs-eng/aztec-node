@@ -108,8 +108,15 @@ export class InactivityTest {
       offlineValidators: this.offlineValidators,
     });
 
-    this.test.logger.warn(`Advancing to epoch ${SETUP_EPOCH_DURATION - 1} (slashing will start after it is completed)`);
-    await this.test.context.cheatCodes.rollup.advanceToEpoch(EpochNumber(SETUP_EPOCH_DURATION - 1));
+    const lastSetupEpoch = EpochNumber(SETUP_EPOCH_DURATION - 1);
+    this.test.logger.warn(`Advancing to epoch ${lastSetupEpoch} (slashing will start after it is completed)`);
+    await this.test.context.cheatCodes.rollup.advanceToEpoch(lastSetupEpoch);
+
+    // The warp lands at the start of the epoch, past the build deadlines of both its slots, so nothing proposes in it
+    // and its randao is never checkpointed. Nodes would then not serve the next epoch's committee in time for its
+    // first slot, and that slot's honest proposer would be flagged inactive. Set the epoch up directly instead.
+    await this.test.context.cheatCodes.rollup.setupEpoch();
+    expect(await this.test.rollup.isEpochSetUp(lastSetupEpoch)).toBe(true);
   }
 
   public async teardown() {

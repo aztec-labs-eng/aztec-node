@@ -2,7 +2,7 @@ import { InboxAbi } from '@aztec-foundation/l1-artifacts/InboxAbi';
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { L1RpcError, getPublicClient } from '@aztec-labs/ethereum/client';
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -824,6 +824,40 @@ describeWithAnvil('Rollup', () => {
 
       expect(await rollup.getProtocolFeeMargin()).toBe(2000);
       expect(await rollup.getProtocolFeeMargin({ blockNumber: pinnedBlock })).toBe(1000);
+    });
+  });
+
+  describe('isEpochSetUp', () => {
+    let setupRollup: RollupContract;
+    let setupRollupCheatCodes: RollupCheatCodes;
+
+    beforeAll(async () => {
+      // A rollup with an empty target committee, so setupEpoch succeeds without any staked validators.
+      const privateKeyRaw = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
+      const setupDeployment = await deployAztecL1Contracts(rpcUrl, privateKeyRaw, foundry.id, {
+        ...DefaultL1ContractsConfig,
+        aztecTargetCommitteeSize: 0,
+        vkTreeRoot,
+        protocolContractsHash,
+        genesisArchiveRoot,
+        realVerifier: false,
+      });
+      setupRollup = new RollupContract(publicClient, setupDeployment.l1ContractAddresses.rollupAddress.toString());
+      setupRollupCheatCodes = new RollupCheatCodes(cheatCodes, setupDeployment.l1ContractAddresses);
+    });
+
+    it('reads the committee commitment at the requested L1 block', async () => {
+      const blockBeforeSetup = await publicClient.getBlockNumber({ cacheTime: 0 });
+      await setupRollupCheatCodes.setupEpoch();
+      const blockAfterSetup = await publicClient.getBlock({ includeTransactions: false });
+
+      const epoch = EpochNumber.fromBigInt(
+        await setupRollup.getContract().read.getEpochAt([blockAfterSetup.timestamp]),
+      );
+
+      expect(await setupRollup.isEpochSetUp(epoch, { blockNumber: blockBeforeSetup })).toBe(false);
+      expect(await setupRollup.isEpochSetUp(epoch, { blockNumber: blockAfterSetup.number })).toBe(true);
+      expect(await setupRollup.isEpochSetUp(epoch)).toBe(true);
     });
   });
 

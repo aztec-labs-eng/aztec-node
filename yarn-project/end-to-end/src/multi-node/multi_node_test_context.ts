@@ -3,7 +3,9 @@ import { SlasherAbi } from '@aztec-foundation/l1-artifacts';
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
-import { RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { CommitteeNotStableError, RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
@@ -12,6 +14,7 @@ import { SecretValue } from '@aztec-labs/foundation/config';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { L2Tips } from '@aztec-labs/stdlib/block';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type { AztecNode, BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
 import type { Offense } from '@aztec-labs/stdlib/slashing';
 import { createSharedSlashingProtectionDb } from '@aztec-labs/validator-ha-signer/factory';
@@ -144,6 +147,46 @@ export function defaultSlashingPenalties(unit: bigint = BigInt(1e14)): SlashingP
  */
 export function withOnlyOffense(offense: keyof SlashingPenalties, unit: bigint = BigInt(1e14)): SlashingPenalties {
   return Object.fromEntries(SLASHING_PENALTY_KEYS.map(key => [key, key === offense ? unit : 0n])) as SlashingPenalties;
+}
+
+/**
+ * Reads the proposer of `slot` from a node's epoch cache. When the slot is in the next epoch and its committee is not
+ * stable on L1 yet, because nothing has checkpointed the current epoch's randao, sets up the current epoch and retries
+ * until the node's cached unstable marker expires. Rethrows `CommitteeNotStableError` for slots further ahead, whose
+ * seed no setup in the current epoch can fix, so callers can warp forward instead.
+ */
+export async function getProposerFixingSeed(
+  epochCache: EpochCacheInterface,
+  cheatCodes: RollupCheatCodes,
+  slot: SlotNumber,
+): Promise<EthAddress | undefined> {
+  try {
+    return await epochCache.getProposerAttesterAddressInSlot(slot);
+  } catch (err) {
+    const l1Constants = epochCache.getL1Constants();
+    const nextEpoch = epochCache.getEpochNow() + 1;
+    if (!(err instanceof CommitteeNotStableError) || getEpochAtSlot(slot, l1Constants) > nextEpoch) {
+      throw err;
+    }
+  }
+
+  await cheatCodes.setupEpoch();
+  const { proposer } = await retryUntil(
+    async () => {
+      try {
+        return { proposer: await epochCache.getProposerAttesterAddressInSlot(slot) };
+      } catch (err) {
+        if (err instanceof CommitteeNotStableError) {
+          return undefined;
+        }
+        throw err;
+      }
+    },
+    `stable committee for slot ${slot}`,
+    3 * epochCache.getL1Constants().ethereumSlotDuration,
+    0.5,
+  );
+  return proposer;
 }
 
 /** One HA pair: its two member nodes, the two shared validator keys, and the per-node coinbases. */
@@ -357,7 +400,8 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
   /**
    * Finds `count` consecutive slots (starting from `opts.fromSlot` or the current slot plus a
    * margin) whose proposers satisfy `predicate`, warping the L1 clock forward one epoch and
-   * retrying when the rollup reports `ValidatorSelection__EpochNotStable` for a future epoch.
+   * retrying when the rollup reports `ValidatorSelection__EpochNotStable` for a future epoch, or the
+   * epoch cache reports that a future epoch's seed can still change (`CommitteeNotStableError`).
    * Returns the matched slots and their proposer addresses. Encapsulates the slot-search loop
    * duplicated across the multi-validator tests.
    */
@@ -374,16 +418,17 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         try {
           const slots = Array.from({ length: count }, (_, i) => SlotNumber(candidate + i));
-          const maybeProposers = await Promise.all(
-            slots.map(slot => this.epochCache.getProposerAttesterAddressInSlot(slot)),
-          );
+          const maybeProposers: (EthAddress | undefined)[] = [];
+          for (const slot of slots) {
+            maybeProposers.push(await getProposerFixingSeed(this.epochCache, this.context.cheatCodes.rollup, slot));
+          }
           if (maybeProposers.every((p): p is EthAddress => p !== undefined) && predicate(maybeProposers)) {
             return { slots, proposers: maybeProposers };
           }
           candidate = SlotNumber(candidate + 1);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('EpochNotStable')) {
+          if (!(err instanceof CommitteeNotStableError) && !msg.includes('EpochNotStable')) {
             throw err;
           }
           const block = await this.l1Client.getBlock({ includeTransactions: false });

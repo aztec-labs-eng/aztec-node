@@ -173,12 +173,25 @@ entry is marked as **finalized**.
   (typically 12 seconds). After this TTL, the next request triggers a re-fetch
   from L1. On re-fetch, if the data is now finalized, the entry gets promoted
   to permanent.
-- **Unstable epochs** (sampling timestamp beyond the latest L1 block) cause an
-  error, since the L1 contract itself would revert.
+- **Unstable epochs** throw `CommitteeNotStableError`. Epoch E's seed comes from
+  the randao that L1 checkpoints in epoch S = E - `lagInEpochsForRandao`, and the
+  v6 rollup views return a provisional seed until that randao is written. The
+  cache serves E's committee only once `setupEpoch` has stored S's commitment, or
+  once the latest L1 block is in S's last L1 slot. A marker per epoch limits the
+  re-checks to one per Ethereum slot.
 
 This approach preserves **safety** (stale data from L1 reorgs gets refreshed
-within one Ethereum slot) while maintaining **liveness** (the cache never refuses
-to serve data that L1 accepts, even if L1 finalization stalls).
+within one Ethereum slot) while maintaining **liveness** (the cache serves any
+committee whose seed L1 can no longer change, even if L1 finalization stalls).
+
+The last-L1-slot rule assumes consecutive L1 blocks are at least one Ethereum
+slot apart, so no later block can land in S. Ethereum guarantees this; anvil does
+not. `EthCheatCodes.mine(n)` spaces blocks one second apart, and a `warp` without
+`resetBlockInterval` lets the next interval block land less than a slot later. A
+randao written by such a block after the cache has served E's committee is never
+seen, because the refresh only rechecks the block hash the entry was read at.
+Tests that run validators should only mine or warp before the nodes start, or
+warp with `resetBlockInterval`.
 
 ### Concurrency
 

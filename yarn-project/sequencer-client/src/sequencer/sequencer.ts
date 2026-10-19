@@ -1,6 +1,11 @@
 import { getKzg } from '@aztec-labs/blob-lib';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET, unlessCommitteeNotStable } from '@aztec-labs/epoch-cache';
+import {
+  CommitteeNotStableError,
+  type InboxContract,
+  NoCommitteeError,
+  type RollupContract,
+} from '@aztec-labs/ethereum/contracts';
 import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, omit, pick } from '@aztec-labs/foundation/collection';
@@ -108,6 +113,9 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
 
   /** The last epoch for which we logged a "no committee" diagnostic, to avoid per-slot log spam. */
   private lastEpochForNoCommitteeLog: EpochNumber | undefined;
+
+  /** The last target slot for which we logged that its committee is not stable on L1 yet, to avoid per-tick log spam. */
+  private lastSlotForCommitteeNotStableLog: SlotNumber | undefined;
 
   /** The last slot for which we triggered a checkpoint proposal job, to prevent duplicate attempts. */
   protected lastSlotForCheckpointProposalJob: SlotNumber | undefined;
@@ -550,7 +558,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // expensive multi-subsystem checkSync (and the rest of the build path) behind it. Computed once
     // here and reused for the escape-hatch voting path below. No setState/timing gate on this path:
     // the build-start deadline gate runs only on the proposer build path, before checkSync.
-    const [canPropose, proposer] = await this.checkCanPropose(targetSlot);
+    const proposerCheck = await this.checkCanPropose(targetSlot);
+    if (proposerCheck === undefined) {
+      return undefined;
+    }
+    const [canPropose, proposer] = proposerCheck;
 
     // If escape hatch is open for the target epoch, do not start checkpoint proposal work and do not attempt invalidations.
     // Still perform governance/slashing voting (as proposer) once per slot.
@@ -1089,14 +1101,26 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
 
   /**
    * Checks if we are the proposer for the next slot.
-   * @returns True if we can propose, and the proposer address (undefined if anyone can propose)
+   * @returns True if we can propose, and the proposer address (undefined if anyone can propose). Undefined if the
+   * target slot's committee is not stable on L1 yet, in which case the slot must be skipped altogether.
    */
-  protected async checkCanPropose(targetSlot: SlotNumber): Promise<[boolean, EthAddress | undefined]> {
+  protected async checkCanPropose(targetSlot: SlotNumber): Promise<[boolean, EthAddress | undefined] | undefined> {
     let proposer: EthAddress | undefined;
 
     try {
       proposer = await this.epochCache.getProposerAttesterAddressInSlot(targetSlot);
     } catch (e) {
+      if (e instanceof CommitteeNotStableError) {
+        if (this.lastSlotForCommitteeNotStableLog !== targetSlot) {
+          this.lastSlotForCommitteeNotStableLog = targetSlot;
+          this.log.verbose(`Skipping target slot ${targetSlot}: its committee is not stable on L1 yet`, {
+            targetSlot,
+            epoch: e.epoch,
+            l1BlockNumber: e.l1BlockNumber,
+          });
+        }
+        return undefined;
+      }
       if (e instanceof NoCommitteeError) {
         const targetEpoch = getEpochAtSlot(targetSlot, this.l1Constants);
         if (this.lastEpochForNoCommitteeLog !== targetEpoch) {
@@ -1171,11 +1195,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     });
 
     // Check if we're a proposer or proposal is open
-    const [canPropose, proposer] = await this.checkCanPropose(targetSlot);
-    if (!canPropose) {
-      this.log.trace(`Cannot vote in slot ${slot} since we are not a proposer`, { slot, proposer });
+    const proposerCheck = await this.checkCanPropose(targetSlot);
+    if (!proposerCheck?.[0]) {
+      this.log.trace(`Cannot vote in slot ${slot} since we are not a proposer`, { slot, proposer: proposerCheck?.[1] });
       return;
     }
+    const [, proposer] = proposerCheck;
 
     // Mark this slot as attempted
     this.lastSlotForFallbackAction = slot;
@@ -1367,10 +1392,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       currentSlot,
     };
 
-    const inCurrentCommittee = () =>
-      this.epochCache
-        .getCommittee(currentSlot)
-        .then(c => c?.committee?.some(member => ourValidatorAddresses.some(addr => addr.equals(member))));
+    // A committee that is not stable on L1 yet cannot tell whether we are in it, so treat that as not being in it.
+    const getCurrentCommittee = async () =>
+      (await this.epochCache.getCommittee(currentSlot).catch(unlessCommitteeNotStable(undefined)))?.committee;
+    const inCurrentCommittee = async () =>
+      (await getCurrentCommittee())?.some(member => ourValidatorAddresses.some(addr => addr.equals(member)));
 
     const invalidateAsCommitteeMember =
       secondsBeforeInvalidatingBlockAsCommitteeMember !== undefined &&
@@ -1391,7 +1417,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     let validatorToUse: EthAddress;
     if (invalidateAsCommitteeMember) {
       // When invalidating as a committee member, use first validator that's actually in the committee
-      const { committee } = await this.epochCache.getCommittee(currentSlot);
+      const committee = await getCurrentCommittee();
       if (committee) {
         const committeeSet = new Set(committee.map(addr => addr.toString()));
         validatorToUse =

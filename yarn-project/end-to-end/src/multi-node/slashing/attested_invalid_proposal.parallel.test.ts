@@ -23,6 +23,7 @@ import {
   MultiNodeTestContext,
   SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
 import { SENTINEL_TIMING, awaitCommitteeExists, findSlashOffense } from './setup.js';
 
@@ -121,8 +122,8 @@ async function advanceToEpochBeforePipelinedTargetSlot({
     // The prior pipelined target can start first after the epoch warp and consume the bad proposer config.
     const priorPipelinedTargetSlot = SlotNumber(firstSlotOfNextEpoch);
     const pipelinedTargetSlot = SlotNumber(firstSlotOfNextEpoch + 1);
-    const priorProposer = await epochCache.getProposerAttesterAddressInSlot(priorPipelinedTargetSlot);
-    const proposer = await epochCache.getProposerAttesterAddressInSlot(pipelinedTargetSlot);
+    const priorProposer = await getProposerFixingSeed(epochCache, cheatCodes, priorPipelinedTargetSlot);
+    const proposer = await getProposerFixingSeed(epochCache, cheatCodes, pipelinedTargetSlot);
 
     logger.info(
       `Checking pipelined target slot ${pipelinedTargetSlot} in epoch ${nextEpoch} for proposer ${targetProposer}`,

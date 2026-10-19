@@ -4,7 +4,7 @@ import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
-import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient, ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
@@ -29,6 +29,7 @@ import {
   MultiNodeTestContext,
   type RegisteredValidator,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 10);
@@ -401,11 +402,14 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         const preBadTargetSlots = times(preBadSlotCount, i => SlotNumber.add(candidateWarpSlot, i + 1));
         const candidateSlot1 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 1);
         const candidateSlot2 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 2);
-        const [preBadProposers, p1, p2] = await Promise.all([
-          Promise.all(preBadTargetSlots.map(slot => test.epochCache.getProposerAttesterAddressInSlot(slot))),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot1),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot2),
-        ]);
+        const readProposer = (slot: SlotNumber) =>
+          getProposerFixingSeed(test.epochCache, test.context.cheatCodes.rollup, slot);
+        const preBadProposers: (EthAddress | undefined)[] = [];
+        for (const slot of preBadTargetSlots) {
+          preBadProposers.push(await readProposer(slot));
+        }
+        const p1 = await readProposer(candidateSlot1);
+        const p2 = await readProposer(candidateSlot2);
 
         logger.warn(`Checking bad checkpoint slots ${candidateSlot1} and ${candidateSlot2}`, {
           candidateWarpSlot,
@@ -427,7 +431,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         candidate++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('EpochNotStable')) {
+        if (!(err instanceof CommitteeNotStableError) && !msg.includes('EpochNotStable')) {
           throw err;
         }
         const block = await test.l1Client.getBlock({ includeTransactions: false });

@@ -73,6 +73,7 @@ describe('multi-node/slashing/data_withholding_slash', () => {
 
   beforeEach(async () => {
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
       ...SENTINEL_TIMING,
       sentinelEnabled: false, // reuse only the fast base timing; this test does not use the sentinel
