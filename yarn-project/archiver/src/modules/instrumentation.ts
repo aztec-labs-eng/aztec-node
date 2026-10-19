@@ -41,6 +41,7 @@ export class ArchiverInstrumentation {
   private syncMessageCount: UpDownCounter;
 
   private blockProposalTxTargetCount: UpDownCounter;
+  private checkpointCalldataUnavailableCount: UpDownCounter;
 
   private checkpointL1InclusionDelay: Histogram;
   private checkpointPromotedCount: UpDownCounter;
@@ -94,6 +95,11 @@ export class ArchiverInstrumentation {
       {
         [Attributes.L1_BLOCK_PROPOSAL_USED_TRACE]: [true, false],
       },
+    );
+
+    this.checkpointCalldataUnavailableCount = createUpDownCounterWithDefault(
+      meter,
+      Metrics.ARCHIVER_CHECKPOINT_CALLDATA_UNAVAILABLE_COUNT,
     );
 
     this.checkpointL1InclusionDelay = meter.createHistogram(Metrics.ARCHIVER_CHECKPOINT_L1_INCLUSION_DELAY);
@@ -195,6 +201,11 @@ export class ArchiverInstrumentation {
       [Attributes.L1_BLOCK_PROPOSAL_TX_TARGET]: target.toLowerCase(),
       [Attributes.L1_BLOCK_PROPOSAL_USED_TRACE]: usedTrace,
     });
+  }
+
+  /** Records a failed attempt to extract a checkpoint's propose calldata because the L1 tx could not be traced. */
+  public recordCheckpointCalldataUnavailable() {
+    this.checkpointCalldataUnavailableCount.add(1);
   }
 
   /** Records a checkpoint promoted from proposed (blob fetch skipped). */
