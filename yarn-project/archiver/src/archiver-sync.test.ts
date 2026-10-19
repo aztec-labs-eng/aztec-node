@@ -2549,11 +2549,9 @@ describe('Archiver Sync', () => {
       }, 15_000);
 
       it('does not report equivocation during an escape hatch, when L1 did not check the committee proposer', async () => {
-        epochCache.getCommitteeForEpoch.mockResolvedValue({
-          committee: signers.map(signer => signer.address),
-          seed: 0n,
-          isEscapeHatchOpen: true,
-        } as EpochCommitteeInfo);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(
+          makeCommitteeLookup({ committee: signers.map(signer => signer.address), seed: 0n, isEscapeHatchOpen: true }),
+        );
         await syncDivergingCheckpointTwo(signers[0].address);
         expect(equivocationSpy).not.toHaveBeenCalled();
       }, 15_000);
@@ -4191,10 +4189,9 @@ describe('Archiver Sync', () => {
 
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({
-        committee: signers.map(signer => signer.address),
-        seed: 0n,
-      } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(
+        makeCommitteeLookup({ committee: signers.map(signer => signer.address), seed: 0n }),
+      );
       // The fake rollup names the first signer as the proposer of each slot it has a checkpoint for.
       const proposer = signers[0].address;
 

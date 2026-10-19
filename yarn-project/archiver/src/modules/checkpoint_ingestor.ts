@@ -1,5 +1,5 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
-import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { type EpochCache, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
@@ -639,11 +639,12 @@ export class CheckpointIngestor {
    * at the latest L1 block returns the address `propose` checked. The propose calldata cannot tell this: the
    * CheckpointProposed event commits to neither the signers nor the bundle signature, so a reverted copy of the call
    * signed by another key matches the event just as well. Returns undefined when L1 did not check the committee's
-   * proposer, because an escape hatch was open for the epoch, or when the committee was empty.
+   * proposer, because an escape hatch was open for the epoch, or when the committee was empty. Throws while the epoch's
+   * committee is not stable, since whether its escape hatch was open is not known yet.
    */
   private async getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
     const epoch = getEpochAtSlot(slot, this.deps.l1Constants);
-    const { isEscapeHatchOpen } = await this.deps.epochCache.getCommitteeForEpoch(epoch);
+    const { isEscapeHatchOpen } = requireStableCommittee(await this.deps.epochCache.getCommitteeForEpoch(epoch));
     if (isEscapeHatchOpen) {
       return undefined;
     }
