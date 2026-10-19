@@ -6,6 +6,7 @@ import {
   TX_DA_GAS_OVERHEAD,
 } from '@aztec-labs/constants';
 import { type BaseBuffer32, Buffer32 } from '@aztec-labs/foundation/buffer';
+import { sum } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import {
@@ -124,8 +125,17 @@ export class Tx extends Gossipable {
     return callRequests.map(r => this.#combinePublicCallRequestWithCallData(r));
   }
 
+  /** Returns the number of calldata fields across the supplied calldata entries, whichever calls use them. */
   getTotalPublicCalldataCount(): number {
     return this.publicFunctionCalldata.reduce((accum, cd) => accum + cd.values.length, 0);
+  }
+
+  /**
+   * Returns the number of calldata fields the public calls receive. Calldata shared by several calls counts once per
+   * call, and a call with no matching calldata entry counts as receiving none.
+   */
+  getDeliveredPublicCalldataCount(): number {
+    return sum(this.getPublicCallRequestsWithCalldata().map(r => r.calldata.length));
   }
 
   getGasSettings(): GasSettings {
