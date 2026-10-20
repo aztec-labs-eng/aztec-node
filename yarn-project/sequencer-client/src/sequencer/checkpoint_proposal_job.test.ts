@@ -27,6 +27,7 @@ import {
   type BlockHash,
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
+  type L2Block,
   type L2BlockSink,
   type L2BlockSource,
   type ProposedCheckpointSink,
@@ -311,6 +312,7 @@ describe('CheckpointProposalJob', () => {
     blockSink = mock<L2BlockSink & ProposedCheckpointSink>();
     blockSink.addBlock.mockResolvedValue(undefined);
     blockSink.addProposedCheckpoint.mockResolvedValue(undefined);
+    blockSink.pruneAbandonedProposedBlocks.mockResolvedValue([]);
 
     validatorClient = mock<ValidatorClient>();
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve([]));
@@ -2996,6 +2998,190 @@ describe('CheckpointProposalJob', () => {
 
       // Should handle timeout gracefully (in background pipeline)
       expect(validatorClient.collectAttestations).toHaveBeenCalled();
+    });
+  });
+
+  describe('blocks of an abandoned checkpoint', () => {
+    /** The proposer's local chain past the parent block, as the archiver behind the block sink holds it. */
+    let localBlocks: L2Block[];
+
+    const localBlockNumbers = () => localBlocks.map(block => block.number);
+    const proposedTip = () => localBlocks.at(-1)?.number ?? lastBlockNumber;
+    const mockSubslots = (count: number) => {
+      const spy = jest.spyOn(job.getTimetable(), 'selectNextSubslot');
+      for (let i = 0; i < count; i++) {
+        spy.mockReturnValueOnce(subslot(10 + 8 * i, i, i === count - 1));
+      }
+      spy.mockReturnValue(noSubslot());
+      jest.spyOn(job.getTimetable(), 'getMaxBlocksPerCheckpoint').mockReturnValue(count);
+    };
+
+    beforeEach(() => {
+      job.setTimetable(makeProposerTimetable({ l1Constants, blockDurationMs: 3000 }));
+      localBlocks = [];
+      blockSink.addBlock.mockImplementation(block => {
+        localBlocks.push(block);
+        return Promise.resolve();
+      });
+      // Prunes whenever asked for the job's own blocks, without the archiver's checkpoint guard, so a test that keeps
+      // the blocks shows the job never asked rather than the archiver refusing.
+      blockSink.pruneAbandonedProposedBlocks.mockImplementation(async (afterBlockNumber, firstBlockHash) => {
+        const first = localBlocks.find(block => block.number === afterBlockNumber + 1);
+        if (first === undefined || !(await first.hash()).equals(firstBlockHash)) {
+          return [];
+        }
+        const pruned = localBlocks.filter(block => block.number > afterBlockNumber).map(block => block.number);
+        localBlocks = localBlocks.filter(block => block.number <= afterBlockNumber);
+        return pruned;
+      });
+    });
+
+    it('prunes every block of the checkpoint when the pre-broadcast preflight rejects it', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValue(new Error('Rollup__UnconsumedInboxMessages(6)'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(p2p.broadcastCheckpointProposal).not.toHaveBeenCalled();
+      expect(localBlockNumbers()).toEqual([]);
+      expect(proposedTip()).toEqual(lastBlockNumber);
+    });
+
+    it('prunes the blocks already pushed when the streaming Inbox abandons the checkpoint mid-way', async () => {
+      mockSubslots(2);
+      streamingInbox.set([new Fr(1), new Fr(2)]);
+      // A content-changing L1 reorg replaces the messages the first block consumed before the second block builds.
+      jest.spyOn(job, 'waitUntilNextSubslot').mockImplementation(() => {
+        streamingInbox.set([new Fr(1000), new Fr(1001)]);
+        return Promise.resolve();
+      });
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(metrics.recordCheckpointProposalFailed).toHaveBeenCalledWith('inbox_prefix_reorged');
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(1);
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('prunes the blocks when the archiver refuses the proposed checkpoint', async () => {
+      mockSubslots(2);
+      blockSink.addProposedCheckpoint.mockRejectedValue(new Error('proposed checkpoint slot expired'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(p2p.broadcastCheckpointProposal).not.toHaveBeenCalled();
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('prunes the blocks when the checkpoint has fewer blocks than the configured minimum', async () => {
+      mockSubslots(2);
+      job.updateConfig({ minBlocksForCheckpoint: 3 });
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('keeps the blocks of a checkpoint handed to the archiver and broadcast', async () => {
+      mockSubslots(2);
+      const { blocks, lastBlock } = await setupMultipleBlocks(2, [1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+    });
+
+    it('keeps the blocks of a checkpoint handed to the archiver even when its broadcast fails', async () => {
+      mockSubslots(2);
+      p2p.broadcastCheckpointProposal.mockRejectedValue(new Error('gossipsub publish failed'));
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+    });
+
+    it('still gives up the slot when the prune itself fails', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValue(new Error('Rollup__UnconsumedInboxMessages(6)'));
+      blockSink.pruneAbandonedProposedBlocks.mockRejectedValue(new Error('Archiver stopped'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
+    });
+
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])('leaves the blocks to the orphan prune when an HA peer holds the slot (%s)', async (_, makeError) => {
+      mockSubslots(2);
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+      const sign = validatorClient.createBlockProposal.getMockImplementation()!;
+      let signed = 0;
+      validatorClient.createBlockProposal.mockImplementation((...args) => {
+        if (++signed === 2) {
+          throw makeError();
+        }
+        return sign(...args);
+      });
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual([blocks[0].number]);
+    });
+
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])(
+      'leaves the blocks to the orphan prune when an HA peer signed the checkpoint proposal (%s)',
+      async (_, makeError) => {
+        mockSubslots(2);
+        validatorClient.createCheckpointProposal.mockRejectedValue(makeError());
+        const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+        const checkpoint = await job.executeAndAwait();
+
+        expect(checkpoint).toBeUndefined();
+        expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+      },
+    );
+
+    it('leaves the blocks to the orphan prune when the job is interrupted', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockImplementation(() => {
+        job.interrupt();
+        return Promise.resolve(0n);
+      });
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
     });
   });
 

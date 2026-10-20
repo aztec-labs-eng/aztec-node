@@ -21,6 +21,7 @@ import { type TypedEventEmitter, isErrorClass } from '@aztec-labs/foundation/typ
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import {
+  type BlockHash,
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
   L2Block,
@@ -161,6 +162,14 @@ export class CheckpointProposalJob implements Traceable {
 
   private readonly interruptibleSleep = new InterruptibleSleep();
   private interrupted = false;
+
+  /**
+   * Hash of this checkpoint's first block once it is in the local archiver, until the checkpoint itself is handed to
+   * the archiver. While set, giving the checkpoint up leaves blocks on the local chain that no checkpoint will cover.
+   */
+  private unclaimedFirstBlockHash: BlockHash | undefined;
+  /** Whether an HA peer holds one of this slot's signing duties, and so may be proposing the blocks pushed here. */
+  private yieldedToHAPeer = false;
 
   private getSignatureContext(): CoordinationSignatureContext {
     return this.signatureContext;
@@ -331,6 +340,7 @@ export class CheckpointProposalJob implements Traceable {
     const outcome = await this.proposeCheckpoint();
 
     if (!outcome) {
+      await this.pruneAbandonedCheckpointBlocks();
       await Promise.all(votesPromises);
       // Still submit votes even without a checkpoint.
       // Under proposer pipelining, vote-offenses signatures are EIP-712-bound to `targetSlot`
@@ -1233,6 +1243,7 @@ export class CheckpointProposalJob implements Traceable {
     } catch (err) {
       if (err && (err instanceof DutyAlreadySignedError || err instanceof SlashingProtectionError)) {
         // swallow this error. It's already been logged by a function deeper in the stack
+        this.yieldedToHAPeer = true;
         return undefined;
       }
 
@@ -2148,6 +2159,7 @@ export class CheckpointProposalJob implements Traceable {
       slot: block.header.globalVariables.slotNumber,
     });
     await this.blockSink.addBlock(block, inboxPrefixRef);
+    this.unclaimedFirstBlockHash ??= await block.hash();
   }
 
   /**
@@ -2185,6 +2197,44 @@ export class CheckpointProposalJob implements Traceable {
       feeAssetPriceModifier,
       signer: proposal.getSender(),
     });
+    this.unclaimedFirstBlockHash = undefined;
+  }
+
+  /**
+   * Prunes this checkpoint's blocks from the local archiver once the job has given the checkpoint up after pushing
+   * them. Until then the node serves them as its chain tip: world state applies them, the tx pool marks their txs
+   * mined, and RPC users build txs on them, all of which the orphan prune would only undo seconds later. Pruning
+   * every block after the parent rather than just the last one, since without the checkpoint none of them can land.
+   *
+   * Left to the orphan prune when the job was interrupted, since the sequencer is then stopping and the archiver sync
+   * loop that runs the prune may be stopping with it, and when an HA peer holds one of the slot's duties, since the
+   * peer may be proposing these very blocks and the orphan prune waits for its checkpoint proposal. Never throws: a
+   * failed prune only leaves the blocks to the orphan prune.
+   */
+  private async pruneAbandonedCheckpointBlocks(): Promise<void> {
+    const firstBlockHash = this.unclaimedFirstBlockHash;
+    if (firstBlockHash === undefined || this.interrupted || this.yieldedToHAPeer) {
+      return;
+    }
+    this.unclaimedFirstBlockHash = undefined;
+    const context = {
+      slot: this.targetSlot,
+      checkpointNumber: this.checkpointNumber,
+      parentBlockNumber: this.syncedToBlockNumber,
+      firstBlockHash: firstBlockHash.toString(),
+    };
+    try {
+      const prunedBlocks = await this.blockSink.pruneAbandonedProposedBlocks(this.syncedToBlockNumber, firstBlockHash);
+      this.log.info(`Pruned the blocks of abandoned checkpoint ${this.checkpointNumber} from the local archiver`, {
+        ...context,
+        prunedBlocks,
+      });
+    } catch (err) {
+      this.log.warn(
+        `Failed to prune the blocks of abandoned checkpoint ${this.checkpointNumber}; leaving them to the orphan prune`,
+        { ...context, error: err instanceof Error ? err.message : String(err) },
+      );
+    }
   }
 
   /** Runs fee analysis and logs checkpoint outcome as fisherman */
@@ -2208,6 +2258,9 @@ export class CheckpointProposalJob implements Traceable {
    * Helper to handle HA double-signing errors. Returns true if the error was handled (caller should yield).
    */
   private handleHASigningError(err: any, errorContext: string): boolean {
+    if (err instanceof DutyAlreadySignedError || err instanceof SlashingProtectionError) {
+      this.yieldedToHAPeer = true;
+    }
     if (err instanceof DutyAlreadySignedError) {
       this.log.info(`${errorContext} for slot ${this.targetSlot} already signed by another HA node, yielding`, {
         slot: this.targetSlot,
