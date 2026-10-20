@@ -587,7 +587,7 @@ export class AutomineSequencer {
     // Anvil mining is paused, so the propose is mined by hand once sent, at the pinned slot-start timestamp, together
     // with any unrelated L1 txs that queued up during the build.
     const result = await publisher.sendRequests(SlotNumber(targetSlot), {
-      onTxSent: () => this.deps.ethCheatCodes.evmMine(),
+      onTxSent: () => this.deps.ethCheatCodes.evmMine({ silent: true }),
     });
 
     const proposeSucceeded = !!result?.successfulActions?.some(action => action === 'propose');
