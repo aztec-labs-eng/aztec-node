@@ -40,7 +40,7 @@ Public entry points:
 
 The AutomineSequencer owns L1 time in the local network (replacing the deleted `AnvilTestWatcher`). It builds and publishes each checkpoint at the next aztec-slot boundary, and `warpTo` / `warpBy` advance the clock by publishing an empty checkpoint at the target slot. Before every build, warp, and prove it reconciles the injected `TestDateProvider` to the latest *mined* L1 timestamp, so node-side consumers of `dateProvider.now()` stay aligned with L1 even when an unrelated L1 tx mines a block between our builds. It never advances the clock to the pending, un-mined timestamp.
 
-Each build and warp pins the next L1 block's timestamp to the target slot's start, and runs with anvil mining paused from that pin through the propose (`EthCheatCodes.execWithPausedAnvil`). The publisher's `onTxSent` hook then re-enables automine, and anvil mines the whole pending pool: the propose and any unrelated L1 txs sent meanwhile, starting with a block at the pinned timestamp (and more blocks after it if one is not enough). Those txs therefore cannot take the pinned block or move L1 time out of the slot through anvil's block-timestamp interval before the propose lands. The pause also re-enables automine when the build ends, so nothing is left in the pool when no propose is sent.
+Each build and warp pins the next L1 block's timestamp to the target slot's start and pauses anvil mining until the propose is sent. Unrelated L1 txs sent meanwhile wait in the pool and are mined together with the propose, so they cannot move L1 time out of the slot before the propose lands.
 
 ## Publish-failure recovery
 
