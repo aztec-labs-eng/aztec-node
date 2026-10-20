@@ -1035,7 +1035,15 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   // after the next proposer started building on the L1 tip. That proposer had no proposed parent and nothing to
   // invalidate when it started, so it finds the bad checkpoint only when it checks its parent before sending. It must
   // invalidate it and still land its own checkpoint in its own slot, bundled in the same L1 tx.
-  it('proposer invalidates a non-broadcast checkpoint that lands after it started building, and posts its own', async () => {
+  /**
+   * The attacker posts a checkpoint with insufficient attestations in its slot without broadcasting it, and the honest
+   * proposer of the next slot builds on the L1 tip without seeing it. The attacker's propose is held back until the
+   * honest proposer's job has started, and with `holdUntil: 'honest-proposal-stored'` also until every other node
+   * stores the honest proposed checkpoint, so the bad checkpoint lands with the same number as that proposed copy.
+   * Checks that the honest proposer invalidates the bad checkpoint and lands its own in its slot, and that the next
+   * proposer lands the following checkpoint in its own slot, so no slot is lost beyond the attacker's.
+   */
+  async function runLateNonBroadcastCheckpointTest(holdUntil: 'honest-job-started' | 'honest-proposal-stored') {
     const sequencers = nodes.map(node => node.getSequencer()!);
     sequencers.forEach(s =>
       s.updateConfig({
@@ -1048,7 +1056,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     // The lead-in proposer is not the attacker, so warping to the lead-in build window makes the bad checkpoint the
     // attacker's first job and its propose the attacker's first L1 tx. The honest and next proposers are other nodes.
     const {
-      slots: [leadInSlot, badSlot, honestSlot],
+      slots: [leadInSlot, badSlot, honestSlot, nextSlot],
       proposers: [, attacker, honest],
     } = await test.findSlotsWithProposers(
       4,
@@ -1058,19 +1066,46 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const findNode = (proposer: EthAddress) =>
       nodes.find(n => n.getSequencer()!.validatorAddresses!.some(a => a.equals(proposer)))!;
     const attackerNode = findNode(attacker);
+    const honestNode = findNode(honest);
+    const bystanderNodes = nodes.filter(n => n !== attackerNode && n !== honestNode);
     await attackerNode.setConfig({ skipCollectingAttestations: true, skipBroadcastProposals: true });
 
     const honestJobStarts: { hadProposedParent: boolean; startedAt: number }[] = [];
     const honestJobStarted = promiseWithResolvers<void>();
-    const honestSequencer = findNode(honest).getSequencer()!.getSequencer();
+    const honestSequencer = honestNode.getSequencer()!.getSequencer();
     honestSequencer.on('preparing-checkpoint', ({ targetSlot, hadProposedParent }) => {
       if (targetSlot === honestSlot) {
         honestJobStarts.push({ hadProposedParent, startedAt: test.context.dateProvider.nowInSeconds() });
         honestJobStarted.resolve();
       }
     });
-    // Keep the bad checkpoint off L1 until the honest proposer's job has started, however the two nodes are scheduled.
-    const attackerTxsWithheld = withholdSequencerTxsUntil(attackerNode, honestJobStarted.promise);
+
+    let honestProposalStored: { checkpointNumber: CheckpointNumber; storedAt: number } | undefined;
+    const waitForHonestProposalStored = async () => {
+      const proposals = await retryUntil(
+        async () => {
+          const stored = await Promise.all(
+            bystanderNodes.map(n => n.getBlockSource().getProposedCheckpointData({ slot: honestSlot })),
+          );
+          return stored.every(p => p !== undefined) ? stored : undefined;
+        },
+        `honest proposed checkpoint for slot ${honestSlot} stored on every bystander node`,
+        test.L2_SLOT_DURATION_IN_S * 4,
+        0.1,
+      );
+      honestProposalStored = {
+        checkpointNumber: proposals[0].checkpointNumber,
+        storedAt: test.context.dateProvider.nowInSeconds(),
+      };
+    };
+    // Keep the bad checkpoint off L1 until the honest proposer's job has started, however the two nodes are scheduled,
+    // and in the stored mode also until every bystander holds the honest proposed checkpoint.
+    const attackerTxsWithheld = withholdSequencerTxsUntil(
+      attackerNode,
+      holdUntil === 'honest-job-started'
+        ? honestJobStarted.promise
+        : honestJobStarted.promise.then(waitForHonestProposalStored),
+    );
 
     const badCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
@@ -1100,17 +1135,34 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     expect(honestJobStarts[0].hadProposedParent).toBe(false);
     expect(BigInt(honestJobStarts[0].startedAt)).toBeLessThan(badCheckpointTimestamp);
 
+    // The bad checkpoint landed in its own slot after every other node stored the honest proposed checkpoint with the
+    // same number. A timing slip that releases the attacker early or late fails here rather than skipping the case.
+    if (holdUntil === 'honest-proposal-stored') {
+      expect(honestProposalStored?.checkpointNumber).toEqual(badCheckpointNumber);
+      expect(BigInt(honestProposalStored!.storedAt)).toBeLessThanOrEqual(badCheckpointTimestamp);
+      expect(badCheckpointTimestamp).toBeLessThan(getTimestampForSlot(SlotNumber(badSlot + 1), test.constants));
+    }
+
     // The honest proposer invalidates the bad checkpoint and posts its own in the same L1 tx, in its own slot.
     const { checkpointNumber: invalidatedCheckpointNumber, event } = await invalidationPromise;
     expect(invalidatedCheckpointNumber).toEqual(badCheckpointNumber);
     expect((await findCheckpointProposedInSameTx(event))?.args.checkpointNumber).toEqual(badCheckpointNumber);
     expect((await test.rollup.getCheckpoint(badCheckpointNumber)).slotNumber).toEqual(honestSlot);
 
-    // The slot after the honest one is lost today: when the invalid checkpoint lands on L1 with the same number as the
-    // honest proposed checkpoint, archivers drop the local proposed checkpoint, so the next proposer cannot build on
-    // it. Until that is fixed, only check that the chain progresses past the honest checkpoint.
-    await test.waitUntilCheckpointNumber(CheckpointNumber(badCheckpointNumber + 1), test.L2_SLOT_DURATION_IN_S * 4);
+    // Archivers keep the honest proposed checkpoint when the invalid one with its number lands on L1, so the next
+    // proposer builds on it and no slot is lost beyond the attacker's.
+    const nextCheckpointNumber = CheckpointNumber(badCheckpointNumber + 1);
+    await test.waitUntilCheckpointNumber(nextCheckpointNumber, test.L2_SLOT_DURATION_IN_S * 4);
+    expect((await test.rollup.getCheckpoint(nextCheckpointNumber)).slotNumber).toEqual(nextSlot);
 
     logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
+  }
+
+  it('proposer invalidates a non-broadcast checkpoint that lands after it started building, and posts its own', async () => {
+    await runLateNonBroadcastCheckpointTest('honest-job-started');
+  });
+
+  it('keeps the honest proposed checkpoint when a non-broadcast invalid checkpoint with the same number lands after it was gossiped', async () => {
+    await runLateNonBroadcastCheckpointTest('honest-proposal-stored');
   });
 });
