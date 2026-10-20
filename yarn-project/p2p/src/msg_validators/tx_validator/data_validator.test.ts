@@ -376,6 +376,18 @@ describe('TxDataValidator', () => {
     await expectInvalid(badTxs[1], TX_ERROR_CONTRACT_CLASS_LOG_LENGTH);
   });
 
+  it('rejects txs with a zero-length contract class log', async () => {
+    const [tx] = await mockTxs(1);
+    const log = ContractClassLogFields.empty();
+    tx.contractClassLogFields.push(log);
+    tx.data.forPublic!.nonRevertibleAccumulatedData.contractClassLogsHashes[0] = LogHash.from({
+      value: await log.hash(),
+      length: 0,
+    }).scope(await AztecAddress.random());
+
+    await expectInvalid(tx, TX_ERROR_CONTRACT_CLASS_LOG_LENGTH);
+  });
+
   describe('private log padding', () => {
     // A log that emits 3 of its 16 fields, with non-zero values in the unpublished tail.
     const junkPaddedLog = () => {
