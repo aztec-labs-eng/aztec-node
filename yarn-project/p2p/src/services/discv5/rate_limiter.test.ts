@@ -33,7 +33,7 @@ describe('Discv5RateLimiter', () => {
     expect(countAllowed(limiter, ip, 301)).toBe(300);
 
     limiter.addExpectedResponse(ip);
-    expect(countAllowed(limiter, ip, 1_000)).toBe(1_000);
+    expect(countAllowed(limiter, ip, 16)).toBe(16);
     limiter.removeExpectedResponse(ip);
     expect(limiter.allowEncodedPacket(ip)).toBe(false);
   });
@@ -50,6 +50,68 @@ describe('Discv5RateLimiter', () => {
     expect(limiter.allowEncodedPacket(ip)).toBe(false);
     limiter.removeExpectedResponse(ip);
     expect(limiter.allowEncodedPacket(ip)).toBe(false);
+  });
+
+  describe('reply exemptions', () => {
+    // Budgets that do not refill within the test, so only the exemption can admit packets.
+    const slowOpts: Discv5RateLimiterOpts = {
+      byIPQuota: { maxTokens: 2, replenishAllEvery: 3_600_000 },
+      globalQuota: { maxTokens: 1_000, replenishAllEvery: 3_600_000 },
+    };
+
+    it('ends a reply exemption after it expires', () => {
+      const limiter = new Discv5RateLimiter(slowOpts);
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      limiter.addExpectedResponse(ip);
+      expect(limiter.allowEncodedPacket(ip)).toBe(true);
+      jest.advanceTimersByTime(10_000);
+      expect(limiter.allowEncodedPacket(ip)).toBe(false);
+    });
+
+    it('ends a reply exemption once its packet allowance is spent', () => {
+      const limiter = new Discv5RateLimiter(slowOpts);
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      limiter.addExpectedResponse(ip);
+      expect(countAllowed(limiter, ip, 100)).toBe(16);
+    });
+
+    it('extends a reply exemption with each new request to the IP', () => {
+      const limiter = new Discv5RateLimiter(slowOpts);
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      limiter.addExpectedResponse(ip);
+      jest.advanceTimersByTime(9_000);
+      limiter.addExpectedResponse(ip);
+      jest.advanceTimersByTime(9_000);
+      expect(limiter.allowEncodedPacket(ip)).toBe(true);
+    });
+
+    it('caps the packet allowance accumulated across requests', () => {
+      const limiter = new Discv5RateLimiter(slowOpts);
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      for (let i = 0; i < 10; i++) {
+        limiter.addExpectedResponse(ip);
+      }
+      expect(countAllowed(limiter, ip, 200)).toBe(64);
+    });
+
+    it('keeps reply exemptions bounded', () => {
+      const maxTrackedIps = 16;
+      const limiter = new Discv5RateLimiter(slowOpts, { maxTrackedIps });
+      for (let i = 0; i < 5_000; i++) {
+        limiter.addExpectedResponse(`10.${(i >> 16) & 0xff}.${(i >> 8) & 0xff}.${i & 0xff}`);
+      }
+      expect(limiter.expectedResponseIpCount).toBe(maxTrackedIps);
+    });
+  });
+
+  it('rejects bounds that are not positive integers', () => {
+    expect(() => new Discv5RateLimiter(opts, { maxTrackedIps: 0 })).toThrow('maxTrackedIps');
+    expect(() => new Discv5RateLimiter(opts, { maxTrackedIps: 1.5 })).toThrow('maxTrackedIps');
+    expect(() => new Discv5RateLimiter(opts, { expectedResponseTtlMs: Number.NaN })).toThrow('expectedResponseTtlMs');
   });
 
   it('admits unsolicited packets again once the budget refills', () => {
@@ -81,7 +143,7 @@ describe('Discv5RateLimiter', () => {
         byIPQuota: { maxTokens: 2, replenishAllEvery: replenishMs },
         globalQuota: { maxTokens: 100, replenishAllEvery: replenishMs },
       },
-      maxTrackedIps,
+      { maxTrackedIps },
     );
 
     let admitted = 0;
@@ -101,7 +163,7 @@ describe('Discv5RateLimiter', () => {
         byIPQuota: { maxTokens: 2, replenishAllEvery: replenishMs },
         globalQuota: { maxTokens: 1_000, replenishAllEvery: replenishMs },
       },
-      2,
+      { maxTrackedIps: 2 },
     );
     expect(countAllowed(limiter, ip, 3)).toBe(2);
 

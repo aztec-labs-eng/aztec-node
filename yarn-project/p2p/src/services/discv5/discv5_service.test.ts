@@ -1,5 +1,7 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { emptyChainConfig } from '@aztec-labs/stdlib/config';
@@ -9,8 +11,11 @@ import type { PeerId } from '@libp2p/interface';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { IDiscv5CreateOptions } from '@nethermindeth/discv5';
+import { createRandomPacket, encodePacket } from '@nethermindeth/discv5/packet';
 import { ENR, SignableENR } from '@nethermindeth/enr';
 import { Buffer } from 'buffer';
+import { randomBytes } from 'node:crypto';
+import { createSocket } from 'node:dgram';
 
 import { BootstrapNode } from '../../bootstrap/bootstrap.js';
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES, type P2PConfig, getP2PDefaultConfig } from '../../config.js';
@@ -469,29 +474,17 @@ describe('Discv5Service', () => {
     expect(allowed).toBeLessThan(5000);
     expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
 
-    // Expected responses are exempt, driven through the SessionService wrapper (the layer the
-    // request flow uses) rather than the transport hook directly, so a reversed wrapper is caught.
-    const honestIp = '198.51.100.7';
-    const honestAddr = multiaddr(`/ip4/${honestIp}/udp/30303`);
+    // Expected responses are exempt even from a source over its budget, driven through the SessionService wrapper (the
+    // layer the request flow uses) rather than the transport hook directly, so a reversed wrapper is caught.
+    const replyAddr = multiaddr(`/ip4/${attackerIp}/udp/30303`);
     const sessionService = (node as any).discv5.sessionService;
-    sessionService.addExpectedResponse(honestAddr);
-    let honestAllowed = 0;
-    for (let i = 0; i < 5000; i++) {
-      if (limiter.allowEncodedPacket(honestIp)) {
-        honestAllowed++;
-      }
-    }
-    expect(honestAllowed).toBe(5000);
+    sessionService.addExpectedResponse(replyAddr);
+    const exempt = Array.from({ length: 8 }, () => limiter.allowEncodedPacket(attackerIp));
+    expect(exempt.every(Boolean)).toBe(true);
 
-    // Once the exchange ends the exemption is cleared and the source is metered again.
-    sessionService.removeExpectedResponse(honestAddr);
-    let afterExchange = 0;
-    for (let i = 0; i < 5000; i++) {
-      if (limiter.allowEncodedPacket(honestIp)) {
-        afterExchange++;
-      }
-    }
-    expect(afterExchange).toBeLessThan(5000);
+    // Once the exchange ends the exemption is cleared, with allowance left over, and the source is metered again.
+    sessionService.removeExpectedResponse(replyAddr);
+    expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
   });
 
   it('applies the configured per-IP and global rate limits to the discovery transport', async () => {
@@ -554,6 +547,37 @@ describe('Discv5Service', () => {
         nowSpy.mockRestore();
       }
     });
+  });
+
+  it('does not exempt a source after answering its unsolicited packet with a challenge', async () => {
+    const node = await createNode({
+      discv5RateLimitPerIpMaxTokens: 7,
+      discv5RateLimitPerIpReplenishMs: 3_600_000,
+      discv5RateLimitGlobalMaxTokens: 1_000,
+      discv5RateLimitGlobalReplenishMs: 3_600_000,
+    });
+    await node.start();
+    const limiter = (node as any).discv5.sessionService.transport.rateLimiter;
+
+    // A source we never queried, on its own loopback address so it is distinct from the bootnode's.
+    const sourceIp = '127.0.0.2';
+    const socket = createSocket('udp4');
+    try {
+      await new Promise<void>(resolve => socket.bind(0, sourceIp, resolve));
+      const challenge = promiseWithResolvers<Buffer>();
+      socket.once('message', msg => challenge.resolve(msg));
+
+      // A message packet from a node with no session makes the node answer with a WHOAREYOU challenge.
+      const packet = encodePacket(node.getEnr().nodeId, createRandomPacket(randomBytes(32).toString('hex')));
+      socket.send(packet, node.getEnr().udp!, '127.0.0.1');
+      await executeTimeout(() => challenge.promise, 5_000, 'waiting for WHOAREYOU');
+
+      // The source spent one of its 7 tokens on that packet and stays metered.
+      const allowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket(sourceIp));
+      expect(allowed.filter(Boolean).length).toBe(6);
+    } finally {
+      socket.close();
+    }
   });
 
   it('refuses to start with a non-positive rate limit', async () => {
