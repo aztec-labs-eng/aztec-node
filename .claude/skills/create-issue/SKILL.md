@@ -48,7 +48,7 @@ In planning mode most of these are already settled — inherit them. In standalo
 
 1. **Team** — which Linear team. Get the user's teams from `get_user` (query `"me"`); offer them as options. Required to create an issue.
 2. **Project** — whether to attach to a project. If a project is being planned, use it. Otherwise ask, and if yes, list the team's projects (`list_projects`) to choose.
-3. **Labels** — which labels to apply. Fetch the team's labels (`list_issue_labels` with the team) and offer the relevant ones as a multi-select rather than a blank prompt. In planning mode, apply the project's agreed label convention.
+3. **Labels** — which labels to apply. Fetch the team's labels (`list_issue_labels` with the team) and offer the relevant ones as a multi-select rather than a blank prompt. In planning mode, apply the project's agreed label convention. If the team has an `Area` label group, suggest the one area that fits, read from the group's and labels' descriptions; it is optional, and work with no clear area (release, CI, infra) goes without.
 4. **Priority** — if not already stated or implied by the plan, ask. Linear priority values: `1`=Urgent, `2`=High, `3`=Medium, `4`=Low, `0`=None.
 
 If the user already specified any of these, honor it and don't re-ask.
