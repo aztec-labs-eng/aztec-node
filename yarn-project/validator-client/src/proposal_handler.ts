@@ -2227,16 +2227,26 @@ export class ProposalHandler {
     if (isCheckpointValidationFailure(located)) {
       return located;
     }
-    const result = await this.validateCoveredBlocks(proposal, located, proposalInfo);
     if (located.laterBlockNumbers.length === 0) {
-      return result;
+      return await this.validateCoveredBlocks(proposal, located, proposalInfo);
     }
-    const coveredBlocksResult = result.isValid ? 'valid' : result.reason;
-    if (isSlashableCheckpointProposalResult(result)) {
-      return result;
+
+    // A local failure to check the covered blocks, a thrown one included, must not erase the omission: the proposer
+    // is still accountable for leaving out signed blocks, whatever this node could verify about the rest.
+    let coveredBlocksResult: string;
+    try {
+      const result = await this.validateCoveredBlocks(proposal, located, proposalInfo);
+      if (!result.isValid && SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason]) {
+        return result;
+      }
+      coveredBlocksResult = result.isValid ? 'valid' : result.reason;
+    } catch (err) {
+      this.log.warn(`Failed to check the covered blocks of a checkpoint proposal that leaves blocks out`, {
+        ...proposalInfo,
+        err,
+      });
+      coveredBlocksResult = 'error';
     }
-    // A local failure to check the covered blocks must not erase the omission either: the proposer is still
-    // accountable for leaving out signed blocks, whatever this node could verify about the rest.
     this.log.warn(`Rejecting checkpoint proposal that leaves later blocks of its slot out`, {
       ...proposalInfo,
       coveredBlocksResult,

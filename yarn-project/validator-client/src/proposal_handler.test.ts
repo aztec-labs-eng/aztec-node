@@ -1536,7 +1536,10 @@ describe('ProposalHandler checkpoint validation', () => {
     // the same payload as valid. The omission accuses the proposer only; the covered blocks' own content decides
     // whether the payload is evidence against its attesters.
     describe('a checkpoint that leaves later blocks of its slot out', () => {
-      /** Stores a later block of the slot after its last local block, consuming messages up to `leafCount`. */
+      /**
+       * Stores a later block of the slot after its last local block, consuming messages up to `leafCount`. Returns the
+       * blocks the slot held before it, which a proposal signed at the last of them covers.
+       */
       async function storeLaterBlockOfSlot(leafCount = 0) {
         const covered = await blockSource.getBlocksForSlot(SlotNumber(1));
         const last = covered[covered.length - 1];
@@ -1552,6 +1555,7 @@ describe('ProposalHandler checkpoint validation', () => {
           },
         } as unknown as L2Block;
         blockSource.getBlocksForSlot.mockResolvedValue([...covered, later]);
+        return covered;
       }
 
       /** Asserts that the payload was rejected as leaving blocks out, without being recorded against its attesters. */
@@ -1614,7 +1618,7 @@ describe('ProposalHandler checkpoint validation', () => {
       // reaches the header comparison.
       it('rebuilds the covered blocks only, reporting their header mismatch and accusing the attesters', async () => {
         const header = setupMatchingRebuild();
-        await storeLaterBlockOfSlot(4);
+        const covered = await storeLaterBlockOfSlot(4);
         const proposal = await makeProposal({
           archiveRoot,
           checkpointHeader: makeMatchingHeader({ lastArchiveRoot: header.lastArchiveRoot, totalManaUsed: new Fr(999) }),
@@ -1627,6 +1631,56 @@ describe('ProposalHandler checkpoint validation', () => {
         ]);
         expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(true);
         expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([proposal.getPayloadHash()]);
+        // The rebuild mock returns a fixed checkpoint, so the blocks it is handed are what shows the later one left out.
+        expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalledWith(
+          CheckpointNumber(1),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          covered,
+          expect.anything(),
+        );
+      });
+
+      it('applies the block cap to the covered blocks only', async () => {
+        handler.updateConfig({ maxBlocksPerCheckpoint: 1 });
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+      });
+
+      // A local fault while checking the covered blocks is not a verdict on them, but the omission already is one.
+      it('keeps last_block_archive_mismatch when checking the covered blocks throws, still disposing the fork', async () => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        mockCheckpointBuilder.completeCheckpoint.mockRejectedValue(new Error('complete failed'));
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+        expect(mockDispose).toHaveBeenCalled();
+      });
+
+      it('keeps last_block_archive_mismatch when reading the checkpoint ancestry throws', async () => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        blockSource.getCheckpointsData.mockRejectedValue(new Error('checkpoint store unavailable'));
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
       });
     });
 
