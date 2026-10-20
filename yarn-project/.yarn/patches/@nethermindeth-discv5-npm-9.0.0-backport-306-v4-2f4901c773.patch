@@ -1,8 +1,16 @@
 diff --git a/lib/session/service.js b/lib/session/service.js
-index d0357a007456d7639b6d479a770384a890dcbe6c..22577a170dfe58cdecce0094918d66e42fc2c7b0 100644
+index d0357a007456d7639b6d479a770384a890dcbe6c..3f2484ae8158cc3a92dc3fc4755ed7af5a9b2566 100644
 --- a/lib/session/service.js
 +++ b/lib/session/service.js
-@@ -599,10 +599,10 @@ export class SessionService extends EventEmitter {
+@@ -220,7 +220,6 @@ export class SessionService extends EventEmitter {
+         const packet = createWhoAreYouPacket(nonce, enrSeq);
+         const challengeData = encodeChallengeData(packet.maskingIv, packet.header);
+         log("Sending WHOAREYOU to %o", nodeAddr);
+-        this.addExpectedResponse(nodeAddr.socketAddr);
+         this.send(nodeAddr, packet);
+         this.activeChallenges.set(nodeAddrStr, { data: challengeData, remoteEnr: remoteEnr ?? undefined });
+     }
+@@ -599,10 +598,10 @@ export class SessionService extends EventEmitter {
          }
      }
      removeExpectedResponse(socketAddr) {

@@ -4,12 +4,13 @@ import type { P2PBootstrapApi } from '@aztec-labs/stdlib/interfaces/server';
 import { OtelMetricsAdapter, type TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
-import { Discv5, type Discv5EventEmitter } from '@nethermindeth/discv5';
+import { Discv5, type Discv5EventEmitter, UDPTransportService } from '@nethermindeth/discv5';
 import { ENR, type SignableENR } from '@nethermindeth/enr';
 
 import type { BootnodeConfig } from '../config.js';
 import { createBootnodeENRandPeerId } from '../enr/generate-enr.js';
 import { getDiscv5RateLimiterOpts } from '../services/discv5/config.js';
+import { Discv5RateLimiter } from '../services/discv5/rate_limiter.js';
 import { convertToMultiaddr, getPeerIdPrivateKey, getPublicIp } from '../util.js';
 
 /**
@@ -69,16 +70,22 @@ export class BootstrapNode implements P2PBootstrapApi {
     this.logger.debug(`Starting bootstrap node ${peerId} listening on ${listenAddrUdp.toString()}`);
 
     const metricsRegistry = new OtelMetricsAdapter(this.telemetry, this.logger.getBindings());
+    const bindAddrs = { ip4: listenAddrUdp };
+    const transport = new UDPTransportService({
+      bindAddrs,
+      nodeId: ourEnr.nodeId,
+      rateLimiter: new Discv5RateLimiter(getDiscv5RateLimiterOpts(config)),
+    });
     this.node = Discv5.create({
       enr: ourEnr,
       peerId,
-      bindAddrs: { ip4: listenAddrUdp },
+      bindAddrs,
       config: {
         lookupTimeout: 2000,
         allowUnverifiedSessions: true,
       },
       metricsRegistry,
-      rateLimiterOpts: getDiscv5RateLimiterOpts(config),
+      transport,
     });
 
     this.node.on('multiaddrUpdated', (addr: Multiaddr) => {

@@ -3,9 +3,8 @@ import type { IDiscv5CreateOptions } from '@nethermindeth/discv5';
 
 /**
  * Limits for the discv5 transport rate limiter, which bounds pre-auth packet decode so one host cannot force unbounded
- * decoding on the discovery path. Responses to our own queries are exempt via the expected-response bypass. A source
- * IP that exceeds its per-IP budget is banned for the lifetime of the process, so the defaults sit well above any
- * honest unsolicited burst.
+ * decoding on the discovery path. Responses to our own queries are exempt via the expected-response bypass. Packets
+ * over a source IP's budget are dropped until it refills, so the defaults sit well above any honest unsolicited burst.
  */
 export interface Discv5RateLimiterConfig {
   /** Burst size, in packets, of unsolicited discv5 packets accepted from a single source IP. */
@@ -30,7 +29,7 @@ export const discv5RateLimiterConfigMappings: ConfigMappingsType<Discv5RateLimit
   discv5RateLimitPerIpMaxTokens: {
     env: 'P2P_DISCV5_RATE_LIMIT_PER_IP_MAX_TOKENS',
     description:
-      'Maximum burst of unsolicited discv5 packets accepted from a single source IP, replenished over P2P_DISCV5_RATE_LIMIT_PER_IP_REPLENISH_MS. A source IP that exceeds it is banned from discovery for the lifetime of the process. Responses to our own discovery queries are exempt. Raise it when many nodes share one egress IP (e.g. behind NAT). Must be a positive integer.',
+      'Maximum burst of unsolicited discv5 packets accepted from a single source IP, replenished over P2P_DISCV5_RATE_LIMIT_PER_IP_REPLENISH_MS. Packets over it are dropped until the budget refills. Responses to our own discovery queries are exempt. Raise it when many nodes share one egress IP (e.g. behind NAT). Must be a positive integer.',
     ...numberConfigHelper(300),
   },
   discv5RateLimitPerIpReplenishMs: {
@@ -58,13 +57,13 @@ export function getDiscv5RateLimiterDefaultConfig(): Discv5RateLimiterConfig {
   return getDefaultConfig<Discv5RateLimiterConfig>(discv5RateLimiterConfigMappings);
 }
 
-type Discv5RateLimiterOpts = NonNullable<IDiscv5CreateOptions['rateLimiterOpts']>;
+/** Per-IP and aggregate packet quotas for the discv5 transport rate limiter. */
+export type Discv5RateLimiterOpts = NonNullable<IDiscv5CreateOptions['rateLimiterOpts']>;
 
 /**
- * Builds the discv5 `rateLimiterOpts` from config, using the default for any limit left unset.
- * @throws If a limit is set to anything other than a positive integer. The library rejects zero but silently accepts
- * negative or NaN values, which disable the limiter, and a fractional token count below one bans every source on its
- * first packet.
+ * Builds the discv5 rate limiter quotas from config, using the default for any limit left unset.
+ * @throws If a limit is set to anything other than a positive integer. Depending on the field, a negative, NaN or
+ * fractional value would make the limiter admit every packet or drop every packet.
  */
 export function getDiscv5RateLimiterOpts(config: Partial<Discv5RateLimiterConfig>): Discv5RateLimiterOpts {
   const limits = getDiscv5RateLimiterDefaultConfig();

@@ -6,6 +6,7 @@ import { Discv5 } from '@nethermindeth/discv5';
 
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES } from '../config.js';
 import { getDiscv5RateLimiterDefaultConfig } from '../services/discv5/config.js';
+import { Discv5RateLimiter } from '../services/discv5/rate_limiter.js';
 import { BootstrapNode } from './bootstrap.js';
 
 describe('BootstrapNode', () => {
@@ -38,9 +39,9 @@ describe('BootstrapNode', () => {
       // A mapped deployment sets listen != broadcast. The discovery socket must bind the local
       // listen port so routed packets arrive, while the advertised record keeps the broadcast port.
       const createArgs = createSpy.mock.calls[0][0] as Parameters<typeof Discv5.create>[0];
-      const boundIp4 = createArgs.bindAddrs.ip4;
-      expect(boundIp4).toBeDefined();
-      expect(boundIp4!.nodeAddress().port).toBe(p2pPort);
+      const boundAddrs = createArgs.transport!.bindAddrs;
+      expect(boundAddrs).toHaveLength(1);
+      expect(boundAddrs[0].nodeAddress().port).toBe(p2pPort);
       expect(bootNode.getENR()?.udp).toBe(p2pBroadcastPort);
     } finally {
       createSpy.mockRestore();
@@ -71,6 +72,7 @@ describe('BootstrapNode', () => {
     try {
       await bootNode.start(config);
       const limiter = (bootNode as any).node.sessionService.transport.rateLimiter;
+      expect(limiter).toBeInstanceOf(Discv5RateLimiter);
       const allowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket('203.0.113.1'));
       expect(allowed.filter(Boolean).length).toBe(7);
     } finally {
