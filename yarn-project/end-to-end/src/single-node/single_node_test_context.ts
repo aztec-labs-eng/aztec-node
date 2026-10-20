@@ -284,7 +284,7 @@ export class SingleNodeTestContext {
         startProverNode: true,
         proverTestDelayMs: opts.proverTestDelayMs ?? 0,
         proverId: EthAddress.fromNumber(1),
-        worldStateCheckpointHistory: WORLD_STATE_CHECKPOINT_HISTORY,
+        worldStateHistoryRetention: { type: 'rolling', checkpoints: WORLD_STATE_CHECKPOINT_HISTORY },
         exitDelaySeconds: DefaultL1ContractsConfig.exitDelaySeconds,
         slasherEnabled: false,
         // `inboxLag: 2` is the intended value when running with pipelining (the production config

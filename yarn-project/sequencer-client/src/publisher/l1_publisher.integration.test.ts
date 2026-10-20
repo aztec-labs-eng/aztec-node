@@ -417,7 +417,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
     const worldStateConfig: WorldStateConfig = {
       worldStateBlockCheckIntervalMS: 10000,
       worldStateDbMapSizeKb: 10 * 1024 * 1024,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' },
     };
     worldStateSynchronizer = new ServerWorldStateSynchronizer(builderDb, blockSource, worldStateConfig);
     await worldStateSynchronizer.start();

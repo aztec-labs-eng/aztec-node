@@ -215,7 +215,7 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
   'WORLD STATE': [
     configToFlag('--world-state-data-directory', worldStateConfigMappings.worldStateDataDirectory),
     configToFlag('--world-state-db-map-size-kb', worldStateConfigMappings.worldStateDbMapSizeKb),
-    configToFlag('--world-state-checkpoint-history', worldStateConfigMappings.worldStateCheckpointHistory),
+    configToFlag('--world-state-history-retention', worldStateConfigMappings.worldStateHistoryRetention),
   ],
   // We can't easily auto-generate node options as they're parts of modules defined below
   'AZTEC NODE': [

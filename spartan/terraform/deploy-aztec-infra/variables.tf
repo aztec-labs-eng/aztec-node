@@ -1188,8 +1188,8 @@ variable "P2P_DROP_TX_CHANCE" {
   default     = 0
 }
 
-variable "WS_NUM_HISTORIC_CHECKPOINTS" {
-  description = "Number of historic checkpoints for world state"
+variable "WS_HISTORY_RETENTION" {
+  description = "World-state history retention policy: rolling:N, pinned:N, or archive"
   type        = string
   nullable    = true
   default     = null

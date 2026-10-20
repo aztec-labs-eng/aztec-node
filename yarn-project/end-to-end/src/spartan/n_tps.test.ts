@@ -517,7 +517,7 @@ describe('sustained N TPS test', () => {
 
   // The prototype's anchor block header is bound into the private kernel proof. If the
   // chain reorgs past that block — or on very long runs the header ages out of
-  // WS_NUM_HISTORIC_BLOCKS — the node rejects clones with `Block header not found`.
+  // WS_HISTORY_RETENTION — the node rejects clones with `Block header not found`.
   // Detect this on send, invalidate the cached prototype, and retry once.
   const STALE_ANCHOR_MESSAGE = 'Block header not found';
   const isStaleAnchorError = (err: unknown): boolean => {

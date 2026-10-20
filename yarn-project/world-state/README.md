@@ -33,6 +33,30 @@ Once a new block is received, the synchronizer checks the uncommitted root value
 
 The interface to the Merkle Tree DB offers a unified asynchronous API to the set of trees available. Reads from the Merkle Trees need to be marked as to whether they should include uncommitted state. For this reason, the MerkleTreeReadOperationsFacade exists to abstract this detail away from the end consumer.
 
+### History retention
+
+`WS_HISTORY_RETENTION` (CLI: `--world-state-history-retention`) selects one history retention policy:
+
+- `rolling:N` retains the latest N finalized checkpoints and all newer state. The default is `rolling:64`.
+- `pinned:N` retains every block in checkpoint N and every later checkpoint permanently.
+- `archive` retains all history from genesis and disables history pruning.
+
+Rolling counts and pinned checkpoint numbers must be positive integers. Pruning preserves complete checkpoints and always
+retains the checkpoint containing the finalized tip. A future pin prunes to the finalized checkpoint until the pin is reached,
+then keeps that boundary fixed.
+
+Increasing a rolling window accumulates more history as the chain advances; it does not require an existing database or
+snapshot to contain that history already. Pinned and archive modes reject a database missing required history, including
+with `SYNC_MODE=force-snapshot`. Use a fresh world-state database to rebuild missing history.
+
+When bootstrapping a fresh database in pinned mode, snapshot sync tries compatible snapshots in checkpoint N or earlier,
+newest first. Snapshot block numbers are mapped to checkpoints using the archived metadata. Missing or incompatible
+snapshots are skipped. If none can be used, the node rebuilds from genesis. Archive mode starts from genesis unless a
+snapshot contains full history from genesis. `SYNC_MODE=full` always skips snapshot downloads.
+
+The former `WS_NUM_HISTORIC_CHECKPOINTS` and `WS_NUM_HISTORIC_BLOCKS` settings are removed. Replace positive values N with
+`WS_HISTORY_RETENTION=rolling:N`, and values below 1 with `WS_HISTORY_RETENTION=archive`.
+
 # Building/Testing
 
 Building the package is as simple as calling `yarn build` from the package root.
