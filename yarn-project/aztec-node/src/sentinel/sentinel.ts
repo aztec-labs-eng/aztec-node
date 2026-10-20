@@ -29,7 +29,11 @@ import {
   getSlotRangeForEpoch,
   getTimestampForSlot,
 } from '@aztec-labs/stdlib/epoch-helpers';
-import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import {
+  type CheckpointAttestation,
+  ConsensusPayload,
+  type CoordinationSignatureContext,
+} from '@aztec-labs/stdlib/p2p';
 import type {
   SingleValidatorStats,
   ValidatorStats,
@@ -71,8 +75,21 @@ type UnpublishedProposalClassification =
   | { status: 'checkpoint-orphaned'; reason: OrphanedProposalReason }
   | {
       status: 'checkpoint-valid';
-      reason: 'equivocation' | 'no-parent-data' | 'below-quorum' | 'unexpected-parent-appeared';
+      reason: 'equivocation' | 'no-proposal-data' | 'below-quorum' | 'unexpected-parent-appeared';
     };
+
+/**
+ * Whether the classification shows the proposal conflicts with a checkpoint that landed on L1, either in its parent's
+ * position or in its own. A validator that already held the landed checkpoint's blocks rejects the proposal's blocks as
+ * conflicting, so it is right not to attest.
+ */
+function excusesMissingAttestations(classification: UnpublishedProposalClassification | undefined): boolean {
+  return (
+    classification !== undefined &&
+    'reason' in classification &&
+    (classification.reason === 'parent-hash-mismatch' || classification.reason === 'unexpected-parent-appeared')
+  );
+}
 
 /** Maps a validator status to its category: proposer or attestation. */
 function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
@@ -546,7 +563,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *
    * Missing-attestor penalties apply only in cases 5 (including 5a and 5b) and 6, where the local
    * node has positive evidence the checkpoint was valid or has been canonicalised on L1, and never when
-   * an earlier slot took the proposal's checkpoint number.
+   * the proposal conflicts with a checkpoint that landed in its parent's position or its own.
    */
   protected async getSlotActivity(slot: SlotNumber, epoch: EpochNumber, proposer: EthAddress, committee: EthAddress[]) {
     this.logger.debug(`Computing stats for slot ${slot} at epoch ${epoch}`, { slot, epoch, proposer, committee });
@@ -579,7 +596,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     if (checkpoint) {
       status = 'checkpoint-mined';
     } else if (reexecutionOutcome === 'valid') {
-      classification = await this.classifyUnpublishedProposal(slot, proposer, committee, p2pAttestors);
+      classification = await this.classifyUnpublishedProposal(slot, proposer, committee, p2pAttested);
       status = classification.status;
     } else if (reexecutionOutcome === 'invalid') {
       status = 'checkpoint-invalid';
@@ -597,14 +614,9 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     // A local `invalid` verdict vetoes them even for a mined checkpoint (an honest validator refuses
     // to sign what it re-executed as invalid), and so does a proposal equivocation in the slot: with
     // two conflicting proposals an honest attestor may have seen an invalid one and correctly
-    // declined, so neither must count as a missed attestor (inactivity slashing). Nor does a proposal whose
-    // checkpoint number an earlier slot took: a validator that already held that slot's blocks rejects the
-    // proposal's blocks as conflicting, and is right to.
+    // declined, so neither must count as a missed attestor (inactivity slashing). Nor does a proposal that conflicts
+    // with a checkpoint that landed on L1 (see excusesMissingAttestations).
     const hasEquivocation = this.reexecutionTracker.hasEquivocation(slot);
-    const unexpectedParentAppeared =
-      classification !== undefined &&
-      'reason' in classification &&
-      classification.reason === 'unexpected-parent-appeared';
     const attestorsExpected =
       (status === 'checkpoint-mined' ||
         status === 'checkpoint-unpublished' ||
@@ -612,7 +624,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
         status === 'checkpoint-valid') &&
       reexecutionOutcome !== 'invalid' &&
       !hasEquivocation &&
-      !unexpectedParentAppeared;
+      !excusesMissingAttestations(classification);
     const missedAttestors = new Set(
       attestorsExpected
         ? committee.filter(v => !attestors.has(v.toString()) && !proposer.equals(v)).map(v => v.toString())
@@ -656,16 +668,19 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *  - `checkpoint-unpublished` (5a) when its parent is on L1 and a quorum of the committee attested, so the proposer
    *    had everything it needed to publish. A later slot that lands the same checkpoint number does not exempt it:
    *    that slot only got the number because this proposer failed to land it.
-   *  - `checkpoint-valid` (5) otherwise: the slot had an equivocation, the tracker has no parent data to judge by, or
-   *    attestations fell short of quorum. Short of quorum is a fault of the attestors, who are tagged
+   *  - `checkpoint-valid` (5) otherwise: the slot had an equivocation, the tracker has no parent or payload data to
+   *    judge by, or attestations fell short of quorum. Short of quorum is a fault of the attestors, who are tagged
    *    `attestation-missed`, except after an unexpected parent appeared (`unexpected-parent-appeared`), when
    *    refusing to attest was correct.
+   *
+   * Only attestations for the proposal's own payload count toward quorum, since those are the only ones its proposer
+   * could have published.
    */
   protected async classifyUnpublishedProposal(
     slot: SlotNumber,
     proposer: EthAddress,
     committee: EthAddress[],
-    p2pAttestors: EthAddress[],
+    p2pAttested: CheckpointAttestation[],
   ): Promise<UnpublishedProposalClassification> {
     if (this.reexecutionTracker.hasEquivocation(slot)) {
       return { status: 'checkpoint-valid', reason: 'equivocation' };
@@ -673,8 +688,9 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     const record = this.reexecutionTracker.getRecordForSlot(slot);
     const checkpointNumber = record?.checkpointNumber;
     const lastArchiveRoot = record?.lastArchiveRoot;
-    if (checkpointNumber === undefined || lastArchiveRoot === undefined) {
-      return { status: 'checkpoint-valid', reason: 'no-parent-data' };
+    const payloadHash = record?.payloadHash;
+    if (checkpointNumber === undefined || lastArchiveRoot === undefined || payloadHash === undefined) {
+      return { status: 'checkpoint-valid', reason: 'no-proposal-data' };
     }
 
     const logData = { slot, proposer: proposer.toString(), checkpointNumber };
@@ -704,7 +720,10 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     // The proposer's own attestation counts, as it does when its sequencer collects attestations for L1.
     const committeeMembers = new Set(committee.map(member => member.toString()));
     const attestationCount = new Set(
-      p2pAttestors.map(attestor => attestor.toString()).filter(attestor => committeeMembers.has(attestor)),
+      p2pAttested
+        .filter(attestation => attestation.getPayloadHash() === payloadHash)
+        .map(attestation => attestation.getSender()?.toString())
+        .filter(attestor => attestor !== undefined && committeeMembers.has(attestor)),
     ).size;
     const quorum = computeQuorum(committee.length);
 

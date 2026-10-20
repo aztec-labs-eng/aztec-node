@@ -1923,8 +1923,9 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
       });
 
-      // The sentinel judges a valid proposal that never landed by whether the parent it built on is on L1.
-      it('records the parent archive root of the evaluated proposal', async () => {
+      // The sentinel judges a valid proposal that never landed by whether the parent it built on is on L1, and by the
+      // attestations that signed this exact payload.
+      it('records the parent archive root and payload hash of the evaluated proposal', async () => {
         const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
         inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
         const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -1935,6 +1936,7 @@ describe('ProposalHandler checkpoint validation', () => {
           checkpointNumber: CheckpointNumber(1),
           archiveRoot: proposal.archive.toString(),
           lastArchiveRoot: header.lastArchiveRoot.toString(),
+          payloadHash: proposal.getPayloadHash(),
         });
       });
 

@@ -1,4 +1,4 @@
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { CheckpointReexecutionTracker } from './checkpoint_reexecution_tracker.js';
@@ -66,17 +66,19 @@ describe('CheckpointReexecutionTracker', () => {
     expect(tracker.getOutcomeForSlot(SlotNumber(99))).toBeUndefined();
   });
 
-  it('returns the full record for a slot, including the parent archive root', () => {
+  it('returns the full record for a slot, including the parent archive root and payload hash', () => {
     const slot = SlotNumber(42);
     const archive = Fr.random();
     const lastArchive = Fr.random();
-    tracker.recordOutcome(slot, archive, 'valid', CheckpointNumber(7), lastArchive);
+    const payloadHash = CheckpointProposalHash(Fr.random().toString());
+    tracker.recordOutcome(slot, archive, 'valid', CheckpointNumber(7), { lastArchiveRoot: lastArchive, payloadHash });
 
     expect(tracker.getRecordForSlot(slot)).toEqual({
       outcome: 'valid',
       checkpointNumber: CheckpointNumber(7),
       archiveRoot: archive.toString(),
       lastArchiveRoot: lastArchive.toString(),
+      payloadHash,
     });
     expect(tracker.getRecordForSlot(SlotNumber(43))).toBeUndefined();
   });

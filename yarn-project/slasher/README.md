@@ -214,7 +214,7 @@ Re-execution outcomes are read from the `CheckpointReexecutionTracker`, which th
 
 Each non-proposer committee member is assigned one of:
 - `attestation-sent` if their checkpoint attestation was seen on L1 or on the P2P network
-- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen, unless an earlier slot landed the proposal's checkpoint number
+- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen, unless a different checkpoint landed in the parent's position or an earlier slot landed the proposal's checkpoint number
 - none in any other case
 
 `blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot. `checkpoint-unpublished` and `checkpoint-orphaned` do not count toward inactivity yet: they are recorded in the sentinel's history and stats only.

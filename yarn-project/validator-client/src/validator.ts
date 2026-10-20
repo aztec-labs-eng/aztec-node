@@ -1053,6 +1053,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       archive,
       checkpointNumber,
       checkpointHeader.lastArchiveRoot,
+      newProposal.getPayloadHash(),
     );
     return newProposal;
   }

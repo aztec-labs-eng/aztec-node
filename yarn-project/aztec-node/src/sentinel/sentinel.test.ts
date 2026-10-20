@@ -429,7 +429,10 @@ describe('sentinel', () => {
 
       /** Records a valid outcome for the slot's proposal, built on the given parent archive root. */
       const recordValidProposal = (number: CheckpointNumber, lastArchiveRoot: Fr | undefined) =>
-        reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', number, lastArchiveRoot);
+        reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', number, {
+          lastArchiveRoot,
+          payloadHash: attestations[0].getPayloadHash(),
+        });
 
       beforeEach(async () => {
         parent = await Checkpoint.random(CheckpointNumber(checkpointNumber - 1), {
@@ -467,9 +470,12 @@ describe('sentinel', () => {
 
       it('flags checkpoint-orphaned when the landed parent has a different archive root (case 5b)', async () => {
         recordValidProposal(checkpointNumber, Fr.random());
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
 
         const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
         expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
+        // Validators holding the checkpoint that landed in the parent's place rightly refused to attest.
+        expect(activity[committee[3].toString()]).toBeUndefined();
       });
 
       // An earlier slot landing the same checkpoint number means the proposer built on the previous checkpoint before
@@ -525,6 +531,16 @@ describe('sentinel', () => {
         expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
         expect(activity[committee[2].toString()]).toEqual('attestation-missed');
         expect(activity[committee[3].toString()]).toEqual('attestation-missed');
+      });
+
+      // The pool holds the first attestation each signer sent for the slot, whatever it signed, and the proposer can
+      // only publish attestations for its own payload.
+      it('counts only attestations for the evaluated proposal toward quorum', async () => {
+        const otherProposalAttestation = makeCheckpointAttestation({ signer: signers[2], archive: Fr.random() });
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue([...attestations.slice(0, 2), otherProposalAttestation]);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
       });
 
       it('counts each committee member once toward quorum', async () => {

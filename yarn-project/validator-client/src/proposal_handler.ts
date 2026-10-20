@@ -579,15 +579,17 @@ export class ProposalHandler {
    * checkpoint ends at the bucket end its own sequencer resolved against the Inbox when it built the last block,
    * so the evidence exists — it was gathered while building rather than while validating.
    *
-   * `lastArchiveRoot` is the archive root of the parent checkpoint the proposal builds on.
+   * `lastArchiveRoot` is the archive root of the parent checkpoint the proposal builds on, and `payloadHash` the hash
+   * of the signed payload as broadcast, which is what attestors sign.
    */
   public recordOwnCheckpointProposalAsValid(
     slot: SlotNumber,
     archive: Fr,
     checkpointNumber: CheckpointNumber,
     lastArchiveRoot: Fr,
+    payloadHash: CheckpointProposalHash,
   ): void {
-    this.reexecutionTracker.recordOutcome(slot, archive, 'valid', checkpointNumber, lastArchiveRoot);
+    this.reexecutionTracker.recordOutcome(slot, archive, 'valid', checkpointNumber, { lastArchiveRoot, payloadHash });
   }
 
   /**
@@ -2026,13 +2028,10 @@ export class ProposalHandler {
         (result.checkpointNumber !== undefined &&
           this.reexecutionTracker.hasReexecuted(result.checkpointNumber, proposal.archive)));
     if (outcome !== undefined && !wouldForgetVerdict) {
-      this.reexecutionTracker.recordOutcome(
-        slot,
-        proposal.archive,
-        outcome,
-        result.checkpointNumber,
-        proposal.checkpointHeader.lastArchiveRoot,
-      );
+      this.reexecutionTracker.recordOutcome(slot, proposal.archive, outcome, result.checkpointNumber, {
+        lastArchiveRoot: proposal.checkpointHeader.lastArchiveRoot,
+        payloadHash,
+      });
     }
 
     // Drop tracker entries for checkpoints that have reached L1 finality.

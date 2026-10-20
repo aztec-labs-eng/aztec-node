@@ -1,4 +1,4 @@
-import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { CheckpointNumber, CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 /**
@@ -21,6 +21,16 @@ export type ReexecutionRecord = {
   archiveRoot?: string;
   /** Archive root of the parent checkpoint the proposal builds on, when known. */
   lastArchiveRoot?: string;
+  /** Hash of the evaluated proposal's signed payload, which its attestations sign. */
+  payloadHash?: CheckpointProposalHash;
+};
+
+/** Optional details of an evaluated checkpoint proposal, beyond what identifies it. */
+export type ReexecutionDetails = {
+  /** Archive root of the parent checkpoint the proposal builds on (the checkpoint header's `lastArchiveRoot`). */
+  lastArchiveRoot?: Fr;
+  /** Hash of the proposal's signed payload. */
+  payloadHash?: CheckpointProposalHash;
 };
 
 /**
@@ -41,6 +51,7 @@ interface Entry {
   checkpointNumber: CheckpointNumber | undefined;
   archiveRoot: string | undefined;
   lastArchiveRoot: string | undefined;
+  payloadHash: CheckpointProposalHash | undefined;
   outcome: ReexecutionOutcome | undefined;
 
   slot: SlotNumber;
@@ -65,16 +76,15 @@ export class CheckpointReexecutionTracker {
    * @param outcome - Outcome of evaluation.
    * @param checkpointNumber - Checkpoint number, if known. Required for `valid` outcomes; optional
    *   for `invalid`/`unvalidated` because some early rejections fire before blocks are loaded.
-   * @param lastArchiveRoot - Archive root of the parent checkpoint the proposal builds on (the checkpoint header's
-   *   `lastArchiveRoot`), if known. Lets the sentinel tell whether a valid proposal that never landed was built on a
-   *   parent that is on L1.
+   * @param details - The proposal's parent archive root and payload hash, if known. They let the sentinel tell whether
+   *   a valid proposal that never landed was built on a parent that is on L1, and count only the attestations for it.
    */
   public recordOutcome(
     slot: SlotNumber,
     archiveRoot: Fr,
     outcome: ReexecutionOutcome,
     checkpointNumber?: CheckpointNumber,
-    lastArchiveRoot?: Fr,
+    details: ReexecutionDetails = {},
   ): void {
     const archiveRootStr = archiveRoot.toString();
 
@@ -83,7 +93,8 @@ export class CheckpointReexecutionTracker {
     const entry: Entry = {
       checkpointNumber,
       archiveRoot: archiveRootStr,
-      lastArchiveRoot: lastArchiveRoot?.toString(),
+      lastArchiveRoot: details.lastArchiveRoot?.toString(),
+      payloadHash: details.payloadHash,
       slot,
       outcome,
       txsCollected: existing?.txsCollected ?? new Map(),
@@ -121,6 +132,7 @@ export class CheckpointReexecutionTracker {
         checkpointNumber: undefined,
         archiveRoot: undefined,
         lastArchiveRoot: undefined,
+        payloadHash: undefined,
         slot,
         outcome: undefined,
         txsCollected: new Map(),
@@ -143,6 +155,7 @@ export class CheckpointReexecutionTracker {
         checkpointNumber: undefined,
         archiveRoot: undefined,
         lastArchiveRoot: undefined,
+        payloadHash: undefined,
         slot,
         outcome: undefined,
         txsCollected: new Map(),
@@ -182,6 +195,7 @@ export class CheckpointReexecutionTracker {
       checkpointNumber: entry.checkpointNumber,
       archiveRoot: entry.archiveRoot,
       lastArchiveRoot: entry.lastArchiveRoot,
+      payloadHash: entry.payloadHash,
     };
   }
 
