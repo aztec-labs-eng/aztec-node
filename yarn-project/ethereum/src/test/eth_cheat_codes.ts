@@ -195,11 +195,9 @@ export class EthCheatCodes {
   /**
    * Mines a single block with evm_mine
    */
-  public async evmMine(opts: { silent?: boolean } = {}): Promise<void> {
+  public async evmMine(): Promise<void> {
     await this.withMiningLock(() => this.doEvmMine());
-    if (!opts.silent) {
-      this.logger.warn(`Mined 1 L1 block with evm_mine`);
-    }
+    this.logger.warn(`Mined 1 L1 block with evm_mine`);
   }
 
   private async doEvmMine(): Promise<void> {
