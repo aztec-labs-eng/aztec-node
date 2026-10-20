@@ -59,7 +59,7 @@ describe('Discv5RateLimiter', () => {
       globalQuota: { maxTokens: 1_000, replenishAllEvery: 3_600_000 },
     };
 
-    it('ends a reply exemption after it expires', () => {
+    it('ends a reply exemption after a full expiry with no packets', () => {
       const limiter = new Discv5RateLimiter(slowOpts);
       expect(countAllowed(limiter, ip, 3)).toBe(2);
 
@@ -75,6 +75,27 @@ describe('Discv5RateLimiter', () => {
 
       limiter.addExpectedResponse(ip);
       expect(countAllowed(limiter, ip, 100)).toBe(16);
+    });
+
+    it('keeps a reply exemption alive while reply packets keep arriving, until its allowance is spent', () => {
+      const limiter = new Discv5RateLimiter(slowOpts);
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      limiter.addExpectedResponse(ip);
+      for (let i = 0; i < 16; i++) {
+        jest.advanceTimersByTime(9_999);
+        expect(limiter.allowEncodedPacket(ip)).toBe(true);
+      }
+      jest.advanceTimersByTime(9_999);
+      expect(limiter.allowEncodedPacket(ip)).toBe(false);
+    });
+
+    it('caps the packet allowance granted by the first request', () => {
+      const limiter = new Discv5RateLimiter(slowOpts, { maxExpectedResponseAllowance: 2 });
+      expect(countAllowed(limiter, ip, 3)).toBe(2);
+
+      limiter.addExpectedResponse(ip);
+      expect(countAllowed(limiter, ip, 20)).toBe(2);
     });
 
     it('extends a reply exemption with each new request to the IP', () => {

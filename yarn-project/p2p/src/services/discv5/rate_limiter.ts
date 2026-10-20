@@ -10,7 +10,7 @@ type Quota = Discv5RateLimiterOpts['byIPQuota'];
 export type Discv5RateLimiterBounds = {
   /** Number of source IPs whose packet budget, and separately whose reply exemption, is tracked at once. */
   maxTrackedIps: number;
-  /** Time in ms a reply exemption lasts after the latest request to that IP. */
+  /** Time in ms a reply exemption lasts after the latest request to that IP or the latest packet it admitted. */
   expectedResponseTtlMs: number;
   /** Packets admitted without budget per request sent to an IP. */
   expectedResponseAllowance: number;
@@ -32,15 +32,15 @@ type ExpectedResponse = {
   outstanding: number;
   /** Exempt packets left. */
   allowance: number;
-  /** Time, in ms since the limiter was created, at which the exemption ends. */
+  /** Time, in ms since the limiter was created, at which the exemption ends unless renewed. */
   expiresAt: number;
 };
 
 /**
  * Packet rate limiter for the discv5 UDP transport, consulted for every incoming datagram before it is decoded.
  *
- * Replies to our own requests are admitted without budget, up to a small packet allowance per request and for a short
- * time after it. Any other packet must fit the budget of its source IP and then the aggregate budget, and is dropped
+ * Replies to our own requests are admitted without budget, up to a small packet allowance per request, until a short
+ * time passes with neither a new request nor a reply packet. Any other packet must fit the budget of its source IP and then the aggregate budget, and is dropped
  * otherwise. No source is ever banned: an over-limit source is admitted again as its budget refills.
  *
  * Per-IP budgets and reply exemptions are each kept for a bounded number of IPs, evicting the least recently seen one.
@@ -109,7 +109,8 @@ export class Discv5RateLimiter implements TransportRateLimiter {
     const expiresAt = now + this.bounds.expectedResponseTtlMs;
     const entry = this.expectedResponses.get(ip);
     if (entry === undefined || now >= entry.expiresAt) {
-      this.expectedResponses.set(ip, { outstanding: 1, allowance: this.bounds.expectedResponseAllowance, expiresAt });
+      const allowance = Math.min(this.bounds.expectedResponseAllowance, this.bounds.maxExpectedResponseAllowance);
+      this.expectedResponses.set(ip, { outstanding: 1, allowance, expiresAt });
       return;
     }
     entry.outstanding++;
@@ -146,6 +147,8 @@ export class Discv5RateLimiter implements TransportRateLimiter {
       return false;
     }
     entry.allowance--;
+    // A multi-packet reply keeps the exemption alive; the allowance still bounds what it admits.
+    entry.expiresAt = Math.max(entry.expiresAt, now + this.bounds.expectedResponseTtlMs);
     return true;
   }
 
