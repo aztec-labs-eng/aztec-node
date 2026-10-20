@@ -6,6 +6,7 @@ import { Discv5 } from '@nethermindeth/discv5';
 
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES } from '../config.js';
 import { getDiscv5RateLimiterDefaultConfig } from '../services/discv5/config.js';
+import { Discv5RateLimiter } from '../services/discv5/rate_limiter.js';
 import { BootstrapNode } from './bootstrap.js';
 
 describe('BootstrapNode', () => {
@@ -71,6 +72,7 @@ describe('BootstrapNode', () => {
     try {
       await bootNode.start(config);
       const limiter = (bootNode as any).node.sessionService.transport.rateLimiter;
+      expect(limiter).toBeInstanceOf(Discv5RateLimiter);
       const allowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket('203.0.113.1'));
       expect(allowed.filter(Boolean).length).toBe(7);
     } finally {

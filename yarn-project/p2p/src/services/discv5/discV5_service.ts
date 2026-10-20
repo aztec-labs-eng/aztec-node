@@ -6,7 +6,7 @@ import { type ComponentsVersions, checkCompressedComponentVersion } from '@aztec
 import { OtelMetricsAdapter, type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
-import { Discv5, type Discv5EventEmitter, type IDiscv5CreateOptions } from '@nethermindeth/discv5';
+import { Discv5, type Discv5EventEmitter, type IDiscv5CreateOptions, UDPTransportService } from '@nethermindeth/discv5';
 import { ENR, SignableENR } from '@nethermindeth/enr';
 import { Buffer } from 'buffer';
 import EventEmitter from 'events';
@@ -18,6 +18,7 @@ import { convertToMultiaddr } from '../../util.js';
 import { type PeerDiscoveryService, PeerDiscoveryState } from '../service.js';
 import { getDiscv5RateLimiterOpts } from './config.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
+import { Discv5RateLimiter } from './rate_limiter.js';
 
 const delayBeforeStart = 2000; // 2sec
 
@@ -115,6 +116,11 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
     ));
 
     const metricsRegistry = new OtelMetricsAdapter(telemetry, this.logger.getBindings());
+    const transport = new UDPTransportService({
+      bindAddrs,
+      nodeId: this.enr.nodeId,
+      rateLimiter: new Discv5RateLimiter(getDiscv5RateLimiterOpts(config)),
+    });
     this.discv5 = Discv5.create({
       enr: this.enr,
       peerId,
@@ -128,7 +134,7 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
         ...configOverrides.config,
       },
       metricsRegistry,
-      rateLimiterOpts: getDiscv5RateLimiterOpts(config),
+      transport,
     });
 
     // Hook onto the onEstablished method to check the peer's version from the ENR,

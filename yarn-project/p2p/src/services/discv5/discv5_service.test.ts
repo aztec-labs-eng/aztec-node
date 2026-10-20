@@ -19,6 +19,7 @@ import { PeerDiscoveryState } from '../service.js';
 import { getDiscv5RateLimiterDefaultConfig } from './config.js';
 import { DiscV5Service } from './discV5_service.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
+import { Discv5RateLimiter } from './rate_limiter.js';
 
 /**
  * Runs discovery queries on all nodes until the condition is met or timeout expires.
@@ -448,12 +449,13 @@ describe('Discv5Service', () => {
 
   const testPackageVersion = 'test-discv5-service';
   it('rate-limits unsolicited discovery packets per source IP while exempting expected responses', async () => {
-    // Regression guard: without rateLimiterOpts the transport limiter is undefined and every
-    // unauthenticated packet reaches decode. Assert it is wired.
+    // Regression guard: without a limiter on the transport every unauthenticated packet reaches
+    // decode. Assert ours is wired on both the node and the bootnode.
     const node = await createNode();
     const transport = (node as any).discv5.sessionService.transport;
     const limiter = transport.rateLimiter;
-    expect(limiter).toBeDefined();
+    expect(limiter).toBeInstanceOf(Discv5RateLimiter);
+    expect((bootNode as any).node.sessionService.transport.rateLimiter).toBeInstanceOf(Discv5RateLimiter);
 
     // A single source gets a bounded burst, then is refused.
     const attackerIp = '203.0.113.1';
@@ -509,6 +511,49 @@ describe('Discv5Service', () => {
     // The attacker spent 7 of the 20 aggregate tokens, so fresh sources share the remaining 13.
     const freshIps = Array.from({ length: 20 }, (_, i) => `198.51.100.${i + 1}`);
     expect(freshIps.filter(ip => limiter.allowEncodedPacket(ip)).length).toBe(13);
+  });
+
+  describe('after a burst from one source', () => {
+    const replenishMs = 3_600_000;
+    const ip = '198.51.100.9';
+
+    const createBurstNode = async () => {
+      // Replenish far slower than the test runs so the burst count is exact.
+      const node = await createNode({
+        discv5RateLimitPerIpMaxTokens: 300,
+        discv5RateLimitPerIpReplenishMs: replenishMs,
+        discv5RateLimitGlobalMaxTokens: 6_000,
+        discv5RateLimitGlobalReplenishMs: replenishMs,
+      });
+      const sessionService = (node as any).discv5.sessionService;
+      const limiter = sessionService.transport.rateLimiter;
+      const burst = Array.from({ length: 301 }, () => limiter.allowEncodedPacket(ip));
+      expect(burst.filter(Boolean).length).toBe(300);
+      return { sessionService, limiter };
+    };
+
+    it('admits expected responses after a burst', async () => {
+      const { sessionService, limiter } = await createBurstNode();
+      const addr = multiaddr(`/ip4/${ip}/udp/30303`);
+
+      sessionService.addExpectedResponse(addr);
+      expect(limiter.allowEncodedPacket(ip)).toBe(true);
+      sessionService.removeExpectedResponse(addr);
+      expect(limiter.allowEncodedPacket(ip)).toBe(false);
+    });
+
+    it('admits unsolicited packets again once the budget refills', async () => {
+      const { limiter } = await createBurstNode();
+      expect(limiter.allowEncodedPacket(ip)).toBe(false);
+
+      const now = Date.now();
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now + replenishMs);
+      try {
+        expect(limiter.allowEncodedPacket(ip)).toBe(true);
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
   });
 
   it('refuses to start with a non-positive rate limit', async () => {
