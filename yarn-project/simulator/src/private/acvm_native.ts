@@ -50,7 +50,7 @@ const WITNESS_NAME = 'output-witness';
  * Flags a Node system error (one carrying `syscall`, such as ENOSPC or EMFILE) as retryable, since the machine failed
  * rather than the circuit. Any other error, such as a malformed return value, is returned untouched.
  */
-function markSystemErrorRetryable(err: unknown): unknown {
+export function markSystemErrorRetryable(err: unknown): unknown {
   if (typeof err === 'object' && err !== null && 'syscall' in err && !('retry' in err)) {
     Object.assign(err, { retry: true });
   }
