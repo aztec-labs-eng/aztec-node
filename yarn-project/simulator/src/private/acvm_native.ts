@@ -46,6 +46,17 @@ const EMPTY_DEBUG_SYMBOLS = 'q1ZKSU0qTY/PzEvLL1ayio6tBQA=';
 const PROVER_FILE = 'Prover.json';
 const WITNESS_NAME = 'output-witness';
 
+/**
+ * Flags a Node system error (one carrying `syscall`, such as ENOSPC or EMFILE) as retryable, since the machine failed
+ * rather than the circuit. Any other error, such as a malformed return value, is returned untouched.
+ */
+function markSystemErrorRetryable(err: unknown): unknown {
+  if (typeof err === 'object' && err !== null && 'syscall' in err && !('retry' in err)) {
+    Object.assign(err, { retry: true });
+  }
+  return err;
+}
+
 export class NativeACVMSimulator implements CircuitSimulator {
   private logger: Logger;
   /**
@@ -69,6 +80,44 @@ export class NativeACVMSimulator implements CircuitSimulator {
     callback: ForeignCallHandler | undefined,
   ): Promise<ProtocolCircuitResult<ReturnType>> {
     this.rejectForeignCalls(callback);
+    try {
+      return await this.runProtocolCircuit<ReturnType>(inputs, artifact);
+    } catch (err) {
+      throw markSystemErrorRetryable(err);
+    }
+  }
+
+  async executeProtocolCircuitToWitness(
+    input: ACVMWitness,
+    artifact: NoirCompiledCircuitWithName,
+    callback: ForeignCallHandler | undefined,
+  ): Promise<ACVMSuccess> {
+    this.rejectForeignCalls(callback);
+    try {
+      return await this.runProtocolCircuitToWitness(input, artifact);
+    } catch (err) {
+      throw markSystemErrorRetryable(err);
+    }
+  }
+
+  executeUserCircuit(
+    _input: ACVMWitness,
+    _artifact: FunctionArtifactWithContractName,
+    _callback: ACIRCallback,
+  ): Promise<ACIRExecutionResult> {
+    throw new Error('Not implemented');
+  }
+
+  private rejectForeignCalls(callback: ForeignCallHandler | undefined) {
+    if (callback) {
+      throw new Error('Native ACVM simulator does not support foreign calls. Ignoring callback.');
+    }
+  }
+
+  private async runProtocolCircuit<ReturnType>(
+    inputs: InputMap,
+    artifact: NoirCompiledCircuitWithName,
+  ): Promise<ProtocolCircuitResult<ReturnType>> {
     const artifactPath = await this.getArtifactPath(artifact);
 
     return await runInDirectory(
@@ -96,12 +145,10 @@ export class NativeACVMSimulator implements CircuitSimulator {
     );
   }
 
-  async executeProtocolCircuitToWitness(
+  private async runProtocolCircuitToWitness(
     input: ACVMWitness,
     artifact: NoirCompiledCircuitWithName,
-    callback: ForeignCallHandler | undefined,
   ): Promise<ACVMSuccess> {
-    this.rejectForeignCalls(callback);
     const artifactPath = await this.getArtifactPath(artifact);
 
     return await runInDirectory(
@@ -128,21 +175,11 @@ export class NativeACVMSimulator implements CircuitSimulator {
     );
   }
 
-  executeUserCircuit(
-    _input: ACVMWitness,
-    _artifact: FunctionArtifactWithContractName,
-    _callback: ACIRCallback,
-  ): Promise<ACIRExecutionResult> {
-    throw new Error('Not implemented');
-  }
-
-  private rejectForeignCalls(callback: ForeignCallHandler | undefined) {
-    if (callback) {
-      throw new Error('Native ACVM simulator does not support foreign calls. Ignoring callback.');
-    }
-  }
-
-  /** Spawns `noir-execute`, resolving once the circuit has been solved. */
+  /**
+   * Spawns `noir-execute`, resolving once the circuit has been solved. A child that could not start or was killed by
+   * a signal (such as the OOM killer's SIGKILL) rejects as retryable; a child that exits with a code rejects as
+   * permanent, since that is how `noir-execute` reports a circuit that cannot be solved for these inputs.
+   */
   private run(artifactPath: string, proverFile: string, directory: string, saveWitness: boolean): Promise<void> {
     const args = [
       'execute',
@@ -166,13 +203,27 @@ export class NativeACVMSimulator implements CircuitSimulator {
         errChunks.push(data);
         errLen += data.length;
       });
-      child.on('error', reject);
-      child.on('close', code => {
+      let spawnFailed = false;
+      child.on('error', err => {
+        spawnFailed = true;
+        reject(
+          Object.assign(new Error(`Failed to spawn noir-execute: ${err.message}`, { cause: err }), { retry: true }),
+        );
+      });
+      child.on('close', (code, signal) => {
+        // A child that failed to spawn can still emit `close`; the spawn error already describes the failure.
+        if (spawnFailed) {
+          return;
+        }
         if (code === 0) {
           resolve();
+          return;
+        }
+        const stderr = Buffer.concat(errChunks, errLen).toString('utf-8');
+        this.logger.error(`From noir-execute: ${stderr}`, { code, signal });
+        if (signal) {
+          reject(Object.assign(new Error(`noir-execute was killed by ${signal}: ${stderr}`), { retry: true }));
         } else {
-          const stderr = Buffer.concat(errChunks, errLen).toString('utf-8');
-          this.logger.error(`From noir-execute: ${stderr}`);
           reject(new Error(`Failed to generate witness: ${stderr}`));
         }
       });

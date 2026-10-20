@@ -39,7 +39,7 @@ import {
 } from '@aztec-labs/noir-protocol-circuits-types/server';
 import { ServerCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-circuits-types/types';
-import { NativeACVMSimulator } from '@aztec-labs/simulator/server';
+import { NativeACVMSimulator, type ProtocolCircuitResult } from '@aztec-labs/simulator/server';
 import type { AvmCircuitInputs, AvmCircuitPublicInputs } from '@aztec-labs/stdlib/avm';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 import {
@@ -409,12 +409,18 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     logger.debug(`Generating witness data for ${circuitType}`);
 
     const foreignCallHandler = undefined;
-    const witnessResult = await simulator.executeProtocolCircuit<Return>(
-      convertInput(input),
-      artifact,
-      foreignCallHandler,
-    );
-    const output = convertOutput(witnessResult.returnValue);
+    let witnessResult: ProtocolCircuitResult<Return>;
+    let output: Output;
+    let witness: Uint8Array;
+    try {
+      witnessResult = await simulator.executeProtocolCircuit<Return>(convertInput(input), artifact, foreignCallHandler);
+      output = convertOutput(witnessResult.returnValue);
+      // Read and decompress the witness for bb.js
+      witness = ungzip(await fs.readFile(outputWitnessFile));
+    } catch (error) {
+      // A crashed or unspawnable noir-execute is retryable; a circuit that cannot be solved for these inputs is not.
+      throw new ProvingError(`Failed to generate witness for ${circuitType}: ${error}`, error, isRetryableError(error));
+    }
 
     const circuitName = mapProtocolArtifactNameToCircuitName(circuitType);
     this.instrumentation.recordDuration('witGenDuration', circuitName, witnessResult.duration);
@@ -428,10 +434,6 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       outputSize: output.toBuffer().length,
       eventName: 'circuit-witness-generation',
     } satisfies CircuitWitnessGenerationStats);
-
-    // Read and decompress the witness for bb.js
-    const witnessGz = await fs.readFile(outputWitnessFile);
-    const witness = ungzip(witnessGz);
 
     // Decompress bytecode for bb.js
     const bytecode = ungzip(Buffer.from(artifact.bytecode, 'base64'));

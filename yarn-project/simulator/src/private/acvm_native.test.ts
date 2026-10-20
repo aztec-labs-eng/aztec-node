@@ -1,3 +1,4 @@
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import { jest } from '@jest/globals';
 import { promises as fs } from 'fs';
@@ -92,6 +93,68 @@ describe('NativeACVMSimulator', () => {
         name.endsWith('.tmp'),
       );
       expect(leftovers).toEqual([]);
+    });
+  });
+
+  describe('failure classification', () => {
+    /** Writes an executable shell script standing in for `noir-execute`, which receives the prover file as `$5`. */
+    async function makeNoirExecute(body: string): Promise<string> {
+      const scriptPath = path.join(workingDirectory, 'noir-execute.sh');
+      await fs.writeFile(scriptPath, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      return scriptPath;
+    }
+
+    async function executeWith(pathToNoirExecute: string): Promise<unknown> {
+      const simulator = new NativeACVMSimulator(workingDirectory, pathToNoirExecute);
+      try {
+        await simulator.executeProtocolCircuit({}, artifact, undefined);
+      } catch (err) {
+        return err;
+      }
+      throw new Error('Expected the execution to fail');
+    }
+
+    it('retries a child killed by a signal', async () => {
+      const err = await executeWith(await makeNoirExecute('kill -9 $$'));
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain('SIGKILL');
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    it('retries a binary that cannot be spawned', async () => {
+      const err = await executeWith(path.join(workingDirectory, 'missing-noir-execute'));
+      expect(err).toBeInstanceOf(Error);
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    it('does not retry a circuit that fails to solve', async () => {
+      const err = await executeWith(
+        await makeNoirExecute(`echo "Failed to solve program: 'Cannot satisfy constraint'" >&2\nexit 1`),
+      );
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain('Cannot satisfy constraint');
+      expect(isRetryableError(err)).toBe(false);
+    });
+
+    it('retries a failure to write the inputs to disk', async () => {
+      const writeFile = fs.writeFile.bind(fs);
+      jest.spyOn(fs, 'writeFile').mockImplementation((file, data, options) => {
+        if (typeof file === 'string' && file.endsWith('Prover.json')) {
+          return Promise.reject(
+            Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC', syscall: 'write' }),
+          );
+        }
+        return writeFile(file, data, options);
+      });
+
+      const err = await executeWith(await makeNoirExecute('exit 0'));
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    it('does not retry a malformed return value', async () => {
+      const err = await executeWith(await makeNoirExecute('echo "not json" > "$5"'));
+      expect(err).toBeInstanceOf(SyntaxError);
+      expect(isRetryableError(err)).toBe(false);
     });
   });
 });
