@@ -1,7 +1,6 @@
 import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
 import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
-import type { ConfigMappingsType } from '@aztec-labs/foundation/config';
-import { getEnv } from '@aztec-labs/foundation/config/env';
+import { type ConfigMappingsType, getValueFromEnvWithFallback } from '@aztec-labs/foundation/config';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import type { ProverConfig } from '@aztec-labs/stdlib/interfaces/server';
@@ -144,35 +143,8 @@ export function formatHelpLine(
   return `${chalk.cyan(paddedOption)}${chalk.yellow(paddedDefault)}${chalk.green(envVar)}`;
 }
 
-const getDefaultOrEnvValue = (opt: AztecStartOption) => {
-  let val;
-
-  // if the option is set in the environment, use that
-  if (opt.env) {
-    val = getEnv()[opt.env];
-  }
-
-  // if we have fallback env vars, check those
-  if (!val && opt.fallback && opt.fallback.length > 0) {
-    for (const fallback of opt.fallback) {
-      val = getEnv()[fallback];
-      if (val) {
-        break;
-      }
-    }
-  }
-
-  // if we have a value, optionally parse it and return
-  if (val) {
-    if (opt.parseVal) {
-      return opt.parseVal(val);
-    }
-    return val;
-  } else if (opt.defaultValue !== undefined) {
-    return opt.defaultValue;
-  }
-  return undefined;
-};
+const getDefaultOrEnvValue = (opt: AztecStartOption) =>
+  getValueFromEnvWithFallback(opt.env, opt.parseVal, opt.defaultValue, opt.fallback, opt.deprecatedFallback);
 
 // Function to add options dynamically
 export const addOptions = (cmd: Command, options: AztecStartOption[]) => {

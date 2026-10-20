@@ -24,7 +24,12 @@ export interface ConfigMapping<T> {
    * List of deprecated env vars that are still supported but will log a warning.
    * These should also be included in the fallback array for parsing.
    */
-  deprecatedFallback?: { env: EnvVar; message?: string }[];
+  deprecatedFallback?: {
+    env: EnvVar;
+    message?: string;
+    /** Convert a legacy value to the syntax accepted by parseEnv. */
+    transform?: (value: string) => string;
+  }[];
 }
 
 export function isBooleanConfigValue<T>(obj: T, key: keyof T): boolean {
@@ -43,6 +48,7 @@ export type ConfigMappingsType<T> = {
  * @param fallback - Optional array of fallback environment variable names
  * @param parseFunc - Optional function to parse the environment variable value
  * @param defaultValue - Optional default value to use if no environment variable is set
+ * @param deprecatedFallback - Deprecated aliases, with optional value migrations
  * @returns The parsed value from environment variables or the default value
  */
 export function getValueFromEnvWithFallback<T>(
@@ -50,6 +56,7 @@ export function getValueFromEnvWithFallback<T>(
   parseFunc: ((val: string) => T) | undefined,
   defaultValue: T | undefined,
   fallback?: EnvVar[],
+  deprecatedFallback?: ConfigMapping<T>['deprecatedFallback'],
 ): T | undefined {
   let value: string | undefined;
 
@@ -59,13 +66,23 @@ export function getValueFromEnvWithFallback<T>(
   }
 
   // If primary not found, try fallbacks
-  if (value === undefined && fallback && fallback.length > 0) {
+  if (!value && fallback && fallback.length > 0) {
     for (const fallbackEnv of fallback) {
       const fallbackVal = getEnv()[fallbackEnv];
-      if (fallbackVal !== undefined) {
-        value = fallbackVal;
+      if (fallbackVal !== undefined && fallbackVal !== '') {
+        const transform = deprecatedFallback?.find(entry => entry.env === fallbackEnv)?.transform;
+        value = transform?.(fallbackVal) ?? fallbackVal;
         break;
       }
+    }
+  }
+
+  for (const { env: deprecatedEnv, message } of deprecatedFallback ?? []) {
+    if (getEnv()[deprecatedEnv]) {
+      createConsoleLogger('[DEPRECATED]')(
+        message ?? `Environment variable ${deprecatedEnv} is deprecated. Please use ${env} instead.`,
+        { deprecatedEnvVar: deprecatedEnv, newEnvVar: env },
+      );
     }
   }
 
@@ -84,20 +101,9 @@ export function getConfigFromMappings<T>(configMappings: ConfigMappingsType<T>):
   for (const key in configMappings) {
     const { env, parseEnv, defaultValue, fallback, deprecatedFallback } = configMappings[key];
     try {
-      (config as any)[key] = getValueFromEnvWithFallback(env, parseEnv, defaultValue, fallback);
+      (config as any)[key] = getValueFromEnvWithFallback(env, parseEnv, defaultValue, fallback, deprecatedFallback);
     } catch (e: any) {
       throw new Error(`Failed to parse config '${key}' (env: ${env ?? 'none'}): ${e.message}`);
-    }
-
-    if (deprecatedFallback?.length) {
-      const userLog = createConsoleLogger('[DEPRECATED]');
-      for (const { env: deprecatedEnv, message } of deprecatedFallback) {
-        if (getEnv()[deprecatedEnv]) {
-          const warningMessage =
-            message ?? `Environment variable ${deprecatedEnv} is deprecated. Please use ${env} instead.`;
-          userLog(warningMessage, { deprecatedEnvVar: deprecatedEnv, newEnvVar: env });
-        }
-      }
     }
   }
 
