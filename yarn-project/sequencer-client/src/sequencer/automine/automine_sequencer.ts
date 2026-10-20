@@ -43,6 +43,7 @@ import {
   getEndpointUpperBound,
   resolveEndpoint,
 } from '../inbox_message_selection.js';
+import { mineSentTx } from './mine_sent_tx.js';
 
 /**
  * L1 rollup constants needed by the AutomineSequencer. Same as SequencerRollupConstants
@@ -587,7 +588,7 @@ export class AutomineSequencer {
     // Anvil mining is paused, so the propose is mined by hand once sent, at the pinned slot-start timestamp, together
     // with any unrelated L1 txs that queued up during the build.
     const result = await publisher.sendRequests(SlotNumber(targetSlot), {
-      onTxSent: () => this.deps.ethCheatCodes.evmMine({ silent: true }),
+      onTxSent: txHash => mineSentTx(this.deps.ethCheatCodes, txHash, this.log),
     });
 
     const proposeSucceeded = !!result?.successfulActions?.some(action => action === 'propose');
