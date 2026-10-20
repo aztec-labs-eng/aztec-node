@@ -12,6 +12,8 @@ import { mnemonicToAccount } from 'viem/accounts';
 export async function sequencers(opts: {
   command: 'list' | 'add' | 'remove' | 'who-next' | 'flush';
   who?: string;
+  /** Address that receives the withdrawn stake. Required for `remove`. */
+  recipient?: string;
   mnemonic?: string;
   bn254SecretKey?: bigint;
   nodeUrl: string;
@@ -19,7 +21,10 @@ export async function sequencers(opts: {
   chainId: number;
   log: LogFn;
 }) {
-  const { command, who: maybeWho, mnemonic, bn254SecretKey, nodeUrl, l1RpcUrls, chainId, log } = opts;
+  const { command, who: maybeWho, recipient, mnemonic, bn254SecretKey, nodeUrl, l1RpcUrls, chainId, log } = opts;
+  if (command === 'remove' && !recipient) {
+    throw new Error(`Missing --recipient: the address that receives the withdrawn stake`);
+  }
   const client = createAztecNodeClient(nodeUrl);
   const { l1ContractAddresses } = await client.getNodeInfo();
 
@@ -109,8 +114,8 @@ export async function sequencers(opts: {
     if (!who || !writeableRollup) {
       throw new Error(`Missing sequencer address`);
     }
-    log(`Removing ${who} as sequencer`);
-    const hash = await writeableRollup.write.initiateWithdraw([who, who]);
+    log(`Removing ${who} as sequencer, withdrawing its stake to ${recipient}`);
+    const hash = await writeableRollup.write.initiateWithdraw([who, recipient as `0x${string}`]);
     await publicClient.waitForTransactionReceipt({ hash });
     log(`Removed in tx ${hash}`);
   } else if (command === 'who-next') {
