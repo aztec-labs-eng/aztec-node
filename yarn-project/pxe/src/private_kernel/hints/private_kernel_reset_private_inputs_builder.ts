@@ -42,11 +42,11 @@ import {
 import { type PrivateCallExecutionResult, collectNested } from '@aztec-labs/stdlib/tx';
 import { VkData } from '@aztec-labs/stdlib/vks';
 
-import type { PrivateKernelOracle } from '../private_kernel_oracle.js';
+import type { PrivateKernelInputsProvider } from '../private_kernel_inputs_provider.js';
 
-function getNullifierMembershipWitnessResolver(oracle: PrivateKernelOracle) {
+function getNullifierMembershipWitnessResolver(inputsProvider: PrivateKernelInputsProvider) {
   return async (nullifier: Fr) => {
-    const res = await oracle.getNullifierMembershipWitness(nullifier);
+    const res = await inputsProvider.getNullifierMembershipWitness(nullifier);
     if (!res) {
       throw new Error(`Cannot find the leaf for nullifier ${nullifier}.`);
     }
@@ -65,12 +65,12 @@ async function getMasterSecretKeysAndKeyTypeDomainSeparators(
     typeof MAX_KEY_VALIDATION_REQUESTS_PER_TX
   >,
   numRequestsToVerify: number,
-  oracle: PrivateKernelOracle,
+  inputsProvider: PrivateKernelInputsProvider,
 ) {
   const numRequestsToProcess = Math.min(keyValidationRequests.claimedLength, numRequestsToVerify);
   const keysHints = await allToCompletion(
     keyValidationRequests.array.slice(0, numRequestsToProcess).map(async ({ request }) => {
-      const secretKeys = await oracle.getMasterSecretKey(request.request.pkMHash);
+      const secretKeys = await inputsProvider.getMasterSecretKey(request.request.pkMHash);
       return new KeyValidationHint(secretKeys);
     }),
   );
@@ -129,7 +129,7 @@ export class PrivateKernelResetPrivateInputsBuilder {
     }
   }
 
-  async build(oracle: PrivateKernelOracle) {
+  async build(inputsProvider: PrivateKernelInputsProvider) {
     if (privateKernelResetDimensionNames.every(name => !this.requestedDimensions[name])) {
       throw new Error('Reset is not required.');
     }
@@ -170,12 +170,12 @@ export class PrivateKernelResetPrivateInputsBuilder {
     // Execute all the expensive node querying operations in parallel.
     const [previousVkMembershipWitness, noteHashReadRequestHints, nullifierReadRequestHints, keyValidationHints] =
       await allToCompletion([
-        oracle.getVkMembershipWitness(this.previousKernelOutput.verificationKey.keyAsFields),
+        inputsProvider.getVkMembershipWitness(this.previousKernelOutput.verificationKey.keyAsFields),
         buildNoteHashReadRequestHintsFromResetActions<
           typeof MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
           typeof MAX_NOTE_HASH_READ_REQUESTS_PER_TX
         >(
-          oracle,
+          inputsProvider,
           this.previousKernel.validationRequests.noteHashReadRequests,
           this.previousKernel.end.noteHashes,
           this.noteHashResetActions,
@@ -184,14 +184,14 @@ export class PrivateKernelResetPrivateInputsBuilder {
           typeof MAX_NULLIFIER_READ_REQUESTS_PER_TX,
           typeof MAX_NULLIFIER_READ_REQUESTS_PER_TX
         >(
-          { getNullifierMembershipWitness: getNullifierMembershipWitnessResolver(oracle) },
+          { getNullifierMembershipWitness: getNullifierMembershipWitnessResolver(inputsProvider) },
           this.previousKernel.validationRequests.nullifierReadRequests,
           this.nullifierResetActions,
         ),
         getMasterSecretKeysAndKeyTypeDomainSeparators(
           this.previousKernel.validationRequests.scopedKeyValidationRequestsAndSeparators,
           dimensions.KEY_VALIDATION,
-          oracle,
+          inputsProvider,
         ),
       ]);
 

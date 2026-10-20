@@ -21,7 +21,7 @@ import { NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 
-import type { PrivateKernelOracle } from '../private_kernel_oracle.js';
+import type { PrivateKernelInputsProvider } from '../private_kernel_inputs_provider.js';
 import { PrivateKernelResetPrivateInputsBuilder } from './private_kernel_reset_private_inputs_builder.js';
 import {
   PrivateCircuitPublicInputsBuilder,
@@ -41,7 +41,7 @@ function randomInt(value: number, toValue?: number) {
 }
 
 describe('PrivateKernelResetPrivateInputsBuilder', () => {
-  let oracle: ReturnType<typeof mock<PrivateKernelOracle>>;
+  let inputsProvider: ReturnType<typeof mock<PrivateKernelInputsProvider>>;
   let kernel: PrivateKernelCircuitPublicInputsBuilder;
   let noteHashNullifierCounterMap: Map<number, number>;
   let splitCounter: number;
@@ -50,11 +50,11 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
     kernel = new PrivateKernelCircuitPublicInputsBuilder();
     noteHashNullifierCounterMap = new Map();
     splitCounter = 0;
-    oracle = mock<PrivateKernelOracle>();
-    oracle.getVkMembershipWitness.mockResolvedValue(MembershipWitness.random(VK_TREE_HEIGHT));
-    oracle.getNoteHashMembershipWitness.mockResolvedValue(MembershipWitness.random(NOTE_HASH_TREE_HEIGHT));
-    oracle.getNullifierMembershipWitness.mockResolvedValue(NullifierMembershipWitness.random());
-    oracle.getMasterSecretKey.mockResolvedValue(Fr.random() as unknown as GrumpkinScalar);
+    inputsProvider = mock<PrivateKernelInputsProvider>();
+    inputsProvider.getVkMembershipWitness.mockResolvedValue(MembershipWitness.random(VK_TREE_HEIGHT));
+    inputsProvider.getNoteHashMembershipWitness.mockResolvedValue(MembershipWitness.random(NOTE_HASH_TREE_HEIGHT));
+    inputsProvider.getNullifierMembershipWitness.mockResolvedValue(NullifierMembershipWitness.random());
+    inputsProvider.getMasterSecretKey.mockResolvedValue(Fr.random() as unknown as GrumpkinScalar);
   });
 
   describe('no next iteration (final reset)', () => {
@@ -91,13 +91,13 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
       expect(builder.needsReset()).toBe(false);
 
       // Throws if attempting to build.
-      await expect(builder.build(oracle)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
     });
 
     it('throws when building without calling needsReset', async () => {
       kernel.addSettledNoteHashReadRequest();
       const builder = makeResetBuilder();
-      await expect(builder.build(oracle)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
     });
 
     describe('note hash read requests', () => {
@@ -110,7 +110,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { NOTE_HASH_PENDING_READ: numReads });
       });
 
@@ -121,9 +121,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { NOTE_HASH_SETTLED_READ: numReads });
-        expect(oracle.getNoteHashMembershipWitness).toHaveBeenCalledTimes(numReads);
+        expect(inputsProvider.getNoteHashMembershipWitness).toHaveBeenCalledTimes(numReads);
       });
 
       it('resets both pending and settled reads', async () => {
@@ -137,23 +137,23 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, {
           NOTE_HASH_PENDING_READ: numPending,
           NOTE_HASH_SETTLED_READ: numSettled,
         });
-        expect(oracle.getNoteHashMembershipWitness).toHaveBeenCalledTimes(numSettled);
+        expect(inputsProvider.getNoteHashMembershipWitness).toHaveBeenCalledTimes(numSettled);
       });
 
       it('throws when settled read request has no matching membership witness', async () => {
         kernel.addSettledNoteHashReadRequest();
 
-        oracle.getNoteHashMembershipWitness.mockResolvedValue(undefined);
+        inputsProvider.getNoteHashMembershipWitness.mockResolvedValue(undefined);
 
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        await expect(builder.build(oracle)).rejects.toThrow('Read request is reading an unknown note hash.');
+        await expect(builder.build(inputsProvider)).rejects.toThrow('Read request is reading an unknown note hash.');
       });
 
       it('throws when pending read request has no matching note hash', () => {
@@ -175,7 +175,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { NULLIFIER_PENDING_READ: numReads });
       });
 
@@ -186,9 +186,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { NULLIFIER_SETTLED_READ: numReads });
-        expect(oracle.getNullifierMembershipWitness).toHaveBeenCalledTimes(numReads);
+        expect(inputsProvider.getNullifierMembershipWitness).toHaveBeenCalledTimes(numReads);
       });
 
       it('resets both pending and settled reads', async () => {
@@ -203,23 +203,23 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, {
           NULLIFIER_PENDING_READ: numPending,
           NULLIFIER_SETTLED_READ: numSettled,
         });
-        expect(oracle.getNullifierMembershipWitness).toHaveBeenCalledTimes(numSettled);
+        expect(inputsProvider.getNullifierMembershipWitness).toHaveBeenCalledTimes(numSettled);
       });
 
       it('throws when settled read request has no matching membership witness', async () => {
         kernel.addSettledNullifierReadRequest();
 
-        oracle.getNullifierMembershipWitness.mockResolvedValue(undefined);
+        inputsProvider.getNullifierMembershipWitness.mockResolvedValue(undefined);
 
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        await expect(builder.build(oracle)).rejects.toThrow('Cannot find the leaf for nullifier');
+        await expect(builder.build(inputsProvider)).rejects.toThrow('Cannot find the leaf for nullifier');
       });
 
       it('throws when pending read request has no matching nullifier', () => {
@@ -231,16 +231,16 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
     });
 
     describe('key validation requests', () => {
-      it('resets key validation requests and invokes oracle', async () => {
+      it('resets key validation requests and invokes the inputs provider', async () => {
         const numRequests = randomInt(1, MAX_KEY_VALIDATION_REQUESTS_PER_TX);
         times(numRequests, () => kernel.addKeyValidationRequest());
 
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { KEY_VALIDATION: numRequests });
-        expect(oracle.getMasterSecretKey).toHaveBeenCalledTimes(numRequests);
+        expect(inputsProvider.getMasterSecretKey).toHaveBeenCalledTimes(numRequests);
       });
     });
 
@@ -265,7 +265,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { TRANSIENT_DATA_SQUASHING: numSquashing });
       });
     });
@@ -278,7 +278,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
 
         expectDimensions(builder, result.dimensions, { NOTE_HASH_SILOING: numNoteHashes });
       });
@@ -290,7 +290,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
 
         expectDimensions(builder, result.dimensions, { NULLIFIER_SILOING: numNullifiers });
       });
@@ -302,7 +302,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
 
         expectDimensions(builder, result.dimensions, { PRIVATE_LOG_SILOING: numPrivateLogs });
       });
@@ -345,7 +345,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, { NULLIFIER_SILOING: 1, PRIVATE_LOG_SILOING: 1 });
       });
     });
@@ -363,7 +363,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, {
           NOTE_HASH_SILOING: 1,
           NULLIFIER_SILOING: 1,
@@ -387,7 +387,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, {
           PRIVATE_LOG_SILOING: 1,
           NOTE_HASH_SILOING: 1,
@@ -448,7 +448,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
       expect(builder.needsReset()).toBe(false);
 
       // Throws if attempting to build.
-      await expect(builder.build(oracle)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
     });
 
     describe('note hash read requests', () => {
@@ -477,7 +477,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', numReads);
       });
 
@@ -491,7 +491,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_SETTLED_READ', numReads);
       });
 
@@ -516,7 +516,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', numPending);
       });
 
@@ -541,7 +541,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_SETTLED_READ', numSettled);
       });
 
@@ -586,7 +586,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numReads);
       });
 
@@ -600,7 +600,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'NULLIFIER_SETTLED_READ', numReads);
       });
 
@@ -625,7 +625,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         if (numPending >= numSettled) {
           expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numPending);
         } else {
@@ -654,7 +654,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         if (numPending >= numSettled) {
           expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numPending);
         } else {
@@ -700,7 +700,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'KEY_VALIDATION', numRequests);
       });
     });
@@ -765,7 +765,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -797,7 +797,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -835,7 +835,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -858,7 +858,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -882,7 +882,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', 1);
       });
@@ -908,7 +908,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -928,7 +928,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Resets the note hash read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -948,7 +948,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Resets the nullifier read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', 1);
       });
@@ -969,7 +969,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Resets the note hash read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -995,7 +995,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         // Only one dimension should be reset for an inner reset -> note hash read request is reset first.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -1035,7 +1035,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', 1);
       });
 
@@ -1055,7 +1055,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(oracle);
+        const result = await builder.build(inputsProvider);
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', 1);
       });
 
