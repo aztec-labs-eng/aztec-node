@@ -110,11 +110,16 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     await test.teardown();
   });
 
+  /** Resolves on the next CheckpointInvalidated event, ignoring any mined at or before the `after` event's block. */
   function awaitCheckpointInvalidationEvent(
     waitSlots = 8,
+    after?: Log,
   ): Promise<{ checkpointNumber: CheckpointNumber; event: Log }> {
     const promise = promiseWithResolvers<{ checkpointNumber: CheckpointNumber; event: Log }>();
     const unwatch = rollupContract.listenToCheckpointInvalidated(({ checkpointNumber, event }) => {
+      if (after !== undefined && event.blockNumber! <= after.blockNumber!) {
+        return;
+      }
       unwatch();
       logger.warn(`Checkpoint ${checkpointNumber} has been invalidated`);
       promise.resolve({ checkpointNumber, event });
@@ -181,9 +186,50 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   }
 
   /**
+   * Waits for a checkpoint posted in the same tx as an invalidation to settle: either it is invalidated too and the
+   * chain is back at `initialCheckpointNumber`, or a node accepts it onto its checkpointed chain, which it only does
+   * for a checkpoint with valid attestations.
+   */
+  async function waitForReplacementToSettle(
+    initialCheckpointNumber: CheckpointNumber,
+    replacementCheckpointNumber: CheckpointNumber,
+    firstInvalidation: Log,
+  ) {
+    let settled = false;
+    const accepted = (async () => {
+      while (!settled) {
+        const tips = await nodes[0].getChainTips();
+        if (tips.checkpointed.checkpoint.number >= replacementCheckpointNumber) {
+          break;
+        }
+        await sleep(500);
+      }
+      return { kind: 'accepted' as const };
+    })();
+    const reinvalidated = awaitCheckpointInvalidationEvent(8, firstInvalidation).then(e => ({
+      kind: 'invalidated' as const,
+      ...e,
+    }));
+
+    try {
+      const outcome = await Promise.race([accepted, reinvalidated]);
+      if (outcome.kind === 'accepted') {
+        logger.warn(`Replacement checkpoint ${replacementCheckpointNumber} was accepted`);
+        return;
+      }
+      expect(outcome.checkpointNumber).toEqual(replacementCheckpointNumber);
+      logger.warn(`Replacement checkpoint ${replacementCheckpointNumber} was invalidated in turn`);
+      expect(await test.rollup.getCheckpointNumber()).toEqual(initialCheckpointNumber);
+    } finally {
+      settled = true;
+    }
+  }
+
+  /**
    * Configures all sequencers with an attack config, enables the attack for a single checkpoint,
    * disables it after the first checkpoint is mined (also stopping block production), and waits
-   * for the checkpoint to be invalidated. Verifies the chain rolled back to the initial state.
+   * for the checkpoint to be invalidated. Verifies the chain ends up clean: rolled back to the initial state, or with a
+   * replacement checkpoint posted alongside the invalidation that either proves valid or is invalidated in turn.
    */
   async function runInvalidationTest(opts: {
     attackConfig: Record<string, unknown>;
@@ -209,15 +255,19 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     // Wait for the CheckpointInvalidated event
     const { checkpointNumber: invalidatedCheckpointNumber, event } = await awaitCheckpointInvalidationEvent();
 
-    // Verify the checkpoint was invalidated and the chain rolled back. A proposer that built on the L1 tip before the
-    // bad checkpoint landed sends its own checkpoint in the same tx as the invalidation, right on top of the rollback.
+    // Verify the checkpoint was invalidated and the chain rolled back.
     expect(invalidatedCheckpointNumber).toBeGreaterThan(initialCheckpointNumber);
     const proposedInSameTx = (
       await rollupContract.getCheckpointProposedEvents(event.blockNumber!, event.blockNumber!)
     ).some(e => e.l1TransactionHash === event.transactionHash);
-    expect(await test.rollup.getCheckpointNumber()).toEqual(
-      CheckpointNumber(initialCheckpointNumber + (proposedInSameTx ? 1 : 0)),
-    );
+    if (!proposedInSameTx) {
+      expect(await test.rollup.getCheckpointNumber()).toEqual(initialCheckpointNumber);
+    } else {
+      // A proposer that built on the L1 tip before the bad checkpoint landed sent its own checkpoint in the same tx as
+      // the invalidation. It may have inherited the attack config, so the chain only counts as clean once that
+      // replacement is either invalidated in turn or accepted with valid attestations.
+      await waitForReplacementToSettle(initialCheckpointNumber, invalidatedCheckpointNumber, event);
+    }
 
     logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
   }
