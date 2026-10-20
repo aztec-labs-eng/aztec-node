@@ -495,6 +495,9 @@ function release_packages {
   local package_list=()
   for package in $packages; do
     (cd $package && retry "deploy_npm $1")
+    # deploy_npm does not publish private workspaces, so they must stay out of the smoke test below:
+    # installing a version that was never published would fail the release.
+    [ "$(jq -r '.private // false' "$package/package.json")" == "true" ] && continue
     local package_name=$(jq -r .name "$package/package.json")
     package_list+=("$package_name@$1")
   done
@@ -507,12 +510,23 @@ function release_packages {
   # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
   # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
   # npm accepts a publish well before it serves the new version, sometimes more than 20 minutes later, so keep retrying
-  # for up to 30 minutes. --prefer-online makes each attempt re-check the registry instead of reusing npm's cached
+  # until it is installable. --prefer-online makes each attempt re-check the registry instead of reusing npm's cached
   # package metadata, which would otherwise hide the new version for up to 5 minutes.
+  #
+  # The budget is a single wall-clock deadline shared across every package, not a per-package attempt count: npm's
+  # serve lag is correlated across a release's packages, so once the registry catches up they become installable
+  # together, and one deadline bounds the smoke test's total addition to release time instead of multiplying it by the
+  # package count.
   local npm_serve_timeout_s=1800 npm_retry_sleep_s=30
+  local deadline=$(($(date +%s) + npm_serve_timeout_s))
   for package in "${package_list[@]}"; do
-    RETRY_ATTEMPTS=$((npm_serve_timeout_s / npm_retry_sleep_s)) RETRY_SLEEP=$npm_retry_sleep_s \
-      retry "do_or_dryrun npm install --no-audit --no-fund --prefer-online $package"
+    until do_or_dryrun npm install --no-audit --no-fund --prefer-online "$package"; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "Smoke test timed out after ${npm_serve_timeout_s}s waiting for $package to be installable." >&2
+        exit 1
+      fi
+      sleep "$npm_retry_sleep_s"
+    done
   done
   rm -rf "$dir"
 }
