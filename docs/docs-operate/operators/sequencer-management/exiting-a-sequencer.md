@@ -57,17 +57,25 @@ cast call $ROLLUP "getAttesterExitWindow()(uint256)" --rpc-url $L1_RPC
 
 ## Withdrawer-initiated exit
 
-The withdrawer starts the exit and names the recipient in one call:
+The withdrawer starts the exit and names the recipient in one call, sent from the withdrawer key:
+
+```bash
+aztec remove-l1-validator --validator $ATTESTER --recipient [RECIPIENT_ADDRESS] \
+    --rollup $ROLLUP --l1-rpc-urls $L1_RPC --l1-chain-id $L1_CHAIN_ID \
+    --private-key [WITHDRAWER_PRIVATE_KEY]
+```
+
+Or with `cast`:
 
 ```bash
 cast send $ROLLUP "initiateWithdraw(address,address)" $ATTESTER [RECIPIENT_ADDRESS] \
     --private-key [WITHDRAWER_PRIVATE_KEY] --rpc-url $L1_RPC
 ```
 
-Then [finalize](#finalize-the-withdrawal) once the delays have passed.
+Choose the recipient carefully: it cannot be changed once set. Then [finalize](#finalize-the-withdrawal) once the delays have passed.
 
-:::warning Do not use `aztec remove-l1-validator` to exit
-`aztec remove-l1-validator` calls `initiateWithdraw(validator, validator)`: it sets the **attester's own address** as the recipient. The attester key is the hot key on your node, and for delegated stake it belongs to the provider, not to the delegator who owns the stake. The recipient cannot be changed once set. Call `initiateWithdraw` with an explicit recipient, as above.
+:::note Older CLI versions
+Before v6.0.0, `aztec remove-l1-validator` had no `--recipient` flag and always named the attester's own address as the recipient. Do not use an older CLI to exit.
 :::
 
 ## Attester-initiated exit
@@ -155,14 +163,22 @@ Both modes still revert the whole transaction if any authorization is invalid: a
 
 ### Name the recipient
 
-After an attester-initiated exit, the stake waits for the withdrawer. The withdrawer names the recipient:
+After an attester-initiated exit, the stake waits for the withdrawer. The withdrawer names the recipient with the same command as a withdrawer-initiated exit:
+
+```bash
+aztec remove-l1-validator --validator $ATTESTER --recipient [RECIPIENT_ADDRESS] \
+    --rollup $ROLLUP --l1-rpc-urls $L1_RPC --l1-chain-id $L1_CHAIN_ID \
+    --private-key [WITHDRAWER_PRIVATE_KEY]
+```
+
+Or with `cast`:
 
 ```bash
 cast send $ROLLUP "initiateWithdraw(address,address)" $ATTESTER [RECIPIENT_ADDRESS] \
     --private-key [WITHDRAWER_PRIVATE_KEY] --rpc-url $L1_RPC
 ```
 
-Do this for each exited position. It can happen any time before you finalize, and it does not restart the delay. Do not use `aztec remove-l1-validator` for this step: it names the attester as the recipient (see the warning [above](#withdrawer-initiated-exit)).
+Do this for each exited position. It can happen any time before you finalize, it does not restart the delay, and the recipient cannot be changed once set.
 
 If you are a staking provider exiting delegated positions, tell your delegators: they control the withdrawer, so they must complete this step.
 
