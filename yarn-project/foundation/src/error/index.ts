@@ -22,6 +22,15 @@ export class AbortError extends Error {
 }
 
 /**
+ * An error caused by the environment rather than by the request: a process that died or could not be started, or a
+ * failed system call. Retrying may succeed. Satisfies {@link isRetryableError}.
+ */
+export class RetryableError extends Error {
+  public override readonly name = 'RetryableError';
+  public readonly retry = true;
+}
+
+/**
  * Whether a failure was environmental, and so may be retried: the process behind a call died, its
  * connection broke, or it could not be started.
  *

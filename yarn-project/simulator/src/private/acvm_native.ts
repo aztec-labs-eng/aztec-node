@@ -2,6 +2,7 @@ import { type ForeignCallHandler, decompressWitness } from '@aztec-foundation/no
 import { abiDecode } from '@aztec-foundation/noir-noirc_abi';
 import type { InputMap } from '@aztec-foundation/noir-types';
 
+import { RetryableError } from '@aztec-labs/foundation/error';
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -47,12 +48,13 @@ const PROVER_FILE = 'Prover.json';
 const WITNESS_NAME = 'output-witness';
 
 /**
- * Flags a Node system error (one carrying `syscall`, such as ENOSPC or EMFILE) as retryable, since the machine failed
- * rather than the circuit. Any other error, such as a malformed return value, is returned untouched.
+ * Wraps a Node system error (one carrying `syscall`, such as ENOSPC or EMFILE) in a {@link RetryableError}, since the
+ * machine failed rather than the circuit. Any other error, such as a malformed return value, is returned untouched.
  */
-export function markSystemErrorRetryable(err: unknown): unknown {
+export function wrapSystemErrorAsRetryable(err: unknown): unknown {
   if (typeof err === 'object' && err !== null && 'syscall' in err && !('retry' in err)) {
-    Object.assign(err, { retry: true });
+    const message = 'message' in err ? String(err.message) : `${String(err.syscall)} failed`;
+    return new RetryableError(message, { cause: err });
   }
   return err;
 }
@@ -83,7 +85,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
     try {
       return await this.runProtocolCircuit<ReturnType>(inputs, artifact);
     } catch (err) {
-      throw markSystemErrorRetryable(err);
+      throw wrapSystemErrorAsRetryable(err);
     }
   }
 
@@ -96,7 +98,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
     try {
       return await this.runProtocolCircuitToWitness(input, artifact);
     } catch (err) {
-      throw markSystemErrorRetryable(err);
+      throw wrapSystemErrorAsRetryable(err);
     }
   }
 
@@ -206,9 +208,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
       let spawnFailed = false;
       child.on('error', err => {
         spawnFailed = true;
-        reject(
-          Object.assign(new Error(`Failed to spawn noir-execute: ${err.message}`, { cause: err }), { retry: true }),
-        );
+        reject(new RetryableError(`Failed to spawn noir-execute: ${err.message}`, { cause: err }));
       });
       child.on('close', (code, signal) => {
         // A child that failed to spawn can still emit `close`; the spawn error already describes the failure.
@@ -222,7 +222,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
         const stderr = Buffer.concat(errChunks, errLen).toString('utf-8');
         this.logger.error(`From noir-execute: ${stderr}`, { code, signal });
         if (signal) {
-          reject(Object.assign(new Error(`noir-execute was killed by ${signal}: ${stderr}`), { retry: true }));
+          reject(new RetryableError(`noir-execute was killed by ${signal}: ${stderr}`));
         } else {
           reject(new Error(`Failed to generate witness: ${stderr}`));
         }

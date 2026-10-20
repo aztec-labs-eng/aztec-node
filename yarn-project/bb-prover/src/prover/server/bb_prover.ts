@@ -42,7 +42,7 @@ import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-
 import {
   NativeACVMSimulator,
   type ProtocolCircuitResult,
-  markSystemErrorRetryable,
+  wrapSystemErrorAsRetryable,
 } from '@aztec-labs/simulator/server';
 import type { AvmCircuitInputs, AvmCircuitPublicInputs } from '@aztec-labs/stdlib/avm';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
@@ -424,7 +424,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     } catch (error) {
       // A crashed or unspawnable noir-execute, or an OS error reading its witness, is retryable; a circuit that cannot
       // be solved for these inputs, or a witness that does not decode, is not.
-      const retry = isRetryableError(markSystemErrorRetryable(error));
+      const retry = isRetryableError(wrapSystemErrorAsRetryable(error));
       throw new ProvingError(`Failed to generate witness for ${circuitType}: ${error}`, error, retry);
     }
 
