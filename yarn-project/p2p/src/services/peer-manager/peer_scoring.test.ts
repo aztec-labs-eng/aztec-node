@@ -274,4 +274,26 @@ describe('PeerScoring', () => {
     expect(peerScoring.getScore(peer.toString())).toBe(-150);
     expect(peerScoring.getScoreState(peer.toString())).toBe(PeerScoreState.Banned);
   });
+
+  describe('bounded retention under identity churn', () => {
+    it('caps the scored-peers map and evicts the least-recently-updated identity', () => {
+      for (let i = 0; i < 5000; i++) {
+        peerScoring.updateScore(`churn-${i}`, -60); // Disconnect: distinct throwaway identities
+      }
+      // Retention is bounded, so heartbeat-scanned work does not grow with churn.
+      expect(peerScoring.getStats().disconnectCount).toBeLessThanOrEqual(4096);
+      // The earliest identity was evicted; the most recent keeps its penalty.
+      expect(peerScoring.getScore('churn-0')).toBe(0);
+      expect(peerScoring.getScore('churn-4999')).toBeLessThan(0);
+    });
+
+    it('caps the ban map and evicts the earliest-expiring ban', () => {
+      for (let i = 0; i < 5000; i++) {
+        peerScoring.updateScore(`banchurn-${i}`, -150); // immediate ban
+      }
+      expect(peerScoring.getStats().bannedCount).toBeLessThanOrEqual(4096);
+      expect(peerScoring.getScoreState('banchurn-0')).not.toBe(PeerScoreState.Banned);
+      expect(peerScoring.getScoreState('banchurn-4999')).toBe(PeerScoreState.Banned);
+    });
+  });
 });
