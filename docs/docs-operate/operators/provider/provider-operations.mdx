@@ -139,12 +139,17 @@ Run with the smallest number that gets past the offending duplicate. Each call c
 
 You hold the attester keys for your delegations, so you can exit them yourself with an attester-initiated exit, without your delegators' withdrawer keys. Sign one exit authorization per attester and relay them all in a single transaction:
 
-<ConfigCode language="bash">{`aztec sign-attester-exit --private-key <attester-private-key> --attester <attester-address> \\
-  --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --deadline <unix-timestamp> \\
+<ConfigCode language="bash">{`aztec sign-attester-exit --private-key [ATTESTER_PRIVATE_KEY] --attester [ATTESTER_ADDRESS] \\
+  --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --deadline [UNIX_TIMESTAMP] \\
   --output exits.json --append
 
+# Simulate first (no key needed), then submit from any funded key
 aztec initiate-withdraw-by-attester-batch --dry-run --authorizations exits.json \\
-  --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --l1-rpc-urls {{ETH_RPC}}`}</ConfigCode>
+  --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --l1-rpc-urls {{ETH_RPC}}
+
+aztec initiate-withdraw-by-attester-batch --authorizations exits.json \\
+  --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --l1-rpc-urls {{ETH_RPC}} \\
+  --private-key [RELAYER_PRIVATE_KEY]`}</ConfigCode>
 
 The stake goes to each delegator's withdrawer, not to you, and the withdrawer must name the recipient before the stake can be finalized. Tell your delegators before you exit them. Attester-initiated exits are rate-limited to about 5% of the sequencer set per rolling window, so large batches may need `--up-to-limit` and several submissions.
 

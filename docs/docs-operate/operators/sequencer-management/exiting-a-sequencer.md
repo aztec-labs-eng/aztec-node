@@ -75,7 +75,7 @@ cast send $ROLLUP "initiateWithdraw(address,address)" $ATTESTER [RECIPIENT_ADDRE
 Choose the recipient carefully: it cannot be changed once set. Then [finalize](#finalize-the-withdrawal) once the delays have passed.
 
 :::note Older CLI versions
-Before v6.0.0, `aztec remove-l1-validator` had no `--recipient` flag and always named the attester's own address as the recipient. Do not use an older CLI to exit.
+Before v6.0.0, `aztec remove-l1-validator` and `aztec sequencers remove` had no `--recipient` flag and always named the attester's own address as the recipient. Do not use an older CLI to exit.
 :::
 
 ## Attester-initiated exit
@@ -157,7 +157,7 @@ Each attester signs an exit authorization offline. One relayer then submits them
 
 #### Batches larger than the rate limit
 
-By default the batch is all or nothing: if the rate limit cannot fit every authorization, the transaction reverts. Add `--up-to-limit` to process as many authorizations as the limit allows, starting from the top of the file, and leave the rest. Submit the remainder later, once the window has room again and before the deadline.
+By default the batch is all or nothing: if the rate limit cannot fit every authorization, the transaction reverts. Add `--up-to-limit` to process as many authorizations as the limit allows, starting from the top of the file, and leave the rest. The command prints the zero-based indices of the entries it did not process, but it does not edit `exits.json`. Before you resubmit, remove the processed entries from the file (or write the unprocessed ones to a new file): an entry whose attester is already exiting reverts the whole batch. Submit the remainder once the window has room again and before the deadline.
 
 Both modes still revert the whole transaction if any authorization is invalid: an expired deadline, a bad signature, a duplicate attester, or an attester that is already exiting or has no stake. Always run `--dry-run` first.
 
