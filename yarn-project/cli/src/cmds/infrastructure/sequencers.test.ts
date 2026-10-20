@@ -1,15 +1,12 @@
-import { RollupAbi } from '@aztec-foundation/l1-artifacts';
-
-import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { L1ContractsNames } from '@aztec-labs/ethereum/l1-contract-addresses';
 import { startAnvil } from '@aztec-labs/ethereum/test';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { ProtocolContractsNames } from '@aztec-labs/stdlib/contract';
 import { type Server, createServer } from 'node:http';
-import { type Hex, decodeFunctionData } from 'viem';
 import { foundry } from 'viem/chains';
 
+import { getLatestInitiateWithdrawArgs } from '../l1/l1_rpc_test_utils.js';
 import { sequencers } from './sequencers.js';
 
 const mnemonic = 'test test test test test test test test test test test junk';
@@ -70,44 +67,26 @@ describe('sequencers remove', () => {
     await stopAnvil?.();
   });
 
-  const remove = (recipientAddress?: string) => {
-    const messages: string[] = [];
-    return {
-      messages,
-      run: sequencers({
-        command: 'remove',
-        who: who.toString(),
-        recipient: recipientAddress,
-        mnemonic,
-        nodeUrl: node.url,
-        l1RpcUrls: [l1RpcUrl],
-        chainId: foundry.id,
-        log: message => messages.push(message),
-      }),
-    };
-  };
+  const remove = (recipientAddress: string | undefined, nodeUrl = node.url) =>
+    sequencers({
+      command: 'remove',
+      who: who.toString(),
+      recipient: recipientAddress,
+      mnemonic,
+      nodeUrl,
+      l1RpcUrls: [l1RpcUrl],
+      chainId: foundry.id,
+      log: () => {},
+    });
 
   it('initiates the withdrawal to the given recipient', async () => {
-    const { messages, run } = remove(recipient.toString());
-    await run;
+    await remove(recipient.toString());
 
-    const txHash = messages.map(m => m.match(/^Removed in tx (0x[0-9a-f]+)$/)?.[1]).find(Boolean) as Hex;
-    expect(txHash).toBeDefined();
-    const tx = await getPublicClient({ l1RpcUrls: [l1RpcUrl], l1ChainId: foundry.id }).getTransaction({
-      hash: txHash,
-    });
-    const { functionName, args } = decodeFunctionData({ abi: RollupAbi, data: tx.input });
-
-    expect(functionName).toBe('initiateWithdraw');
-    expect((args as readonly Hex[]).map(arg => arg.toLowerCase())).toEqual([
-      who.toString().toLowerCase(),
-      recipient.toString().toLowerCase(),
-    ]);
+    expect(await getLatestInitiateWithdrawArgs(l1RpcUrl, rollup)).toEqual({ attester: who, recipient });
   });
 
-  it('refuses to remove without a recipient', async () => {
-    const { messages, run } = remove(undefined);
-    await expect(run).rejects.toThrow('--recipient');
-    expect(messages).toEqual([]);
+  it('refuses to remove without a recipient before contacting the node', async () => {
+    // Nothing listens on port 1, so reaching the node would fail with a connection error instead.
+    await expect(remove(undefined, 'http://127.0.0.1:1')).rejects.toThrow('Missing --recipient');
   });
 });
