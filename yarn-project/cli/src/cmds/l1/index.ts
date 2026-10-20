@@ -489,6 +489,11 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
     )
     .addOption(l1ChainIdOption)
     .option('--validator <address>', 'ethereum address of the validator', parseEthereumAddress)
+    .requiredOption(
+      '--recipient <address>',
+      'Address that receives the withdrawn stake; it cannot be changed once set',
+      parseEthereumAddress,
+    )
     .option('--rollup <address>', 'ethereum address of the rollup contract', parseEthereumAddress)
     .action(async options => {
       const { removeL1Validator } = await import('./update_l1_validators.js');
@@ -498,6 +503,7 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
         privateKey: options.privateKey,
         mnemonic: options.mnemonic,
         validatorAddress: options.validator,
+        recipientAddress: options.recipient,
         rollupAddress: options.rollup,
         log,
         debugLogger,
