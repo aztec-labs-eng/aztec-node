@@ -62,8 +62,8 @@ export type Discv5RateLimiterOpts = NonNullable<IDiscv5CreateOptions['rateLimite
 
 /**
  * Builds the discv5 rate limiter quotas from config, using the default for any limit left unset.
- * @throws If a limit is set to anything other than a positive integer. A negative value would disable the limiter, and
- * a NaN or a fractional token count below one would drop every packet.
+ * @throws If a limit is set to anything other than a positive integer. Depending on the field, a negative, NaN or
+ * fractional value would make the limiter admit every packet or drop every packet.
  */
 export function getDiscv5RateLimiterOpts(config: Partial<Discv5RateLimiterConfig>): Discv5RateLimiterOpts {
   const limits = getDiscv5RateLimiterDefaultConfig();

@@ -39,9 +39,9 @@ describe('BootstrapNode', () => {
       // A mapped deployment sets listen != broadcast. The discovery socket must bind the local
       // listen port so routed packets arrive, while the advertised record keeps the broadcast port.
       const createArgs = createSpy.mock.calls[0][0] as Parameters<typeof Discv5.create>[0];
-      const boundIp4 = createArgs.bindAddrs.ip4;
-      expect(boundIp4).toBeDefined();
-      expect(boundIp4!.nodeAddress().port).toBe(p2pPort);
+      const boundAddrs = createArgs.transport!.bindAddrs;
+      expect(boundAddrs).toHaveLength(1);
+      expect(boundAddrs[0].nodeAddress().port).toBe(p2pPort);
       expect(bootNode.getENR()?.udp).toBe(p2pBroadcastPort);
     } finally {
       createSpy.mockRestore();
