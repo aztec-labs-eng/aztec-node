@@ -30,7 +30,7 @@ Deserialization guards: `BlockProposal.fromBuffer` and `SignedTxs.fromBuffer` bo
 |---|------|-------------|
 | 9 | **Duplicate**: same archive root already stored | IGNORE (no penalty) |
 | 10 | **Per-position cap**: max 2 proposals per (slot, indexWithinCheckpoint) | IGNORE (receiver-local drop: no penalty, no re-broadcast) |
-| 11 | **Equivocation**: >1 distinct proposal for same (slot, index) | ACCEPT (rebroadcast for detection). At count=2: `duplicateProposalCallback` fires -> slash event (`OffenseType.DUPLICATE_PROPOSAL`, configured via `slashDuplicateProposalPenalty`) |
+| 11 | **Equivocation**: >1 distinct proposal for same (slot, index) | ACCEPT (rebroadcast for detection), not processed. At count=2: `duplicateProposalCallback` fires and the slot is marked as equivocated on the spot. No slash here: the count is per position, not per signer. The slasher's `BroadcastedProposalWatcher` later attributes `OffenseType.DUPLICATE_PROPOSAL` (configured via `slashDuplicateProposalPenalty`) to a signer only if that signer signed two different payloads at one position |
 
 ### Stage 3: Validator-Client Processing (BlockProposalHandler)
 

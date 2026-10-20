@@ -31,7 +31,7 @@ import { AvmSimulatorPool } from '@aztec-labs/simulator/server';
 import {
   AttestationsBlockWatcher,
   AttestedInvalidProposalWatcher,
-  BroadcastedInvalidCheckpointProposalWatcher,
+  BroadcastedProposalWatcher,
   CheckpointEquivocationWatcher,
   DataWithholdingWatcher,
   type SlasherClientInterface,
@@ -428,7 +428,7 @@ export async function createAztecNodeService(
     let dataWithholdingWatcher: DataWithholdingWatcher | undefined;
     let attestationsBlockWatcher: AttestationsBlockWatcher | undefined;
     let attestedInvalidProposalWatcher: AttestedInvalidProposalWatcher | undefined;
-    let broadcastedInvalidCheckpointProposalWatcher: BroadcastedInvalidCheckpointProposalWatcher | undefined;
+    let broadcastedProposalWatcher: BroadcastedProposalWatcher | undefined;
     let checkpointEquivocationWatcher: CheckpointEquivocationWatcher | undefined;
 
     const validatorsSentinel = await createSentinel(epochCache, archiver, p2pClient, reexecutionTracker, config);
@@ -454,13 +454,8 @@ export async function createAztecNodeService(
         log.verbose('Skipping data-withholding watcher since p2p is disabled');
       }
 
-      broadcastedInvalidCheckpointProposalWatcher = new BroadcastedInvalidCheckpointProposalWatcher(
-        p2pClient,
-        archiver,
-        epochCache,
-        config,
-      );
-      watchers.push(broadcastedInvalidCheckpointProposalWatcher);
+      broadcastedProposalWatcher = new BroadcastedProposalWatcher(p2pClient, archiver, epochCache, config);
+      watchers.push(broadcastedProposalWatcher);
 
       // The proposal handler (validator-owned or standalone) is the source of invalid-proposal/equivocation
       // slots, so the watcher runs on non-validator offense collectors too.
@@ -487,7 +482,7 @@ export async function createAztecNodeService(
       validatorsSentinel,
       dataWithholdingWatcher,
       attestationsBlockWatcher,
-      broadcastedInvalidCheckpointProposalWatcher,
+      broadcastedProposalWatcher,
       attestedInvalidProposalWatcher,
       checkpointEquivocationWatcher,
     ]);
