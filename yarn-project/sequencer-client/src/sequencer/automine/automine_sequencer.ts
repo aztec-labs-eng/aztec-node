@@ -43,7 +43,6 @@ import {
   getEndpointUpperBound,
   resolveEndpoint,
 } from '../inbox_message_selection.js';
-import { mineSentTx } from './mine_sent_tx.js';
 
 /**
  * L1 rollup constants needed by the AutomineSequencer. Same as SequencerRollupConstants
@@ -585,14 +584,15 @@ export class AutomineSequencer {
     // Automine publishes synchronously in the current slot via `sendRequests`. It must NOT use the
     // production `sendRequestsAt` (or `canProposeAt`), which always apply the one-slot pipelining
     // offset — automine is the deliberate non-pipelined exception and builds/publishes in place.
-    // Anvil mining is paused, so the propose is mined by hand once sent, at the pinned slot-start timestamp, together
-    // with any unrelated L1 txs that queued up during the build.
+    // Anvil mining is paused, so automine is re-enabled once the propose is sent: anvil then mines the whole pool, the
+    // propose and any unrelated L1 txs that queued up during the build, starting with a block at the pinned slot-start
+    // timestamp.
     const result = await publisher.sendRequests(SlotNumber(targetSlot), {
-      onTxSent: txHash => mineSentTx(this.deps.ethCheatCodes, txHash, this.log),
+      onTxSent: () => this.deps.ethCheatCodes.setAutomine(true, { silent: true }),
     });
 
     const proposeSucceeded = !!result?.successfulActions?.some(action => action === 'propose');
-    if (!proposeSucceeded) {
+    if (!result || !proposeSucceeded) {
       this.log.warn('Automine propose did not succeed; rolled back optimistic insert, will rebuild from the poller', {
         slot: targetSlot,
         checkpointNumber,
@@ -608,13 +608,18 @@ export class AutomineSequencer {
     // only advance when the archiver observes the L1-confirmed checkpoint via its sync loop.
     await this.deps.archiver.syncImmediate();
 
-    // Sync the date provider to the L1 block timestamp we just mined.
+    // Sync the date provider to the latest mined L1 block timestamp.
     const newL1Ts = await this.deps.ethCheatCodes.lastBlockTimestamp();
     this.deps.dateProvider.setTime(newL1Ts * 1000);
 
     // A successful propose is validated on-chain against the mined L1 block's slot, so the mined slot
     // should equal our target; warn (without rolling back — the checkpoint is on L1) if it ever differs.
-    const minedSlot = Number(getSlotAtTimestamp(BigInt(newL1Ts), this.deps.l1Constants));
+    // Read the propose's own block: automine is back on, so an unrelated L1 tx may have mined a later one since.
+    const proposeBlock = await this.deps.ethCheatCodes.publicClient.getBlock({
+      blockNumber: result.result.receipt.blockNumber,
+    });
+    const proposeL1Ts = Number(proposeBlock.timestamp);
+    const minedSlot = Number(getSlotAtTimestamp(BigInt(proposeL1Ts), this.deps.l1Constants));
     if (minedSlot !== targetSlot) {
       this.log.warn(`Automine checkpoint mined in slot ${minedSlot} but targeted ${targetSlot}`, {
         minedSlot,
@@ -629,7 +634,7 @@ export class AutomineSequencer {
       checkpointNumber,
       blockNumber: nextBlockNumber,
       slot: targetSlot,
-      l1Timestamp: newL1Ts,
+      l1Timestamp: proposeL1Ts,
       txCount: buildResult.numTxs,
     });
 

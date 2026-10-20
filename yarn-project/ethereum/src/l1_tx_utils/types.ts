@@ -19,7 +19,7 @@ export type L1TxConfig = Partial<L1TxUtilsConfig> & { gasLimit?: bigint; txTimeo
 export type SendAndMonitorOpts = {
   /**
    * Awaited once the tx has been sent and before monitoring for its receipt starts, for a caller that has to act on
-   * the chain to get the tx mined (such as mining the block by hand on a dev chain). An error it throws is logged and
+   * the chain to get the tx mined (such as turning mining back on for a dev chain). An error it throws is logged and
    * ignored: the tx is already sent, so its fate is still decided by the monitor.
    */
   onTxSent?: (txHash: Hex) => Promise<void>;

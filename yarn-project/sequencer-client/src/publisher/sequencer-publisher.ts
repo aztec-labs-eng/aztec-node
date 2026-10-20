@@ -578,7 +578,7 @@ export class SequencerPublisher implements Disposable {
    *   the slot the propose is built for. When omitted, falls back to getCurrentL2Slot() for the
    *   AutomineSequencer, which publishes synchronously within the current slot.
    * @param opts - `onTxSent` is awaited once the bundle is sent to L1 and before its receipt is awaited; it is not
-   *   called when nothing is sent. The AutomineSequencer uses it to mine the block holding the bundle by hand.
+   *   called when nothing is sent. The AutomineSequencer uses it to resume mining on its dev chain.
    * @returns one of:
    * - A receipt and stats if the tx succeeded
    * - a receipt and errorMsg if it failed on L1
