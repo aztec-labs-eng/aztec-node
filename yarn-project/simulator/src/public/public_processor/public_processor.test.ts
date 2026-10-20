@@ -23,6 +23,7 @@ import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { strict as assert } from 'assert';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import { AvmProcessDiedError } from '../avm_simulator.js';
 import { PublicContractsDB } from '../public_db_sources.js';
 import type { PublicTxSimulatorInterface } from '../public_tx_simulator/index.js';
 import { GuardedMerkleTreeOperations } from './guarded_merkle_tree.js';
@@ -178,6 +179,36 @@ describe('public_processor', () => {
 
       expect(merkleTree.commitCheckpoint).toHaveBeenCalledTimes(0);
       expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
+    });
+
+    describe('when the AVM process dies on every attempt', () => {
+      const processDied = () => new AvmProcessDiedError('AVM simulator process died twice running this simulation');
+
+      it('rethrows when re-executing, leaving the fork state as it was before the tx', async function () {
+        const tx = await mockTxWithPublicCalls();
+        const contractClassId = await mockContractClassForTx(tx);
+        publicTxSimulator.simulate.mockImplementation((simulatedTx: Tx) => {
+          contractsDB.addNewContracts(simulatedTx);
+          return Promise.reject(processDied());
+        });
+
+        await expect(processor.process([tx])).rejects.toBeInstanceOf(AvmProcessDiedError);
+
+        expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
+        expect(merkleTree.commitCheckpoint).not.toHaveBeenCalled();
+        expect(await contractsDB.getContractClass(contractClassId)).toBeUndefined();
+      });
+
+      it('fails the tx when building a proposal, so it is evicted', async function () {
+        publicTxSimulator.simulate.mockImplementation(() => Promise.reject(processDied()));
+
+        const tx = await mockTxWithPublicCalls();
+        const [processed, failed] = await processor.process([tx], { isBuildingProposal: true });
+
+        expect(processed).toEqual([]);
+        expect(failed).toEqual([{ tx, error: expect.any(AvmProcessDiedError) }]);
+        expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
+      });
     });
 
     it('does not attempt to overfill a block', async function () {

@@ -13,7 +13,7 @@ import { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { Buffer } from 'buffer';
 
-import type { AvmContractsDBContext, AvmSimulator } from '../avm_simulator.js';
+import { type AvmContractsDBContext, AvmProcessDiedError, type AvmSimulator } from '../avm_simulator.js';
 import { ExecutorMetrics } from '../executor_metrics.js';
 import type { ExecutorMetricsInterface } from '../executor_metrics_interface.js';
 import type { PublicContractsDB } from '../public_db_sources.js';
@@ -97,6 +97,10 @@ export class PublicTxSimulator extends PublicTxSimulatorBase implements PublicTx
     try {
       resultBuffer = await this.avmSimulator.simulate(inputBuffer, context, signal);
     } catch (error: any) {
+      // Left unwrapped so the public processor can tell this node's dead AVM process from a tx that fails.
+      if (error instanceof AvmProcessDiedError) {
+        throw error;
+      }
       if (error.message?.includes('cancelled')) {
         throw new SimulationError(`AVM simulation cancelled`, []);
       }

@@ -1,7 +1,7 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { mock } from 'jest-mock-extended';
 
-import type { AvmContractsDBContext } from './avm_simulator.js';
+import { type AvmContractsDBContext, AvmProcessDiedError } from './avm_simulator.js';
 import { type AvmProcessHandle, AvmSimulatorPool, type AvmSimulatorPoolOptions } from './avm_simulator_pool.js';
 import type { PublicContractsDB } from './public_db_sources.js';
 
@@ -110,7 +110,7 @@ describe('AvmSimulatorPool', () => {
     expect(calls).toBe(2);
   });
 
-  it('attributes a second process death to the input', async () => {
+  it('fails with AvmProcessDiedError when the re-issued simulation also loses its process', async () => {
     let calls = 0;
     const pool = makePool(() =>
       Promise.resolve(
@@ -124,10 +124,77 @@ describe('AvmSimulatorPool', () => {
       () => undefined,
       (e: Error) => e,
     );
-    expect(err?.message).toMatch(/died twice.*attributing the failure to the input/);
-    // The verdict is the tx's, not an environmental flag anything upstream should interpret.
+    expect(err).toBeInstanceOf(AvmProcessDiedError);
+    // No retry flag, so nothing above the pool re-issues it a third time; the last death is kept as the cause.
     expect((err as Error & { retry?: unknown }).retry).toBeUndefined();
+    expect((err?.cause as { retry?: unknown } | undefined)?.retry).toBe(true);
     expect(calls).toBe(2);
+  });
+
+  it('fails with AvmProcessDiedError when the two deaths happen on two different processes', async () => {
+    const VICTIM = Uint8Array.from([1]);
+    const FILLER = Uint8Array.from([2]);
+    const BLOCKER = Uint8Array.from([3]);
+    const calls: { process: string; input: number }[] = [];
+    const firstDeath = promiseWithResolvers<void>();
+    const fillerDone = promiseWithResolvers<void>();
+    const blockerDone = promiseWithResolvers<void>();
+
+    /** A process that serves its calls from a script, one entry per call, recording which input it ran. */
+    const scripted = (name: string, script: (() => Promise<Uint8Array>)[]): AvmProcessHandle => ({
+      simulate: (input: Uint8Array) => {
+        calls.push({ process: name, input: input[0] });
+        return script.shift()!();
+      },
+      simulateWithHints: () => Promise.reject(new Error('unused')),
+      destroy: () => Promise.resolve(),
+    });
+
+    // p0 serves the victim and dies, then serves the blocker until told to finish, so the next free process is p1.
+    const p0 = scripted('p0', [
+      async () => {
+        await firstDeath.promise;
+        throw processDeathError('bb-avm-sim exited unexpectedly (signal=SIGKILL)');
+      },
+      async () => {
+        await blockerDone.promise;
+        return RESULT;
+      },
+    ]);
+    // p1 serves the filler, then the victim's retry, and dies under it.
+    const p1 = scripted('p1', [
+      async () => {
+        await fillerDone.promise;
+        return RESULT;
+      },
+      () => Promise.reject(processDeathError('bb-avm-sim exited unexpectedly (signal=SIGKILL)')),
+    ]);
+    const spawned = [p0, p1];
+    const pool = makePool(() => Promise.resolve(spawned.shift()!), { maxSize: 2 });
+    const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+
+    const victim = pool.simulate(VICTIM, context).then(
+      () => undefined,
+      (e: Error) => e,
+    );
+    await tick();
+    const filler = pool.simulate(FILLER, context);
+    await tick();
+    // A queued waiter is handed the freed process before it goes back on the free list, so the victim's retry
+    // cannot land on p0 again.
+    const blocker = pool.simulate(BLOCKER, context);
+    await tick();
+
+    firstDeath.resolve();
+    await tick();
+    fillerDone.resolve();
+    const err = await victim;
+    blockerDone.resolve();
+
+    await expect(filler).resolves.toEqual(RESULT);
+    await expect(blocker).resolves.toEqual(RESULT);
+    expect(calls.filter(call => call.input === VICTIM[0]).map(call => call.process)).toEqual(['p0', 'p1']);
+    expect(err).toBeInstanceOf(AvmProcessDiedError);
   });
 
   it('does not re-issue simulations that fail on their own merits', async () => {

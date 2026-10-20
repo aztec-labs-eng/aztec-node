@@ -52,7 +52,7 @@ import {
 import { ForkCheckpoint } from '@aztec-labs/world-state/native';
 import { AssertionError } from 'assert';
 
-import type { AvmSimulator } from '../avm_simulator.js';
+import { AvmProcessDiedError, type AvmSimulator } from '../avm_simulator.js';
 import { PublicContractsDB, PublicTreesDB } from '../public_db_sources.js';
 import {
   type PublicTxSimulatorConfig,
@@ -372,6 +372,16 @@ export class PublicProcessor implements Traceable {
         // Reverts all checkpoints at or above this checkpoint's depth, preserving any caller checkpoints below.
         await checkpoint.revertToCheckpoint();
         this.contractsDB.revertCheckpoint();
+
+        // A dead AVM process says nothing about the tx. Only a node building a proposal fails it, so a tx that really
+        // crashes the AVM is evicted rather than stalling every block it is picked for. A node re-executing someone
+        // else's txs (a validator) must not report a failed tx for it, since that verdict is read as proposer misconduct.
+        if (err instanceof AvmProcessDiedError && !isBuildingProposal) {
+          await this.checkWorldStateUnchanged(startStateReference, txHash, err);
+          this.log.warn(`Stopping tx processing: the AVM process died while processing tx ${txHash}`, { txHash });
+          throw err;
+        }
+
         const errorMessage = err instanceof Error || err instanceof AssertionError ? err.message : 'Unknown error';
         this.log.warn(`Failed to process tx ${txHash.toString()}: ${errorMessage} ${err?.stack}`);
         failed.push({ tx, error: err instanceof Error ? err : new Error(errorMessage) });

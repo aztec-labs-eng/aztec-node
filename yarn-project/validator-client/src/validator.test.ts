@@ -34,6 +34,7 @@ import {
   type TxProvider,
   createSecp256k1PeerId,
 } from '@aztec-labs/p2p';
+import { AvmProcessDiedError } from '@aztec-labs/simulator/server';
 import { OffenseType, WANT_TO_CLEAR_SLASH_EVENT, WANT_TO_SLASH_EVENT } from '@aztec-labs/slasher';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { type BlockData, BlockHash, L2Block, type L2BlockSink, type L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -1874,6 +1875,24 @@ describe('ValidatorClient', () => {
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
       expect(isValid).toBe(false);
+    });
+
+    // The AVM process dying on every attempt says nothing about the proposal: it is this node's environment (e.g. the
+    // OOM killer), so it must not be read as a failed tx and turned into an offense against the proposer.
+    it('rejects without an offense or marking the slot invalid when the AVM process died during re-execution', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      mockCheckpointBuilder.buildBlock.mockRejectedValue(
+        new AvmProcessDiedError('AVM simulator process died twice running this simulation'),
+      );
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'simulator_failure', slashable: false }),
+      ]);
+      expect(emitSpy.mock.calls.filter(([event]) => event === WANT_TO_SLASH_EVENT)).toEqual([]);
+      expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
     });
 
     describe('with txs carried in the proposal failing integrity validation', () => {
