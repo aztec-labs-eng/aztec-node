@@ -14,7 +14,6 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { sleep } from '@aztec-labs/foundation/sleep';
 import { executeTimeout, timeoutPromise } from '@aztec-labs/foundation/timer';
 import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { OffenseType } from '@aztec-labs/slasher';
@@ -25,6 +24,7 @@ import type { Log } from 'viem';
 
 import { getAnvilPort } from '../../fixtures/fixtures.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
+import { waitForNodeCheckpoint } from '../../fixtures/wait_helpers.js';
 import {
   MOCK_GOSSIP_MULTI_VALIDATOR_OPTS,
   MultiNodeTestContext,
@@ -131,34 +131,39 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   }
 
   /**
-   * Withholds every L1 tx the node's sequencer sends until `release` resolves, then sends the latest one withheld. The
-   * L1 tx utils re-sign a stuck tx with higher fees, so every speed-up has to be caught too, not just the first send.
+   * Withholds every L1 tx the node's sequencer sends until `release` resolves, then sends the latest one withheld, if
+   * any. Pinning the delayer's one-shot cancel also catches the speed-ups the L1 tx utils re-sign for a stuck tx.
    */
   async function withholdSequencerTxsUntil(node: AztecNodeService, release: Promise<unknown>): Promise<void> {
     const delayer = node.getSequencer()!.getDelayer()!;
-    let released = false;
-    void release.then(() => (released = true));
-    while (!released) {
-      if (delayer.nextWait === undefined) {
-        delayer.cancelNextTx();
-      }
-      await Promise.race([release, sleep(100)]);
-    }
-    delayer.nextWait = undefined;
+    Object.defineProperty(delayer, 'nextWait', {
+      get: () => ({ indefinitely: true }),
+      set: () => {},
+      configurable: true,
+    });
+    await release;
+    Object.defineProperty(delayer, 'nextWait', { value: undefined, writable: true, configurable: true });
     const withheld = delayer.getCancelledTxs().at(-1);
     if (withheld !== undefined) {
-      logger.warn(`Sending withheld L1 tx from node ${node.getSequencer()!.validatorAddresses?.join(',')}`);
       await l1Client.sendRawTransaction({ serializedTransaction: withheld });
     }
+  }
+
+  /** Returns the CheckpointProposed event sent in the same L1 tx as the given event, if any. */
+  async function findCheckpointProposedInSameTx(event: Log) {
+    const proposed = await rollupContract.getCheckpointProposedEvents(event.blockNumber!, event.blockNumber!);
+    return proposed.find(e => e.l1TransactionHash === event.transactionHash);
   }
 
   /**
    * Asserts that the given checkpoint, as posted on L1, has fewer valid attestations than quorum.
    * Useful to catch config-timing races where malicious config does not take effect before the proposer
    * starts its work, leading to the test assuming a checkpoint is bad when it actually landed valid.
+   * @returns The checkpoint's CheckpointProposed event.
    */
-  async function assertCheckpointInsufficientAttestations(checkpointNumber: CheckpointNumber): Promise<void> {
-    const proposedEvents = await rollupContract.getCheckpointProposedEvents(1n, await l1Client.getBlockNumber());
+  async function assertCheckpointInsufficientAttestations(checkpointNumber: CheckpointNumber) {
+    const latestBlock = await l1Client.getBlockNumber({ cacheTime: 0 });
+    const proposedEvents = await rollupContract.getCheckpointProposedEvents(1n, latestBlock);
     const event = proposedEvents.find(e => e.args.checkpointNumber === checkpointNumber);
     expect(event).toBeDefined();
 
@@ -183,46 +188,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const quorum = computeQuorum(VALIDATOR_COUNT);
     logger.warn(`Checkpoint ${checkpointNumber} has ${validCount}/${VALIDATOR_COUNT} attestations (quorum=${quorum})`);
     expect(validCount).toBeLessThan(quorum);
-  }
-
-  /**
-   * Waits for a checkpoint posted in the same tx as an invalidation to settle: either it is invalidated too and the
-   * chain is back at `initialCheckpointNumber`, or a node accepts it onto its checkpointed chain, which it only does
-   * for a checkpoint with valid attestations.
-   */
-  async function waitForReplacementToSettle(
-    initialCheckpointNumber: CheckpointNumber,
-    replacementCheckpointNumber: CheckpointNumber,
-    firstInvalidation: Log,
-  ) {
-    let settled = false;
-    const accepted = (async () => {
-      while (!settled) {
-        const tips = await nodes[0].getChainTips();
-        if (tips.checkpointed.checkpoint.number >= replacementCheckpointNumber) {
-          break;
-        }
-        await sleep(500);
-      }
-      return { kind: 'accepted' as const };
-    })();
-    const reinvalidated = awaitCheckpointInvalidationEvent(8, firstInvalidation).then(e => ({
-      kind: 'invalidated' as const,
-      ...e,
-    }));
-
-    try {
-      const outcome = await Promise.race([accepted, reinvalidated]);
-      if (outcome.kind === 'accepted') {
-        logger.warn(`Replacement checkpoint ${replacementCheckpointNumber} was accepted`);
-        return;
-      }
-      expect(outcome.checkpointNumber).toEqual(replacementCheckpointNumber);
-      logger.warn(`Replacement checkpoint ${replacementCheckpointNumber} was invalidated in turn`);
-      expect(await test.rollup.getCheckpointNumber()).toEqual(initialCheckpointNumber);
-    } finally {
-      settled = true;
-    }
+    return event!;
   }
 
   /**
@@ -255,18 +221,23 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     // Wait for the CheckpointInvalidated event
     const { checkpointNumber: invalidatedCheckpointNumber, event } = await awaitCheckpointInvalidationEvent();
 
-    // Verify the checkpoint was invalidated and the chain rolled back.
     expect(invalidatedCheckpointNumber).toBeGreaterThan(initialCheckpointNumber);
-    const proposedInSameTx = (
-      await rollupContract.getCheckpointProposedEvents(event.blockNumber!, event.blockNumber!)
-    ).some(e => e.l1TransactionHash === event.transactionHash);
-    if (!proposedInSameTx) {
+
+    // A proposer that built on the L1 tip before the bad checkpoint landed bundles its own checkpoint with the
+    // invalidation. It may have inherited the attack config, so it must either be accepted onto a node's checkpointed
+    // chain, which requires valid attestations, or be invalidated in turn. Otherwise the chain must have rolled back.
+    const timeout = test.L2_SLOT_DURATION_IN_S * 8;
+    const replacementAccepted =
+      (await findCheckpointProposedInSameTx(event)) !== undefined &&
+      (await Promise.race([
+        waitForNodeCheckpoint(nodes[0], invalidatedCheckpointNumber, { timeout }).then(() => true),
+        awaitCheckpointInvalidationEvent(8, event).then(({ checkpointNumber }) => {
+          expect(checkpointNumber).toEqual(invalidatedCheckpointNumber);
+          return false;
+        }),
+      ]));
+    if (!replacementAccepted) {
       expect(await test.rollup.getCheckpointNumber()).toEqual(initialCheckpointNumber);
-    } else {
-      // A proposer that built on the L1 tip before the bad checkpoint landed sent its own checkpoint in the same tx as
-      // the invalidation. It may have inherited the attack config, so the chain only counts as clean once that
-      // replacement is either invalidated in turn or accepted with valid attestations.
-      await waitForReplacementToSettle(initialCheckpointNumber, invalidatedCheckpointNumber, event);
     }
 
     logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
@@ -398,11 +369,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     expect(invalidatedCheckpointNumber).toBeGreaterThan(initialCheckpointNumber);
 
     // The invalidation must have been bundled with a new checkpoint proposal in the same L1 tx.
-    const proposedInSameBlock = await rollupContract.getCheckpointProposedEvents(
-      event.blockNumber!,
-      event.blockNumber!,
-    );
-    const proposedInSameTx = proposedInSameBlock.find(e => e.l1TransactionHash === event.transactionHash);
+    const proposedInSameTx = await findCheckpointProposedInSameTx(event);
     expect(proposedInSameTx).toBeDefined();
     logger.warn(`Invalidation bundled with new checkpoint ${proposedInSameTx!.args.checkpointNumber} in same L1 tx`);
 
@@ -1081,48 +1048,29 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     // The lead-in proposer is not the attacker, so warping to the lead-in build window makes the bad checkpoint the
     // attacker's first job and its propose the attacker's first L1 tx. The honest and next proposers are other nodes.
     const {
-      slots: [leadInSlot, badSlot, honestSlot, nextSlot],
+      slots: [leadInSlot, badSlot, honestSlot],
       proposers: [, attacker, honest],
     } = await test.findSlotsWithProposers(
       4,
-      ([leadIn, bad, honestProposer, nextProposer]) =>
-        !leadIn.equals(bad) &&
-        !bad.equals(honestProposer) &&
-        !bad.equals(nextProposer) &&
-        !honestProposer.equals(nextProposer),
+      ([leadIn, bad, honestProposer, next]) =>
+        !bad.equals(leadIn) && !bad.equals(honestProposer) && !bad.equals(next) && !honestProposer.equals(next),
     );
     const findNode = (proposer: EthAddress) =>
       nodes.find(n => n.getSequencer()!.validatorAddresses!.some(a => a.equals(proposer)))!;
     const attackerNode = findNode(attacker);
-    const honestNode = findNode(honest);
-
     await attackerNode.setConfig({ skipCollectingAttestations: true, skipBroadcastProposals: true });
-
-    logger.warn(`Attacker ${attacker} posts bad checkpoint at slot ${badSlot}, honest proposer ${honest} follows`, {
-      leadInSlot,
-      badSlot,
-      honestSlot,
-      nextSlot,
-    });
 
     const honestJobStarts: { hadProposedParent: boolean; startedAt: number }[] = [];
     const honestJobStarted = promiseWithResolvers<void>();
-    honestNode
-      .getSequencer()!
-      .getSequencer()
-      .on('preparing-checkpoint', ({ targetSlot, hadProposedParent }) => {
-        if (targetSlot === honestSlot) {
-          honestJobStarts.push({ hadProposedParent, startedAt: test.context.dateProvider.nowInSeconds() });
-          honestJobStarted.resolve();
-        }
-      });
-
-    // Keep the attacker's propose off L1 until the honest proposer's job has started, so the honest proposer cannot see
-    // the bad checkpoint at build time however the two nodes are scheduled.
-    const attackerTxsWithheld = withholdSequencerTxsUntil(
-      attackerNode,
-      Promise.race([honestJobStarted.promise, sleep(test.L2_SLOT_DURATION_IN_S * 8 * 1000)]),
-    );
+    const honestSequencer = findNode(honest).getSequencer()!.getSequencer();
+    honestSequencer.on('preparing-checkpoint', ({ targetSlot, hadProposedParent }) => {
+      if (targetSlot === honestSlot) {
+        honestJobStarts.push({ hadProposedParent, startedAt: test.context.dateProvider.nowInSeconds() });
+        honestJobStarted.resolve();
+      }
+    });
+    // Keep the bad checkpoint off L1 until the honest proposer's job has started, however the two nodes are scheduled.
+    const attackerTxsWithheld = withholdSequencerTxsUntil(attackerNode, honestJobStarted.promise);
 
     const badCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
@@ -1131,7 +1079,6 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       }
     });
     const invalidationPromise = awaitCheckpointInvalidationEvent();
-    const fromL1Block = await l1Client.getBlockNumber();
 
     await test.warpToBuildWindowForSlot(leadInSlot);
     await Promise.all(sequencers.map(s => s.start()));
@@ -1144,20 +1091,8 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     await attackerTxsWithheld;
     await attackerNode.setConfig({ skipCollectingAttestations: false, skipBroadcastProposals: false });
 
-    // The client caches the L1 block number for a few seconds, so the block the monitor just saw may not be queried yet.
-    const badCheckpointEvent = await retryUntil(
-      async () =>
-        (await rollupContract.getCheckpointProposedEvents(fromL1Block, await l1Client.getBlockNumber())).find(
-          e => e.args.checkpointNumber === badCheckpointNumber,
-        ),
-      'CheckpointProposed event for the bad checkpoint',
-      test.L2_SLOT_DURATION_IN_S,
-      0.5,
-    );
-    await assertCheckpointInsufficientAttestations(badCheckpointNumber);
-
-    // The honest proposer started building on the L1 tip before the bad checkpoint was on L1, so it had nothing to
-    // invalidate at build time and no proposed parent to check.
+    // The honest proposer started building before the bad checkpoint was on L1, so it had no proposed parent.
+    const badCheckpointEvent = await assertCheckpointInsufficientAttestations(badCheckpointNumber);
     const { timestamp: badCheckpointTimestamp } = await l1Client.getBlock({
       blockNumber: badCheckpointEvent.l1BlockNumber,
     });
@@ -1168,17 +1103,13 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     // The honest proposer invalidates the bad checkpoint and posts its own in the same L1 tx, in its own slot.
     const { checkpointNumber: invalidatedCheckpointNumber, event } = await invalidationPromise;
     expect(invalidatedCheckpointNumber).toEqual(badCheckpointNumber);
-    const proposedInSameTx = (
-      await rollupContract.getCheckpointProposedEvents(event.blockNumber!, event.blockNumber!)
-    ).find(e => e.l1TransactionHash === event.transactionHash);
-    expect(proposedInSameTx?.args.checkpointNumber).toEqual(badCheckpointNumber);
+    expect((await findCheckpointProposedInSameTx(event))?.args.checkpointNumber).toEqual(badCheckpointNumber);
     expect((await test.rollup.getCheckpoint(badCheckpointNumber)).slotNumber).toEqual(honestSlot);
 
     // The slot after the honest one is lost today: when the invalid checkpoint lands on L1 with the same number as the
     // honest proposed checkpoint, archivers drop the local proposed checkpoint, so the next proposer cannot build on
     // it. Until that is fixed, only check that the chain progresses past the honest checkpoint.
-    const nextCheckpointNumber = CheckpointNumber(badCheckpointNumber + 1);
-    await test.waitUntilCheckpointNumber(nextCheckpointNumber, test.L2_SLOT_DURATION_IN_S * 4);
+    await test.waitUntilCheckpointNumber(CheckpointNumber(badCheckpointNumber + 1), test.L2_SLOT_DURATION_IN_S * 4);
 
     logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
   });
