@@ -62,7 +62,9 @@ describe('DUPLICATE_PROPOSAL attribution from the attestation pool', () => {
 
   /**
    * Stores a gossiped checkpoint the way the p2p service does: the embedded last block first, then the checkpoint
-   * only if its position holds no other block payload. A checkpoint whose last block equivocates is dropped.
+   * only if that position holds no other block payload, whether the last block is new or already held. The pool
+   * reports the position's full count even for a block it already holds, so a checkpoint whose last block shares its
+   * position with another payload is dropped, as is one whose last block hit the per-position cap.
    */
   const receiveCheckpoint = async (checkpoint: CheckpointProposal) => {
     const lastBlock = await pool.tryAddBlockProposal(checkpoint.getBlockProposal()!);
