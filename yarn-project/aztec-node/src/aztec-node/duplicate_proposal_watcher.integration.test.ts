@@ -6,7 +6,7 @@ import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { AttestationPool } from '@aztec-labs/p2p';
 import {
-  BroadcastedInvalidCheckpointProposalWatcher,
+  BroadcastedProposalWatcher,
   DefaultSlasherConfig,
   OffenseType,
   WANT_TO_SLASH_EVENT,
@@ -30,7 +30,7 @@ describe('DUPLICATE_PROPOSAL attribution from the attestation pool', () => {
 
   let store: AztecAsyncKVStore;
   let pool: AttestationPool;
-  let watcher: BroadcastedInvalidCheckpointProposalWatcher;
+  let watcher: BroadcastedProposalWatcher;
   let offenses: WantToSlashArgs[];
 
   beforeEach(async () => {
@@ -40,7 +40,7 @@ describe('DUPLICATE_PROPOSAL attribution from the attestation pool', () => {
     const l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber'>> = mock();
     const epochCache: MockProxy<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>> = mock();
     epochCache.getL1Constants.mockReturnValue({ ...EmptyL1RollupConstants, ethereumSlotDuration: 12 });
-    watcher = new BroadcastedInvalidCheckpointProposalWatcher(pool, l2BlockSource, epochCache, {
+    watcher = new BroadcastedProposalWatcher(pool, l2BlockSource, epochCache, {
       ...DefaultSlasherConfig,
       slashDuplicateProposalPenalty: penalty,
     });

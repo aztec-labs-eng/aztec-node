@@ -18,14 +18,14 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { DefaultSlasherConfig, type SlasherConfig } from '../config.js';
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '../watcher.js';
-import { BroadcastedInvalidCheckpointProposalWatcher } from './broadcasted_invalid_checkpoint_proposal_watcher.js';
+import { BroadcastedProposalWatcher } from './broadcasted_proposal_watcher.js';
 
-describe('BroadcastedInvalidCheckpointProposalWatcher', () => {
+describe('BroadcastedProposalWatcher', () => {
   let p2pClient: MockProxy<Pick<P2PClient, 'getProposalsForSlot'>>;
   let l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber'>>;
   let epochCache: MockProxy<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>>;
   let config: SlasherConfig;
-  let watcher: BroadcastedInvalidCheckpointProposalWatcher;
+  let watcher: BroadcastedProposalWatcher;
   let handler: jest.MockedFunction<(args: WantToSlashArgs[]) => void>;
 
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('BroadcastedInvalidCheckpointProposalWatcher', () => {
       slashBroadcastedInvalidCheckpointProposalPenalty: 11n,
       slashDuplicateProposalPenalty: 23n,
     };
-    watcher = new BroadcastedInvalidCheckpointProposalWatcher(p2pClient, l2BlockSource, epochCache, config, 4);
+    watcher = new BroadcastedProposalWatcher(p2pClient, l2BlockSource, epochCache, config, 4);
     handler = jest.fn();
     watcher.on(WANT_TO_SLASH_EVENT, handler);
   });

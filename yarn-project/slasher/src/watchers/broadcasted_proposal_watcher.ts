@@ -12,7 +12,7 @@ import EventEmitter from 'node:events';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEmitter } from '../watcher.js';
 
-const BroadcastedInvalidCheckpointProposalWatcherConfigKeys = [
+const BroadcastedProposalWatcherConfigKeys = [
   'slashBroadcastedInvalidCheckpointProposalPenalty',
   'slashDuplicateProposalPenalty',
 ] as const;
@@ -20,10 +20,7 @@ const BroadcastedInvalidCheckpointProposalWatcherConfigKeys = [
 const SCAN_SLOT_LAG = 1;
 const DEFAULT_SCAN_SLOT_LOOKBACK = 4;
 
-type BroadcastedInvalidCheckpointProposalWatcherConfig = Pick<
-  SlasherConfig,
-  (typeof BroadcastedInvalidCheckpointProposalWatcherConfigKeys)[number]
->;
+type BroadcastedProposalWatcherConfig = Pick<SlasherConfig, (typeof BroadcastedProposalWatcherConfigKeys)[number]>;
 
 type ProposalsForSlot = Awaited<ReturnType<P2PClient['getProposalsForSlot']>>;
 type P2PProposalsForSlotSource = Pick<P2PClient, 'getProposalsForSlot'>;
@@ -39,11 +36,8 @@ type SignedBlockProposal = {
  * checkpoint. Offenses are attributed to the signer recovered from each proposal, so payloads from different signers
  * at the same position are never counted against each other.
  */
-export class BroadcastedInvalidCheckpointProposalWatcher
-  extends (EventEmitter as new () => WatcherEmitter)
-  implements Watcher
-{
-  private readonly log: Logger = createLogger('broadcasted-invalid-checkpoint-proposal-watcher');
+export class BroadcastedProposalWatcher extends (EventEmitter as new () => WatcherEmitter) implements Watcher {
+  private readonly log: Logger = createLogger('broadcasted-proposal-watcher');
   private readonly runningPromise: RunningPromise;
   /**
    * Keys of offenses already emitted, by slot. Several signers can offend in one slot, so entries are pruned as their
@@ -53,31 +47,31 @@ export class BroadcastedInvalidCheckpointProposalWatcher
   /** Slots below this one had their emitted offenses pruned and are not scanned again. */
   private emittedOffensesPrunedBefore: SlotNumber | undefined;
   private readonly scanSlotLookback: number;
-  private config: BroadcastedInvalidCheckpointProposalWatcherConfig;
+  private config: BroadcastedProposalWatcherConfig;
   private lastScannedSlot: SlotNumber | undefined;
 
   constructor(
     private readonly p2pClient: P2PProposalsForSlotSource,
     private readonly l2BlockSource: Pick<L2BlockSource, 'getSyncedL2SlotNumber'>,
     private readonly epochCache: Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>,
-    config: BroadcastedInvalidCheckpointProposalWatcherConfig,
+    config: BroadcastedProposalWatcherConfig,
     scanSlotLookback = DEFAULT_SCAN_SLOT_LOOKBACK,
   ) {
     super();
     const constants = epochCache.getL1Constants();
-    this.config = pick(config, ...BroadcastedInvalidCheckpointProposalWatcherConfigKeys);
+    this.config = pick(config, ...BroadcastedProposalWatcherConfigKeys);
     this.scanSlotLookback = Math.max(1, scanSlotLookback);
 
     const intervalMs = Math.max(1000, (constants.ethereumSlotDuration * 1000) / 4);
     this.runningPromise = new RunningPromise(() => this.scan(), this.log, intervalMs);
-    this.log.info('BroadcastedInvalidCheckpointProposalWatcher initialized', {
+    this.log.info('BroadcastedProposalWatcher initialized', {
       scanSlotLookback: this.scanSlotLookback,
     });
   }
 
-  public updateConfig(config: Partial<BroadcastedInvalidCheckpointProposalWatcherConfig>): void {
-    this.config = merge(this.config, pick(config, ...BroadcastedInvalidCheckpointProposalWatcherConfigKeys));
-    this.log.verbose('BroadcastedInvalidCheckpointProposalWatcher config updated', this.config);
+  public updateConfig(config: Partial<BroadcastedProposalWatcherConfig>): void {
+    this.config = merge(this.config, pick(config, ...BroadcastedProposalWatcherConfigKeys));
+    this.log.verbose('BroadcastedProposalWatcher config updated', this.config);
   }
 
   public start(): Promise<void> {

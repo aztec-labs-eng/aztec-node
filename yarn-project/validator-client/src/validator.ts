@@ -921,7 +921,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
    * Handle detection of a second proposal at the same position. Marks the slot as equivocated and clears pending
    * bad-attestation offenses for it, but does not slash: p2p counts payloads per position, not per signer, so the
    * reported proposer may be an honest validator whose proposal followed another signer's. The slasher's
-   * BroadcastedInvalidCheckpointProposalWatcher attributes DUPLICATE_PROPOSAL per signer once the slot closes.
+   * BroadcastedProposalWatcher attributes DUPLICATE_PROPOSAL per signer once the slot closes.
    */
   private handleDuplicateProposal(info: DuplicateProposalInfo): void {
     const { slot, proposer, type } = info;
