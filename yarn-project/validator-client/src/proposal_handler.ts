@@ -269,6 +269,8 @@ type LocatedCheckpointBlocks = {
   firstBlock: L2Block;
   /** The first block's checkpoint number, which every failure after the blocks are located reports. */
   checkpointNumber: CheckpointNumber;
+  /** Blocks of the same slot this node already stored after the one carrying the signed archive. */
+  laterBlockNumbers: BlockNumber[];
 };
 
 /** Everything the checkpoint rebuild consumes besides the fork: the arguments `openCheckpoint` takes. */
@@ -465,6 +467,18 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['checkpoint_already_published']: false,
 };
 
+/**
+ * Slashable checkpoint-proposal rejections that accuse the proposer but not the attesters of its signed payload.
+ *
+ * last_block_archive_mismatch is decided by blocks of the slot the payload does not commit to, which this node stored
+ * before the proposal arrived. An honest attester that had not stored them yet found the same payload valid, so the
+ * verdict says nothing about the attesters. A checkpoint whose covered blocks are themselves invalid is reported with
+ * that content reason instead, which does accuse them.
+ */
+const PROPOSER_ONLY_CHECKPOINT_PROPOSAL_REASONS: ReadonlySet<CheckpointProposalValidationFailureReason> = new Set([
+  'last_block_archive_mismatch',
+]);
+
 /** Whether a block-proposal validation result is a rejection for a slashable reason. */
 function isSlashableBlockProposalResult(
   result: BlockProposalValidationResult,
@@ -477,6 +491,13 @@ function isSlashableCheckpointProposalResult(
   result: CheckpointProposalValidationResult,
 ): result is CheckpointProposalValidationFailureResult {
   return !result.isValid && SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason];
+}
+
+/** Whether a checkpoint-proposal validation result is evidence against the attesters of the proposal's payload. */
+function accusesCheckpointAttesters(
+  result: CheckpointProposalValidationResult,
+): result is CheckpointProposalValidationFailureResult {
+  return isSlashableCheckpointProposalResult(result) && !PROPOSER_ONLY_CHECKPOINT_PROPOSAL_REASONS.has(result.reason);
 }
 
 /**
@@ -801,7 +822,7 @@ export class ProposalHandler {
           // Track invalid checkpoint proposals so offense observers (the attested-invalid-proposal watcher)
           // work on non-validator nodes too. This handler runs for all nodes; validators also mark via the
           // failure callback below (idempotent).
-          if (isSlashableCheckpointProposalResult(result)) {
+          if (accusesCheckpointAttesters(result)) {
             this.markInvalidProposalSlot(proposal.slotNumber);
             this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
           }
@@ -2193,19 +2214,52 @@ export class ProposalHandler {
   }
 
   /**
-   * Validates a checkpoint proposal's content by building the full checkpoint and comparing it with the proposal. The
-   * stages run in order, each on the previous one's output; the fork stays here so its disposal waits for the
-   * comparisons, and so the errors its narrow `try` turns into a verdict stay next to the ones that must escape.
+   * Validates a checkpoint proposal's content against the blocks its signed archive covers. When this node already
+   * stored later blocks of the same slot, the proposal leaves them out: a content failure of the covered blocks is
+   * still reported as such, and anything else, a valid rebuild or a local inability to check included, is reported as
+   * last_block_archive_mismatch.
    */
   private async validateCheckpointContent(
     proposal: CheckpointProposalCore,
     proposalInfo: LogData,
   ): Promise<CheckpointProposalValidationResult> {
-    const slot = proposal.slotNumber;
-
     const located = await this.locateCheckpointBlocks(proposal, proposalInfo);
     if (isCheckpointValidationFailure(located)) {
       return located;
+    }
+    const result = await this.validateCoveredBlocks(proposal, located, proposalInfo);
+    if (located.laterBlockNumbers.length === 0) {
+      return result;
+    }
+    const coveredBlocksResult = result.isValid ? 'valid' : result.reason;
+    if (isSlashableCheckpointProposalResult(result)) {
+      return result;
+    }
+    // A local failure to check the covered blocks must not erase the omission either: the proposer is still
+    // accountable for leaving out signed blocks, whatever this node could verify about the rest.
+    this.log.warn(`Rejecting checkpoint proposal that leaves later blocks of its slot out`, {
+      ...proposalInfo,
+      coveredBlocksResult,
+      laterBlockNumbers: located.laterBlockNumbers,
+    });
+    return { isValid: false, reason: 'last_block_archive_mismatch', checkpointNumber: located.checkpointNumber };
+  }
+
+  /**
+   * Validates the blocks a checkpoint proposal covers by building the full checkpoint and comparing it with the
+   * proposal. The stages run in order, each on the previous one's output; the fork stays here so its disposal waits
+   * for the comparisons, and so the errors its narrow `try` turns into a verdict stay next to the ones that must escape.
+   */
+  private async validateCoveredBlocks(
+    proposal: CheckpointProposalCore,
+    located: LocatedCheckpointBlocks,
+    proposalInfo: LogData,
+  ): Promise<CheckpointProposalValidationResult> {
+    const slot = proposal.slotNumber;
+
+    const coveredBlocksFailure = this.checkCoveredBlocks(proposal, located, proposalInfo);
+    if (coveredBlocksFailure) {
+      return coveredBlocksFailure;
     }
     const inputs = await this.awaitCheckpointRebuildInputs(proposal, located, proposalInfo);
     if (isCheckpointValidationFailure(inputs)) {
@@ -2276,7 +2330,8 @@ export class ProposalHandler {
 
   /**
    * Waits for the checkpoint's blocks to sync, forcing archiver syncs until the slot's attestation deadline, then
-   * rejects a checkpoint already on L1, one that leaves later blocks of its own slot out, and one over the block cap.
+   * rejects a checkpoint already on L1. Returns the blocks the signed archive covers, and the later blocks of the same
+   * slot this node already stored.
    */
   private async locateCheckpointBlocks(
     proposal: CheckpointProposalCore,
@@ -2336,19 +2391,34 @@ export class ProposalHandler {
     }
 
     // The signed archive names a block of the slot that is followed by more of the proposer's blocks for the same
-    // slot: the proposal leaves signed blocks of its own slot out, which no local race explains.
-    if (lastBlockIndex !== blocks.length - 1) {
+    // slot: the proposal leaves signed blocks of its own slot out. Whether this node stored those blocks before the
+    // proposal arrived is a matter of timing, so the covered blocks are still validated on their own.
+    const coveredBlocks = blocks.slice(0, lastBlockIndex + 1);
+    const laterBlockNumbers = blocks.slice(lastBlockIndex + 1).map(b => b.number);
+    if (laterBlockNumbers.length > 0) {
       this.log.warn(`Last block archive mismatch for checkpoint proposal`, {
         ...proposalInfo,
         lastBlockNumber: lastBlock.number,
-        laterBlockNumbers: blocks.slice(lastBlockIndex + 1).map(b => b.number),
+        laterBlockNumbers,
       });
-      return {
-        isValid: false,
-        reason: 'last_block_archive_mismatch',
-        checkpointNumber: lastBlock.checkpointNumber,
-      };
     }
+
+    this.log.debug(`Found ${coveredBlocks.length} blocks for slot ${slot}`, {
+      ...proposalInfo,
+      blockNumbers: coveredBlocks.map(b => b.number),
+    });
+
+    const firstBlock = coveredBlocks[0];
+    return { blocks: coveredBlocks, firstBlock, checkpointNumber: firstBlock.checkpointNumber, laterBlockNumbers };
+  }
+
+  /** Rejects a checkpoint over the block cap, or whose header names another last archive than its first block. */
+  private checkCoveredBlocks(
+    proposal: CheckpointProposalCore,
+    located: LocatedCheckpointBlocks,
+    proposalInfo: LogData,
+  ): CheckpointProposalValidationFailureResult | undefined {
+    const { blocks, firstBlock, checkpointNumber } = located;
 
     // The checkpoint root circuit caps how many blocks a checkpoint may contain, and L1 cannot check it when the
     // checkpoint is proposed (`ProposedHeader` carries no block count, only `blockHeadersHash`). An over-cap
@@ -2364,20 +2434,8 @@ export class ProposalHandler {
         blocksInProposal: blocks.length,
         maxBlocksPerCheckpoint,
       });
-      return {
-        isValid: false,
-        reason: 'too_many_blocks_in_checkpoint',
-        checkpointNumber: lastBlock.checkpointNumber,
-      };
+      return { isValid: false, reason: 'too_many_blocks_in_checkpoint', checkpointNumber };
     }
-
-    this.log.debug(`Found ${blocks.length} blocks for slot ${slot}`, {
-      ...proposalInfo,
-      blockNumbers: blocks.map(b => b.number),
-    });
-
-    const firstBlock = blocks[0];
-    const checkpointNumber = firstBlock.checkpointNumber;
 
     // The rebuild derives the header's lastArchiveRoot from the first block's lastArchive (as does the checkpoint
     // circuit), so any other claimed value is an unprovable header; reject it before the Inbox waits and the rebuild.
@@ -2391,7 +2449,7 @@ export class ProposalHandler {
       return { isValid: false, reason: 'last_archive_root_mismatch', checkpointNumber };
     }
 
-    return { blocks, firstBlock, checkpointNumber };
+    return undefined;
   }
 
   /**

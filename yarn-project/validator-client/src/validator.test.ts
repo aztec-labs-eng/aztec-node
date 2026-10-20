@@ -1154,10 +1154,14 @@ describe('ValidatorClient', () => {
           }) as unknown as L2Block,
       );
 
-      // Proposal references the middle block's archive (block 2), not the last (block 3)
+      // Proposal references the middle block's archive (block 2), not the last (block 3). Its header builds on the
+      // first block's last archive, so the covered blocks are not rejected for a wrong last archive root instead.
       const checkpointProposal = await makeCheckpointProposal({
         archiveRoot: block2Archive.root,
-        checkpointHeader: makeCheckpointHeader(0, { slotNumber: proposal.slotNumber }),
+        checkpointHeader: makeCheckpointHeader(0, {
+          slotNumber: proposal.slotNumber,
+          lastArchiveRoot: blocks[0].header.lastArchive.root,
+        }),
         lastBlock: {
           blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(2), slotNumber: proposal.slotNumber }),
           indexWithinCheckpoint: IndexWithinCheckpoint(1),
@@ -1170,6 +1174,8 @@ describe('ValidatorClient', () => {
       blockSource.getBlocksForSlot.mockResolvedValue(blocks);
 
       const validateCheckpointSpy = jest.spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal');
+      // The covered blocks' consumed Inbox prefix never syncs here; keep its wait to one retry before the deadline.
+      dateProvider.setTime(getExpectedAttestationDeadline(proposal.slotNumber).getTime() - 1_000);
 
       // Checkpoint validation should fail: proposal points to block 2 but last block in slot is block 3
       const attestations = await validatorClient.attestToCheckpointProposal(
@@ -1656,6 +1662,36 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(checkpointProposal.slotNumber),
         },
       ]);
+    });
+
+    it('emits the proposer offense for last_block_archive_mismatch without recording it against attesters', async () => {
+      const checkpointHandler = registerAllNodesCheckpointHandler();
+      const checkpointProposal = await makeCheckpointProposalForSlot();
+      jest.spyOn(validatorClient.getProposalHandler(), 'handleCheckpointProposal').mockResolvedValue({
+        isValid: false,
+        reason: 'last_block_archive_mismatch',
+      });
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      await checkpointHandler(checkpointProposal, sender);
+
+      expect(getBroadcastedInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([
+        [
+          WANT_TO_SLASH_EVENT,
+          [
+            {
+              validator: checkpointProposal.getSender()!,
+              amount: config.slashBroadcastedInvalidCheckpointProposalPenalty,
+              offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+              epochOrSlot: BigInt(checkpointProposal.slotNumber),
+            },
+          ],
+        ],
+      ]);
+      expect(validatorClient.hasInvalidProposals(checkpointProposal.slotNumber)).toBe(false);
+      expect(
+        validatorClient.getProposalHandler().getInvalidCheckpointProposalHashes(checkpointProposal.slotNumber),
+      ).toEqual([]);
     });
 
     it('emits zero-amount checkpoint proposal offenses when the penalty is zero', async () => {
