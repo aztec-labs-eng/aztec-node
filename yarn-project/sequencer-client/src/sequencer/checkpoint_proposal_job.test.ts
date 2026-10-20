@@ -819,6 +819,7 @@ describe('CheckpointProposalJob', () => {
     targetSlot?: SlotNumber;
     targetEpoch?: EpochNumber;
     proposedCheckpointData?: ProposedCheckpointData;
+    invalidateCheckpoint?: InvalidateCheckpointRequest;
     testHooks?: CheckpointProposalJobTestHooks;
   }): TestCheckpointProposalJob {
     const setStateFn = jest.fn();
@@ -833,7 +834,7 @@ describe('CheckpointProposalJob', () => {
       proposer,
       publisher,
       attestorAddress,
-      undefined, // invalidateBlock
+      overrides?.invalidateCheckpoint,
       validatorClient,
       globalVariableBuilder,
       p2p,
@@ -883,12 +884,14 @@ describe('CheckpointProposalJob', () => {
     /** Creates a pipelined job for checkpoint 2, builds one block, and returns the job ready for executeAndAwait. */
     async function createPipelinedJobWithBlock(
       proposedCheckpointData?: ProposedCheckpointData,
+      invalidateCheckpoint?: InvalidateCheckpointRequest,
     ): Promise<TestCheckpointProposalJob> {
       checkpointNumber = CheckpointNumber(2);
 
       const pipelinedJob = createCheckpointProposalJob({
         targetSlot: SlotNumber(newSlotNumber + 1),
         proposedCheckpointData,
+        invalidateCheckpoint,
       });
       pipelinedJob.setTimetable(makeSingleBlockTimetable());
       dateProvider.setTime(pipelinedJob.getTimetable().getBuildFrameStart(SlotNumber(newSlotNumber + 1)) * 1000);
@@ -1241,6 +1244,123 @@ describe('CheckpointProposalJob', () => {
       expect(publisher.sendRequestsAt).toHaveBeenCalled();
       expect(mismatchEvents).toEqual([expect.objectContaining({ reason: 'unexpected-parent-appeared' })]);
       expect(metrics.recordPipelineParentCheckpointMismatch).toHaveBeenCalledWith('unexpected-parent-appeared');
+    });
+
+    describe('without a proposed parent and an invalid pending chain', () => {
+      function makeInvalidValidation(invalidCheckpointNumber: CheckpointNumber): ValidateCheckpointResult {
+        return {
+          valid: false,
+          reason: 'invalid-attestation',
+          checkpoint: {
+            archive: Fr.random(),
+            lastArchive: Fr.random(),
+            slotNumber: SlotNumber(1),
+            checkpointNumber: invalidCheckpointNumber,
+            timestamp: 0n,
+          },
+          committee: [EthAddress.random()],
+          epoch: EpochNumber.ZERO,
+          seed: 0n,
+          attestors: [EthAddress.random()],
+          invalidIndex: 0,
+          attestations: [CommitteeAttestation.random()],
+          verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
+        };
+      }
+
+      function makeInvalidateRequest(invalidCheckpointNumber: CheckpointNumber): InvalidateCheckpointRequest {
+        return {
+          request: { to: EthAddress.random().toString(), data: '0x' },
+          reason: 'invalid-attestation',
+          gasUsed: 100_000n,
+          checkpointNumber: invalidCheckpointNumber,
+          forcePendingCheckpointNumber: CheckpointNumber(invalidCheckpointNumber - 1),
+          lastArchive: Fr.random(),
+        };
+      }
+
+      // The job built checkpoint 2 on checkpointed checkpoint 1, and only then did a checkpoint 2 with invalid
+      // attestations land on L1. Invalidating it rolls L1 back to exactly the parent this job built on.
+      it('invalidates a bad checkpoint that landed on its parent and still proposes', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        const invalidValidation = makeInvalidValidation(CheckpointNumber(2));
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(invalidValidation);
+        const invalidateRequest = makeInvalidateRequest(CheckpointNumber(2));
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(invalidateRequest);
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.simulateInvalidateCheckpoint).toHaveBeenCalledWith(invalidValidation);
+        expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalledWith(invalidateRequest, expect.any(Object));
+        expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+        expect(mismatchEvents).toHaveLength(0);
+        // The publication preflight sees L1 as it will be once the invalidation bundled ahead of the propose runs.
+        const publicationPlan = publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2];
+        expect(publicationPlan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1) });
+      });
+
+      it('proposes without the override when the bad checkpoint was already removed from L1', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(undefined);
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueInvalidateCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+        expect(mismatchEvents).toHaveLength(0);
+        expect(publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2]).toBeUndefined();
+      });
+
+      // The archiver keeps reporting the bad checkpoint until the invalidation enqueued at build time is sent, which
+      // happens together with the proposal.
+      it('proposes without a second invalidation when the build-time invalidation targets the bad checkpoint', async () => {
+        const buildTimeInvalidation = makeInvalidateRequest(CheckpointNumber(2));
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined, buildTimeInvalidation);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.simulateInvalidateCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.enqueueInvalidateCheckpoint.mock.calls).toEqual([[buildTimeInvalidation]]);
+        expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+        expect(mismatchEvents).toHaveLength(0);
+        const publicationPlan = publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2];
+        expect(publicationPlan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1) });
+      });
+
+      it('skips proposal and enqueues invalidation when the invalid checkpoint is not the one above its parent', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(0) });
+        const invalidValidation = makeInvalidValidation(CheckpointNumber(1));
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(invalidValidation);
+        const invalidateRequest = makeInvalidateRequest(CheckpointNumber(1));
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(invalidateRequest);
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.simulateInvalidateCheckpoint).toHaveBeenCalledWith(invalidValidation);
+        expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalledWith(invalidateRequest, expect.any(Object));
+        expect(publisher.sendRequestsAt).toHaveBeenCalled();
+        expect(mismatchEvents).toEqual([expect.objectContaining({ reason: 'parent-invalid-attestations' })]);
+      });
+
+      it('skips proposal when skipInvalidateBlockAsProposer prevents removing the bad checkpoint', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        pipelinedJob.updateConfig({ skipInvalidateBlockAsProposer: true });
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.enqueueInvalidateCheckpoint).not.toHaveBeenCalled();
+        expect(mismatchEvents).toEqual([expect.objectContaining({ reason: 'parent-invalid-attestations' })]);
+      });
     });
   });
 

@@ -171,6 +171,12 @@ export class CheckpointProposalJob implements Traceable {
   /** Whether an HA peer holds one of this slot's signing duties, and so may be proposing the blocks pushed here. */
   private yieldedToHAPeer = false;
 
+  /**
+   * Invalidation enqueued by the parent check for a bad checkpoint that landed right above our parent after we started
+   * building. It is sent ahead of our proposal, like the build-time {@link invalidateCheckpoint}.
+   */
+  private lateInvalidation: InvalidateCheckpointRequest | undefined;
+
   private getSignatureContext(): CoordinationSignatureContext {
     return this.signatureContext;
   }
@@ -606,8 +612,11 @@ export class CheckpointProposalJob implements Traceable {
       return buildPlan;
     }
     const builder = new SimulationOverridesBuilder();
-    if (this.invalidateCheckpoint && !this.config.skipInvalidateBlockAsProposer) {
-      builder.withChainTips({ pending: this.invalidateCheckpoint.forcePendingCheckpointNumber });
+    const invalidation = this.config.skipInvalidateBlockAsProposer
+      ? undefined
+      : (this.invalidateCheckpoint ?? this.lateInvalidation);
+    if (invalidation) {
+      builder.withChainTips({ pending: invalidation.forcePendingCheckpointNumber });
     }
     const provenPin = buildPlan?.chainTipsOverride?.proven;
     if (provenPin !== undefined && (await this.l2BlockSource.isPruneDueAtSlot(this.targetSlot))) {
@@ -800,7 +809,8 @@ export class CheckpointProposalJob implements Traceable {
    * Waits for the parent checkpoint to land on L1 before submitting a pipelined checkpoint.
    * Polls until the archiver has synced L1 past the parent's slot, then verifies:
    * - If we built on a proposed parent: it must have landed on L1 with matching hash and valid attestations.
-   * - If we built without a proposed parent: no new checkpoint must have appeared for that slot.
+   * - If we built without a proposed parent: no new checkpoint must have appeared for that slot, and any checkpoint with
+   *   invalid attestations on L1 must be one we can invalidate ahead of our proposal in the same bundle.
    * If the parent has invalid attestations, enqueues an invalidation. Returns whether to proceed with the proposal.
    */
   protected async waitForValidParentCheckpointOnL1(): Promise<boolean> {
@@ -875,7 +885,36 @@ export class CheckpointProposalJob implements Traceable {
         return false;
       }
 
-      return true;
+      // A checkpoint with invalid attestations may have landed on L1 after we started building. The archiver keeps it
+      // off the checkpointed chain, so the check above misses it, but it still sits at L1's pending tip and our
+      // proposal cannot land on top of it. The invalidation enqueued at build time, if any, already removes it.
+      const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
+      if (
+        validationStatus.valid ||
+        validationStatus.checkpoint.checkpointNumber === this.invalidateCheckpoint?.checkpointNumber
+      ) {
+        return true;
+      }
+
+      // Invalidating a bad checkpoint right above our parent rolls L1 back to exactly the parent we built on, so our
+      // checkpoint is still valid as built: send the invalidation ahead of it in the same bundle.
+      const invalidCheckpointNumber = validationStatus.checkpoint.checkpointNumber;
+      if (invalidCheckpointNumber === this.checkpointNumber && !this.config.skipInvalidateBlockAsProposer) {
+        this.log.warn(
+          `Checkpoint ${invalidCheckpointNumber} with invalid attestations landed on top of our parent ${parentCheckpointNumber}, invalidating it before proposing`,
+          { checkpointNumber: this.checkpointNumber, reason: validationStatus.reason },
+        );
+        this.lateInvalidation = await this.enqueueInvalidation(validationStatus);
+        return true;
+      }
+
+      this.log.warn(
+        `Pending chain has checkpoint ${invalidCheckpointNumber} with invalid attestations, discarding pipelined work`,
+        { checkpointNumber: this.checkpointNumber, reason: validationStatus.reason },
+      );
+      this.emitPipelinedCheckpointDiscarded('parent-invalid-attestations');
+      await this.enqueueInvalidation(validationStatus);
+      return false;
     }
   }
 
@@ -889,11 +928,16 @@ export class CheckpointProposalJob implements Traceable {
     });
   }
 
-  /** Simulates and enqueues an invalidation request for the invalid parent checkpoint. */
-  private async enqueueInvalidation(validationStatus: ValidateCheckpointResult): Promise<void> {
+  /**
+   * Simulates and enqueues an invalidation request for the invalid parent checkpoint. Returns the enqueued request, or
+   * undefined if nothing was enqueued.
+   */
+  private async enqueueInvalidation(
+    validationStatus: ValidateCheckpointResult,
+  ): Promise<InvalidateCheckpointRequest | undefined> {
     if (this.config.skipInvalidateBlockAsProposer) {
       this.log.warn(`Skipping checkpoint invalidation as proposer due to test configuration`);
-      return;
+      return undefined;
     }
     const invalidateRequest = await this.publisher.simulateInvalidateCheckpoint(validationStatus);
     if (invalidateRequest) {
@@ -905,6 +949,7 @@ export class CheckpointProposalJob implements Traceable {
         checkpointNumber: this.checkpointNumber,
       });
     }
+    return invalidateRequest;
   }
 
   @trackSpan('CheckpointProposalJob.proposeCheckpoint', function () {
