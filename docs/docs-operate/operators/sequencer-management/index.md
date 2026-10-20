@@ -32,7 +32,7 @@ As a sequencer operator, your responsibilities extend beyond simply running a no
 
 ## What This Guide Covers
 
-This guide walks you through sequencer management in four parts:
+This guide walks you through sequencer management in five parts:
 
 ### 1. Governance and Proposal Process
 
@@ -69,7 +69,18 @@ Learn how to claim your sequencer rewards:
 
 See [Claiming Rewards](./claiming-rewards.md) for detailed instructions.
 
-### 4. Useful Commands
+### 4. Exiting a sequencer
+
+Learn how to exit a position and withdraw its stake:
+
+- Withdrawer-initiated and attester-initiated exits
+- Batching many attester-signed exits into one transaction
+- The attester exit rate limit and the withdrawal delays
+- Naming the recipient and finalizing the withdrawal
+
+See [Exiting a sequencer](./exiting-a-sequencer.md) for detailed instructions.
+
+### 5. Useful Commands
 
 Essential contract query commands for operators:
 
