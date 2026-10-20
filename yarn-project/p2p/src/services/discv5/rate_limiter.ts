@@ -40,8 +40,9 @@ type ExpectedResponse = {
  * Packet rate limiter for the discv5 UDP transport, consulted for every incoming datagram before it is decoded.
  *
  * Replies to our own requests are admitted without budget, up to a small packet allowance per request, until a short
- * time passes with neither a new request nor a reply packet. Any other packet must fit the budget of its source IP and then the aggregate budget, and is dropped
- * otherwise. No source is ever banned: an over-limit source is admitted again as its budget refills.
+ * time passes with neither a new request nor a reply packet. Any other packet must fit the budget of its source IP and
+ * then the aggregate budget, and is dropped otherwise. No source is ever banned: an over-limit source is admitted again
+ * as its budget refills.
  *
  * Per-IP budgets and reply exemptions are each kept for a bounded number of IPs, evicting the least recently seen one.
  * An evicted source starts over with a full budget, and the aggregate budget still bounds the total admitted.
