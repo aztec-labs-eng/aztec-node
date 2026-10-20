@@ -14,6 +14,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { executeTimeout, timeoutPromise } from '@aztec-labs/foundation/timer';
 import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { OffenseType } from '@aztec-labs/slasher';
@@ -122,6 +123,28 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       promise.promise,
       timeoutPromise(test.L2_SLOT_DURATION_IN_S * waitSlots * 1000, 'Waiting for CheckpointInvalidated event'),
     ]);
+  }
+
+  /**
+   * Withholds every L1 tx the node's sequencer sends until `release` resolves, then sends the latest one withheld. The
+   * L1 tx utils re-sign a stuck tx with higher fees, so every speed-up has to be caught too, not just the first send.
+   */
+  async function withholdSequencerTxsUntil(node: AztecNodeService, release: Promise<unknown>): Promise<void> {
+    const delayer = node.getSequencer()!.getDelayer()!;
+    let released = false;
+    void release.then(() => (released = true));
+    while (!released) {
+      if (delayer.nextWait === undefined) {
+        delayer.cancelNextTx();
+      }
+      await Promise.race([release, sleep(100)]);
+    }
+    delayer.nextWait = undefined;
+    const withheld = delayer.getCancelledTxs().at(-1);
+    if (withheld !== undefined) {
+      logger.warn(`Sending withheld L1 tx from node ${node.getSequencer()!.validatorAddresses?.join(',')}`);
+      await l1Client.sendRawTransaction({ serializedTransaction: withheld });
+    }
   }
 
   /**
@@ -994,8 +1017,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   // A proposer posts a checkpoint with invalid attestations without broadcasting it, and the checkpoint reaches L1 only
   // after the next proposer started building on the L1 tip. That proposer had no proposed parent and nothing to
   // invalidate when it started, so it finds the bad checkpoint only when it checks its parent before sending. It must
-  // invalidate it and still land its own checkpoint in its own slot, bundled in the same L1 tx, so the attack costs no
-  // slot beyond the attacker's.
+  // invalidate it and still land its own checkpoint in its own slot, bundled in the same L1 tx.
   it('proposer invalidates a non-broadcast checkpoint that lands after it started building, and posts its own', async () => {
     const sequencers = nodes.map(node => node.getSequencer()!);
     sequencers.forEach(s =>
@@ -1026,27 +1048,31 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
 
     await attackerNode.setConfig({ skipCollectingAttestations: true, skipBroadcastProposals: true });
 
-    // The honest proposer's job for its slot is created in the last L1 slot before the bad slot. Holding the
-    // attacker's propose until the second L1 block of the bad slot keeps it off L1 until after that job has started.
-    const badCheckpointLandsAt = getTimestampForSlot(badSlot, test.constants) + BigInt(test.L1_BLOCK_TIME_IN_S);
-    attackerNode.getSequencer()!.getDelayer()!.pauseNextTxUntilTimestamp(badCheckpointLandsAt);
     logger.warn(`Attacker ${attacker} posts bad checkpoint at slot ${badSlot}, honest proposer ${honest} follows`, {
       leadInSlot,
       badSlot,
       honestSlot,
       nextSlot,
-      badCheckpointLandsAt,
     });
 
     const honestJobStarts: { hadProposedParent: boolean; startedAt: number }[] = [];
+    const honestJobStarted = promiseWithResolvers<void>();
     honestNode
       .getSequencer()!
       .getSequencer()
       .on('preparing-checkpoint', ({ targetSlot, hadProposedParent }) => {
         if (targetSlot === honestSlot) {
           honestJobStarts.push({ hadProposedParent, startedAt: test.context.dateProvider.nowInSeconds() });
+          honestJobStarted.resolve();
         }
       });
+
+    // Keep the attacker's propose off L1 until the honest proposer's job has started, so the honest proposer cannot see
+    // the bad checkpoint at build time however the two nodes are scheduled.
+    const attackerTxsWithheld = withholdSequencerTxsUntil(
+      attackerNode,
+      Promise.race([honestJobStarted.promise, sleep(test.L2_SLOT_DURATION_IN_S * 8 * 1000)]),
+    );
 
     const badCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
@@ -1065,6 +1091,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       test.L2_SLOT_DURATION_IN_S * 8 * 1000,
       `Waiting for the bad checkpoint at slot ${badSlot}`,
     );
+    await attackerTxsWithheld;
     await attackerNode.setConfig({ skipCollectingAttestations: false, skipBroadcastProposals: false });
 
     // The client caches the L1 block number for a few seconds, so the block the monitor just saw may not be queried yet.
