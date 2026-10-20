@@ -1300,6 +1300,26 @@ describe('CheckpointProposalJob', () => {
         expect(publicationPlan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1) });
       });
 
+      it('still sends the invalidation when the publication preflight abandons the proposal', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
+        const invalidateRequest = makeInvalidateRequest(CheckpointNumber(2));
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(invalidateRequest);
+        publisher.validateCheckpointHeaderAndInbox
+          .mockResolvedValueOnce(0n)
+          .mockRejectedValueOnce(new Error('publication preflight failed'));
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalledWith(invalidateRequest, expect.any(Object));
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.sendRequestsAt).toHaveBeenCalled();
+        expect(publisher.enqueueInvalidateCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(
+          publisher.sendRequestsAt.mock.invocationCallOrder[0],
+        );
+      });
+
       it('proposes without the override when the bad checkpoint was already removed from L1', async () => {
         const pipelinedJob = await createPipelinedJobWithBlock(undefined);
         mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
