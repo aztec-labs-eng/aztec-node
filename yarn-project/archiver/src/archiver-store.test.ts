@@ -12,6 +12,7 @@ import {
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
@@ -54,6 +55,7 @@ describe('Archiver Store', () => {
   let initialHeader: BlockHeader;
   let genesisArchiveRoot: Fr;
   let archiver: Archiver;
+  let synchronizer: MockProxy<ArchiverL1Synchronizer>;
 
   beforeEach(async () => {
     const now = +new Date();
@@ -110,7 +112,7 @@ describe('Archiver Store', () => {
     };
 
     const events = new EventEmitter() as ArchiverEmitter;
-    const synchronizer = mock<ArchiverL1Synchronizer>();
+    synchronizer = mock<ArchiverL1Synchronizer>();
     // syncFromL1 returns the blocks added during the L1 pass; the archiver spreads it, so the mock must resolve
     // to an array rather than the auto-mock's undefined.
     synchronizer.syncFromL1.mockResolvedValue([]);
@@ -706,6 +708,26 @@ describe('Archiver Store', () => {
       expect(blocks.length).toEqual(2);
       expect(await blocks[0].hash()).toEqual(await block1.hash());
       expect(await blocks[1].hash()).toEqual(await block2.hash());
+    });
+
+    it('rejects a block queued during the last sync pass when the archiver stops', async () => {
+      const l1Sync = promiseWithResolvers<L2Block[]>();
+      const inL1Sync = promiseWithResolvers<void>();
+      synchronizer.syncFromL1.mockImplementationOnce(() => {
+        inL1Sync.resolve();
+        return l1Sync.promise;
+      });
+      await archiver.start(false);
+      await inL1Sync.promise;
+
+      const block = await makeBlock(BlockNumber(1), IndexWithinCheckpoint(0), genesisArchive);
+      const added = archiver.addBlock(block, emptyPrefix);
+      const stopped = archiver.stop();
+      l1Sync.resolve([]);
+      await stopped;
+
+      await expect(added).rejects.toThrow(/Archiver stopped before processing the queued block request/);
+      expect(await archiver.getBlock({ number: BlockNumber(1) })).toBeUndefined();
     });
 
     describe('pruneAbandonedProposedBlocks', () => {

@@ -7,6 +7,7 @@ import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-l
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { merge } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { InterruptError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -333,10 +334,16 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     this.checkpointProposalPresence = checkpointProposalPresence;
   }
 
-  public trySyncImmediate() {
+  /** Triggers an immediate sync without propagating its failure, so fire-and-forget callers never leak a rejection. */
+  public async trySyncImmediate(): Promise<void> {
     try {
-      return this.syncImmediate();
+      await this.syncImmediate();
     } catch (err) {
+      // A trigger still pending when the loop stops is never served; the queued requests are settled by stop().
+      if (err instanceof InterruptError) {
+        this.log.debug(`Immediate archiver sync not served before stop`);
+        return;
+      }
       this.log.error(`Failed to trigger immediate archiver sync: ${err}`, err);
     }
   }

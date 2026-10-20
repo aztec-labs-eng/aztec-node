@@ -3150,6 +3150,26 @@ describe('CheckpointProposalJob', () => {
       expect(localBlockNumbers()).toEqual([blocks[0].number]);
     });
 
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])(
+      'leaves the blocks to the orphan prune when an HA peer signed the checkpoint proposal (%s)',
+      async (_, makeError) => {
+        mockSubslots(2);
+        validatorClient.createCheckpointProposal.mockRejectedValue(makeError());
+        const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+        const checkpoint = await job.executeAndAwait();
+
+        expect(checkpoint).toBeUndefined();
+        expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+      },
+    );
+
     it('leaves the blocks to the orphan prune when the job is interrupted', async () => {
       mockSubslots(2);
       publisher.validateCheckpointHeaderAndInbox.mockImplementation(() => {
