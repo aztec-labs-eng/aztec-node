@@ -2459,14 +2459,35 @@ describe('Archiver Sync', () => {
 
       it('still evicts them when a valid L1 checkpoint differs', async () => {
         const cp1 = await syncCheckpointOne();
-        const [localCp2] = await makeOffL1Checkpoints(cp1, 2, [5002n]);
         const { checkpoint: cp2 } = await addValidCheckpoint(2, 5000n, cp1);
-        await addProposedCheckpoint(localCp2, localCp2.feeAssetPriceModifier, signers[1].address);
+        const [localCp3] = await makeOffL1Checkpoints(cp2, 3, [5004n]);
+
+        // The local copy of checkpoint 2 holds L1's own blocks under a header for the next slot, and proposed
+        // checkpoint 3 builds on those blocks. Adding L1's checkpoint 2 drops proposed 2 and the conflicting-block prune
+        // finds nothing to prune, so only the divergence eviction can remove proposed 3.
+        const laterSlotHeader = CheckpointHeader.from({
+          ...cp2.header,
+          slotNumber: SlotNumber(cp2.header.slotNumber + 1),
+        });
+        for (const block of cp2.blocks) {
+          await archiverStore.blocks.addProposedBlock(block);
+        }
+        await archiverStore.blocks.addProposedCheckpoint({
+          checkpointNumber: CheckpointNumber(2),
+          header: laterSlotHeader,
+          startBlock: cp2.blocks[0].number,
+          blockCount: cp2.blocks.length,
+          totalManaUsed: 0n,
+          feeAssetPriceModifier: cp2.feeAssetPriceModifier,
+          signer: signers[1].address,
+        });
+        await addProposedCheckpoint(localCp3, localCp3.feeAssetPriceModifier, signers[2].address);
 
         fake.setL1BlockNumber(5001n);
         await archiver.syncImmediate();
 
         expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(3))).toBeUndefined();
         expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
         const [storedCp2] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
         expect(storedCp2.checkpoint.archive.root).toEqual(cp2.archive.root);

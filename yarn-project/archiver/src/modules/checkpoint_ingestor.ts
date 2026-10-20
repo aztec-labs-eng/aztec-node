@@ -281,9 +281,10 @@ export class CheckpointIngestor {
 
   /**
    * Returns the first proposed checkpoint to evict when the local copy diverged from L1's checkpoint of the same
-   * number. A copy for a later slot than a rejected L1 checkpoint is kept: L1 rolls back to the rejected checkpoint's
-   * parent once someone invalidates it, and the copy may still land on that parent. It still needs its own ancestry
-   * to land first, and if it never lands, the uncheckpointed-block prune clears it once its slot ends.
+   * number. A copy for a later slot than a rejected L1 checkpoint is kept: once someone invalidates the rejected
+   * checkpoint, L1 rolls back to its parent (or, for a descendant of a rejected checkpoint, to before the first rejected
+   * ancestor), and the copy may still land on top of that. It still needs its own ancestry to land first, and if it
+   * never lands, the uncheckpointed-block prune clears it once its slot ends.
    */
   private decideEviction(
     match: ProposedCheckpointMatch,
@@ -730,8 +731,8 @@ export class CheckpointIngestor {
       !proposed.archive.root.equals(calldataCheckpoint.archiveRoot) ||
       proposed.feeAssetPriceModifier !== calldataCheckpoint.feeAssetPriceModifier
     ) {
-      // Only emit when the slots match — uncheckpointed entries are pruned above so this
-      // should always hold, but guard defensively to avoid mis-attributing a slash.
+      // Only a copy for the same slot can be equivocation: the slot's proposer signing two checkpoints for it. A copy
+      // for another slot (a later-slot proposal, or a stale one) is not, whoever signed it.
       if (proposed.header.slotNumber === calldataCheckpoint.header.slotNumber) {
         await this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
       }
