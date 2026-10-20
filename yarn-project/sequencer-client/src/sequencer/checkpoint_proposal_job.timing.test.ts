@@ -475,9 +475,10 @@ describe('CheckpointProposalJob Timing Tests', () => {
     // The always-pipelined submission path calls `waitForValidParentCheckpointOnL1()` for every job
     // that collects attestations. Without these mocks `getSyncedL2SlotNumber` returns undefined and
     // the job spins in a real-clock `retryUntil` until its multi-slot timeout (~80s of wall time per
-    // test). Report the build slot as synced, and a checkpointed tip at the parent checkpoint so the
-    // "no unexpected parent appeared" check passes immediately.
+    // test). Report the build slot as synced, a checkpointed tip at the parent checkpoint so the
+    // "no unexpected parent appeared" check passes immediately, and a valid pending chain.
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(slotNumber);
+    l2BlockSource.getPendingChainValidationStatus.mockResolvedValue({ valid: true });
     l2BlockSource.getL2Tips.mockResolvedValue({
       proposed: { number: BlockNumber.ZERO, hash: '' },
       checkpointed: {
