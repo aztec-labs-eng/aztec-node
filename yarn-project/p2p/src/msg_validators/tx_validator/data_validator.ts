@@ -155,6 +155,17 @@ export class DataTxValidator implements TxValidator<Tx> {
         }
       }
 
+      // The private kernel tail requires every contract class log within the claimed count to have a non-zero length,
+      // and the tx base treats a zero-length log as absent, so a tx carrying one can never be proven.
+      if (logHash.logHash.length === 0) {
+        const txHash = tx.getTxHash().toString();
+        this.#log.verbose(`Rejecting tx ${txHash} because of a zero-length contract class log at index ${i}.`, {
+          txHash,
+          logIndex: i,
+        });
+        return TX_ERROR_CONTRACT_CLASS_LOG_LENGTH;
+      }
+
       // The tx base requires exactly the trimmed length; any other length makes the tx unprovable.
       const expectedLength = 1 + tx.contractClassLogFields[i].fields.findLastIndex(f => !f.isZero());
       if (logHash.logHash.length !== expectedLength) {
