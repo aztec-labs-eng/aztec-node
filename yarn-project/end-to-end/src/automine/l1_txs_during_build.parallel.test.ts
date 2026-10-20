@@ -4,6 +4,7 @@ import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import type { EthCheatCodes } from '@aztec-labs/ethereum/test';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { type TxReceipt, TxStatus } from '@aztec-labs/stdlib/tx';
@@ -11,12 +12,18 @@ import { jest } from '@jest/globals';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import type { EndToEndContext } from '../fixtures/setup.js';
+import { proveInteraction } from '../test-wallet/utils.js';
 import { AutomineTestContext } from './automine_test_context.js';
 
+/** Pause between two unrelated L1 txs: short enough to land several L1 blocks during one build. */
+const SPAM_INTERVAL_MS = 50;
+/** How long one unrelated L1 tx may take to be mined before the spammer gives up, failing the test. */
+const SPAM_RECEIPT_TIMEOUT_MS = 30_000;
+
 /**
- * Sends unrelated L1 txs back to back from an account of its own, as a deploy script or a parallel test file would,
- * until stopped. Each tx is its own L1 block under automine, and the block-timestamp interval set at deploy moves L1
- * time forward by a whole L1 slot per block.
+ * Sends unrelated L1 txs one after the other from an account of its own, as a deploy script or a parallel test file
+ * would, until stopped. Each tx is its own L1 block under automine, and the block-timestamp interval set at deploy
+ * moves L1 time forward by a whole L1 slot per block.
  */
 class L1TxSpammer {
   private stopped = false;
@@ -36,8 +43,9 @@ class L1TxSpammer {
       let sent = 0;
       while (!this.stopped) {
         const hash = await client.sendTransaction({ to: account.address, value: 0n });
-        await client.waitForTransactionReceipt({ hash, pollingInterval: 10 });
+        await client.waitForTransactionReceipt({ hash, pollingInterval: 10, timeout: SPAM_RECEIPT_TIMEOUT_MS });
         sent++;
+        await sleep(SPAM_INTERVAL_MS);
       }
       return sent;
     })();
@@ -94,12 +102,14 @@ describe('automine/l1_txs_during_build', () => {
 
   it('keeps the block a tx was proposed in while unrelated L1 txs land', async () => {
     for (let i = 0; i < 3; i++) {
+      // Prove before the L1 load starts, so it covers only the node's handling of the tx and not the client's proving.
+      const tx = await proveInteraction(test.wallet, contract.methods.emit_nullifier_public(BigInt(1000 + i)), {
+        from: owner,
+      });
       await spammer.start();
       let proposedReceipt: TxReceipt;
       try {
-        ({ receipt: proposedReceipt } = await contract.methods
-          .emit_nullifier_public(BigInt(1000 + i))
-          .send({ from: owner, wait: { waitForStatus: TxStatus.PROPOSED, timeout: 60 } }));
+        proposedReceipt = await tx.send({ wait: { waitForStatus: TxStatus.PROPOSED, timeout: 60 } });
       } finally {
         await spammer.stop();
       }
