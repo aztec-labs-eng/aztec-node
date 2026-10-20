@@ -59,6 +59,11 @@ type AddCheckpointOptions = {
   numBlocks?: number;
   /** Or the actual blocks for the checkpoint */
   blocks?: L2Block[];
+  /**
+   * Or the exact checkpoint to post, e.g. one the archiver already holds as proposed. Posts no L1-to-L2 messages, so
+   * the checkpoint must consume none beyond those the fake already holds.
+   */
+  checkpoint?: Checkpoint;
   /** Number of transactions per block. Default: 4 */
   txsPerBlock?: number;
   /** Max number of effects per tx (for generating large blobs). Default: undefined */
@@ -260,11 +265,13 @@ export class FakeL1State {
 
     // Create the checkpoint using the stdlib helper. Its blocks consume this checkpoint's messages, so their
     // L1-to-L2 leaf count is the fake's message total once those messages are added.
-    const { checkpoint, messages, lastArchive } = await this.makeCheckpointAndMessages(
-      checkpointNumber,
-      { ...options, numL1ToL2Messages },
-      BigInt(this.messages.length + numL1ToL2Messages),
-    );
+    const { checkpoint, messages, lastArchive } = options.checkpoint
+      ? { checkpoint: options.checkpoint, messages: [], lastArchive: undefined }
+      : await this.makeCheckpointAndMessages(
+          checkpointNumber,
+          { ...options, numL1ToL2Messages },
+          BigInt(this.messages.length + numL1ToL2Messages),
+        );
 
     // Store the messages internally so they match the checkpoint's inHash
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);

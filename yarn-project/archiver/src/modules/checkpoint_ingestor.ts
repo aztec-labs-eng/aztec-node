@@ -45,7 +45,7 @@ export type SeenCheckpoint = Pick<RejectedCheckpoint, 'checkpointNumber' | 'l1'>
 /** How the checkpoint L1 published relates to the locally proposed checkpoint of the same number, if any. */
 type ProposedCheckpointMatch =
   | { kind: 'promote'; checkpoint: PublishedCheckpoint }
-  | { kind: 'evict'; fromCheckpointNumber: CheckpointNumber }
+  | { kind: 'evict'; fromCheckpointNumber: CheckpointNumber; proposed: ProposedCheckpointData }
   | { kind: 'none' };
 
 /**
@@ -226,9 +226,9 @@ export class CheckpointIngestor {
 
   /**
    * Decides everything about a batch before touching the store, other than recording rejected checkpoints. The
-   * proposed-copy lookup runs on the last checkpoint before screening, so a diverging local copy is evicted (and its
-   * equivocation reported) even when L1's checkpoint is then rejected, and a matching copy whose L1 checkpoint is
-   * rejected is not promoted.
+   * proposed-copy lookup runs on the last checkpoint before screening, so a diverging local copy has its equivocation
+   * reported even when L1's checkpoint is then rejected, and a matching copy whose L1 checkpoint is rejected is not
+   * promoted. A diverging copy is evicted, unless L1's checkpoint is rejected and the copy is for a later slot.
    */
   private async planBatch(
     calldataCheckpoints: RetrievedCheckpointFromCalldata[],
@@ -256,7 +256,8 @@ export class CheckpointIngestor {
     const match = await this.matchProposedCheckpoint(lastCalldataCheckpoint);
     const checkpointToPromote = match.kind === 'promote' ? match.checkpoint : undefined;
 
-    const checkpointsToIngest = await this.screen(resolvedCheckpoints, validation);
+    const { accepted: checkpointsToIngest, lastAccepted } = await this.screen(resolvedCheckpoints, validation);
+    const evictProposedFrom = this.decideEviction(match, lastCalldataCheckpoint, lastAccepted);
     const published = await this.buildPublished(checkpointsToIngest, checkpointToPromote, initialSyncComplete);
 
     // Split valid checkpoints: the promoted one (if any) is persisted via the proposed-promotion path,
@@ -270,12 +271,60 @@ export class CheckpointIngestor {
       published,
       toAdd,
       promoted,
-      evictProposedFrom: match.kind === 'evict' ? match.fromCheckpointNumber : undefined,
+      evictProposedFrom,
       validationUpdate: validation.update,
       // The last checkpoint seen on L1 this batch (valid or rejected), tracked from calldata since
       // rejected checkpoints are no longer built into PublishedCheckpoints.
       lastSeenCheckpoint: pick(lastCalldataCheckpoint, 'checkpointNumber', 'l1'),
     };
+  }
+
+  /**
+   * Returns the first proposed checkpoint to evict when the local copy diverged from L1's checkpoint of the same
+   * number. A copy for a later slot than a rejected L1 checkpoint is kept: L1 rolls back to the rejected checkpoint's
+   * parent once someone invalidates it, and the copy may still land on that parent. It still needs its own ancestry
+   * to land first, and if it never lands, the uncheckpointed-block prune clears it once its slot ends.
+   */
+  private decideEviction(
+    match: ProposedCheckpointMatch,
+    l1Checkpoint: ResolvedCheckpointFromCalldata,
+    l1CheckpointAccepted: boolean,
+  ): CheckpointNumber | undefined {
+    if (match.kind !== 'evict') {
+      return undefined;
+    }
+
+    const { proposed } = match;
+    const keep = !l1CheckpointAccepted && proposed.header.slotNumber > l1Checkpoint.header.slotNumber;
+    const logData = {
+      proposedCheckpointNumber: proposed.checkpointNumber,
+      proposedSlotNumber: proposed.header.slotNumber,
+      proposedHeader: proposed.header.toInspect(),
+      proposedArchiveRoot: proposed.archive.root.toString(),
+      proposedFeeAssetPriceModifier: proposed.feeAssetPriceModifier.toString(),
+      calldataCheckpointNumber: l1Checkpoint.checkpointNumber,
+      calldataSlotNumber: l1Checkpoint.header.slotNumber,
+      calldataHeader: l1Checkpoint.header.toInspect(),
+      calldataArchiveRoot: l1Checkpoint.archiveRoot.toString(),
+      calldataFeeAssetPriceModifier: l1Checkpoint.feeAssetPriceModifier.toString(),
+      calldataCheckpointAccepted: l1CheckpointAccepted,
+      keptProposedCheckpoint: keep,
+    };
+
+    if (keep) {
+      this.deps.log.warn(
+        `Local proposed checkpoint ${proposed.checkpointNumber} does not match the rejected checkpoint retrieved from ` +
+          `L1, keeping it since it is for a later slot`,
+        logData,
+      );
+      return undefined;
+    }
+
+    this.deps.log.warn(
+      `Local proposed checkpoint ${proposed.checkpointNumber} does not match checkpoint retrieved from L1, overriding with L1 data`,
+      logData,
+    );
+    return match.fromCheckpointNumber;
   }
 
   /**
@@ -285,19 +334,21 @@ export class CheckpointIngestor {
    *
    * Rejected checkpoints are recorded as they are found, outside the transaction that persists the batch, so a later
    * checkpoint in the same batch can find its rejected ancestor. Each record advances the L1 sync point past it.
-   * Returns the accepted checkpoints in L1 order.
+   * Returns the accepted checkpoints in L1 order, and whether the batch's last checkpoint is among them.
    */
   private async screen(
     resolvedCheckpoints: { checkpoint: ResolvedCheckpointFromCalldata; validationResult: ValidateCheckpointResult }[],
     validation: PendingChainValidationTracker,
-  ): Promise<ResolvedCheckpointFromCalldata[]> {
+  ): Promise<{ accepted: ResolvedCheckpointFromCalldata[]; lastAccepted: boolean }> {
     const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
+    let lastAccepted = false;
     // Archive roots accepted earlier in this batch. The store only drops a rejected entry for a root when the batch
     // is persisted, so an accepted checkpoint whose root was also rejected (an earlier post of the same checkpoint
     // with invalid attestations) would otherwise still look rejected to the children that follow it in this batch.
     const acceptedArchiveRoots = new Set<string>();
 
-    for (const { checkpoint: calldataCheckpoint, validationResult: resolvedValidationResult } of resolvedCheckpoints) {
+    for (const [index, resolved] of resolvedCheckpoints.entries()) {
+      const { checkpoint: calldataCheckpoint, validationResult: resolvedValidationResult } = resolved;
       // Check the attestations uploaded by the publisher to L1 are correct.
       // Rollup contract does not validate attestations to save on gas, so this
       // falls on the nodes to verify offchain and skip those checkpoints.
@@ -374,9 +425,10 @@ export class CheckpointIngestor {
 
       checkpointsToIngest.push(calldataCheckpoint);
       acceptedArchiveRoots.add(calldataCheckpoint.archiveRoot.toString());
+      lastAccepted = index === resolvedCheckpoints.length - 1;
     }
 
-    return checkpointsToIngest;
+    return { accepted: checkpointsToIngest, lastAccepted };
   }
 
   private recordRejected(calldataCheckpoint: RetrievedCheckpointFromCalldata, reason: RejectedCheckpointReason) {
@@ -658,7 +710,7 @@ export class CheckpointIngestor {
    *
    * Returns an `evict` match when the L1 checkpoint does NOT match local pending data for that number, so the
    * caller can evict the entire pending suffix >= fromCheckpointNumber (those entries chain off the now-invalid
-   * local state) within the same addCheckpoints transaction.
+   * local state) within the same addCheckpoints transaction, unless `decideEviction` keeps it.
    */
   private async matchProposedCheckpoint(
     calldataCheckpoint: ResolvedCheckpointFromCalldata | undefined,
@@ -678,26 +730,13 @@ export class CheckpointIngestor {
       !proposed.archive.root.equals(calldataCheckpoint.archiveRoot) ||
       proposed.feeAssetPriceModifier !== calldataCheckpoint.feeAssetPriceModifier
     ) {
-      this.deps.log.warn(
-        `Local proposed checkpoint ${proposed.checkpointNumber} does not match checkpoint retrieved from L1, overriding with L1 data`,
-        {
-          proposedCheckpointNumber: proposed.checkpointNumber,
-          proposedHeader: proposed.header.toInspect(),
-          proposedArchiveRoot: proposed.archive.root.toString(),
-          proposedFeeAssetPriceModifier: proposed.feeAssetPriceModifier.toString(),
-          calldataCheckpointNumber: calldataCheckpoint.checkpointNumber,
-          calldataHeader: calldataCheckpoint.header.toInspect(),
-          calldataArchiveRoot: calldataCheckpoint.archiveRoot.toString(),
-          calldataFeeAssetPriceModifier: calldataCheckpoint.feeAssetPriceModifier.toString(),
-        },
-      );
       // Only emit when the slots match — uncheckpointed entries are pruned above so this
       // should always hold, but guard defensively to avoid mis-attributing a slash.
       if (proposed.header.slotNumber === calldataCheckpoint.header.slotNumber) {
         await this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
       }
       // Return a divergence signal so the caller can evict pending >= this number
-      return { kind: 'evict', fromCheckpointNumber: proposed.checkpointNumber };
+      return { kind: 'evict', fromCheckpointNumber: proposed.checkpointNumber, proposed };
     }
 
     this.deps.log.debug(

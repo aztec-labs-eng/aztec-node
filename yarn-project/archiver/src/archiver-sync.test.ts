@@ -2336,6 +2336,166 @@ describe('Archiver Sync', () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
     }, 15_000);
 
+    describe('proposed checkpoints for a later slot than a rejected L1 checkpoint', () => {
+      let equivocationSpy: jest.Mock;
+      let pruneSpy: jest.Mock;
+
+      beforeEach(() => {
+        equivocationSpy = jest.fn();
+        archiver.events.on(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
+        pruneSpy = jest.fn();
+        archiver.events.on(L2BlockSourceEvents.L2PruneUncheckpointed, pruneSpy);
+      });
+
+      // Builds valid checkpoints proposed in the slots of the given L1 blocks, each on top of the previous one, and takes
+      // them off L1 again, so the archiver can hold them as proposed before L1 sees them.
+      const makeOffL1Checkpoints = async (parent: Checkpoint, firstNumber: number, l1BlockNumbers: bigint[]) => {
+        const checkpoints: Checkpoint[] = [];
+        for (const [i, l1BlockNumber] of l1BlockNumbers.entries()) {
+          const { checkpoint } = await addValidCheckpoint(firstNumber + i, l1BlockNumber, checkpoints.at(-1) ?? parent);
+          checkpoints.push(checkpoint);
+        }
+        for (const checkpoint of checkpoints) {
+          fake.removeCheckpoint(checkpoint.number);
+        }
+        return checkpoints;
+      };
+
+      // Invalidates the L1 checkpoint with the copy's number and posts the copy in its place, as the copy's proposer
+      // does once it sees the rejected checkpoint at L1's tip. The archiver promotes it without fetching blobs.
+      const landProposedCopy = async (checkpoint: Checkpoint, l1BlockNumber: bigint) => {
+        fake.markCheckpointAsPruned(checkpoint.number);
+        await fake.addCheckpoint(checkpoint.number, { l1BlockNumber, signers, checkpoint });
+        fake.setL1BlockNumber(l1BlockNumber);
+        blobClient.getBlobSidecar.mockClear();
+        await archiver.syncImmediate();
+        const blockIdsFetched = blobClient.getBlobSidecar.mock.calls.map(([blockId]) => blockId);
+        expect(blockIdsFetched).not.toContain(Buffer32.fromBigInt(l1BlockNumber).toString());
+        const [stored] = await archiver.getCheckpoints({ from: checkpoint.number, limit: 1 });
+        expect(stored.checkpoint.archive.root).toEqual(checkpoint.archive.root);
+      };
+
+      const expectProposed = async (checkpoints: Checkpoint[]) => {
+        for (const checkpoint of checkpoints) {
+          expect(await archiverStore.blocks.getProposedCheckpointByNumber(checkpoint.number)).toEqual(
+            expect.objectContaining({ checkpointNumber: checkpoint.number, archive: checkpoint.archive }),
+          );
+        }
+        expect(await archiver.getBlockNumber()).toEqual(checkpoints.at(-1)!.blocks.at(-1)!.number);
+      };
+
+      // Holds proposed checkpoints 2 and 3 for slots after 5000's, then sees L1 post an invalid checkpoint 2 at block
+      // 5000. The sync stays at L1 block 5001, so the uncheckpointed-block prune still leaves the copies alone.
+      const rejectInvalidCheckpointTwo = async () => {
+        const cp1 = await syncCheckpointOne();
+        const [localCp2, localCp3] = await makeOffL1Checkpoints(cp1, 2, [5002n, 5004n]);
+        const { checkpoint: badCp2 } = await addInvalidCheckpoint(2, 5000n, cp1);
+        expect(localCp2.header.slotNumber).toBeGreaterThan(badCp2.header.slotNumber);
+        await addProposedCheckpoint(localCp2, localCp2.feeAssetPriceModifier, signers[1].address);
+        await addProposedCheckpoint(localCp3, localCp3.feeAssetPriceModifier, signers[2].address);
+
+        fake.setL1BlockNumber(5001n);
+        await archiver.syncImmediate();
+
+        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root)).toEqual(
+          expect.objectContaining({ checkpointNumber: CheckpointNumber(2), reason: 'invalid-attestations' }),
+        );
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        return { localCp2, localCp3 };
+      };
+
+      it('keeps them when the L1 checkpoint has invalid attestations, and promotes them as they land', async () => {
+        const { localCp2, localCp3 } = await rejectInvalidCheckpointTwo();
+        await expectProposed([localCp2, localCp3]);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+        expect(pruneSpy).not.toHaveBeenCalled();
+
+        await landProposedCopy(localCp2, 5002n);
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+        await expectProposed([localCp3]);
+
+        await landProposedCopy(localCp3, 5004n);
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
+        expect(pruneSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('keeps them when the L1 checkpoint descends from a rejected checkpoint', async () => {
+        const cp1 = await syncCheckpointOne();
+        const [localCp2, localCp3] = await makeOffL1Checkpoints(cp1, 2, [5002n, 5004n]);
+        const { checkpoint: badCp2 } = await addInvalidCheckpoint(2, 4998n, cp1);
+        const { checkpoint: badCp3 } = await addValidCheckpoint(3, 5000n, badCp2);
+        expect(localCp3.header.slotNumber).toBeGreaterThan(badCp3.header.slotNumber);
+        await addProposedCheckpoint(localCp2, localCp2.feeAssetPriceModifier, signers[1].address);
+        await addProposedCheckpoint(localCp3, localCp3.feeAssetPriceModifier, signers[2].address);
+
+        fake.setL1BlockNumber(5001n);
+        await archiver.syncImmediate();
+
+        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp3.archive.root)).toEqual(
+          expect.objectContaining({
+            checkpointNumber: CheckpointNumber(3),
+            reason: 'descends-from-invalid-attestations',
+          }),
+        );
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        await expectProposed([localCp2, localCp3]);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+        expect(pruneSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('prunes a kept copy that never lands once its slot ends', async () => {
+        const { localCp2, localCp3 } = await rejectInvalidCheckpointTwo();
+        await expectProposed([localCp2, localCp3]);
+
+        // L1 block 5004 opens the slot after the copy's, and nothing landed in the copy's slot.
+        fake.setL1BlockNumber(5003n);
+        await archiver.syncImmediate();
+
+        expect(pruneSpy).toHaveBeenCalledWith(expect.objectContaining({ slotNumber: localCp2.header.slotNumber }));
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(3))).toBeUndefined();
+        expect(await archiver.getBlockNumber()).toEqual(await archiverStore.blocks.getCheckpointedL2BlockNumber());
+      }, 15_000);
+
+      it('still evicts them when a valid L1 checkpoint differs', async () => {
+        const cp1 = await syncCheckpointOne();
+        const [localCp2] = await makeOffL1Checkpoints(cp1, 2, [5002n]);
+        const { checkpoint: cp2 } = await addValidCheckpoint(2, 5000n, cp1);
+        await addProposedCheckpoint(localCp2, localCp2.feeAssetPriceModifier, signers[1].address);
+
+        fake.setL1BlockNumber(5001n);
+        await archiver.syncImmediate();
+
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+        const [storedCp2] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
+        expect(storedCp2.checkpoint.archive.root).toEqual(cp2.archive.root);
+      }, 15_000);
+
+      it('still evicts a copy for an older slot than the rejected L1 checkpoint', async () => {
+        const cp1 = await syncCheckpointOne();
+        const [localCp2] = await makeOffL1Checkpoints(cp1, 2, [4998n]);
+        await addInvalidCheckpoint(2, 5000n, cp1);
+        await addProposedCheckpoint(localCp2);
+
+        // The copy's slot is over, so the uncheckpointed-block prune that follows ingestion would clear it anyway.
+        // Record whether ingestion already evicted it by the time that prune starts removing blocks.
+        const proposedWhenPruneStarts: unknown[] = [];
+        const removeBlocksAfter = archiverStore.blocks.removeBlocksAfter.bind(archiverStore.blocks);
+        jest.spyOn(archiverStore.blocks, 'removeBlocksAfter').mockImplementation(async blockNumber => {
+          proposedWhenPruneStarts.push(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2)));
+          return removeBlocksAfter(blockNumber);
+        });
+
+        fake.setL1BlockNumber(5000n);
+        await archiver.syncImmediate();
+
+        expect(proposedWhenPruneStarts).toEqual([undefined]);
+        expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
+        expect(equivocationSpy).not.toHaveBeenCalled();
+      }, 15_000);
+    });
+
     it('reports only blob-fetched blocks as added when the last checkpoint of a batch is promoted', async () => {
       const cp1 = await syncCheckpointOne();
       const { checkpoint: cp2 } = await addValidCheckpoint(2, 4990n, cp1);
