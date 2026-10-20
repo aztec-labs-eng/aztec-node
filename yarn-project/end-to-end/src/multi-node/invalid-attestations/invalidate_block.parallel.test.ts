@@ -1068,6 +1068,20 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const attackerNode = findNode(attacker);
     const honestNode = findNode(honest);
     const bystanderNodes = nodes.filter(n => n !== attackerNode && n !== honestNode);
+
+    // An archiver drops a CheckpointProposed log whose archive L1 no longer holds, so a bystander that only reads the
+    // bad checkpoint after the honest proposer invalidated it never rejects it, and never meets the case under test.
+    const bystandersRejectingBadCheckpoint = new Set<number>();
+    for (const [index, node] of bystanderNodes.entries()) {
+      (node.getBlockSource() as Archiver).events.on(
+        L2BlockSourceEvents.InvalidAttestationsCheckpointDetected,
+        ({ validationResult }) => {
+          if (!validationResult.valid && validationResult.checkpoint.slotNumber === badSlot) {
+            bystandersRejectingBadCheckpoint.add(index);
+          }
+        },
+      );
+    }
     await attackerNode.setConfig({ skipCollectingAttestations: true, skipBroadcastProposals: true });
 
     const honestJobStarts: { hadProposedParent: boolean; startedAt: number }[] = [];
@@ -1145,6 +1159,11 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
 
     // The honest proposer invalidates the bad checkpoint and posts its own in the same L1 tx, in its own slot.
     const { checkpointNumber: invalidatedCheckpointNumber, event } = await invalidationPromise;
+
+    // Every bystander, the next proposer among them, read and rejected the bad checkpoint before it was invalidated.
+    if (holdUntil === 'honest-proposal-stored') {
+      expect([...bystandersRejectingBadCheckpoint].sort((a, b) => a - b)).toEqual(range(bystanderNodes.length));
+    }
     expect(invalidatedCheckpointNumber).toEqual(badCheckpointNumber);
     expect((await findCheckpointProposedInSameTx(event))?.args.checkpointNumber).toEqual(badCheckpointNumber);
     expect((await test.rollup.getCheckpoint(badCheckpointNumber)).slotNumber).toEqual(honestSlot);
