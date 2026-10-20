@@ -145,6 +145,21 @@ describe('ProvingAgent', () => {
     });
   });
 
+  it.each([true, false])('keeps the retry flag of a plain error that carries retry=%s', async retry => {
+    const { job, time, inputs } = makeBaseParityJob();
+    const err = Object.assign(new Error('test error'), { retry });
+    jest.spyOn(prover, 'getInboxParityProof').mockRejectedValueOnce(err);
+
+    jobSource.getProvingJob.mockResolvedValueOnce({ job, time });
+    proofDB.getProofInput.mockResolvedValueOnce(inputs);
+    agent.start();
+
+    await jest.advanceTimersByTimeAsync(agentPollIntervalMs);
+    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, expect.stringContaining(err.message), retry, {
+      allowList,
+    });
+  });
+
   it('sets the retry flag on when reporting an error', async () => {
     const { job, time, inputs } = makeBaseParityJob();
     const err = new ProvingError('test error', undefined, true);
