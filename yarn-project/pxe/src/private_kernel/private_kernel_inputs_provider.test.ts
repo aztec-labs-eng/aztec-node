@@ -13,15 +13,15 @@ import { mock } from 'jest-mock-extended';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
 import type { ContractStore } from '../storage/contract_store/contract_store.js';
-import { PrivateKernelOracle } from './private_kernel_oracle.js';
+import { PrivateKernelInputsProvider } from './private_kernel_inputs_provider.js';
 
-describe('PrivateKernelOracle', () => {
-  let oracle: PrivateKernelOracle;
+describe('PrivateKernelInputsProvider', () => {
+  let inputsProvider: PrivateKernelInputsProvider;
   let node: ReturnType<typeof mock<AztecNode>>;
 
   beforeEach(() => {
     node = mock<AztecNode>();
-    oracle = new PrivateKernelOracle(
+    inputsProvider = new PrivateKernelInputsProvider(
       mock<ContractStore>(),
       mock<ContractClassService>(),
       mock<KeyStore>(),
@@ -39,7 +39,7 @@ describe('PrivateKernelOracle', () => {
       const unrelatedSlot = new Fr(hashLeafSlot.toBigInt() - 1n);
       node.getPublicDataWitness.mockResolvedValue(makeWitness(unrelatedSlot));
 
-      const result = await oracle.getUpdatedClassIdHints(contractAddress);
+      const result = await inputsProvider.getUpdatedClassIdHints(contractAddress);
 
       expect(result.updatedClassIdValues.isEmpty()).toBe(true);
       expect(node.getPublicStorageAt).not.toHaveBeenCalled();
@@ -53,7 +53,7 @@ describe('PrivateKernelOracle', () => {
       node.getPublicDataWitness.mockResolvedValue(makeWitness(hashLeafSlot, Fr.random()));
       node.getPublicStorageAt.mockResolvedValue(new Fr(42));
 
-      const result = await oracle.getUpdatedClassIdHints(contractAddress);
+      const result = await inputsProvider.getUpdatedClassIdHints(contractAddress);
 
       expect(result.updatedClassIdValues.isEmpty()).toBe(false);
       expect(node.getPublicStorageAt).toHaveBeenCalled();

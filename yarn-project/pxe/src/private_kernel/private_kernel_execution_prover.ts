@@ -52,7 +52,7 @@ import { Buffer } from 'buffer';
 import { BatchPlanner } from './batch_planner.js';
 import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
-import type { PrivateKernelOracle } from './private_kernel_oracle.js';
+import type { PrivateKernelInputsProvider } from './private_kernel_inputs_provider.js';
 
 const NULL_SIMULATE_OUTPUT: PrivateKernelSimulateOutput<PrivateKernelCircuitPublicInputs> = {
   publicInputs: PrivateKernelCircuitPublicInputs.empty(),
@@ -77,7 +77,7 @@ export class PrivateKernelExecutionProver {
   private log: Logger;
 
   constructor(
-    private oracle: PrivateKernelOracle,
+    private inputsProvider: PrivateKernelInputsProvider,
     private proofCreator: PrivateKernelProver,
     private fakeProofs = false,
     bindings?: LoggerBindings,
@@ -144,7 +144,7 @@ export class PrivateKernelExecutionProver {
         while (resetBuilder.needsReset()) {
           // Inner reset: without siloing.
           const witgenTimer = new Timer();
-          const privateInputs = await resetBuilder.build(this.oracle);
+          const privateInputs = await resetBuilder.build(this.inputsProvider);
           output = generateWitnesses
             ? await this.proofCreator.generateResetOutput(privateInputs)
             : await this.proofCreator.simulateReset(privateInputs);
@@ -215,7 +215,7 @@ export class PrivateKernelExecutionProver {
     // functions were called via their exact expiration offsets.
     const expirationTimestampUpperBound = computeTxExpirationTimestamp(output.publicInputs);
 
-    const resetInputs = await finalResetBuilder.build(this.oracle);
+    const resetInputs = await finalResetBuilder.build(this.inputsProvider);
     const mergedInputs = new PrivateKernelResetTailCircuitPrivateInputs(
       resetInputs.previousKernel,
       resetInputs.paddedSideEffects,
@@ -350,7 +350,7 @@ export class PrivateKernelExecutionProver {
   }
 
   private async getVkData(verificationKey: VerificationKeyData) {
-    const previousVkMembershipWitness = await this.oracle.getVkMembershipWitness(verificationKey.keyAsFields);
+    const previousVkMembershipWitness = await this.inputsProvider.getVkMembershipWitness(verificationKey.keyAsFields);
     return new VkData(
       verificationKey,
       Number(previousVkMembershipWitness.leafIndex),
@@ -371,7 +371,7 @@ export class PrivateKernelExecutionProver {
     const next = executionStack.pop()!;
     executionStack.push(...[...next.nestedExecutionResults].reverse());
 
-    const functionName = await this.oracle.getDebugFunctionName(
+    const functionName = await this.inputsProvider.getDebugFunctionName(
       next.publicInputs.callContext.contractAddress,
       next.publicInputs.callContext.functionSelector,
     );
@@ -403,7 +403,7 @@ export class PrivateKernelExecutionProver {
       await allToCompletion(
         uniqueAddresses.map(
           async addr =>
-            [addr.toString(), await this.oracle.getUpdatedClassIdHints(addr)] as [string, UpdatedClassIdHints],
+            [addr.toString(), await this.inputsProvider.getUpdatedClassIdHints(addr)] as [string, UpdatedClassIdHints],
         ),
       ),
     );
@@ -419,14 +419,14 @@ export class PrivateKernelExecutionProver {
     const vk = await VerificationKeyAsFields.fromKey(vkFields);
 
     const { currentContractClassId, publicKeys, saltedInitializationHash } =
-      await this.oracle.getContractAddressPreimage(contractAddress);
-    const functionLeafMembershipWitness = await this.oracle.getFunctionMembershipWitness(
+      await this.inputsProvider.getContractAddressPreimage(contractAddress);
+    const functionLeafMembershipWitness = await this.inputsProvider.getFunctionMembershipWitness(
       currentContractClassId,
       functionSelector,
     );
 
     const { artifactHash: contractClassArtifactHash, publicBytecodeCommitment: contractClassPublicBytecodeCommitment } =
-      await this.oracle.getContractClassIdPreimage(currentContractClassId);
+      await this.inputsProvider.getContractClassIdPreimage(currentContractClassId);
 
     const updatedClassIdHints = updatedClassIdHintsMap.get(contractAddress.toString())!;
 
