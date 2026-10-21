@@ -50,12 +50,10 @@ export type RawCheckpointFromCalldata = {
 export class CalldataRetriever {
   /** Tx hashes we've already logged for trace+debug failure (log once per tx per process). */
   private static readonly traceFailureWarnedTxHashes = new LruSet<string>(1000);
-  private static readonly malformedTraceWarnedTxHashes = new LruSet<string>(1000);
 
-  /** Clears the trace-failure warned sets. For testing only. */
+  /** Clears the trace-failure warned set. For testing only. */
   static resetTraceFailureWarnedForTesting(): void {
     CalldataRetriever.traceFailureWarnedTxHashes.clear();
-    CalldataRetriever.malformedTraceWarnedTxHashes.clear();
   }
 
   constructor(
@@ -351,19 +349,7 @@ export class CalldataRetriever {
       this.logger.debug(`Successfully traced using trace_transaction, found ${calls.length} calls`);
     } catch (err) {
       const traceError = err instanceof Error ? err : new Error(String(err));
-      // A malformed response means the endpoint serves trace_transaction but the archiver cannot parse its output,
-      // which is not fixed by reconfiguring the endpoint, so it is surfaced even when the debug fallback succeeds.
-      if (traceError instanceof ZodError) {
-        if (!CalldataRetriever.malformedTraceWarnedTxHashes.has(txHash)) {
-          CalldataRetriever.malformedTraceWarnedTxHashes.add(txHash);
-          this.logger.warn(
-            `trace_transaction returned a malformed trace for L1 tx ${txHash}, falling back to debug_traceTransaction`,
-            { txHash, method: 'trace_transaction', issues: traceError.issues.slice(0, 5) },
-          );
-        }
-      } else {
-        this.logger.verbose(`Failed trace_transaction for ${txHash}: ${traceError.message}`);
-      }
+      this.logger.verbose(`Failed trace_transaction for ${txHash}: ${traceError.message}`);
       this.logger.debug(`Trace failure details for ${txHash}`, { traceError });
 
       try {
@@ -378,8 +364,7 @@ export class CalldataRetriever {
           CalldataRetriever.traceFailureWarnedTxHashes.add(txHash);
           this.logger.warn(
             `Cannot decode L1 tx ${txHash}: trace and debug RPC failed or unavailable. ` +
-              `trace_transaction: ${describeTraceError(traceError)}; ` +
-              `debug_traceTransaction: ${describeTraceError(debugError)}`,
+              `trace_transaction: ${traceError.message}; debug_traceTransaction: ${debugError.message}`,
           );
         }
         // Full error objects can be very long; keep at debug only
@@ -390,6 +375,18 @@ export class CalldataRetriever {
         });
         this.instrumentation?.recordCheckpointCalldataUnavailable();
         throw new CheckpointCalldataUnavailableError(txHash, checkpointNumber);
+      }
+
+      // The endpoint serves trace_transaction but the archiver cannot parse its output, so say so even though the
+      // fallback decoded the tx. A decoded tx is not traced again, so this fires once per tx.
+      if (traceError instanceof ZodError) {
+        this.logger.warn(
+          `trace_transaction returned a malformed trace for L1 tx ${txHash}, used debug_traceTransaction`,
+          {
+            txHash,
+            issues: traceError.issues.slice(0, 5),
+          },
+        );
       }
     }
 
@@ -501,10 +498,3 @@ export class CalldataRetriever {
 
 /** Function selector for the `propose` method of the rollup contract. */
 const PROPOSE_SELECTOR = toFunctionSelector(RollupAbi.find(x => x.type === 'function' && x.name === 'propose')!);
-
-/** Describes a trace failure, keeping a malformed response apart from an RPC error and short of the full issue list. */
-function describeTraceError(error: Error): string {
-  return error instanceof ZodError
-    ? `returned a malformed trace (${error.issues.length} validation issues)`
-    : error.message;
-}
