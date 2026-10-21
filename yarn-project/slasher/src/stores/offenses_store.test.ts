@@ -312,6 +312,40 @@ describe('SlasherOffensesStore', () => {
     });
   });
 
+  describe('reindexIfRoundSizeChanged', () => {
+    it('rebuckets and prunes stored offenses by the new round size', async () => {
+      // Under 100-slot rounds, slot 450 is round 4 and slot 150 is round 1. Under 50-slot rounds they are 9 and 3.
+      const recentOffense = createOffense(
+        EthAddress.random(),
+        1000n,
+        OffenseType.PROPOSED_INSUFFICIENT_ATTESTATIONS,
+        450n,
+      );
+      const oldOffense = createOffense(
+        EthAddress.random(),
+        1000n,
+        OffenseType.PROPOSED_INSUFFICIENT_ATTESTATIONS,
+        150n,
+      );
+      await store.addOffense(recentOffense);
+      await store.addOffense(oldOffense);
+
+      const newStore = new SlasherOffensesStore(kvStore, {
+        ...defaultSettings,
+        slashingRoundSize: 50,
+        slashOffenseExpirationRounds: 4,
+      });
+      await newStore.reindexIfRoundSizeChanged();
+
+      await expect(newStore.getOffensesForRound(9n)).resolves.toEqual([recentOffense]);
+      await expect(newStore.getOffensesForRound(4n)).resolves.toEqual([]);
+
+      await newStore.clearExpiredOffenses(12n);
+      expect(await newStore.hasOffense(recentOffense)).toBe(true);
+      expect(await newStore.hasOffense(oldOffense)).toBe(false);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle duplicate offense additions', async () => {
       const offense = createOffense();

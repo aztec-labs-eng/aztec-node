@@ -1,5 +1,5 @@
 import { createLogger } from '@aztec-labs/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap, AztecAsyncSingleton } from '@aztec-labs/kv-store';
 import {
   type Offense,
   type OffenseIdentifier,
@@ -21,6 +21,9 @@ export class SlasherOffensesStore {
   /** Multimap from round to offense keys */
   private roundsOffenses: AztecAsyncMultiMap<string, string>;
 
+  /** Slashing round size that the rounds index was built with */
+  private indexedRoundSize: AztecAsyncSingleton<number>;
+
   private log = createLogger('slasher:store:offenses');
 
   constructor(
@@ -33,6 +36,47 @@ export class SlasherOffensesStore {
   ) {
     this.offenses = kvStore.openMap('offenses');
     this.roundsOffenses = kvStore.openMultiMap('rounds-offenses');
+    this.indexedRoundSize = kvStore.openSingleton('rounds-offenses-round-size');
+  }
+
+  /**
+   * Rebuilds the rounds index if it was built with a different slashing round size. The index is persisted and outlives
+   * the slasher client, and the rollup can swap in a slasher whose proposer uses a different round size, which would
+   * otherwise leave every stored offense under a round number computed with the old size.
+   */
+  public async reindexIfRoundSizeChanged(): Promise<void> {
+    const { slashingRoundSize } = this.settings;
+    const result = await this.kvStore.transactionAsync(async () => {
+      const previousRoundSize = await this.indexedRoundSize.getAsync();
+      if (previousRoundSize === slashingRoundSize) {
+        return undefined;
+      }
+
+      const roundKeys = new Set<string>();
+      for await (const roundKey of this.roundsOffenses.keysAsync()) {
+        roundKeys.add(roundKey);
+      }
+      const offenses: [string, Offense][] = [];
+      for await (const [key, buffer] of this.offenses.entriesAsync()) {
+        offenses.push([key, deserializeOffense(buffer)]);
+      }
+
+      for (const roundKey of roundKeys) {
+        await this.roundsOffenses.delete(roundKey);
+      }
+      for (const [key, offense] of offenses) {
+        await this.roundsOffenses.set(this.getRoundKey(getRoundForOffense(offense, this.settings)), key);
+      }
+      await this.indexedRoundSize.set(slashingRoundSize);
+      return { previousRoundSize, offenseCount: offenses.length };
+    });
+
+    if (result?.previousRoundSize !== undefined) {
+      this.log.info(`Reindexed ${result.offenseCount} offenses for new slashing round size ${slashingRoundSize}`, {
+        ...result,
+        slashingRoundSize,
+      });
+    }
   }
 
   /** Returns all offenses */

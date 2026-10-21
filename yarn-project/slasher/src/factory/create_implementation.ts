@@ -66,6 +66,7 @@ async function createSlasher(
     ...settings,
     slashOffenseExpirationRounds: config.slashOffenseExpirationRounds,
   });
+  await offensesStore.reindexIfRoundSizeChanged();
 
   return new SlasherClient(
     config,
