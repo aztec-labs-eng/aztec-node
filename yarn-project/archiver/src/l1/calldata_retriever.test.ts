@@ -1142,6 +1142,36 @@ describe('CalldataRetriever', () => {
       warnSpy.mockRestore();
     });
 
+    it('should warn once per tx when trace_transaction returns a malformed trace and fall back to debug', async () => {
+      CalldataRetriever.resetTraceFailureWarnedForTesting();
+      const warnSpy = jest.spyOn(logger, 'warn');
+      const proposeCalldata = makeProposeCalldata();
+      const debugTrace = {
+        type: 'CALL',
+        from: EthAddress.random().toString(),
+        to: rollupAddress.toString(),
+        input: proposeCalldata,
+        value: '0x0',
+        gas: '0x50000',
+        gasUsed: '0x5208',
+        output: '0x',
+      };
+
+      for (let i = 0; i < 2; i++) {
+        debugClient.request.mockResolvedValueOnce([{ type: 'call', traceAddress: 'not-an-array' }]);
+        debugClient.request.mockResolvedValueOnce(debugTrace);
+        await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).resolves.toBe(proposeCalldata);
+      }
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ txHash, method: 'trace_transaction', issues: expect.any(Array) }),
+      );
+
+      warnSpy.mockRestore();
+    });
+
     it('should throw when no propose calls found', async () => {
       // Mock debug client to return empty trace
       debugClient.request.mockResolvedValueOnce([]);

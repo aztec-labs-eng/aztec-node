@@ -4,7 +4,7 @@ import { type Hex, createPublicClient, fallback, http } from 'viem';
 import { foundry } from 'viem/chains';
 
 import { getArchiverConfigFromEnv } from '../config.js';
-import { validateAndLogTraceAvailability } from './validate_trace.js';
+import { validateAndLogTraceAvailability, validateTraceAvailability } from './validate_trace.js';
 
 type TraceMethod = 'debug_traceTransaction' | 'trace_transaction';
 
@@ -12,7 +12,12 @@ type TraceMethod = 'debug_traceTransaction' | 'trace_transaction';
  * Builds a debug client over a fake L1 JSON-RPC endpoint whose blocks hold the given txs and that serves the given
  * trace methods. The endpoint is served by mocking fetch, so the client is built like the archiver's.
  */
-function makeDebugClient(opts: { blockTxs: Hex[]; traceMethods: TraceMethod[]; unreachable?: boolean }) {
+function makeDebugClient(opts: {
+  blockTxs: Hex[];
+  traceMethods: TraceMethod[];
+  malformedTraceMethods?: TraceMethod[];
+  unreachable?: boolean;
+}) {
   const respond = (id: number, body: { result: unknown } | { error: { code: number; message: string } }) =>
     new Response(JSON.stringify({ jsonrpc: '2.0', id, ...body }), { headers: { 'Content-Type': 'application/json' } });
 
@@ -27,6 +32,9 @@ function makeDebugClient(opts: { blockTxs: Hex[]; traceMethods: TraceMethod[]; u
     }
     if (!opts.traceMethods.includes(method as TraceMethod)) {
       return Promise.resolve(respond(id, { error: { code: -32601, message: `the method ${method} does not exist` } }));
+    }
+    if (opts.malformedTraceMethods?.includes(method as TraceMethod)) {
+      return Promise.resolve(respond(id, { result: { unexpected: true } }));
     }
     const trace = method === 'debug_traceTransaction' ? { from: `0x${'01'.repeat(20)}`, type: 'CALL' } : [];
     return Promise.resolve(respond(id, { result: trace }));
@@ -88,6 +96,28 @@ describe('validateAndLogTraceAvailability', () => {
   it('starts when no recent block has a transaction to probe with', async () => {
     const client = makeDebugClient({ blockTxs: [], traceMethods: [] });
     await expect(validateAndLogTraceAvailability(client, false)).resolves.toBeUndefined();
+  });
+
+  it('reports a trace that fails validation apart from a missing method', async () => {
+    const client = makeDebugClient({
+      blockTxs: [txHash],
+      traceMethods: ['debug_traceTransaction', 'trace_transaction'],
+      malformedTraceMethods: ['trace_transaction'],
+    });
+
+    await expect(validateTraceAvailability(client)).resolves.toMatchObject({
+      debugTraceRecent: true,
+      traceTransactionRecent: false,
+      malformedTraceMethods: ['trace_transaction'],
+    });
+  });
+
+  it('does not report a missing method as a trace that fails validation', async () => {
+    const client = makeDebugClient({ blockTxs: [txHash], traceMethods: ['debug_traceTransaction'] });
+    await expect(validateTraceAvailability(client)).resolves.toMatchObject({
+      traceTransactionRecent: false,
+      malformedTraceMethods: [],
+    });
   });
 
   it('refuses to start when the endpoint cannot be reached', async () => {

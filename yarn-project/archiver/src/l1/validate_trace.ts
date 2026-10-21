@@ -6,6 +6,14 @@ import type { ZodSchema } from 'zod';
 import { callTraceSchema } from './debug_tx.js';
 import { traceTransactionResponseSchema } from './trace_tx.js';
 
+type TraceMethod = 'debug_traceTransaction' | 'trace_transaction';
+
+/**
+ * Outcome of probing a trace method: `unsupported` when the request fails, `malformed` when the endpoint answers but
+ * the response does not pass the schema the archiver parses it with.
+ */
+type TraceProbeResult = 'supported' | 'unsupported' | 'malformed';
+
 /**
  * Helper function to test a trace method with validation
  *
@@ -15,31 +23,40 @@ import { traceTransactionResponseSchema } from './trace_tx.js';
  * @param method - Name of the RPC method ('debug_traceTransaction' or 'trace_transaction')
  * @param blockType - Type of block being tested ('recent' or 'old')
  * @param logger - Logger instance
- * @returns true if the method works and validation passes, false otherwise
  */
 async function testTraceMethod(
   client: ViemPublicDebugClient,
   txHash: Hex,
   schema: ZodSchema,
-  method: 'debug_traceTransaction' | 'trace_transaction',
+  method: TraceMethod,
   blockType: string,
   logger: Logger,
-): Promise<boolean> {
+): Promise<TraceProbeResult> {
+  let result: unknown;
   try {
     // Make request with appropriate params based on method name
-    const result = await client.request(
+    result = await client.request(
       method === 'debug_traceTransaction'
         ? { method, params: [txHash, { tracer: 'callTracer' }] }
         : { method, params: [txHash] },
     );
-
-    schema.parse(result);
-    logger.debug(`${method} works for ${blockType} blocks`);
-    return true;
   } catch (error) {
     logger.warn(`${method} failed for ${blockType} blocks: ${error}`);
-    return false;
+    return 'unsupported';
   }
+
+  const parsed = schema.safeParse(result);
+  if (!parsed.success) {
+    logger.warn(`${method} returned a trace that failed validation for ${blockType} blocks`, {
+      method,
+      txHash,
+      issues: parsed.error.issues.slice(0, 5),
+    });
+    return 'malformed';
+  }
+
+  logger.debug(`${method} works for ${blockType} blocks`);
+  return 'supported';
 }
 
 /** Result of trace availability checks */
@@ -54,6 +71,8 @@ export interface TraceAvailability {
   traceTransactionOld: boolean;
   /** Whether no recent block had a transaction to probe with, so availability could not be determined */
   noTxToProbe: boolean;
+  /** Methods the endpoint served but whose response failed validation, which points at the archiver, not the endpoint */
+  malformedTraceMethods: TraceMethod[];
 }
 
 /**
@@ -74,6 +93,15 @@ export async function validateTraceAvailability(
     debugTraceOld: false,
     traceTransactionOld: false,
     noTxToProbe: false,
+    malformedTraceMethods: [],
+  };
+
+  const probe = async (txHash: Hex, schema: ZodSchema, method: TraceMethod, blockType: string) => {
+    const outcome = await testTraceMethod(client, txHash, schema, method, blockType, logger);
+    if (outcome === 'malformed' && !result.malformedTraceMethods.includes(method)) {
+      result.malformedTraceMethods.push(method);
+    }
+    return outcome === 'supported';
   };
 
   try {
@@ -97,23 +125,14 @@ export async function validateTraceAvailability(
     const recentTxHash = latestBlock.transactions[0] as Hex;
 
     // Test debug_traceTransaction with recent block
-    result.debugTraceRecent = await testTraceMethod(
-      client,
-      recentTxHash,
-      callTraceSchema,
-      'debug_traceTransaction',
-      'recent',
-      logger,
-    );
+    result.debugTraceRecent = await probe(recentTxHash, callTraceSchema, 'debug_traceTransaction', 'recent');
 
     // Test trace_transaction with recent block
-    result.traceTransactionRecent = await testTraceMethod(
-      client,
+    result.traceTransactionRecent = await probe(
       recentTxHash,
       traceTransactionResponseSchema,
       'trace_transaction',
       'recent',
-      logger,
     );
 
     // Get a block from 512 blocks ago
@@ -142,24 +161,10 @@ export async function validateTraceAvailability(
     const oldTxHash = oldBlock.transactions[0] as Hex;
 
     // Test debug_traceTransaction with old block
-    result.debugTraceOld = await testTraceMethod(
-      client,
-      oldTxHash,
-      callTraceSchema,
-      'debug_traceTransaction',
-      'old',
-      logger,
-    );
+    result.debugTraceOld = await probe(oldTxHash, callTraceSchema, 'debug_traceTransaction', 'old');
 
     // Test trace_transaction with old block
-    result.traceTransactionOld = await testTraceMethod(
-      client,
-      oldTxHash,
-      traceTransactionResponseSchema,
-      'trace_transaction',
-      'old',
-      logger,
-    );
+    result.traceTransactionOld = await probe(oldTxHash, traceTransactionResponseSchema, 'trace_transaction', 'old');
   } catch (error) {
     logger.warn(`Error validating debug_traceTransaction and trace_transaction availability: ${error}`);
   }
@@ -222,10 +227,16 @@ export async function validateAndLogTraceAvailability(
     logger.warn('Starting without confirming that the Ethereum debug client supports trace methods');
   } else {
     // Error case: no support at all
+    const malformed = availability.malformedTraceMethods;
     const errorMessage =
-      'Ethereum debug client does not support debug_traceTransaction or trace_transaction methods. ' +
-      'The archiver needs a trace to read checkpoints published through contracts it does not recognize, ' +
-      'and stops syncing at the first one it cannot read. Point ETHEREUM_DEBUG_HOSTS at a trace-capable endpoint.';
+      malformed.length > 0
+        ? `Ethereum debug client returned traces that failed validation for ${malformed.join(', ')}, ` +
+          'so the archiver cannot read checkpoints published through contracts it does not recognize ' +
+          'and stops syncing at the first one. The endpoint serves the method, so this is an archiver ' +
+          'parsing issue rather than an endpoint misconfiguration; please report it.'
+        : 'Ethereum debug client does not support debug_traceTransaction or trace_transaction methods. ' +
+          'The archiver needs a trace to read checkpoints published through contracts it does not recognize, ' +
+          'and stops syncing at the first one it cannot read. Point ETHEREUM_DEBUG_HOSTS at a trace-capable endpoint.';
 
     if (ethereumAllowNoDebugHosts) {
       logger.warn(`${errorMessage} Continuing because ETHEREUM_ALLOW_NO_DEBUG_HOSTS is set to true.`);
