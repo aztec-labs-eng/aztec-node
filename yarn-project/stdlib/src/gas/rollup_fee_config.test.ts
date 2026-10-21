@@ -67,14 +67,6 @@ describe('RollupFeeConfigTracker', () => {
     expect(tracker.getFeeConfig()).toEqual(expectedAt(10n, initialValues));
   });
 
-  it('picks up a governance update on refresh', async () => {
-    tracker = await RollupFeeConfigTracker.create(rollup);
-    governanceUpdate(raisedValues);
-
-    expect(await tracker.refresh()).toEqual(expectedAt(11n, raisedValues));
-    expect(tracker.getFeeConfig()).toEqual(expectedAt(11n, raisedValues));
-  });
-
   it('picks up a governance update from its own polling loop', async () => {
     tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
     tracker.start();
@@ -86,10 +78,17 @@ describe('RollupFeeConfigTracker', () => {
 
   it('keeps the newer value when a lagging RPC node reports an older block', async () => {
     governanceUpdate(raisedValues);
-    tracker = await RollupFeeConfigTracker.create(rollup);
+    tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
 
     head = 9n;
-    expect(await tracker.refresh()).toEqual(expectedAt(11n, raisedValues));
+    tracker.start();
+    // Wait until a poll has actually read the older block, so the assertion below is about that read.
+    await retryUntil(
+      () => rollup.getManaLimit.mock.calls.some(([opts]) => opts?.blockNumber === 9n) || undefined,
+      'poll',
+      5,
+      0.01,
+    );
     expect(tracker.getFeeConfig()).toEqual(expectedAt(11n, raisedValues));
   });
 
@@ -143,17 +142,12 @@ describe('RollupFeeConfigTracker', () => {
     expect(readsAtBlock(2n)).toBe(2);
   });
 
-  it("asks for a fresh block number on refresh, and polls with the client's cached one", async () => {
+  it("polls with the client's cached block number", async () => {
     tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
-    client.getBlockNumber.mockClear();
-
-    await tracker.refresh();
-    expect(client.getBlockNumber.mock.calls).toEqual([[{ cacheTime: 0 }]]);
-
-    client.getBlockNumber.mockClear();
     tracker.start();
-    await retryUntil(() => client.getBlockNumber.mock.calls.length > 0 || undefined, 'poll', 5, 0.01);
-    expect(client.getBlockNumber.mock.calls[0]).toEqual([]);
+
+    await retryUntil(() => client.getBlockNumber.mock.calls.length > 2 || undefined, 'poll', 5, 0.01);
+    expect(client.getBlockNumber.mock.calls.every(args => args.length === 0)).toBe(true);
   });
 
   it('retries a pinned read that failed', async () => {
@@ -164,21 +158,15 @@ describe('RollupFeeConfigTracker', () => {
     expect(await tracker.getFeeConfigAt(7n)).toEqual(expectedAt(7n, initialValues));
   });
 
-  it('rejects a refresh that fails, keeping the last value', async () => {
-    tracker = await RollupFeeConfigTracker.create(rollup);
-    governanceUpdate(raisedValues);
-    rollup.getManaLimit.mockRejectedValueOnce(new Error('rpc down'));
-
-    // A caller about to reject on the cached limit must learn that the re-read failed, not get the stale value back.
-    await expect(tracker.refresh()).rejects.toThrow('rpc down');
-    expect(tracker.getFeeConfig()).toEqual(expectedAt(10n, initialValues));
-  });
-
-  it('keeps polling after a refresh fails', async () => {
+  it('keeps the last value while a poll fails, and picks up the change once one succeeds', async () => {
     tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
     governanceUpdate(raisedValues);
     rollup.getManaLimit.mockRejectedValueOnce(new Error('rpc down')).mockRejectedValueOnce(new Error('rpc down'));
     tracker.start();
+
+    // The create read plus the two failing polls: while those fail, the value stays at the create read.
+    await retryUntil(() => rollup.getManaLimit.mock.calls.length >= 3 || undefined, 'failing polls', 5, 0.01);
+    expect(tracker.getFeeConfig()).toEqual(expectedAt(10n, initialValues));
 
     await retryUntil(() => tracker!.getFeeConfig().manaLimit === raisedValues.manaLimit || undefined, 'poll', 5, 0.01);
     expect(tracker.getFeeConfig()).toEqual(expectedAt(11n, raisedValues));

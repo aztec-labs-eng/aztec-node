@@ -17,18 +17,12 @@ export type RollupFeeConfig = {
 /** Source of the rollup's live fee settings. */
 export interface RollupFeeConfigProvider {
   /**
-   * Last config successfully read from L1. Usually at most one refresh interval old, but it stays at the last good
+   * Last config successfully read from L1. Usually at most one polling interval old, but it stays at the last good
    * read for as long as L1 reads keep failing.
    */
   getFeeConfig(): RollupFeeConfig;
   /** Config as of the given L1 block, for callers pricing fees at a pinned block. */
   getFeeConfigAt(l1BlockNumber: bigint): Promise<RollupFeeConfig>;
-  /**
-   * Re-reads L1 now and returns the result. For a caller about to reject on a cached limit. Afterwards
-   * getFeeConfig() returns this value or a newer one. Rejects when the read fails, leaving the cached value as it
-   * was, so the caller can tell a confirmed limit from one it could not re-read.
-   */
-  refresh(): Promise<RollupFeeConfig>;
 }
 
 /** Default polling interval. Each pass reads L1's block number through the client's cache, so it is cheap. */
@@ -64,7 +58,7 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
     opts: { pollingIntervalMs?: number; pinnedReadsCapacity?: number; logger?: Logger } = {},
   ): Promise<RollupFeeConfigTracker> {
     const log = opts.logger ?? createLogger('rollup-fee-config');
-    const l1BlockNumber = await rollup.client.getBlockNumber({ cacheTime: 0 });
+    const l1BlockNumber = await rollup.client.getBlockNumber();
     const initial = await readRollupFeeConfig(rollup, l1BlockNumber);
     log.info(`Read rollup fee config at L1 block ${l1BlockNumber}`, initial);
     return new RollupFeeConfigTracker(
@@ -109,32 +103,19 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
   }
 
   /**
-   * Re-reads L1 at its latest block, asking the client for a fresh block number rather than its cached one. Rejects
-   * when the read fails, keeping the last value.
-   */
-  public async refresh(): Promise<RollupFeeConfig> {
-    await this.readLatest(await this.rollup.client.getBlockNumber({ cacheTime: 0 }));
-    return this.latest;
-  }
-
-  /**
-   * One pass of the polling loop. It takes the client's cached block number, so a pass within the cache window costs
-   * no new reads. A failed read only logs: the last value stays until a later pass succeeds.
+   * One pass of the polling loop: reads the config at L1's latest block, sharing any pinned read for it. It takes the
+   * client's cached block number, so a pass within the cache window costs no new reads. A failed read only logs: the
+   * last value stays until a later pass succeeds.
    */
   private async poll(): Promise<void> {
     try {
-      await this.readLatest(await this.rollup.client.getBlockNumber());
+      this.offer(await this.getFeeConfigAt(await this.rollup.client.getBlockNumber()));
     } catch (err) {
       this.log.warn(`Failed to refresh rollup fee config from L1, keeping the last value`, {
         err,
         l1BlockNumber: this.latest.l1BlockNumber,
       });
     }
-  }
-
-  /** Reads the config at the given L1 block, sharing any pinned read for it, and offers it as the latest value. */
-  private async readLatest(l1BlockNumber: bigint): Promise<void> {
-    this.offer(await this.getFeeConfigAt(l1BlockNumber));
   }
 
   /** Takes the read as the latest value unless it is older: a lagging RPC node must not move the value back. */
@@ -176,10 +157,6 @@ export class TestRollupFeeConfigProvider implements RollupFeeConfigProvider {
   }
 
   public getFeeConfigAt(_l1BlockNumber: bigint): Promise<RollupFeeConfig> {
-    return Promise.resolve(this.config);
-  }
-
-  public refresh(): Promise<RollupFeeConfig> {
     return Promise.resolve(this.config);
   }
 }
