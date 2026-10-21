@@ -18,6 +18,11 @@ import type { Watcher } from './watcher.js';
  * Facade for the Slasher client. This class forwards all requests to the actual Slasher client implementation.
  * This class also monitors via the rollup contract when the underlying slasher proposer contract changes, and when it
  * does, it stops the current slasher client, recreates a new one with the new contract address, and starts it again.
+ *
+ * A replacement slashing proposer must keep the same round size and slash offset as the one it replaces. The offenses
+ * store persists across the swap with each offense filed under its round at the old round size, and the two
+ * proposers' voting windows only line up when both values match. A larger round size makes the new proposer re-vote
+ * slots the old one already slashed, so validators get slashed twice; a smaller one skips a range of slots entirely.
  */
 export class SlasherClientFacade implements SlasherClientInterface {
   private client: SlasherClientInterface | undefined;
