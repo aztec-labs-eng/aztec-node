@@ -92,6 +92,7 @@ import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
 import type { PublicDataWitnessData } from '../noir-structs/public_data_witness_data.js';
 import type { ResolvedTx } from '../noir-structs/resolved_tx.js';
 import type { TxEffectData } from '../noir-structs/tx_effect_data.js';
+import type { TxEffectWithBlockData } from '../noir-structs/tx_effect_with_block_data.js';
 import type { UtilityContext } from '../noir-structs/utility_context.js';
 import { pickNotes } from '../pick_notes.js';
 import type { TransientArrayService } from '../transient_array_service.js';
@@ -794,20 +795,16 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /** Fetches transaction effects for all hashes, preserving request order. */
-  public async getTxEffects(txHashes: EphemeralArray<TxHash>): Promise<EphemeralArray<Option<TxEffectData>>> {
-    const hashes = txHashes.readAll(this.ephemeralArrayService);
-    const invalidHash = hashes.find(txHash => txHash.hash.isZero());
-    if (invalidHash) {
-      throw new Error('Invalid tx hash passed into aztec_utl_getTxEffects oracle handler');
-    }
+  public getTxEffects(txHashes: EphemeralArray<TxHash>): Promise<EphemeralArray<Option<TxEffectData>>> {
+    return this.#getTxEffectsBatch(txHashes, 'aztec_utl_getTxEffects', txHash => this.#getTxEffectOption(txHash));
+  }
 
-    const uniqueTxHashes = uniqueBy(hashes, h => h.toString());
-    const options = await allToCompletion(uniqueTxHashes.map(txHash => this.#getTxEffectOption(txHash)));
-    const optionsByHash = new Map(uniqueTxHashes.map((txHash, i) => [txHash.toString(), options[i]]));
-
-    return EphemeralArray.fromValues(
-      this.ephemeralArrayService,
-      hashes.map(txHash => optionsByHash.get(txHash.toString())!),
+  /** Fetches transaction effects for all hashes, preserving request order, each paired with its block. */
+  public getTxEffectsWithBlock(
+    txHashes: EphemeralArray<TxHash>,
+  ): Promise<EphemeralArray<Option<TxEffectWithBlockData>>> {
+    return this.#getTxEffectsBatch(txHashes, 'aztec_utl_getTxEffectsWithBlock', txHash =>
+      this.#getTxEffectWithBlockOption(txHash),
     );
   }
 
@@ -1284,12 +1281,44 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     return receipt;
   }
 
+  async #getTxEffectsBatch<T>(
+    txHashes: EphemeralArray<TxHash>,
+    oracleName: string,
+    fetch: (txHash: TxHash) => Promise<Option<T>>,
+  ): Promise<EphemeralArray<Option<T>>> {
+    const hashes = txHashes.readAll(this.ephemeralArrayService);
+    if (hashes.some(txHash => txHash.hash.isZero())) {
+      throw new Error(`Invalid tx hash passed into ${oracleName} oracle handler`);
+    }
+
+    const uniqueTxHashes = uniqueBy(hashes, h => h.toString());
+    const options = await allToCompletion(uniqueTxHashes.map(fetch));
+    const optionsByHash = new Map(uniqueTxHashes.map((txHash, i) => [txHash.toString(), options[i]]));
+
+    return EphemeralArray.fromValues(
+      this.ephemeralArrayService,
+      hashes.map(txHash => optionsByHash.get(txHash.toString())!),
+    );
+  }
+
   async #getTxEffectOption(txHash: TxHash): Promise<Option<TxEffectData>> {
+    const withBlock = await this.#getTxEffectWithBlockOption(txHash);
+    return withBlock.isSome() ? Option.some(withBlock.value.effect) : Option.none();
+  }
+
+  async #getTxEffectWithBlockOption(txHash: TxHash): Promise<Option<TxEffectWithBlockData>> {
     const receipt = await this.#getTxReceiptWithEffect(txHash);
+    // TODO: getTxReceipt takes no block parameter, so this resolves the tx against the node's current tip and
+    // then only compares block numbers. A reorg or a pruned proposed block below the anchor can seat a different block
+    // at the same height, letting an effect from a block that is not on the anchor's chain through. Anchor by block
+    // hash once the node exposes an anchored tx-effect lookup.
     if (!receipt.isMined() || !receipt.txEffect || receipt.blockNumber > this.anchorBlockHeader.getBlockNumber()) {
       return Option.none();
     }
-    return Option.some(this.#toTxEffectData(receipt.txEffect));
+    return Option.some({
+      effect: this.#toTxEffectData(receipt.txEffect),
+      block: { blockNumber: receipt.blockNumber, blockHash: receipt.blockHash.toFr() },
+    });
   }
 
   #toTxEffectData(txEffect: TxEffect): TxEffectData {
