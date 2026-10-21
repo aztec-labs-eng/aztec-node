@@ -293,6 +293,8 @@ export class NextBlockFeeCache {
       checkpointedCheckpointNumber,
       rollup,
       feeConfigProvider: this.feeConfigProvider,
+      // The same L1 block the fee simulation is pinned to, so the parent's fee header and the fee agree.
+      l1BlockNumber: frontier.l1SyncPoint?.blockNumber,
       signatureContext: this.signatureContext,
       log: this.log,
     });

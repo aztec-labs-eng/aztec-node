@@ -290,6 +290,45 @@ describe('NextBlockFeeCache', () => {
       );
     });
 
+    it("derives the proposed parent's fee header from the mana target at the frontier's L1 block", async () => {
+      const frontierL1Block = 7n;
+      const proposedCheckpoint = makeProposedCheckpointData({
+        checkpointNumber: CheckpointNumber(3),
+        lastBlock: BlockNumber(5),
+        slotNumber: SlotNumber(30),
+      });
+      const grandparentFeeHeader = { ...makeFeeHeader(), excessMana: 1500n, manaUsed: 0n };
+      rollupContract.getCheckpoint.mockResolvedValue({ feeHeader: grandparentFeeHeader } as never);
+      // Governance raised the target after the frontier's L1 block; the tracker's head already has the new value.
+      feeConfigProvider.setFeeConfig({ manaTarget: 2000n, l1BlockNumber: frontierL1Block + 3n });
+      jest
+        .spyOn(feeConfigProvider, 'getFeeConfigAt')
+        .mockImplementation(blockNumber =>
+          blockNumber === frontierL1Block
+            ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 1000n, l1BlockNumber: blockNumber })
+            : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
+        );
+
+      await cache.refresh(
+        makeFrontier(
+          boundaryArgs({
+            checkpointed: CheckpointNumber(2),
+            proposedCheckpoint,
+            l1SyncPoint: syncPoint(Number(frontierL1Block)),
+          }),
+        ),
+      );
+
+      expect(overridesPlanOf()?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(
+          grandparentFeeHeader,
+          proposedCheckpoint.totalManaUsed,
+          proposedCheckpoint.feeAssetPriceModifier,
+          1000n,
+        ),
+      );
+    });
+
     it('prices on the checkpointed tip when the frontier runs more than one checkpoint ahead of L1', async () => {
       // L1 keeps no `tempCheckpointLogs` cell for a checkpoint it has not seen, so the grandparent read the
       // pipelined fee header derives from reverts while the checkpoints between it and the tip are in flight.

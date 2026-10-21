@@ -17,6 +17,11 @@ type CheckpointSimulationOverridesPlanInput = {
   rollup: RollupContract;
   /** Live rollup fee settings, for the mana target the pipelined parent's fee header is derived with. */
   feeConfigProvider: RollupFeeConfigProvider;
+  /**
+   * L1 block the caller runs its fee simulation at. The pipelined parent's fee header is derived from the L1 state at
+   * that block too, so the fee quote does not mix two L1 snapshots. When undefined, the latest state is read.
+   */
+  l1BlockNumber?: bigint;
   /** Checkpoint number to be proposed. */
   checkpointNumber: CheckpointNumber;
   /** Logger instance. */
@@ -107,6 +112,7 @@ export async function buildCheckpointSimulationOverridesPlan(
       proposedCheckpointData: input.proposedCheckpointData,
       rollup: input.rollup,
       feeConfigProvider: input.feeConfigProvider,
+      l1BlockNumber: input.l1BlockNumber,
       log: input.log,
     });
     if (feeHeader) {
@@ -141,6 +147,8 @@ type PipelinedParentFeeHeaderInput = {
   proposedCheckpointData: ProposedCheckpointData;
   rollup: RollupContract;
   feeConfigProvider: RollupFeeConfigProvider;
+  /** L1 block to read the grandparent and the mana target at; the latest state when undefined. */
+  l1BlockNumber?: bigint;
   log: Logger;
 };
 
@@ -159,10 +167,13 @@ export async function computePipelinedParentFeeHeader(
 
   const grandparentCheckpointNumber = CheckpointNumber(input.checkpointNumber - 2);
 
-  const grandparentCheckpoint = await input.rollup.getCheckpoint(grandparentCheckpointNumber);
-  // The latest target rather than one pinned to a sync point: the grandparent is read at L1's latest block too, and
-  // L1 checks the quoted fee against the target in force when the propose lands.
-  const { manaTarget } = input.feeConfigProvider.getFeeConfig();
+  const { l1BlockNumber } = input;
+  const [grandparentCheckpoint, { manaTarget }] = await Promise.all([
+    input.rollup.getCheckpoint(grandparentCheckpointNumber, { blockNumber: l1BlockNumber }),
+    l1BlockNumber === undefined
+      ? input.feeConfigProvider.getFeeConfig()
+      : input.feeConfigProvider.getFeeConfigAt(l1BlockNumber),
+  ]);
 
   if (!grandparentCheckpoint?.feeHeader) {
     throw new Error(

@@ -1,6 +1,6 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
-import type { InboxContract } from '@aztec-labs/ethereum/contracts';
+import { type InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   BlockNumber,
@@ -95,6 +95,7 @@ describe('CheckpointProposalJob', () => {
   let epochCache: MockProxy<EpochCache>;
   let validatorClient: MockProxy<ValidatorClient>;
   let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
+  let feeConfigProvider: FixedRollupFeeConfigProvider;
   let p2p: MockProxy<P2P>;
   let worldState: MockProxy<WorldStateSynchronizer>;
   let checkpointsBuilder: MockCheckpointsBuilder;
@@ -220,6 +221,7 @@ describe('CheckpointProposalJob', () => {
     });
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
+    feeConfigProvider = new FixedRollupFeeConfigProvider({ manaTarget: 10_000n });
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue({
       slotNumber: globalVariables.slotNumber,
       timestamp: globalVariables.timestamp,
@@ -842,7 +844,7 @@ describe('CheckpointProposalJob', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
-      new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
+      feeConfigProvider,
       signatureContext,
       config,
       timetable,
@@ -957,6 +959,45 @@ describe('CheckpointProposalJob', () => {
       expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
       expect(publisher.sendRequestsAt).toHaveBeenCalled();
       expect(mismatchEvents).toHaveLength(0);
+    });
+
+    it("derives the parent's fee header and the fee from the same L1 block", async () => {
+      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
+      mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
+      const grandparentFeeHeader = {
+        manaUsed: 0n,
+        excessMana: 15_000n,
+        ethPerFeeAsset: 1n,
+        protocolFee: 0n,
+        proverCost: 0n,
+      };
+      jest
+        .spyOn(publisher.rollupContract, 'getCheckpoint')
+        .mockResolvedValue({ feeHeader: grandparentFeeHeader } as any);
+      const simulatedL1Block = 77n;
+      jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(simulatedL1Block);
+      // The tracker's cached head is at a different block with a different target than the block the fee is read at.
+      feeConfigProvider.setFeeConfig({ manaTarget: 20_000n, l1BlockNumber: simulatedL1Block - 5n });
+      jest
+        .spyOn(feeConfigProvider, 'getFeeConfigAt')
+        .mockImplementation(blockNumber =>
+          blockNumber === simulatedL1Block
+            ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 10_000n, l1BlockNumber: blockNumber })
+            : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
+        );
+
+      await pipelinedJob.executeAndAwait();
+
+      const [, , , plan, options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
+      expect(options).toEqual({ blockNumber: simulatedL1Block });
+      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(
+          grandparentFeeHeader,
+          proposedParent.totalManaUsed,
+          proposedParent.feeAssetPriceModifier,
+          10_000n,
+        ),
+      );
     });
 
     // The build pins the proven tip on the standing assumption that the epoch proof lands by the target slot; the

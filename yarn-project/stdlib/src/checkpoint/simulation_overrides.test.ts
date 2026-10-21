@@ -3,6 +3,7 @@ import { BlockNumber, CheckpointNumber, TreeLeafIndex } from '@aztec-labs/founda
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
 import { FixedRollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
@@ -105,6 +106,42 @@ describe('computePipelinedParentFeeHeader', () => {
         pendingData.totalManaUsed,
         pendingData.feeAssetPriceModifier,
         raisedTarget,
+      ),
+    );
+  });
+
+  it('reads the grandparent and the mana target at the L1 block the caller simulates at', async () => {
+    const simulatedL1Block = 7n;
+    rollup.getCheckpoint.mockImplementation((_checkpoint, opts) =>
+      opts?.blockNumber === simulatedL1Block
+        ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+        : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+    );
+    // The provider's head has a target governance set after the simulated block.
+    feeConfigProvider.setFeeConfig({ manaTarget: 2_000n, l1BlockNumber: simulatedL1Block + 3n });
+    jest
+      .spyOn(feeConfigProvider, 'getFeeConfigAt')
+      .mockImplementation(blockNumber =>
+        blockNumber === simulatedL1Block
+          ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 1_000n, l1BlockNumber: blockNumber })
+          : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
+      );
+
+    const result = await computePipelinedParentFeeHeader({
+      checkpointNumber: pipelinedCheckpointNumber,
+      proposedCheckpointData: pendingData,
+      rollup,
+      feeConfigProvider,
+      l1BlockNumber: simulatedL1Block,
+      log: createLogger('test'),
+    });
+
+    expect(result).toEqual(
+      RollupContract.computeChildFeeHeader(
+        grandparentFeeHeader,
+        pendingData.totalManaUsed,
+        pendingData.feeAssetPriceModifier,
+        1_000n,
       ),
     );
   });

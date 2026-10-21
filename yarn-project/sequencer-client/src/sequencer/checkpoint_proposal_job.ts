@@ -954,6 +954,10 @@ export class CheckpointProposalJob implements Traceable {
       // pending/archive/fee-header to "as if the proposed parent had landed", so both the
       // mana-min-fee simulation (in the globals builder) and the pre-gossip
       // validateCheckpointHeaderAndInbox preflight see the chain tip the eventual L1 send will see.
+      // The fee simulation and the pipelined parent's fee header are read at one L1 block, so the quote does not mix
+      // two L1 snapshots (governance can change the mana target in between). It is L1's latest block, read now, which
+      // keeps the quote as close as it can be to the state the propose lands on.
+      const feeL1BlockNumber = await this.publisher.rollupContract.client.getBlockNumber({ cacheTime: 0 });
       const simulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
         checkpointNumber: this.checkpointNumber,
         proposedCheckpointData: this.proposedCheckpointData,
@@ -961,6 +965,7 @@ export class CheckpointProposalJob implements Traceable {
         checkpointedCheckpointNumber: this.checkpointedCheckpointNumber,
         rollup: this.publisher.rollupContract,
         feeConfigProvider: this.feeConfigProvider,
+        l1BlockNumber: feeL1BlockNumber,
         signatureContext: this.signatureContext,
         log: this.log,
       });
@@ -970,6 +975,7 @@ export class CheckpointProposalJob implements Traceable {
         feeRecipient,
         this.targetSlot,
         simulationOverridesPlan,
+        { blockNumber: feeL1BlockNumber },
       );
 
       // Collect the out hashes of all the checkpoints before this one in the same epoch.
