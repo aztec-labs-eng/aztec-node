@@ -638,7 +638,10 @@ export class SessionManager {
       }
       return registered;
     } catch (err) {
-      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}; retrying later`, err);
+      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}; retrying later`, {
+        epoch,
+        err,
+      });
       return true;
     }
   }

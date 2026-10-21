@@ -841,7 +841,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
         this.getProverId(),
       );
     } catch (err) {
-      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epochNumber}`, err);
+      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epochNumber}`, { epochNumber, err });
       return false;
     }
   }
