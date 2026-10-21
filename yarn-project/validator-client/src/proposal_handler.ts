@@ -15,7 +15,7 @@ import {
   type CheckpointProposalHash,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
-import { pick } from '@aztec-labs/foundation/collection';
+import { pick, sum } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -1824,6 +1824,7 @@ export class ProposalHandler {
     // Get prior blocks in this checkpoint (same slot before current block)
     const allBlocksInSlot = await this.blockSource.getBlocksForSlot(slot);
     const priorBlocks = allBlocksInSlot.filter(b => b.number < blockNumber && b.header.getSlot() === slot);
+    await this.refreshManaLimitIfExceeded(priorBlocks, blockHeader, { blockNumber, slot });
 
     // Fork before the block to be built
     const parentBlockNumber = BlockNumber(blockNumber - 1);
@@ -1925,6 +1926,33 @@ export class ProposalHandler {
       reexecutionTimeMs,
       totalManaUsed,
     };
+  }
+
+  /**
+   * Re-reads the rollup mana limit from L1 when a block proposal claims more checkpoint mana than the cached limit
+   * allows. Re-execution caps the block at the mana left under the cached limit, so an honest block that uses headroom
+   * governance has just added would otherwise lose txs and be rejected before the checkpoint-level check could
+   * re-read the limit.
+   */
+  private async refreshManaLimitIfExceeded(
+    priorBlocks: L2Block[],
+    blockHeader: BlockHeader,
+    logData: LogData,
+  ): Promise<void> {
+    const feeConfigProvider = this.checkpointsBuilder.getFeeConfigProvider();
+    const cachedManaLimit = feeConfigProvider.getFeeConfig().manaLimit;
+    const claimedMana =
+      sum(priorBlocks.map(block => block.header.totalManaUsed.toNumber())) + blockHeader.totalManaUsed.toNumber();
+    if (BigInt(claimedMana) <= cachedManaLimit) {
+      return;
+    }
+    const refreshed = await feeConfigProvider.refresh();
+    this.log.verbose(`Re-read the rollup mana limit from L1 before re-executing a block over the cached limit`, {
+      ...logData,
+      claimedMana,
+      cachedManaLimit,
+      refreshedManaLimit: refreshed.manaLimit,
+    });
   }
 
   /**
