@@ -16,7 +16,6 @@ import { BootstrapNode } from '../../bootstrap/bootstrap.js';
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES, type P2PConfig, getP2PDefaultConfig } from '../../config.js';
 import { AZTEC_ENR_CLIENT_VERSION_KEY, AZTEC_ENR_KEY, PeerEvent } from '../../types/index.js';
 import { PeerDiscoveryState } from '../service.js';
-import { getDiscv5RateLimiterDefaultConfig } from './config.js';
 import { DiscV5Service } from './discV5_service.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
 
@@ -59,7 +58,6 @@ describe('Discv5Service', () => {
     bootstrapNodes: [],
     queryForIp: false,
     publicIpServices: DEFAULT_PUBLIC_IP_SERVICES,
-    ...getDiscv5RateLimiterDefaultConfig(),
     ...emptyChainConfig,
   };
 
@@ -447,76 +445,6 @@ describe('Discv5Service', () => {
   });
 
   const testPackageVersion = 'test-discv5-service';
-  it('rate-limits unsolicited discovery packets per source IP while exempting expected responses', async () => {
-    // Regression guard: without rateLimiterOpts the transport limiter is undefined and every
-    // unauthenticated packet reaches decode. Assert it is wired.
-    const node = await createNode();
-    const transport = (node as any).discv5.sessionService.transport;
-    const limiter = transport.rateLimiter;
-    expect(limiter).toBeDefined();
-
-    // A single source gets a bounded burst, then is refused.
-    const attackerIp = '203.0.113.1';
-    let allowed = 0;
-    for (let i = 0; i < 5000; i++) {
-      if (limiter.allowEncodedPacket(attackerIp)) {
-        allowed++;
-      }
-    }
-    expect(allowed).toBeGreaterThan(0);
-    expect(allowed).toBeLessThan(5000);
-    expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
-
-    // Expected responses are exempt, driven through the SessionService wrapper (the layer the
-    // request flow uses) rather than the transport hook directly, so a reversed wrapper is caught.
-    const honestIp = '198.51.100.7';
-    const honestAddr = multiaddr(`/ip4/${honestIp}/udp/30303`);
-    const sessionService = (node as any).discv5.sessionService;
-    sessionService.addExpectedResponse(honestAddr);
-    let honestAllowed = 0;
-    for (let i = 0; i < 5000; i++) {
-      if (limiter.allowEncodedPacket(honestIp)) {
-        honestAllowed++;
-      }
-    }
-    expect(honestAllowed).toBe(5000);
-
-    // Once the exchange ends the exemption is cleared and the source is metered again.
-    sessionService.removeExpectedResponse(honestAddr);
-    let afterExchange = 0;
-    for (let i = 0; i < 5000; i++) {
-      if (limiter.allowEncodedPacket(honestIp)) {
-        afterExchange++;
-      }
-    }
-    expect(afterExchange).toBeLessThan(5000);
-  });
-
-  it('applies the configured per-IP and global rate limits to the discovery transport', async () => {
-    // Replenish far slower than the test runs so no token comes back mid-test and the counts are exact.
-    const node = await createNode({
-      discv5RateLimitPerIpMaxTokens: 7,
-      discv5RateLimitPerIpReplenishMs: 3_600_000,
-      discv5RateLimitGlobalMaxTokens: 20,
-      discv5RateLimitGlobalReplenishMs: 3_600_000,
-    });
-    const limiter = (node as any).discv5.sessionService.transport.rateLimiter;
-
-    const attackerIp = '203.0.113.1';
-    const attackerAllowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket(attackerIp));
-    expect(attackerAllowed.filter(Boolean).length).toBe(7);
-
-    // The attacker spent 7 of the 20 aggregate tokens, so fresh sources share the remaining 13.
-    const freshIps = Array.from({ length: 20 }, (_, i) => `198.51.100.${i + 1}`);
-    expect(freshIps.filter(ip => limiter.allowEncodedPacket(ip)).length).toBe(13);
-  });
-
-  it('refuses to start with a non-positive rate limit', async () => {
-    await expect(createNode({ discv5RateLimitPerIpMaxTokens: 0 })).rejects.toThrow(
-      'P2P_DISCV5_RATE_LIMIT_PER_IP_MAX_TOKENS',
-    );
-  });
-
   const createNode = async (overrides: Partial<P2PConfig & IDiscv5CreateOptions> = {}, useBootnode = true) => {
     const port = ++basePort;
     const bootnodeAddr = bootNode.getENR().encodeTxt();

@@ -9,7 +9,6 @@ import { ENR, type SignableENR } from '@nethermindeth/enr';
 
 import type { BootnodeConfig } from '../config.js';
 import { createBootnodeENRandPeerId } from '../enr/generate-enr.js';
-import { getDiscv5RateLimiterOpts } from '../services/discv5/config.js';
 import { convertToMultiaddr, getPeerIdPrivateKey, getPublicIp } from '../util.js';
 
 /**
@@ -78,7 +77,6 @@ export class BootstrapNode implements P2PBootstrapApi {
         allowUnverifiedSessions: true,
       },
       metricsRegistry,
-      rateLimiterOpts: getDiscv5RateLimiterOpts(config),
     });
 
     this.node.on('multiaddrUpdated', (addr: Multiaddr) => {

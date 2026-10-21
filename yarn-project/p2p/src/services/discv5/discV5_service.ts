@@ -16,7 +16,6 @@ import { createNodeENR } from '../../enr/generate-enr.js';
 import { AZTEC_ENR_KEY, Discv5Event, PeerEvent } from '../../types/index.js';
 import { convertToMultiaddr } from '../../util.js';
 import { type PeerDiscoveryService, PeerDiscoveryState } from '../service.js';
-import { getDiscv5RateLimiterOpts } from './config.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
 
 const delayBeforeStart = 2000; // 2sec
@@ -128,7 +127,6 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
         ...configOverrides.config,
       },
       metricsRegistry,
-      rateLimiterOpts: getDiscv5RateLimiterOpts(config),
     });
 
     // Hook onto the onEstablished method to check the peer's version from the ENR,

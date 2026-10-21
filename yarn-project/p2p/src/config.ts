@@ -25,11 +25,6 @@ import {
 import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 
 import {
-  type Discv5RateLimiterConfig,
-  discv5RateLimiterConfigKeys,
-  discv5RateLimiterConfigMappings,
-} from './services/discv5/config.js';
-import {
   type BatchTxRequesterConfig,
   batchTxRequesterConfigMappings,
 } from './services/reqresp/batch-tx-requester/config.js';
@@ -43,7 +38,6 @@ import { type TxFileStoreConfig, txFileStoreConfigMappings } from './services/tx
 export interface P2PConfig
   extends P2PReqRespConfig,
     BatchTxRequesterConfig,
-    Discv5RateLimiterConfig,
     ChainConfig,
     TxCollectionConfig,
     TxFileStoreConfig,
@@ -649,7 +643,6 @@ export const p2pConfigMappings: ConfigMappingsType<P2PConfig> = {
   ]),
   ...p2pReqRespConfigMappings,
   ...batchTxRequesterConfigMappings,
-  ...discv5RateLimiterConfigMappings,
   ...chainConfigMappings,
   ...txCollectionConfigMappings,
   ...txFileStoreConfigMappings,
@@ -681,7 +674,6 @@ export type BootnodeConfig = Pick<
   | 'listenAddress'
   | 'queryForIp'
   | 'publicIpServices'
-  | keyof Discv5RateLimiterConfig
 > &
   Required<Pick<P2PConfig, 'p2pIp' | 'p2pPort'>> &
   Pick<DataStoreConfig, 'dataDirectory' | 'dataStoreMapSizeKb'> &
@@ -700,7 +692,6 @@ const bootnodeConfigKeys: (keyof BootnodeConfig)[] = [
   'l1ChainId',
   'queryForIp',
   'publicIpServices',
-  ...discv5RateLimiterConfigKeys,
 ];
 
 export const bootnodeConfigMappings = pickConfigMappings(
