@@ -54,7 +54,7 @@ export async function sequencers(opts: {
       })
     : undefined;
 
-  const who = (maybeWho as `0x{string}`) ?? walletClient?.account.address.toString();
+  const who = (maybeWho as `0x${string}`) ?? walletClient?.account.address.toString();
 
   if (command === 'list') {
     const sequencers = await rollup.getAttesters();
