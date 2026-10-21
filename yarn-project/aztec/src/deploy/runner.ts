@@ -66,7 +66,7 @@ import type {
   Steps,
 } from './types.js';
 
-/** A step's idempotency gate (transitively) depends on itself. */
+/** A step's inventory check (an action's gate, a fund step's balance, a deferred contract's args) waits on itself. */
 class GateCycleError extends Error {
   constructor(message: string) {
     super(message);
@@ -89,6 +89,24 @@ function isDeferred<C>(step: ContractStep<C>): boolean {
 /** The account that sends (and pays for) a contract step's publish tx. */
 function contractSender<C>(step: ContractStep<C>): (resolve: Resolver) => AztecAddress {
   return step.universal ? step.from : step.deployer;
+}
+
+/**
+ * The contract aliases a pure resolver callback looks up, extracted by dry-running it against a
+ * resolver that records each `contract(alias)` lookup instead of resolving it. The callback's return
+ * value is discarded and the ZERO addresses never leave this function — which is what requires such
+ * callbacks to be pure: they run here with fake addresses and again later with real ones.
+ */
+function referencedContracts(run: (resolve: Resolver) => unknown): string[] {
+  const references = new Set<string>();
+  run({
+    account: () => AztecAddress.ZERO,
+    contract: alias => {
+      references.add(alias);
+      return AztecAddress.ZERO;
+    },
+  });
+  return [...references];
 }
 
 /** One tx to send: a single contract publish, or a batch of same-account actions. */
@@ -154,8 +172,10 @@ class DeploymentRun<C extends Steps> {
   private readonly classesPublishedThisRun = new Set<string>();
   private readonly publishedCache = new Map<string, Promise<boolean>>();
   private readonly gateCache = new Map<string, Promise<boolean>>();
-  private readonly gateInProgress = new Set<string>();
+  private readonly deferredCache = new Map<string, Promise<boolean>>();
   private readonly fundGateCache = new Map<string, Promise<boolean>>();
+  /** Which pending inventory checks each in-flight check is waiting on — see {@link memoizedCheck}. */
+  private readonly waitingOn = new Map<string, Set<string>>();
 
   // Populated by the resolve / inventory / plan phases.
   private resolveOrder: string[] = [];
@@ -166,12 +186,15 @@ class DeploymentRun<C extends Steps> {
 
   private readonly resolver: Resolver;
   private readonly ctx: Ctx<C>;
+  /** Set only when the spec gave a URL — a connected node serves the debug API for warping itself. */
+  private readonly nodeUrl: string | undefined;
 
   private constructor(
     private readonly spec: DeploymentSpec<C>,
     private readonly node: AztecNode,
     private readonly wallet: EmbeddedWallet,
   ) {
+    this.nodeUrl = typeof spec.node === 'string' ? spec.node : undefined;
     this.local = spec.local ?? false;
     this.label = spec.label ?? (this.local ? 'local' : 'network');
     this.reporter = spec.reporter ?? consoleReporter();
@@ -200,8 +223,8 @@ class DeploymentRun<C extends Steps> {
       ...this.resolver,
       instance: ((alias: string) =>
         getOrThrow(this.contractInstances, alias, 'contract instance')) as Ctx<C>['instance'],
-      done: id => this.done(id),
-      ran: id => this.ran(id),
+      done: id => this.done(id, undefined),
+      ran: id => this.ran(id, undefined),
       wallet,
       node,
     };
@@ -210,7 +233,7 @@ class DeploymentRun<C extends Steps> {
   /** Validates the spec, connects the node + ephemeral wallet, then resolves accounts and class ids. */
   public static async create<C extends Steps>(spec: DeploymentSpec<C>): Promise<DeploymentRun<C>> {
     DeploymentRun.validateSpec(spec);
-    const node = spec.node ?? createAztecNodeClient(spec.nodeUrl!);
+    const node = typeof spec.node === 'string' ? createAztecNodeClient(spec.node) : spec.node;
     const wallet = await EmbeddedWallet.create(node, {
       ephemeral: true,
       pxeConfig: { ...getPXEConfig(), proverEnabled: !(spec.local ?? false) },
@@ -223,8 +246,8 @@ class DeploymentRun<C extends Steps> {
 
   /** Static spec validation — everything that can be rejected before touching the network. */
   private static validateSpec<C extends Steps>(spec: DeploymentSpec<C>): void {
-    if (!spec.node && !spec.nodeUrl) {
-      throw new Error('runDeployment requires either `node` or `nodeUrl` on the spec.');
+    if (!spec.node) {
+      throw new Error('runDeployment requires a `node` on the spec — a JSON-RPC URL or a connected node.');
     }
     const steps = Object.entries(spec.steps) as [string, StepSpec<C>][];
     const aliases = new Set(steps.map(([alias]) => alias));
@@ -256,6 +279,9 @@ class DeploymentRun<C extends Steps> {
         );
       }
     }
+    // A declared cycle never becomes ready, and inventory only notices it when the checks involved
+    // happen to consult each other — so reject it before touching the network.
+    topologicalLayers([...aliases], new Map(steps.map(([alias, step]) => [alias, step.dependsOn ?? []])));
   }
 
   /** Resolves every deterministic contract upfront, layer by layer in constructor-arg dependency order. */
@@ -289,29 +315,30 @@ class DeploymentRun<C extends Steps> {
       this.publishedThisRun.add(alias);
     }
 
-    // Deferred contracts: try to resolve now — on a re-run the state their args read is already
-    // on-chain, so the address derives and publication is checked like any other contract (which is
-    // what makes re-runs no-ops). When the args can't resolve yet, the contract publishes this run
-    // and re-resolves at execution time, after its `dependsOn` has run. Runs before the action
-    // gates, so `ran`/`done` on a deferred contract answer correctly inside them.
+    // The remaining checks consult each other (a deferred contract waits on the steps it declares, a
+    // gate on the contracts it reads, `ctx.done`/`ctx.ran` on any step), so each is evaluated on
+    // demand and memoized: whichever check reaches a step first decides it, and every later one
+    // reuses that answer. These loops only make sure every step is decided, in any order.
+
+    // Deferred contracts. On a re-run the state their args read is already on-chain, so the address
+    // derives and publication is checked like any other contract (which is what makes re-runs
+    // no-ops); otherwise the contract publishes this run and re-resolves at execution time.
     for (const [alias, step] of this.contractSteps) {
-      if (isDeferred(step) && !(await this.tryResolveDeferred(alias, step))) {
+      if (isDeferred(step) && (await this.deferredPublishes(alias, undefined))) {
         this.publishedThisRun.add(alias);
       }
     }
 
-    // Fund gates: recipients whose public Fee Juice balance is below the step's threshold. Runs
-    // before the action gates so `ctx.done`/`ctx.ran` on a fund step answer correctly inside them.
+    // Fund gates: recipients whose public Fee Juice balance is below the step's threshold.
     for (const alias of this.fundSteps.keys()) {
-      if (!(await this.fundGate(alias))) {
+      if (!(await this.fundGate(alias, undefined))) {
         this.fundsToRun.add(alias);
       }
     }
 
-    // Action gates. Sequential on purpose: evaluating them concurrently would turn the cyclic-gate
-    // detection (gateInProgress) into a silent deadlock of promises awaiting each other.
+    // Action gates.
     for (const alias of this.actionSteps.keys()) {
-      if (!(await this.actionGate(alias))) {
+      if (!(await this.actionGate(alias, undefined))) {
         this.actionsToRun.add(alias);
       }
     }
@@ -389,7 +416,7 @@ class DeploymentRun<C extends Steps> {
     return prepareFeeSession({
       local: this.local,
       node: this.node,
-      nodeUrl: this.spec.nodeUrl,
+      nodeUrl: this.nodeUrl,
       wallet: this.wallet,
       state: this.state,
       persist: () => this.persist(),
@@ -479,22 +506,7 @@ class DeploymentRun<C extends Steps> {
   private recordContractRefs(): Map<string, string[]> {
     const contractRefs = new Map<string, string[]>();
     for (const [alias, step] of this.contractSteps) {
-      const refs = new Set<string>();
-      if (step.initializerArgs) {
-        // Dry-run `initializerArgs` with a resolver that records each `contract(alias)` lookup instead of resolving
-        // it. The returned args are discarded — this call only extracts references — and the ZERO addresses never
-        // leave this block. This is what requires `initializerArgs` to be pure: it runs here with fake addresses and
-        // again later (in resolveDeterministicContracts) with real ones.
-        const recording: Resolver = {
-          account: () => AztecAddress.ZERO,
-          contract: referenced => {
-            refs.add(referenced);
-            return AztecAddress.ZERO;
-          },
-        };
-        step.initializerArgs(recording);
-      }
-      contractRefs.set(alias, [...refs]);
+      contractRefs.set(alias, step.initializerArgs ? referencedContracts(step.initializerArgs) : []);
     }
     return contractRefs;
   }
@@ -545,15 +557,180 @@ class DeploymentRun<C extends Steps> {
   }
 
   /**
-   * Attempts to resolve a deferred contract from current on-chain state. True if the args
-   * resolved AND the instance is already published — i.e. there is no work left for it this run.
+   * Whether a deferred contract publishes this run, decided once per run. It resolves from current
+   * on-chain state only once every step it declares is in place, actions included: its args read
+   * their effects, so resolving earlier would derive the address from state that does not exist
+   * yet. It has no work left when the args resolve AND the instance is already published.
    */
-  private async tryResolveDeferred(alias: string, step: ContractStep<C>): Promise<boolean> {
+  private deferredPublishes(alias: string, waiter: string | undefined): Promise<boolean> {
+    const step = getOrThrow(this.contractSteps, alias, 'contract');
+    return this.memoizedCheck(this.deferredCache, alias, waiter, async () => {
+      if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
+        return true;
+      }
+      await this.resolveDeferred(alias, step, { inventory: true });
+      return !(await this.isPublished(alias));
+    });
+  }
+
+  /**
+   * Evaluates the inventory check for `alias` at most once per run, on behalf of `waiter` — the check
+   * awaiting it, or undefined at the top level. Checks consult each other, possibly from parallel
+   * branches of one gate, so a check still in flight is shared, and only a wait that would close a
+   * loop in the waiting-on graph is a cycle: it throws {@link GateCycleError} instead of deadlocking.
+   */
+  private memoizedCheck(
+    cache: Map<string, Promise<boolean>>,
+    alias: string,
+    waiter: string | undefined,
+    evaluate: () => Promise<boolean>,
+  ): Promise<boolean> {
+    if (waiter === undefined) {
+      return this.getOrEvaluate(cache, alias, evaluate);
+    }
+    if (this.waitsOn(alias, waiter)) {
+      return Promise.reject(new GateCycleError(`Cyclic dependency: "${waiter}" and "${alias}" wait on each other.`));
+    }
+    // Recorded before evaluating: the evaluation can reach back to `waiter` synchronously.
+    let edges = this.waitingOn.get(waiter);
+    if (!edges) {
+      edges = new Set();
+      this.waitingOn.set(waiter, edges);
+    }
+    edges.add(alias);
+    return this.getOrEvaluate(cache, alias, evaluate).finally(() => edges.delete(alias));
+  }
+
+  private getOrEvaluate(
+    cache: Map<string, Promise<boolean>>,
+    alias: string,
+    evaluate: () => Promise<boolean>,
+  ): Promise<boolean> {
+    let pending = cache.get(alias);
+    if (!pending) {
+      pending = evaluate();
+      cache.set(alias, pending);
+    }
+    return pending;
+  }
+
+  /** Whether check `from` is (transitively) waiting on check `to` — or is it. */
+  private waitsOn(from: string, to: string): boolean {
+    const seen = new Set<string>();
+    const stack = [from];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (current === to) {
+        return true;
+      }
+      if (!seen.has(current)) {
+        seen.add(current);
+        stack.push(...(this.waitingOn.get(current) ?? []));
+      }
+    }
+    return false;
+  }
+
+  /** Resolves a deferred contract's address from its args, read against the current state. */
+  private async resolveDeferred(
+    alias: string,
+    step: ContractStep<C>,
+    { inventory }: { inventory: boolean },
+  ): Promise<void> {
+    const args = await this.runRecorded(
+      alias,
+      `Deferred initializer args for contract "${alias}"`,
+      { inventory },
+      ctx => step.deferredInitializerArgs!(ctx),
+    );
+    await this.resolveContract(alias, step, args);
+  }
+
+  /**
+   * Whether the steps `alias` declares as dependencies are all in place: a contract published or
+   * registered per its mode, a fund step above its threshold, an action already done. With
+   * `contractsOnly`, contracts alone — a gate exists to observe whether the actions and funds it
+   * follows landed, so it must still run once the contracts it reads are there.
+   */
+  private async dependenciesReady(alias: string, { contractsOnly }: { contractsOnly: boolean }): Promise<boolean> {
+    const step = getOrThrow(this.steps, alias, 'step');
+    for (const dependency of [...(this.contractRefs.get(alias) ?? []), ...(step.dependsOn ?? [])]) {
+      if (contractsOnly && getOrThrow(this.steps, dependency, 'step').kind !== 'contract') {
+        continue;
+      }
+      if (!(await this.done(dependency, alias))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Runs a user callback against a ctx that records every contract alias it looks up, then requires
+   * those to be declared in the step's `dependsOn` — an undeclared read is state nothing checked was
+   * in place. The check runs even when the callback throws, so a callback that catches its own
+   * errors (the usual shape for a getter that reverts when unset) can't hide one — nor a
+   * {@link GateCycleError} from a step it consults. With `inventory`,
+   * the callback is part of `alias`'s inventory check, so the steps it consults are waited on by
+   * that check (see {@link memoizedCheck}); at execution time every check is already decided.
+   */
+  private async runRecorded<T>(
+    alias: string,
+    description: string,
+    { inventory }: { inventory: boolean },
+    run: (ctx: Ctx<C>) => T | Promise<T>,
+  ): Promise<T> {
+    const references = new Set<string>();
+    const waiter = inventory ? alias : undefined;
+    let cycle: GateCycleError | undefined;
+    const surfaceCycle = (status: Promise<boolean>) =>
+      status.catch(error => {
+        if (error instanceof GateCycleError) {
+          cycle ??= error;
+        }
+        throw error;
+      });
+    const ctx: Ctx<C> = {
+      ...this.ctx,
+      done: id => surfaceCycle(this.done(id, waiter)),
+      ran: id => surfaceCycle(this.ran(id, waiter)),
+      contract: reference => {
+        references.add(reference);
+        return this.resolver.contract(reference);
+      },
+      instance: ((reference: string) => {
+        references.add(reference);
+        return getOrThrow(this.contractInstances, reference, 'contract instance');
+      }) as Ctx<C>['instance'],
+    };
+    let result: T;
     try {
-      await this.resolveContract(alias, step, await step.deferredInitializerArgs!(this.ctx));
-      return await this.isPublished(alias);
-    } catch {
-      return false; // args not resolvable yet — they read state this run creates
+      result = await run(ctx);
+    } catch (error) {
+      this.assertReferencesDeclared(alias, description, references, error);
+      throw cycle ?? error;
+    }
+    this.assertReferencesDeclared(alias, description, references);
+    if (cycle) {
+      throw cycle;
+    }
+    return result;
+  }
+
+  /**
+   * Rejects contract aliases the callback read but the step doesn't declare. `cause` carries the
+   * error the callback threw, since an undeclared read is the likeliest reason it did.
+   */
+  private assertReferencesDeclared(alias: string, description: string, references: Set<string>, cause?: unknown): void {
+    const step = getOrThrow(this.steps, alias, 'step');
+    const declared = new Set([...(this.contractRefs.get(alias) ?? []), ...(step.dependsOn ?? [])]);
+    const undeclared = [...references].filter(reference => !declared.has(reference));
+    if (undeclared.length > 0) {
+      throw new Error(
+        `${description} reads ${undeclared.map(reference => `"${reference}"`).join(', ')} but does not declare it in` +
+          ` dependsOn. Declare every step it reads, so it only runs once they are in place.`,
+        { cause },
+      );
     }
   }
 
@@ -573,101 +750,98 @@ class DeploymentRun<C extends Steps> {
 
   /**
    * A fund step's idempotency gate: whether the recipient's public Fee Juice balance already
-   * clears the step's threshold. Memoized per run.
+   * clears the step's threshold. A recipient this run has yet to put in place holds nothing, so the
+   * balance is read only once the contracts its selector references are there. Memoized per run.
    */
-  private fundGate(alias: string): Promise<boolean> {
+  private fundGate(alias: string, waiter: string | undefined): Promise<boolean> {
     const step = getOrThrow(this.fundSteps, alias, 'fund step');
-    let cached = this.fundGateCache.get(alias);
-    if (!cached) {
-      cached = (async () => {
-        try {
-          const recipient = step.recipient(this.resolver);
-          return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
-        } catch {
-          return false; // recipient not resolvable yet (e.g. a deferred contract) ⇒ fund this run
+    return this.memoizedCheck(this.fundGateCache, alias, waiter, async () => {
+      for (const reference of referencedContracts(step.recipient)) {
+        if (!(await this.done(reference, alias))) {
+          return false;
         }
-      })();
-      this.fundGateCache.set(alias, cached);
-    }
-    return cached;
+      }
+      const recipient = step.recipient(this.resolver);
+      return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
+    });
   }
 
   /**
-   * An action's `done` gate, memoized per run. Gates may consult other steps via `ctx.done`, so a
-   * gate that (transitively) depends on itself throws {@link GateCycleError}.
+   * An action's `done` gate, memoized per run. Invoked only once the contracts the action declares
+   * are in place: until then the action cannot have run, and the gate would read state that does not
+   * exist. Gates may consult other steps via `ctx.done`.
    */
-  private actionGate(alias: string): Promise<boolean> {
+  private actionGate(alias: string, waiter: string | undefined): Promise<boolean> {
     const step = this.actionSteps.get(alias);
     if (!step) {
       throw new Error(`Unknown action "${alias}".`);
     }
-    if (this.gateInProgress.has(alias)) {
-      return Promise.reject(new GateCycleError(`Cyclic idempotency gate at "${alias}".`));
-    }
-    const cached = this.gateCache.get(alias);
-    if (cached) {
-      return cached;
-    }
-    this.gateInProgress.add(alias);
-    const pending = (async () => {
-      try {
-        return await step.done(this.ctx);
-      } catch (error) {
-        if (error instanceof GateCycleError) {
-          throw error;
-        }
-        return false; // e.g. a target contract isn't published yet ⇒ not done
+    return this.memoizedCheck(this.gateCache, alias, waiter, async () => {
+      if (!(await this.dependenciesReady(alias, { contractsOnly: true }))) {
+        return false;
       }
-    })().finally(() => this.gateInProgress.delete(alias));
-    this.gateCache.set(alias, pending);
-    return pending;
+      return this.runRecorded(alias, `Idempotency gate for action "${alias}"`, { inventory: true }, ctx =>
+        step.done(ctx),
+      );
+    });
   }
 
-  /** `ctx.done`: whether step `id` is already satisfied this run — mode-aware. */
-  private done(id: string): Promise<boolean> {
+  /** `ctx.done`: whether step `id` is already satisfied this run — mode-aware. `waiter` is the check asking. */
+  private done(id: string, waiter: string | undefined): Promise<boolean> {
     const step = this.steps.get(id);
     if (!step) {
       throw new Error(`Unknown step "${id}".`);
     }
     if (step.kind === 'action') {
-      return this.actionGate(id);
+      return this.actionGate(id, waiter);
     }
     if (step.kind === 'fund') {
-      return this.fundGate(id);
+      return this.fundGate(id, waiter);
     }
     if (step.mode === 'register') {
       return Promise.resolve(this.contractAddresses.has(id)); // registered in the PXE
     }
+    if (isDeferred(step)) {
+      // Its address only exists once it resolves; publication itself is read live, so a publish
+      // later in this run still shows.
+      return this.deferredPublishes(id, waiter).then(() => this.isPublished(id));
+    }
     return this.isPublished(id);
   }
 
-  /** `ctx.ran`: whether step `id` did (or will do) work this run — mode-aware. */
-  private async ran(id: string): Promise<boolean> {
+  /** `ctx.ran`: whether step `id` did (or will do) work this run — mode-aware. `waiter` is the check asking. */
+  private async ran(id: string, waiter: string | undefined): Promise<boolean> {
     const step = this.steps.get(id);
     if (!step) {
       throw new Error(`Unknown step "${id}".`);
     }
     if (step.kind === 'action') {
-      return !(await this.actionGate(id));
+      return !(await this.actionGate(id, waiter));
     }
     if (step.kind === 'fund') {
-      return this.fundsToRun.has(id);
+      return !(await this.fundGate(id, waiter));
     }
     if (step.mode === 'register') {
       return this.contractAddresses.has(id); // (re)registered this run
     }
-    return this.publishedThisRun.has(id);
+    return isDeferred(step) ? this.deferredPublishes(id, waiter) : this.publishedThisRun.has(id);
   }
 
   /**
    * Builds the execution graph over the steps that run and groups it into layers. Exactly one
-   * contract per class publishes it (the first in declaration order); every other same-class
-   * contract — deterministic or deferred — is ordered after it.
+   * contract per class publishes it; every other same-class contract — deterministic or deferred —
+   * is ordered after it. The publisher is the class's first contract in `dependsOn` order, so the
+   * ordering can't run against a dependency (a same-class contract declared earlier but depending on
+   * a later one would otherwise close a cycle).
    */
   private buildLayers(): string[][] {
+    const dependsOn = new Map(
+      this.execAliases.map(alias => [alias, getOrThrow(this.steps, alias, 'step').dependsOn ?? []]),
+    );
     const publisherByClass = new Map<string, string>();
-    for (const [alias, step] of this.contractSteps) {
-      if (step.mode !== 'publish') {
+    for (const alias of topologicalLayers(this.execAliases, dependsOn).flat()) {
+      const step = this.contractSteps.get(alias);
+      if (step?.mode !== 'publish') {
         continue;
       }
       const classId = getOrThrow(this.classIds, alias, 'class id').toString();
@@ -708,9 +882,9 @@ class DeploymentRun<C extends Steps> {
         account,
         send: async fee => {
           if (isDeferred(step)) {
-            // Re-resolve with post-`dependsOn` state: the inventory attempt either failed or ran
+            // Re-resolve with post-`dependsOn` state: the inventory attempt was skipped or ran
             // before this run's earlier layers landed.
-            await this.resolveContract(alias, step, await step.deferredInitializerArgs!(this.ctx));
+            await this.resolveDeferred(alias, step, { inventory: false });
           }
           const classId = getOrThrow(this.classIds, alias, 'class id');
           const deployMethod = getOrThrow(this.deployMethods, alias, 'deploy method');
@@ -752,7 +926,7 @@ class DeploymentRun<C extends Steps> {
           const claim = await obtainFeeJuiceClaim({
             local: this.local,
             node: this.node,
-            nodeUrl: this.spec.nodeUrl,
+            nodeUrl: this.nodeUrl,
             recipient,
             amount: step.amount,
             l1: { l1FunderKey: step.l1FunderKey, l1RpcUrl: step.l1RpcUrl, l1ChainId: step.l1ChainId },
@@ -795,7 +969,11 @@ class DeploymentRun<C extends Steps> {
           account,
           send: async fee => {
             const interactions = await Promise.all(
-              batch.map(alias => getOrThrow(this.actionSteps, alias, 'action').call(this.ctx)),
+              batch.map(alias =>
+                this.runRecorded(alias, `Call for action "${alias}"`, { inventory: false }, ctx =>
+                  getOrThrow(this.actionSteps, alias, 'action').call(ctx),
+                ),
+              ),
             );
             const sendOptions = { from: account, fee, wait: { timeout: 120 } };
             return interactions.length === 1

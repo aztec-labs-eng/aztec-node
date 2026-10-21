@@ -1,4 +1,5 @@
 import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/accounts/schnorr';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
@@ -91,7 +92,7 @@ describeWithAnvil('runDeployment', () => {
       contract: TokenContract,
       deployer: r => r.account('admin'),
       mode: 'publish',
-      dependsOn: ['mint'],
+      dependsOn: ['mint', 'token'],
       deferredInitializerArgs: async ctx => {
         const { result } = await TokenContract.at(ctx.contract('token'), ctx.wallet)
           .methods.balance_of_public(ctx.account('admin'))
@@ -184,6 +185,241 @@ describeWithAnvil('runDeployment', () => {
       await runDeployment({ ...base, reporter });
       expect(nothingToDo).toBe(true);
       expect(defBalance).toEqual(7n);
+
+      // A gate reading a contract it doesn't declare is rejected even though the read succeeds here
+      // (token is on-chain) and even though the gate swallows its own errors — nothing checked the
+      // contract was in place before the read.
+      const undeclared = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: [],
+        call: ctx => TokenContract.at(ctx.contract('token'), ctx.wallet).methods.mint_to_public(operator, 1n),
+        done: async ctx => {
+          try {
+            const { result } = await TokenContract.at(ctx.contract('token'), ctx.wallet)
+              .methods.balance_of_public(ctx.account('admin'))
+              .simulate({ from: ctx.account('admin') });
+            return BigInt(result.toString()) > 0n;
+          } catch {
+            return false;
+          }
+        },
+      } satisfies ActionStep;
+      await expect(runDeployment({ ...base, reporter: {}, steps: { ...base.steps, undeclared } })).rejects.toThrow(
+        /Idempotency gate for action "undeclared" reads "token" but does not declare it in dependsOn/,
+      );
+
+      // The same holds for the interaction an action builds: its target is undeclared, so nothing
+      // ordered the action after it. Rejected before the tx is sent.
+      const undeclaredCall = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: [],
+        call: ctx => TokenContract.at(ctx.contract('token'), ctx.wallet).methods.mint_to_public(operator, 1n),
+        done: () => Promise.resolve(false),
+      } satisfies ActionStep;
+      await expect(runDeployment({ ...base, reporter: {}, steps: { ...base.steps, undeclaredCall } })).rejects.toThrow(
+        /Call for action "undeclaredCall" reads "token" but does not declare it in dependsOn/,
+      );
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+      await net.stop();
+    }
+  }, 300_000);
+
+  it('evaluates inventory gates independently of step declaration order', async () => {
+    const secret = Fr.fromString('0x00000000000000000000000000000000000000000000000000000000c0ffee01');
+    const salt = new Fr(0);
+    const admin = await getSchnorrInitializerlessAccountContractAddress(
+      deriveMasterMessageSigningSecretKey(secret),
+      salt,
+      secret,
+    );
+    const operatorSecret = Fr.fromString('0x00000000000000000000000000000000000000000000000000000000c0ffee02');
+    const operator = await getSchnorrInitializerlessAccountContractAddress(
+      deriveMasterMessageSigningSecretKey(operatorSecret),
+      salt,
+      operatorSecret,
+    );
+
+    const net = await setupLocalNetwork({ fundedAddresses: [admin] });
+    const stateDir = await mkdtemp(join(tmpdir(), 'deploy-test-'));
+
+    const publicBalance = async (ctx: Ctx, alias: string, owner: AztecAddress) => {
+      const { result } = await TokenContract.at(ctx.contract(alias), ctx.wallet)
+        .methods.balance_of_public(owner)
+        .simulate({ from: ctx.account('admin') });
+      return BigInt(result.toString());
+    };
+
+    // Declared before the steps it depends on: inventory checks `later` while `seed`'s gate still waits
+    // on `early`, a deferred contract that has not been looked at yet.
+    const later = {
+      kind: 'contract',
+      contract: TokenContract,
+      deployer: r => r.account('admin'),
+      mode: 'publish',
+      dependsOn: ['seed', 'early'],
+      deferredInitializerArgs: async ctx => [
+        ctx.account('admin'),
+        `Later${await publicBalance(ctx, 'early', ctx.account('admin'))}`,
+        'LTR',
+        18,
+      ],
+    } satisfies ContractStep;
+    const seed = {
+      kind: 'action',
+      from: r => r.account('admin'),
+      dependsOn: ['early'],
+      call: ctx => TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(ctx.account('admin'), 5n),
+      done: async ctx => (await publicBalance(ctx, 'early', ctx.account('admin'))) > 0n,
+    } satisfies ActionStep;
+    const early = {
+      kind: 'contract',
+      contract: TokenContract,
+      deployer: r => r.account('admin'),
+      mode: 'publish',
+      dependsOn: [],
+      deferredInitializerArgs: r => [r.account('admin'), 'Early', 'ERL', 18],
+    } satisfies ContractStep;
+
+    const units: string[] = [];
+    const reporter: DeployReporter = { onUnitStart: unit => units.push(unit.label) };
+    const base = {
+      node: net.node,
+      local: true,
+      label: 'test',
+      stateDir,
+      accounts: { admin: { secret, salt } },
+      fees: { kind: 'fee-juice', threshold: 1n, fundAmount: 0n } as const,
+      reporter,
+    };
+
+    try {
+      await runDeployment({ ...base, steps: { later, seed, early } });
+      expect(units).toEqual(expect.arrayContaining(['publish early', 'action seed', 'publish later']));
+
+      // Everything is in place, so a re-run sends nothing — `seed` included, though `later` reached
+      // its gate before `early` had resolved.
+      units.length = 0;
+      await runDeployment({ ...base, steps: { later, seed, early } });
+      expect(units).toEqual([]);
+
+      // A gate asking whether a fund step runs this run must get the answer before fund inventory
+      // would have reached it: `funded` checks `afterFund`'s gate while contracts are still being
+      // inventoried, and `afterFund` runs because `fundOperator` does.
+      const fundOperator = {
+        kind: 'fund',
+        recipient: () => operator,
+        threshold: 1n,
+        amount: 10n ** 18n,
+        from: r => r.account('admin'),
+        l1RpcUrl: net.l1RpcUrl,
+        l1ChainId: net.l1ChainId,
+      } satisfies FundStep;
+      const afterFund = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['fundOperator', 'early'],
+        call: ctx => TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(operator, 1n),
+        done: async ctx => !(await ctx.ran('fundOperator')),
+      } satisfies ActionStep;
+      const funded = {
+        kind: 'contract',
+        contract: TokenContract,
+        deployer: r => r.account('admin'),
+        mode: 'publish',
+        dependsOn: ['afterFund'],
+        deferredInitializerArgs: r => [r.account('admin'), 'Funded', 'FND', 18],
+      } satisfies ContractStep;
+      units.length = 0;
+      await runDeployment({ ...base, steps: { early, seed, later, funded, fundOperator, afterFund } });
+      expect(units).toEqual(expect.arrayContaining(['fund fundOperator', 'action afterFund', 'publish funded']));
+
+      // Two branches of one gate need the same pending check (`early`, declared last, not yet decided).
+      // The second branch must wait for the first branch's answer, not report a cycle.
+      const branch = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['early'],
+        call: ctx =>
+          TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(ctx.account('admin'), 1n),
+        done: async ctx => (await publicBalance(ctx, 'early', ctx.account('admin'))) > 0n,
+      } satisfies ActionStep;
+      const check = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['left', 'right'],
+        call: ctx =>
+          TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(ctx.account('admin'), 1n),
+        done: async ctx => (await Promise.all([ctx.done('left'), ctx.done('right')])).every(Boolean),
+      } satisfies ActionStep;
+      const joined = {
+        kind: 'contract',
+        contract: TokenContract,
+        deployer: r => r.account('admin'),
+        mode: 'publish',
+        dependsOn: ['check'],
+        deferredInitializerArgs: r => [r.account('admin'), 'Joined', 'JND', 18],
+      } satisfies ContractStep;
+      units.length = 0;
+      await runDeployment({ ...base, steps: { joined, check, left: branch, right: branch, early } });
+      expect(units).toEqual(['publish joined']);
+
+      // Once inventory has decided, a step's execution-time callbacks may ask about the step itself.
+      const selfAware = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['early'],
+        call: async ctx => {
+          expect(await ctx.ran('selfAware')).toBe(true);
+          return TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(operator, 1n);
+        },
+        done: () => Promise.resolve(false),
+      } satisfies ActionStep;
+      const selfRef = {
+        kind: 'contract',
+        contract: TokenContract,
+        deployer: r => r.account('admin'),
+        mode: 'publish',
+        dependsOn: ['selfAware'],
+        deferredInitializerArgs: async ctx => [ctx.account('admin'), `Self${await ctx.ran('selfRef')}`, 'SLF', 18],
+      } satisfies ContractStep;
+      units.length = 0;
+      await runDeployment({ ...base, steps: { early, selfAware, selfRef } });
+      expect(units).toEqual(['action selfAware', 'publish selfRef']);
+
+      // A real cycle is still reported, also when its two halves run in parallel branches.
+      const waitsOn = (...others: string[]) =>
+        ({
+          kind: 'action',
+          from: r => r.account('admin'),
+          call: (): never => {
+            throw new Error('unreachable');
+          },
+          done: async ctx => (await Promise.all(others.map(other => ctx.done(other)))).every(Boolean),
+        }) satisfies ActionStep;
+      await expect(
+        runDeployment({ ...base, steps: { early, ping: waitsOn('pong'), pong: waitsOn('ping') } }),
+      ).rejects.toThrow(/Cyclic dependency: "pong" and "ping" wait on each other/);
+      await expect(
+        runDeployment({ ...base, steps: { early, fork: waitsOn('p', 'q'), p: waitsOn('q'), q: waitsOn('p') } }),
+      ).rejects.toThrow(/Cyclic dependency/);
+      // ...and when the gates catch their own errors.
+      const swallowing = (other: string) =>
+        ({
+          ...waitsOn(other),
+          done: async ctx => {
+            try {
+              return await ctx.done(other);
+            } catch {
+              return false;
+            }
+          },
+        }) satisfies ActionStep;
+      await expect(
+        runDeployment({ ...base, steps: { early, ping: swallowing('pong'), pong: swallowing('ping') } }),
+      ).rejects.toThrow(/Cyclic dependency/);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
       await net.stop();
