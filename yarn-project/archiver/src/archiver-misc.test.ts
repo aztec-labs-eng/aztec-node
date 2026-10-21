@@ -46,7 +46,6 @@ describe('Archiver misc', () => {
       ethereumSlotDuration: ETH_SLOT_DURATION,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       genesisArchiveRoot: new Fr(GENESIS_ARCHIVE_ROOT),
     };
 

@@ -180,7 +180,6 @@ describe('Archiver Sync', () => {
       ethereumSlotDuration: DefaultL1ContractsConfig.ethereumSlotDuration,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       genesisArchiveRoot: GENESIS_ROOT,
     };
 

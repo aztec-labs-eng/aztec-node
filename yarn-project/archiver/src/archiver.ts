@@ -217,9 +217,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
       blockDuration: this.config.blockDuration,
       checkpointProposalSyncGrace: this.config.checkpointProposalSyncGrace,
     });
-    this.updater = new ArchiverDataStoreUpdater(this.dataStores, this.l2FrontierCache, {
-      rollupManaLimit: l1Constants.rollupManaLimit,
-    });
+    this.updater = new ArchiverDataStoreUpdater(this.dataStores, this.l2FrontierCache);
 
     // The resolver reads its witness data from this archiver and pins its lazy Outbox-root fetches
     // to the archiver's synced L1 block. No method on `this` is invoked during construction.

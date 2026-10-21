@@ -72,7 +72,6 @@ export class ArchiverDataStoreUpdater {
   constructor(
     private stores: ArchiverDataStores,
     private l2FrontierCache?: L2FrontierCache,
-    private opts: { rollupManaLimit?: number } = {},
   ) {}
 
   /**
@@ -204,7 +203,9 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: PublishedCheckpoint,
     evictProposedFrom?: CheckpointNumber,
   ): Promise<ReconcileCheckpointsResult> {
-    const validateOpts = { rollupManaLimit: this.opts?.rollupManaLimit };
+    // No mana cap: L1 already enforced its live mana limit when the checkpoint was proposed, and governance can raise
+    // that limit after this node started, so a cap read at startup would reject checkpoints L1 accepted.
+    const validateOpts = {};
     for (const checkpoint of checkpoints) {
       validateCheckpoint(checkpoint.checkpoint, validateOpts);
     }

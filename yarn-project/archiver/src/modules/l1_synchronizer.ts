@@ -91,9 +91,7 @@ export class ArchiverL1Synchronizer implements Traceable {
     private readonly l2FrontierCache?: L2FrontierCache,
     private readonly log: Logger = createLogger('archiver:l1-sync'),
   ) {
-    this.updater = new ArchiverDataStoreUpdater(this.stores, l2FrontierCache, {
-      rollupManaLimit: l1Constants.rollupManaLimit,
-    });
+    this.updater = new ArchiverDataStoreUpdater(this.stores, l2FrontierCache);
     this.messageSynchronizer = new InboxMessageSynchronizer(
       publicClient,
       inbox,

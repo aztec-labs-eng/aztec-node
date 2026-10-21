@@ -808,6 +808,22 @@ describe('ArchiverDataStoreUpdater', () => {
     });
   });
 
+  describe('rollup mana limit', () => {
+    it('ingests an L1 checkpoint whose mana exceeds the limit the node read at startup', async () => {
+      // Governance can raise the mana target after the node starts (here, from a limit of 1000), and L1 enforces the
+      // live limit at propose, so the checkpoint is valid even though it uses more mana than the startup limit.
+      const block = await L2Block.random(BlockNumber(1), {
+        checkpointNumber: CheckpointNumber(1),
+        slotNumber: SlotNumber(100),
+        totalManaUsed: new Fr(1_500),
+      });
+
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+  });
+
   describe('repeated tx hashes', () => {
     it('accepts an L1 checkpoint that replaces a local proposed block and includes the same tx', async () => {
       const blockOpts = {
