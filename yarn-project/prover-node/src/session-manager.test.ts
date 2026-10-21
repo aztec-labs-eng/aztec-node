@@ -1,7 +1,7 @@
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
-import { DateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, ManualDateProvider } from '@aztec-labs/foundation/timer';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server';
@@ -26,7 +26,9 @@ describe('SessionManager', () => {
     >
   >;
   let publishingService: ReturnType<typeof mock<ProofPublishingService>>;
+  let rollupContract: ReturnType<typeof mock<SessionManagerDeps['rollupContract']>>;
   let metrics: ProverNodeJobMetrics;
+  let dateProvider: ManualDateProvider;
 
   /** Mirror of fullSessions/partialSessions whose entries are stubs we control. */
   let stubs: StubSession[];
@@ -44,6 +46,8 @@ describe('SessionManager', () => {
         Pick<L2BlockSource, 'isEpochComplete' | 'getCheckpoints' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'>
       >();
     publishingService = mock<ProofPublishingService>();
+    rollupContract = mock<SessionManagerDeps['rollupContract']>();
+    dateProvider = new ManualDateProvider();
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
       {
@@ -57,8 +61,10 @@ describe('SessionManager', () => {
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
     l2BlockSource.isEpochComplete.mockResolvedValue(false);
     l2BlockSource.getCheckpoints.mockResolvedValue([]);
+    store.list.mockReturnValue([]);
     store.listInSlotRange.mockReturnValue([]);
     store.listForEpoch.mockResolvedValue([]);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
 
     stubs = [];
     sessionFailures = [];
@@ -70,9 +76,10 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: {} as any,
         proverId: EthAddress.ZERO,
+        rollupContract,
         publishingService,
         metrics,
-        dateProvider: new DateProvider(),
+        dateProvider,
         config: { maxPendingJobs: 0, tickIntervalMs: 60_000, finalizationDelayMs: undefined },
         onSessionFailed: session => {
           sessionFailures.push(session);
@@ -162,6 +169,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: {} as any,
         proverId: EthAddress.ZERO,
+        rollupContract,
         publishingService,
         metrics,
         dateProvider: new DateProvider(),
@@ -214,6 +222,7 @@ describe('SessionManager', () => {
           l2BlockSource,
           proverFactory: mock<SessionManagerDeps['proverFactory']>(),
           proverId: EthAddress.ZERO,
+          rollupContract,
           publishingService,
           metrics,
           dateProvider: new DateProvider(),
@@ -485,6 +494,156 @@ describe('SessionManager', () => {
     // No new session for epoch 3 — it is proven; nothing opened for the empty epoch 4 either.
     expect(manager.getFullSession(EpochNumber(3))).toBeUndefined();
     expect(stubs.length).toBe(1);
+  });
+
+  it('onTick opens a full session for an epoch the proven tip covered while it was still open', async () => {
+    // Epoch 3's only checkpoint (block 1) arrives while the epoch is open, so no session opens. A proof of it
+    // then lands before the epoch ends and moves the proven tip over it. L1 registered that proof as non-full,
+    // so it still accepts and rewards our full-epoch proof once the epoch has ended.
+    const epoch = EpochNumber(3);
+    const provers = [proverForCheckpoint(1, 6)];
+    store.list.mockReturnValue(provers);
+    store.listInSlotRange.mockImplementation((fromSlot: SlotNumber) => (Number(fromSlot) === 6 ? provers : []));
+    l2BlockSource.getCheckpoints.mockImplementation(({ epoch: e }: { epoch: EpochNumber }) =>
+      Promise.resolve(Number(e) === 3 ? [archiverCp(1, 6)] : []),
+    );
+    await manager.onCheckpointAdded(epoch);
+    expect(stubs).toHaveLength(0);
+
+    mockNextUnprovenSlot(1, undefined);
+    await manager.onTick();
+    expect(stubs).toHaveLength(0);
+
+    // Epoch 3 ends and epoch 4 receives its first block, so the next unproven epoch is 4.
+    l2BlockSource.isEpochComplete.mockImplementation(e => Promise.resolve(Number(e) === 3));
+    mockNextUnprovenSlot(1, 8);
+    await manager.onTick();
+
+    expect(stubs.map(s => s.spec)).toEqual([
+      { kind: 'full', epochNumber: epoch, fromSlot: SlotNumber(6), toSlot: SlotNumber(7) },
+    ]);
+  });
+
+  it('onTick does not open a covered epoch once our own full-epoch proof of it is on L1', async () => {
+    // E.g. after a restart, which drops the retained completed session for an epoch we already proved.
+    const provers = [proverForCheckpoint(1, 6)];
+    store.list.mockReturnValue(provers);
+    store.listInSlotRange.mockReturnValue(provers);
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+    mockNextUnprovenSlot(1, undefined);
+    rollupContract.getHasSubmittedFullEpochProof.mockImplementation((epoch, length, prover) =>
+      Promise.resolve(Number(epoch) === 3 && length === 1 && prover.toString() === EthAddress.ZERO.toString()),
+    );
+
+    await manager.onTick();
+    await manager.onTick();
+
+    expect(stubs).toHaveLength(0);
+  });
+
+  it('onTick still opens the next unproven epoch while the L1 read for a covered epoch fails', async () => {
+    // Epoch 3 (block 1) is covered by the proven tip; epoch 4 (block 2) is the next unproven epoch.
+    const epoch3Provers = [proverForCheckpoint(1, 6)];
+    const epoch4Provers = [proverForCheckpoint(2, 8)];
+    store.list.mockReturnValue([...epoch3Provers, ...epoch4Provers]);
+    store.listInSlotRange.mockImplementation((fromSlot: SlotNumber) =>
+      Number(fromSlot) === 6 ? epoch3Provers : Number(fromSlot) === 8 ? epoch4Provers : [],
+    );
+    l2BlockSource.getCheckpoints.mockImplementation(({ epoch }: { epoch: EpochNumber }) =>
+      Promise.resolve(Number(epoch) === 3 ? [archiverCp(1, 6)] : Number(epoch) === 4 ? [archiverCp(2, 8)] : []),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    mockNextUnprovenSlot(1, 8);
+    rollupContract.getHasSubmittedFullEpochProof.mockRejectedValue(new Error('L1 unavailable'));
+
+    await manager.onTick();
+    expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(4)]);
+
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+    await manager.onTick();
+    expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(4), EpochNumber(3)]);
+  });
+
+  it('onTick gives the last session slot to the next unproven epoch ahead of a covered one', async () => {
+    manager = new TestSessionManager(
+      {
+        checkpointStore: store,
+        l2BlockSource,
+        proverFactory: {} as any,
+        proverId: EthAddress.ZERO,
+        rollupContract,
+        publishingService,
+        metrics,
+        dateProvider: new DateProvider(),
+        config: { maxPendingJobs: 1, tickIntervalMs: 60_000, finalizationDelayMs: undefined },
+      },
+      (spec, provers) => {
+        const stub = makeStubSession(spec, provers);
+        stubs.push(stub);
+        return stub as unknown as EpochSession;
+      },
+    );
+    // Epoch 3 (block 1) is covered by the proven tip; epoch 4 (block 2) is the next unproven epoch.
+    const epoch3Provers = [proverForCheckpoint(1, 6)];
+    const epoch4Provers = [proverForCheckpoint(2, 8)];
+    store.list.mockReturnValue([...epoch3Provers, ...epoch4Provers]);
+    store.listInSlotRange.mockImplementation((fromSlot: SlotNumber) =>
+      Number(fromSlot) === 6 ? epoch3Provers : Number(fromSlot) === 8 ? epoch4Provers : [],
+    );
+    l2BlockSource.getCheckpoints.mockImplementation(({ epoch }: { epoch: EpochNumber }) =>
+      Promise.resolve(Number(epoch) === 3 ? [archiverCp(1, 6)] : Number(epoch) === 4 ? [archiverCp(2, 8)] : []),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    mockNextUnprovenSlot(1, 8);
+
+    await manager.onTick();
+
+    expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(4)]);
+  });
+
+  it('onTick re-reads our full-epoch proof registration once per L2 slot', async () => {
+    // A covered epoch with no session whose full-epoch proof is ours, e.g. submitted by an HA peer sharing our
+    // prover id. Ticks run every polling interval, so re-reading L1 on each one would be steady RPC load. Reading
+    // again after a slot notices an L1 reorg that dropped the registration.
+    const provers = [proverForCheckpoint(1, 6)];
+    store.list.mockReturnValue(provers);
+    store.listInSlotRange.mockReturnValue(provers);
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+    mockNextUnprovenSlot(1, undefined);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);
+
+    await manager.onTick();
+    await manager.onTick();
+    await manager.onTick();
+    expect(stubs).toHaveLength(0);
+    expect(rollupContract.getHasSubmittedFullEpochProof).toHaveBeenCalledTimes(1);
+
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+    dateProvider.advanceTime(l1Constants.slotDuration);
+    await manager.onTick();
+    expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(3)]);
+  });
+
+  it('onTick opens an epoch at once when an L1 reorg rolls the proven tip back below it', async () => {
+    // Epoch 3's only checkpoint is block 2. Our full-epoch proof is confirmed while the tip covers it, so the
+    // epoch is skipped. A reorg then drops the proof that moved the tip: epoch 3 is the next unproven epoch again
+    // and must open without waiting out the confirmed answer, which applies only while the tip covers the epoch.
+    const provers = [proverForCheckpoint(2, 6)];
+    store.list.mockReturnValue(provers);
+    store.listInSlotRange.mockReturnValue(provers);
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(2, 6)]);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);
+
+    mockNextUnprovenSlot(2, undefined);
+    await manager.onTick();
+    expect(stubs).toHaveLength(0);
+
+    mockNextUnprovenSlot(1, 6);
+    await manager.onTick();
+    expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(3)]);
   });
 
   it('onTick keeps retrying the same epoch while a transient blocker prevents opening', async () => {
@@ -1157,6 +1316,8 @@ function proverForCheckpoint(number: number, slot: number, failed = false): Chec
     id: CheckpointProver.idFor(checkpoint),
     checkpoint,
     slotNumber: SlotNumber(slot),
+    // The suite runs with epochDuration=2.
+    epochNumber: EpochNumber(Math.floor(slot / 2)),
     isCancelled: () => false,
     isFailed: () => failed,
   } as unknown as CheckpointProver;
