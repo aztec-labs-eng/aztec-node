@@ -335,6 +335,53 @@ describeWithAnvil('runDeployment', () => {
       units.length = 0;
       await runDeployment({ ...base, steps: { early, seed, later, funded, fundOperator, afterFund } });
       expect(units).toEqual(expect.arrayContaining(['fund fundOperator', 'action afterFund', 'publish funded']));
+
+      // Two branches of one gate need the same pending check (`early`, declared last, not yet decided).
+      // The second branch must wait for the first branch's answer, not report a cycle.
+      const branch = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['early'],
+        call: ctx =>
+          TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(ctx.account('admin'), 1n),
+        done: async ctx => (await publicBalance(ctx, 'early', ctx.account('admin'))) > 0n,
+      } satisfies ActionStep;
+      const check = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['left', 'right'],
+        call: ctx =>
+          TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(ctx.account('admin'), 1n),
+        done: async ctx => (await Promise.all([ctx.done('left'), ctx.done('right')])).every(Boolean),
+      } satisfies ActionStep;
+      const joined = {
+        kind: 'contract',
+        contract: TokenContract,
+        deployer: r => r.account('admin'),
+        mode: 'publish',
+        dependsOn: ['check'],
+        deferredInitializerArgs: r => [r.account('admin'), 'Joined', 'JND', 18],
+      } satisfies ContractStep;
+      units.length = 0;
+      await runDeployment({ ...base, steps: { joined, check, left: branch, right: branch, early } });
+      expect(units).toEqual(['publish joined']);
+
+      // A real cycle is still reported, also when its two halves run in parallel branches.
+      const waitsOn = (...others: string[]) =>
+        ({
+          kind: 'action',
+          from: r => r.account('admin'),
+          call: (): never => {
+            throw new Error('unreachable');
+          },
+          done: async ctx => (await Promise.all(others.map(other => ctx.done(other)))).every(Boolean),
+        }) satisfies ActionStep;
+      await expect(
+        runDeployment({ ...base, steps: { early, ping: waitsOn('pong'), pong: waitsOn('ping') } }),
+      ).rejects.toThrow(/Cyclic dependency: "pong" and "ping" wait on each other/);
+      await expect(
+        runDeployment({ ...base, steps: { early, fork: waitsOn('p', 'q'), p: waitsOn('q'), q: waitsOn('p') } }),
+      ).rejects.toThrow(/Cyclic dependency/);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
       await net.stop();

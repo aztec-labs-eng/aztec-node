@@ -66,7 +66,7 @@ import type {
   Steps,
 } from './types.js';
 
-/** A step's inventory check — an action's gate, or a deferred contract's args — (transitively) depends on itself. */
+/** A step's inventory check (an action's gate, a fund step's balance, a deferred contract's args) waits on itself. */
 class GateCycleError extends Error {
   constructor(message: string) {
     super(message);
@@ -172,10 +172,10 @@ class DeploymentRun<C extends Steps> {
   private readonly classesPublishedThisRun = new Set<string>();
   private readonly publishedCache = new Map<string, Promise<boolean>>();
   private readonly gateCache = new Map<string, Promise<boolean>>();
-  private readonly gateInProgress = new Set<string>();
   private readonly deferredCache = new Map<string, Promise<boolean>>();
-  private readonly deferredInProgress = new Set<string>();
   private readonly fundGateCache = new Map<string, Promise<boolean>>();
+  /** Which pending inventory checks each in-flight check is waiting on — see {@link memoizedCheck}. */
+  private readonly waitingOn = new Map<string, Set<string>>();
 
   // Populated by the resolve / inventory / plan phases.
   private resolveOrder: string[] = [];
@@ -223,8 +223,8 @@ class DeploymentRun<C extends Steps> {
       ...this.resolver,
       instance: ((alias: string) =>
         getOrThrow(this.contractInstances, alias, 'contract instance')) as Ctx<C>['instance'],
-      done: id => this.done(id),
-      ran: id => this.ran(id),
+      done: id => this.done(id, undefined),
+      ran: id => this.ran(id, undefined),
       wallet,
       node,
     };
@@ -316,28 +316,26 @@ class DeploymentRun<C extends Steps> {
     // gate on the contracts it reads, `ctx.done`/`ctx.ran` on any step), so each is evaluated on
     // demand and memoized: whichever check reaches a step first decides it, and every later one
     // reuses that answer. These loops only make sure every step is decided, in any order.
-    // Sequential on purpose: evaluating them concurrently would turn the cycle detection
-    // (gateInProgress, deferredInProgress) into a silent deadlock of promises awaiting each other.
 
     // Deferred contracts. On a re-run the state their args read is already on-chain, so the address
     // derives and publication is checked like any other contract (which is what makes re-runs
     // no-ops); otherwise the contract publishes this run and re-resolves at execution time.
     for (const [alias, step] of this.contractSteps) {
-      if (isDeferred(step) && (await this.deferredPublishes(alias))) {
+      if (isDeferred(step) && (await this.deferredPublishes(alias, undefined))) {
         this.publishedThisRun.add(alias);
       }
     }
 
     // Fund gates: recipients whose public Fee Juice balance is below the step's threshold.
     for (const alias of this.fundSteps.keys()) {
-      if (!(await this.fundGate(alias))) {
+      if (!(await this.fundGate(alias, undefined))) {
         this.fundsToRun.add(alias);
       }
     }
 
     // Action gates.
     for (const alias of this.actionSteps.keys()) {
-      if (!(await this.actionGate(alias))) {
+      if (!(await this.actionGate(alias, undefined))) {
         this.actionsToRun.add(alias);
       }
     }
@@ -559,28 +557,75 @@ class DeploymentRun<C extends Steps> {
    * Whether a deferred contract publishes this run, decided once per run. It resolves from current
    * on-chain state only once every step it declares is in place, actions included: its args read
    * their effects, so resolving earlier would derive the address from state that does not exist
-   * yet. It has no work left when the args resolve AND the instance is already published. A deferred
-   * contract that (transitively) depends on itself throws {@link GateCycleError}.
+   * yet. It has no work left when the args resolve AND the instance is already published.
    */
-  private deferredPublishes(alias: string): Promise<boolean> {
-    if (this.deferredInProgress.has(alias)) {
-      return Promise.reject(new GateCycleError(`Cyclic dependency at deferred contract "${alias}".`));
-    }
-    const cached = this.deferredCache.get(alias);
-    if (cached) {
-      return cached;
-    }
-    this.deferredInProgress.add(alias);
+  private deferredPublishes(alias: string, waiter: string | undefined): Promise<boolean> {
     const step = getOrThrow(this.contractSteps, alias, 'contract');
-    const pending = (async () => {
+    return this.memoizedCheck(this.deferredCache, alias, waiter, async () => {
       if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
         return true;
       }
       await this.resolveDeferred(alias, step);
       return !(await this.isPublished(alias));
-    })().finally(() => this.deferredInProgress.delete(alias));
-    this.deferredCache.set(alias, pending);
+    });
+  }
+
+  /**
+   * Evaluates the inventory check for `alias` at most once per run, on behalf of `waiter` — the check
+   * awaiting it, or undefined at the top level. Checks consult each other, possibly from parallel
+   * branches of one gate, so a check still in flight is shared, and only a wait that would close a
+   * loop in the waiting-on graph is a cycle: it throws {@link GateCycleError} instead of deadlocking.
+   */
+  private memoizedCheck(
+    cache: Map<string, Promise<boolean>>,
+    alias: string,
+    waiter: string | undefined,
+    evaluate: () => Promise<boolean>,
+  ): Promise<boolean> {
+    if (waiter === undefined) {
+      return this.getOrEvaluate(cache, alias, evaluate);
+    }
+    if (this.waitsOn(alias, waiter)) {
+      return Promise.reject(new GateCycleError(`Cyclic dependency: "${waiter}" and "${alias}" wait on each other.`));
+    }
+    // Recorded before evaluating: the evaluation can reach back to `waiter` synchronously.
+    let edges = this.waitingOn.get(waiter);
+    if (!edges) {
+      edges = new Set();
+      this.waitingOn.set(waiter, edges);
+    }
+    edges.add(alias);
+    return this.getOrEvaluate(cache, alias, evaluate).finally(() => edges.delete(alias));
+  }
+
+  private getOrEvaluate(
+    cache: Map<string, Promise<boolean>>,
+    alias: string,
+    evaluate: () => Promise<boolean>,
+  ): Promise<boolean> {
+    let pending = cache.get(alias);
+    if (!pending) {
+      pending = evaluate();
+      cache.set(alias, pending);
+    }
     return pending;
+  }
+
+  /** Whether check `from` is (transitively) waiting on check `to` — or is it. */
+  private waitsOn(from: string, to: string): boolean {
+    const seen = new Set<string>();
+    const stack = [from];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (current === to) {
+        return true;
+      }
+      if (!seen.has(current)) {
+        seen.add(current);
+        stack.push(...(this.waitingOn.get(current) ?? []));
+      }
+    }
+    return false;
   }
 
   /** Resolves a deferred contract's address from its args, read against the current state. */
@@ -603,7 +648,7 @@ class DeploymentRun<C extends Steps> {
       if (contractsOnly && getOrThrow(this.steps, dependency, 'step').kind !== 'contract') {
         continue;
       }
-      if (!(await this.done(dependency))) {
+      if (!(await this.done(dependency, alias))) {
         return false;
       }
     }
@@ -620,6 +665,8 @@ class DeploymentRun<C extends Steps> {
     const references = new Set<string>();
     const ctx: Ctx<C> = {
       ...this.ctx,
+      done: id => this.done(id, alias),
+      ran: id => this.ran(id, alias),
       contract: reference => {
         references.add(reference);
         return this.resolver.contract(reference);
@@ -676,64 +723,48 @@ class DeploymentRun<C extends Steps> {
    * clears the step's threshold. A recipient this run has yet to put in place holds nothing, so the
    * balance is read only once the contracts its selector references are there. Memoized per run.
    */
-  private fundGate(alias: string): Promise<boolean> {
+  private fundGate(alias: string, waiter: string | undefined): Promise<boolean> {
     const step = getOrThrow(this.fundSteps, alias, 'fund step');
-    let cached = this.fundGateCache.get(alias);
-    if (!cached) {
-      cached = (async () => {
-        for (const reference of referencedContracts(step.recipient)) {
-          if (!(await this.done(reference))) {
-            return false;
-          }
+    return this.memoizedCheck(this.fundGateCache, alias, waiter, async () => {
+      for (const reference of referencedContracts(step.recipient)) {
+        if (!(await this.done(reference, alias))) {
+          return false;
         }
-        const recipient = step.recipient(this.resolver);
-        return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
-      })();
-      this.fundGateCache.set(alias, cached);
-    }
-    return cached;
+      }
+      const recipient = step.recipient(this.resolver);
+      return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
+    });
   }
 
   /**
    * An action's `done` gate, memoized per run. Invoked only once the contracts the action declares
    * are in place: until then the action cannot have run, and the gate would read state that does not
-   * exist. Gates may consult other steps via `ctx.done`, so a gate that (transitively) depends on
-   * itself throws {@link GateCycleError}.
+   * exist. Gates may consult other steps via `ctx.done`.
    */
-  private actionGate(alias: string): Promise<boolean> {
+  private actionGate(alias: string, waiter: string | undefined): Promise<boolean> {
     const step = this.actionSteps.get(alias);
     if (!step) {
       throw new Error(`Unknown action "${alias}".`);
     }
-    if (this.gateInProgress.has(alias)) {
-      return Promise.reject(new GateCycleError(`Cyclic idempotency gate at "${alias}".`));
-    }
-    const cached = this.gateCache.get(alias);
-    if (cached) {
-      return cached;
-    }
-    this.gateInProgress.add(alias);
-    const pending = (async () => {
+    return this.memoizedCheck(this.gateCache, alias, waiter, async () => {
       if (!(await this.dependenciesReady(alias, { contractsOnly: true }))) {
         return false;
       }
       return this.runRecorded(alias, `Idempotency gate for action "${alias}"`, ctx => step.done(ctx));
-    })().finally(() => this.gateInProgress.delete(alias));
-    this.gateCache.set(alias, pending);
-    return pending;
+    });
   }
 
-  /** `ctx.done`: whether step `id` is already satisfied this run — mode-aware. */
-  private done(id: string): Promise<boolean> {
+  /** `ctx.done`: whether step `id` is already satisfied this run — mode-aware. `waiter` is the check asking. */
+  private done(id: string, waiter: string | undefined): Promise<boolean> {
     const step = this.steps.get(id);
     if (!step) {
       throw new Error(`Unknown step "${id}".`);
     }
     if (step.kind === 'action') {
-      return this.actionGate(id);
+      return this.actionGate(id, waiter);
     }
     if (step.kind === 'fund') {
-      return this.fundGate(id);
+      return this.fundGate(id, waiter);
     }
     if (step.mode === 'register') {
       return Promise.resolve(this.contractAddresses.has(id)); // registered in the PXE
@@ -741,27 +772,27 @@ class DeploymentRun<C extends Steps> {
     if (isDeferred(step)) {
       // Its address only exists once it resolves; publication itself is read live, so a publish
       // later in this run still shows.
-      return this.deferredPublishes(id).then(() => this.isPublished(id));
+      return this.deferredPublishes(id, waiter).then(() => this.isPublished(id));
     }
     return this.isPublished(id);
   }
 
-  /** `ctx.ran`: whether step `id` did (or will do) work this run — mode-aware. */
-  private async ran(id: string): Promise<boolean> {
+  /** `ctx.ran`: whether step `id` did (or will do) work this run — mode-aware. `waiter` is the check asking. */
+  private async ran(id: string, waiter: string | undefined): Promise<boolean> {
     const step = this.steps.get(id);
     if (!step) {
       throw new Error(`Unknown step "${id}".`);
     }
     if (step.kind === 'action') {
-      return !(await this.actionGate(id));
+      return !(await this.actionGate(id, waiter));
     }
     if (step.kind === 'fund') {
-      return !(await this.fundGate(id));
+      return !(await this.fundGate(id, waiter));
     }
     if (step.mode === 'register') {
       return this.contractAddresses.has(id); // (re)registered this run
     }
-    return isDeferred(step) ? this.deferredPublishes(id) : this.publishedThisRun.has(id);
+    return isDeferred(step) ? this.deferredPublishes(id, waiter) : this.publishedThisRun.has(id);
   }
 
   /**
