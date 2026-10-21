@@ -14,7 +14,7 @@ import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
 import { ValidatorMetrics } from './metrics.js';
-import { type BlockProposalObservers, ProposalHandler } from './proposal_handler.js';
+import { type BlockProposalObservers, type CheckpointOpeningFeeSource, ProposalHandler } from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 export function createProposalHandler(
@@ -31,6 +31,7 @@ export function createProposalHandler(
     dateProvider: DateProvider;
     telemetry: TelemetryClient;
     reexecutionTracker: CheckpointReexecutionTracker;
+    checkpointFeeSource: CheckpointOpeningFeeSource;
     /** Test-only in-process observations of this node's proposal handling; absent in production. */
     blockProposalObservers?: BlockProposalObservers;
   },
@@ -52,6 +53,7 @@ export function createProposalHandler(
     config,
     deps.blobClient,
     deps.reexecutionTracker,
+    deps.checkpointFeeSource,
     metrics,
     deps.dateProvider,
     deps.telemetry,
@@ -75,6 +77,7 @@ export function createValidatorClient(
     keyStoreManager: KeystoreManager | undefined;
     blobClient: BlobClientInterface;
     reexecutionTracker: CheckpointReexecutionTracker;
+    checkpointFeeSource: CheckpointOpeningFeeSource;
     slashingProtectionDb?: SlashingProtectionDatabase;
     /** Test-only in-process observations of this node's proposal handling; absent in production. */
     blockProposalObservers?: BlockProposalObservers;
@@ -98,6 +101,7 @@ export function createValidatorClient(
     deps.keyStoreManager,
     deps.blobClient,
     deps.reexecutionTracker,
+    deps.checkpointFeeSource,
     deps.dateProvider,
     deps.telemetry,
     deps.slashingProtectionDb,

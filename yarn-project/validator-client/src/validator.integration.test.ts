@@ -236,6 +236,8 @@ describe('ValidatorClient Integration', () => {
       keyStoreManager,
       blobClient,
       new CheckpointReexecutionTracker(),
+      // Every checkpoint these tests build carries empty gas fees.
+      { getCheckpointOpeningGasFees: () => Promise.resolve(GasFees.empty()) },
       dateProvider,
     );
 

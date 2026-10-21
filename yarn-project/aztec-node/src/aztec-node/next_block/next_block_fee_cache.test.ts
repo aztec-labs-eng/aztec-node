@@ -17,6 +17,7 @@ import { DEFAULT_REFRESH_INTERVAL_MS, MAX_AGE_INTERVALS, NextBlockFeeCache } fro
 import { type BoundaryFeeKey, computeBoundaryFeeKey, getClockSlot, planNextBlock } from './next_block_planner.js';
 import {
   type L2FrontierArgs,
+  blockHashOf,
   makeFeeHeader,
   makeFrontier,
   makeInvalidStatus,
@@ -357,6 +358,92 @@ describe('NextBlockFeeCache', () => {
           proven: CheckpointNumber(1),
         });
       });
+    });
+  });
+
+  describe('getCheckpointOpeningGasFees', () => {
+    const parentOf = (blockNumber: BlockNumber) => ({ number: blockNumber, hash: blockHashOf(blockNumber).toString() });
+
+    beforeEach(() => {
+      // A fee that tells the priced slot apart, so a result shows which boundary it was priced for.
+      globalVariableBuilder.buildCheckpointGlobalVariables.mockImplementation((_c, _f, slotNumber) =>
+        Promise.resolve(globalsFor(slotNumber, slotNumber * 1000)),
+      );
+    });
+
+    it("prices the proposal's slot rather than the slot this node's clock plans", async () => {
+      setFrontier();
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(12), parentOf(BlockNumber(5)));
+
+      expect(fees).toEqual(new GasFees(0, 12_000));
+    });
+
+    it('serves a boundary the loop already priced for that slot and parent from memory', async () => {
+      setFrontier();
+      await cache.refresh();
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(20), parentOf(BlockNumber(5)));
+
+      expect(fees).toEqual(new GasFees(0, 20_000));
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).toHaveBeenCalledTimes(1);
+    });
+
+    it('has no price when the proposed tip is not the proposal parent', async () => {
+      setFrontier();
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(20), {
+        number: BlockNumber(5),
+        hash: blockHashOf(BlockNumber(6)).toString(),
+      });
+
+      expect(fees).toBeUndefined();
+    });
+
+    it("has no price until the parent's checkpoint is processed", async () => {
+      // The parent's blocks are local but its checkpoint is not, so the frontier is still mid-checkpoint.
+      setFrontier({ proposed: BlockNumber(7), latestBlockGlobals: { slotNumber: SlotNumber(30) } });
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(31), parentOf(BlockNumber(7)));
+
+      expect(fees).toBeUndefined();
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
+    });
+
+    it("has no price while the checkpointed tip trails the parent's parent, then prices on the pipelined plan", async () => {
+      const proposedCheckpoint = makeProposedCheckpointData({
+        checkpointNumber: CheckpointNumber(3),
+        lastBlock: BlockNumber(5),
+        slotNumber: SlotNumber(30),
+      });
+      rollupContract.getCheckpoint.mockResolvedValue({ feeHeader: makeFeeHeader() } as never);
+      rollupContract.getManaTarget.mockResolvedValue(1000n);
+      const childFeeHeader = makeFeeHeader();
+      jest.spyOn(RollupContract, 'computeChildFeeHeader').mockReturnValue(childFeeHeader);
+
+      // Checkpoint 2, the parent's parent, has not been checkpointed in this node's view yet.
+      setFrontier({ checkpointed: CheckpointNumber(1), proposedCheckpoint });
+      const trailing = await cache.getCheckpointOpeningGasFees(SlotNumber(31), parentOf(BlockNumber(5)));
+
+      setFrontier({ checkpointed: CheckpointNumber(2), proposedCheckpoint });
+      const caughtUp = await cache.getCheckpointOpeningGasFees(SlotNumber(31), parentOf(BlockNumber(5)));
+
+      expect(trailing).toBeUndefined();
+      expect(caughtUp).toEqual(new GasFees(0, 31_000));
+      // The only price was the one read under the pipelined parent's fee header, never a pinned-tips one.
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).toHaveBeenCalledTimes(1);
+      expect(
+        globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0][3]?.pendingCheckpointState?.feeHeader,
+      ).toEqual(childFeeHeader);
+    });
+
+    it('surfaces the L1 failure', async () => {
+      setFrontier();
+      globalVariableBuilder.buildCheckpointGlobalVariables.mockRejectedValue(new Error('L1 is down'));
+
+      await expect(cache.getCheckpointOpeningGasFees(SlotNumber(20), parentOf(BlockNumber(5)))).rejects.toThrow(
+        'L1 is down',
+      );
     });
   });
 
