@@ -156,8 +156,9 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  * Missing-attestor faults are recorded only in `checkpoint-mined` and the three valid-proposal
  * statuses (`checkpoint-unpublished`, `checkpoint-orphaned`, `checkpoint-valid`), where the local
  * node has positive evidence the checkpoint was canonical or valid. In the other four cases the
- * proposer is at fault and no attestor penalty applies. A valid proposal whose checkpoint number an
- * earlier slot took is also exempt: a validator holding that slot's blocks rightly refuses it.
+ * proposer is at fault and no attestor penalty applies. A valid proposal that conflicts with a checkpoint
+ * that landed on L1, in its parent's position or its own, is also exempt: a validator holding the landed
+ * checkpoint's blocks rightly refuses it.
  *
  * `checkpoint-unpublished` and `checkpoint-orphaned` are neutral for the proposer, like
  * `checkpoint-valid`: neither counts toward `missedProposals` or inactivity slashing.

@@ -58,7 +58,7 @@ For each slot, the proposer is assigned one of six statuses, ranked highest-conf
 | 2 | `checkpoint-missed` | `p2p.hasBlockProposalsForSlot(slot)` true (blocks seen but no checkpoint proposal observed) | Proposer |
 | 1 | `blocks-missed` | None of the above (no block proposals observed) | Proposer |
 
-Missing-attestor faults are only recorded in cases 5 (including 5a and 5b) and 6 — where the local node has positive evidence the checkpoint was valid or canonical. In cases 1–4 the proposer is at fault and no attestor penalty applies. Nor does one apply when an earlier slot landed the proposal's checkpoint number: a validator that already held that slot's blocks rejects the proposal's blocks as conflicting, and is right to.
+Missing-attestor faults are only recorded in cases 5 (including 5a and 5b) and 6 — where the local node has positive evidence the checkpoint was valid or canonical. In cases 1–4 the proposer is at fault and no attestor penalty applies. Nor does one apply when a different checkpoint landed in the parent's position or an earlier slot landed the proposal's checkpoint number: a validator that already held the landed checkpoint's blocks rejects the proposal (or the parent it builds on) as conflicting, and is right to.
 
 ### Refining case 5: unpublished and orphaned proposals
 
