@@ -205,11 +205,8 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: PublishedCheckpoint,
     evictProposedFrom?: CheckpointNumber,
   ): Promise<ReconcileCheckpointsResult> {
-    // L1 checks only the checkpoint header's mana against its limit, not the sum of the blocks' mana, so the sum is
-    // checked here. Against the live limit rather than one read at startup or at the checkpoint's L1 block: governance
-    // can raise the limit after this node started and only ever raises it, so the live value is a safe upper bound and
-    // needs no historical L1 state. It can trail an increase by a polling interval: a checkpoint over a stale limit
-    // fails this sync pass, and the sync retries it once the tracker has caught up.
+    // Checked against the live mana limit, which may trail L1 by a poll; a checkpoint over a stale limit fails this
+    // pass and the sync retries it.
     const validateOpts = { rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit) };
     for (const checkpoint of checkpoints) {
       validateCheckpoint(checkpoint.checkpoint, validateOpts);

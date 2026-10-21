@@ -27,7 +27,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import type { RollupFeeConfig, RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   ITxProvider,
   ValidatorClientFullConfig,
@@ -139,7 +139,7 @@ describe('ProposalHandler checkpoint validation', () => {
   let inbox: FakeInbox;
   let epochCache: MockProxy<EpochCache>;
   let checkpointsBuilder: MockProxy<FullNodeCheckpointsBuilder>;
-  let feeConfigProvider: MockProxy<RollupFeeConfigProvider>;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let dateProvider: TestDateProvider;
   let metrics: MockProxy<ValidatorMetrics>;
   let config: ValidatorClientFullConfig;
@@ -167,14 +167,7 @@ describe('ProposalHandler checkpoint validation', () => {
       l1ChainId: 1,
       rollupVersion: 1,
     });
-    feeConfigProvider = mock<RollupFeeConfigProvider>();
-    feeConfigProvider.getFeeConfig.mockReturnValue({
-      manaTarget: 100_000_000n,
-      manaLimit: 200_000_000n,
-      provingCostPerManaInEth: 0n,
-      protocolFeeMarginBps: 0,
-      l1BlockNumber: 1n,
-    });
+    feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: 200_000_000n });
     checkpointsBuilder.getFeeConfigProvider.mockReturnValue(feeConfigProvider);
 
     epochCache = mock<EpochCache>();
@@ -1203,17 +1196,9 @@ describe('ProposalHandler checkpoint validation', () => {
     });
 
     describe('rollup mana limit raised by governance', () => {
-      const feeConfigWithLimit = (manaLimit: bigint): RollupFeeConfig => ({
-        manaTarget: manaLimit / 2n,
-        manaLimit,
-        provingCostPerManaInEth: 0n,
-        protocolFeeMarginBps: 0,
-        l1BlockNumber: 1n,
-      });
-
       it('accepts a proposal above the startup limit once the provider has the raised limit', async () => {
         // The node started with 200M; governance has since raised it to 300M and the provider has caught up.
-        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(300_000_000n));
+        feeConfigProvider.setFeeConfig({ manaLimit: 300_000_000n });
         const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
 
         const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -1222,7 +1207,7 @@ describe('ProposalHandler checkpoint validation', () => {
       });
 
       it("rejects a proposal above the provider's current limit", async () => {
-        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(200_000_000n));
+        feeConfigProvider.setFeeConfig({ manaLimit: 200_000_000n });
         const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
 
         const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
