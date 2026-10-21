@@ -11,12 +11,11 @@ import { ENR, SignableENR } from '@nethermindeth/enr';
 import { Buffer } from 'buffer';
 import EventEmitter from 'events';
 
-import type { P2PConfig } from '../../config.js';
+import { DISCV5_RATE_LIMITER_OPTS, type P2PConfig } from '../../config.js';
 import { createNodeENR } from '../../enr/generate-enr.js';
 import { AZTEC_ENR_KEY, Discv5Event, PeerEvent } from '../../types/index.js';
 import { convertToMultiaddr } from '../../util.js';
 import { type PeerDiscoveryService, PeerDiscoveryState } from '../service.js';
-import { getDiscv5RateLimiterOpts } from './config.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
 
 const delayBeforeStart = 2000; // 2sec
@@ -128,7 +127,7 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
         ...configOverrides.config,
       },
       metricsRegistry,
-      rateLimiterOpts: getDiscv5RateLimiterOpts(config),
+      rateLimiterOpts: DISCV5_RATE_LIMITER_OPTS,
     });
 
     // Hook onto the onEstablished method to check the peer's version from the ENR,
