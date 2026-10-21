@@ -151,7 +151,7 @@ aztec initiate-withdraw-by-attester-batch --authorizations exits.json \\
   --rollup {{ROLLUP_ADDR}} --l1-chain-id {{L1_CHAIN_ID}} --l1-rpc-urls {{ETH_RPC}} \\
   --private-key [RELAYER_PRIVATE_KEY]`}</ConfigCode>
 
-The stake goes to each delegator's withdrawer, not to you, and the withdrawer must name the recipient before the stake can be finalized. Tell your delegators before you exit them. Attester-initiated exits are rate-limited to about 5% of the sequencer set per rolling window, so large batches may need `--up-to-limit` and several submissions.
+The stake goes to each delegator's withdrawer address. Attester-initiated exits are rate-limited to about 5% of the sequencer set per governance withdrawal delay, so for a batch larger than the current limit, `--up-to-limit` exits as many as the limit allows and leaves the rest for a later submission.
 
 See [Exiting a sequencer](/operate/operators/sequencer-management/exiting-a-sequencer) for the full procedure, the limits, and troubleshooting.
 
