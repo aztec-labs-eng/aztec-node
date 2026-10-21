@@ -66,24 +66,7 @@ describe('ProverNode', () => {
     l1ToL2MessageSource.getL1ToL2MessagesBetweenLeafCounts.mockResolvedValue([]);
     publisherFactory.create.mockResolvedValue(publisher);
 
-    proverNode = new TestProverNode(
-      prover,
-      publisherFactory,
-      l2BlockSource,
-      l1ToL2MessageSource,
-      contractDataSource,
-      worldState,
-      { getTxProvider: () => txProvider },
-      rollupContract,
-      l1Metrics,
-      avmSimulator,
-      {},
-    );
-    // Inject the session manager and publishing service without going through start() —
-    // start() wires the publisher + block stream + ticker, none of which these unit tests
-    // exercise.
-    proverNode.setSessionManager(sessionManager);
-    proverNode.setPublishingService(publishingService);
+    proverNode = createProverNode({});
     mined.clear();
   });
 
@@ -338,7 +321,7 @@ describe('ProverNode', () => {
 
   // ---------------- handleCheckpointEvent gating ----------------
 
-  it('skips registration when the epoch is already fully proven on L1', async () => {
+  it('skips registration when the epoch is fully proven and our full-epoch proof of it is on L1', async () => {
     // Proven block sits at the last block of epoch 1 (epochDuration=1, slot=1). Block 2 must be
     // absent so isProvenBlockLastOfItsEpoch falls through to isEpochComplete and reports the
     // proven tip as the epoch's last block.
@@ -347,6 +330,7 @@ describe('ProverNode', () => {
       Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
     );
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -354,6 +338,50 @@ describe('ProverNode', () => {
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
     // The whole-epoch skip still advances the cursor so we don't re-evaluate it next pass.
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+  });
+
+  it('registers a fully-proven epoch while our full-epoch proof of it is not on L1', async () => {
+    // The proof that moved the tip over epoch 1 may be another prover's, or one that landed while the
+    // epoch was open. L1 still rewards our full-epoch proof, so the epoch's checkpoints must be proven.
+    setupRegistrationSuccess();
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
+    l2BlockSource.getBlockData.mockImplementation((query: any) =>
+      Promise.resolve(
+        Number(query.number) <= 1
+          ? ({
+              header: {
+                getSlot: () => SlotNumber(1),
+                lastArchive: { root: Fr.ZERO },
+                state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
+              },
+            } as any)
+          : undefined,
+      ),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+
+    expect(proverNode.getCheckpointStore().listAll().length).toBe(1);
+    expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(1));
+  });
+
+  it('skips a fully-proven epoch when full-epoch proving is disabled', async () => {
+    // Such a node never opens the full session and `startProof` refuses a covered epoch, so proving the epoch's
+    // checkpoints would be wasted even though our full-epoch proof of it is not on L1.
+    proverNode = createProverNode({ proverNodeDisableFullEpochProving: true });
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
+    l2BlockSource.getBlockData.mockImplementation((query: any) =>
+      Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+
+    expect(proverNode.getCheckpointStore().listAll().length).toBe(0);
+    expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
   });
 
   it('content-addresses the prover by the checkpoint archive root', async () => {
@@ -688,7 +716,58 @@ describe('ProverNode', () => {
     });
   });
 
+  // ---------------- resolveCatchUpStartEpoch ----------------
+
+  // epochDuration=1 and proofSubmissionEpochs=1: at synced slot N, epochs up to N-2 can no longer be proven.
+  it.each([
+    { lastFullyProven: 5, syncedSlot: 6, expected: 4, why: 'lowers a proven epoch still in its window' },
+    { lastFullyProven: 3, syncedSlot: 6, expected: 3, why: 'keeps an older fully-proven epoch' },
+    {
+      lastFullyProven: 5,
+      syncedSlot: undefined,
+      expected: 3,
+      why: 'assumes the earliest epoch when no slot is synced',
+    },
+    { lastFullyProven: 5, syncedSlot: 1, expected: undefined, why: 'starts from scratch when no window has closed' },
+    {
+      lastFullyProven: undefined,
+      syncedSlot: 6,
+      expected: undefined,
+      why: 'starts from scratch when nothing is proven',
+    },
+  ])('resolveCatchUpStartEpoch $why', async ({ lastFullyProven, syncedSlot, expected }) => {
+    l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(
+      syncedSlot === undefined ? undefined : SlotNumber(syncedSlot),
+    );
+    const result = await proverNode.callResolveCatchUpStartEpoch(
+      lastFullyProven === undefined ? undefined : EpochNumber(lastFullyProven),
+    );
+    expect(result).toEqual(expected === undefined ? undefined : EpochNumber(expected));
+  });
+
   // ---------------- helpers ----------------
+
+  function createProverNode(config: ConstructorParameters<typeof TestProverNode>[10]): TestProverNode {
+    const node = new TestProverNode(
+      prover,
+      publisherFactory,
+      l2BlockSource,
+      l1ToL2MessageSource,
+      contractDataSource,
+      worldState,
+      { getTxProvider: () => txProvider },
+      rollupContract,
+      l1Metrics,
+      avmSimulator,
+      config,
+    );
+    // Inject the session manager and publishing service without going through start() —
+    // start() wires the publisher + block stream + ticker, none of which these unit tests
+    // exercise.
+    node.setSessionManager(sessionManager);
+    node.setPublishingService(publishingService);
+    return node;
+  }
 
   /** Bypass `isEpochFullyProven` so checkpoint events register normally. */
   function setupNotFullyProven() {
@@ -818,6 +897,10 @@ class TestProverNode extends ProverNode {
 
   public callResolveLastFullyProvenEpoch() {
     return this.resolveLastFullyProvenEpoch();
+  }
+
+  public callResolveCatchUpStartEpoch(lastFullyProvenEpoch: EpochNumber | undefined) {
+    return this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
   }
 
   /** Drives the expiry sweep directly, as the periodic ticker does in production. */

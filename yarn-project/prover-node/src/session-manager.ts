@@ -1,3 +1,4 @@
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -60,6 +61,8 @@ export type SessionManagerDeps = {
   >;
   proverFactory: EpochProverFactory;
   proverId: EthAddress;
+  /** Read to tell whether this prover already holds a full-epoch proof of an epoch the proven tip covers. */
+  rollupContract: Pick<RollupContract, 'getHasSubmittedFullEpochProof'>;
   publishingService: ProofPublishingService;
   metrics: ProverNodeJobMetrics;
   dateProvider: DateProvider;
@@ -92,6 +95,12 @@ export class SessionManager {
    * freshly-constructed session.
    */
   private readonly reconcileQueue = new SerialQueue();
+  /**
+   * Stored epochs whose full-epoch proof under our prover id L1 has confirmed, with the confirmed checkpoint count and
+   * when it was read. A covered epoch with no session is then re-read once per L2 slot rather than on every tick, which
+   * still notices an L1 reorg that drops the registration. Entries leave with the epoch's checkpoints.
+   */
+  private readonly ownFullEpochProofs: Map<EpochNumber, { length: number; confirmedAtMs: number }> = new Map();
   /** Cached L1 constants, populated on first read. */
   private cachedL1Constants: L1RollupConstants | undefined;
   /** Test-only hooks applied to every session this manager constructs. */
@@ -166,7 +175,8 @@ export class SessionManager {
   /**
    * Called periodically by ProverNode's ticker. Picks up epochs that have become complete
    * by time without a fresh checkpoint event (e.g. the epoch's last slots are empty), and
-   * advances to the next epoch once the previous one is proven on L1.
+   * advances to the next epoch once the previous one is proven on L1. Also revisits epochs the
+   * proven tip already covers, which this prover still proves if it holds no full-epoch proof of them.
    */
   public onTick(): Promise<void> {
     return this.scheduleReconcile({ kind: 'tick' });
@@ -239,6 +249,7 @@ export class SessionManager {
     this.log.debug(`Reconciling`, { trigger });
 
     this.recreateInvalidSessions();
+    this.forgetFullEpochProofsOutsideStore();
 
     if (!this.deps.config.disableFullEpochProving) {
       const implicatedEpochs = await this.epochsForTrigger(trigger);
@@ -339,6 +350,16 @@ export class SessionManager {
       // session over it would fail immediately. Don't re-create it every tick — it recovers when a
       // prune/re-add replaces the failed prover with a fresh one, or fails for good at expiry.
       this.log.debug(`Skipping full-session open for epoch ${epoch}: a checkpoint prover has failed`, { epoch });
+      return;
+    }
+    // The proven tip can cover an epoch for which this prover holds no full-epoch proof: a proof landed while the
+    // epoch was still open, which L1 registers as non-full. L1 still accepts and rewards our full-epoch proof until
+    // the submission window closes, so the tip alone does not make the epoch done.
+    if (
+      (await this.isProvenChainEncompassing(canonical)) &&
+      (await this.hasOwnFullEpochProof(epoch, canonical.length))
+    ) {
+      this.log.debug(`Skipping full-session open for epoch ${epoch}: our full-epoch proof is already on L1`, { epoch });
       return;
     }
     const spec: SessionSpec = { kind: 'full', epochNumber: epoch, fromSlot, toSlot };
@@ -481,10 +502,12 @@ export class SessionManager {
   /**
    * Maps a reconcile trigger to the epochs whose full session should be (re)opened.
    *
-   * The periodic `tick` returns the next unproven epoch every time; it does not track prior attempts.
-   * `openFullSessionIfReady` is what keeps this from re-proving a doomed epoch: it refuses to build a
-   * session when any checkpoint prover in the set has failed, so a stuck epoch is cheaply skipped each
-   * tick rather than re-proved. `checkpoint` and `prune` fire when an epoch's canonical content changes
+   * The periodic `tick` returns the next unproven epoch every time, followed by every epoch in the store that the
+   * proven tip already covers; the next unproven epoch comes first so it gets a session slot ahead of epochs that only
+   * earn this prover its reward. The tick does not track prior attempts. `openFullSessionIfReady` skips a covered
+   * epoch once our own full-epoch proof of it is on L1. It is also what keeps this from re-proving a doomed epoch: it
+   * refuses to build a session when any checkpoint prover in the set has failed, so a stuck epoch is cheaply skipped
+   * each tick rather than re-proved. `checkpoint` and `prune` fire when an epoch's canonical content changes
    * (a checkpoint arrives, or a reorg prunes/replaces one) — which is what installs a fresh prover in
    * place of a failed one, letting the next open succeed and recovering a pruned-then-re-added epoch.
    */
@@ -495,8 +518,9 @@ export class SessionManager {
       case 'prune':
         return trigger.affectedEpochs;
       case 'tick': {
-        const epoch = await this.nextUnprovenEpoch();
-        return epoch === undefined ? [] : [epoch];
+        const next = await this.nextUnprovenEpoch();
+        const covered = this.storedEpochs().filter(epoch => next === undefined || epoch < next);
+        return next === undefined ? covered : [next, ...covered];
       }
       case 'start-proof':
         return [];
@@ -517,6 +541,23 @@ export class SessionManager {
       return undefined;
     }
     return getEpochAtSlot(header.getSlot(), await this.getL1Constants());
+  }
+
+  private forgetFullEpochProofsOutsideStore(): void {
+    if (this.ownFullEpochProofs.size === 0) {
+      return;
+    }
+    const stored = new Set(this.storedEpochs());
+    for (const epoch of Array.from(this.ownFullEpochProofs.keys())) {
+      if (!stored.has(epoch)) {
+        this.ownFullEpochProofs.delete(epoch);
+      }
+    }
+  }
+
+  /** Distinct epochs with checkpoints in the store, ascending. The store drops an epoch once its window closes. */
+  private storedEpochs(): EpochNumber[] {
+    return Array.from(new Set(this.deps.checkpointStore.list().map(p => p.epochNumber)));
   }
 
   private checkpointsForSpec(spec: SessionSpec): CheckpointProver[] {
@@ -574,6 +615,32 @@ export class SessionManager {
     const lastCheckpoint = canonical[canonical.length - 1].checkpoint;
     const lastBlock = lastCheckpoint.blocks[lastCheckpoint.blocks.length - 1].number;
     return provenBlock >= lastBlock;
+  }
+
+  /**
+   * Whether L1 registered this prover's proof of the epoch as a full-epoch proof. A failed read counts as registered:
+   * the epoch is skipped until a later tick retries, and the reconcile still opens the other implicated epochs.
+   */
+  private async hasOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean> {
+    const cached = this.ownFullEpochProofs.get(epoch);
+    const { slotDuration } = await this.getL1Constants();
+    if (cached?.length === length && this.deps.dateProvider.now() - cached.confirmedAtMs < slotDuration * 1000) {
+      return true;
+    }
+    try {
+      const registered = await this.deps.rollupContract.getHasSubmittedFullEpochProof(
+        epoch,
+        length,
+        this.deps.proverId,
+      );
+      if (registered) {
+        this.ownFullEpochProofs.set(epoch, { length, confirmedAtMs: this.deps.dateProvider.now() });
+      }
+      return registered;
+    } catch (err) {
+      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}; retrying later`, err);
+      return true;
+    }
   }
 
   private async getL1Constants(): Promise<L1RollupConstants> {
