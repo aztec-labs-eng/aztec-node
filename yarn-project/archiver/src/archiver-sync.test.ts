@@ -2217,6 +2217,56 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
     }, 15_000);
+
+    describe('L1 reorg republishes the latest checkpoint with different attestations', () => {
+      let signers: Secp256k1Signer[];
+
+      beforeEach(async () => {
+        fake.setTargetCommitteeSize(3);
+        signers = times(3, Secp256k1Signer.random);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(
+          makeCommitteeLookup({ committee: signers.map(signer => signer.address), seed: 0n }),
+        );
+        await fake.addCheckpoint(CheckpointNumber(1), { l1BlockNumber: 101n, signers });
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      });
+
+      const syncAfterRepublish = async () => {
+        for (const head of [120n, 130n]) {
+          fake.setL1BlockNumber(head);
+          await archiver.syncImmediate();
+        }
+      };
+
+      it('stores the republished attestations', async () => {
+        await fake.repostCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 101n,
+          signers,
+          spareAttestationsBitmapBit: true,
+          reorged: true,
+        });
+        await syncAfterRepublish();
+
+        const stored = await archiver.getCheckpoint({ number: CheckpointNumber(1) });
+        expect(computeAttestationsHash(stored!.verbatimAttestations)).toEqual(
+          fake.getPostedAttestationsHash(CheckpointNumber(1)).toString(),
+        );
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+      });
+
+      it('flags the republished checkpoint when its attestations are invalid', async () => {
+        await fake.repostCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 101n,
+          signers: times(3, Secp256k1Signer.random),
+          reorged: true,
+        });
+        await syncAfterRepublish();
+
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+      });
+    });
   });
 
   describe('checkpoint ingestion recovery', () => {
