@@ -2,13 +2,15 @@ import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { TopTreeOrchestrator } from '@aztec-labs/prover-client/orchestrator';
-import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { CommitteeAttestation, CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
@@ -30,6 +32,7 @@ import type { TopTreeProof } from './top-tree-job.js';
 describe('EpochSession', () => {
   let proverFactory: ReturnType<typeof mock<EpochProverFactory>>;
   let publishingService: ReturnType<typeof mock<Pick<ProofPublishingService, 'submit' | 'withdraw'>>>;
+  let l2BlockSource: ReturnType<typeof mock<Pick<L2BlockSource, 'getCheckpoint'>>>;
   let topTree: ReturnType<typeof mock<TopTreeOrchestrator>>;
   let metrics: ProverNodeJobMetrics;
   let dateProvider: DateProvider;
@@ -54,6 +57,7 @@ describe('EpochSession', () => {
       return topTree;
     });
     publishingService = mock<Pick<ProofPublishingService, 'submit' | 'withdraw'>>();
+    l2BlockSource = mock<Pick<L2BlockSource, 'getCheckpoint'>>();
 
     const telemetry = getTelemetryClient();
     metrics = new ProverNodeJobMetrics(telemetry.getMeter('test'), telemetry.getTracer('test'));
@@ -129,6 +133,25 @@ describe('EpochSession', () => {
       expect(candidate.endBlock).toEqual(session.getEndBlockNumber());
       expect(candidate.fromCheckpoint).toEqual(CheckpointNumber(1));
       expect(candidate.toCheckpoint).toEqual(CheckpointNumber(1));
+    });
+
+    it('submits the attestations the block source holds for the last checkpoint, not the registered ones', async () => {
+      const [registered, republished] = times(2, () =>
+        CommitteeAttestationsAndSigners.packAttestations(times(3, CommitteeAttestation.random)),
+      );
+      l2BlockSource.getCheckpoint.mockResolvedValue(
+        new PublishedCheckpoint(cp, L1PublishedData.random(), [], republished),
+      );
+      publishingService.submit.mockResolvedValue('published');
+      const session = new EpochSession(
+        makeSpec(),
+        [{ ...stubProver, verbatimAttestations: registered } as CheckpointProver],
+        makeDeps(),
+      );
+      await session.start();
+
+      const candidate = publishingService.submit.mock.calls[0]![0] as PublishCandidate;
+      expect(candidate.attestations).toEqual(republished);
     });
   });
 
@@ -436,6 +459,7 @@ describe('EpochSession', () => {
       proverFactory,
       proverId: EthAddress.ZERO,
       publishingService,
+      l2BlockSource,
       metrics,
       dateProvider,
       deadline: opts.deadline,

@@ -56,7 +56,7 @@ export type SessionManagerDeps = {
   checkpointStore: CheckpointStore;
   l2BlockSource: Pick<
     L2BlockSource,
-    'isEpochComplete' | 'getCheckpoints' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'
+    'isEpochComplete' | 'getCheckpoints' | 'getCheckpoint' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'
   >;
   proverFactory: EpochProverFactory;
   proverId: EthAddress;
@@ -396,6 +396,7 @@ export class SessionManager {
       proverFactory: this.deps.proverFactory,
       proverId: this.deps.proverId,
       publishingService: this.deps.publishingService,
+      l2BlockSource: this.deps.l2BlockSource,
       metrics: this.deps.metrics,
       dateProvider: this.deps.dateProvider,
       deadline: this.computeDeadline(epochNumber),
