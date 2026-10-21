@@ -752,33 +752,33 @@ describe('ProverNode', () => {
     });
   });
 
-  // ---------------- resolveCatchUpStartEpoch ----------------
-
-  // epochDuration=1 and proofSubmissionEpochs=1: at synced slot N, epochs up to N-2 can no longer be proven.
-  it.each([
-    { lastFullyProven: 5, syncedSlot: 6, expected: 4, why: 'lowers a proven epoch still in its window' },
-    { lastFullyProven: 3, syncedSlot: 6, expected: 3, why: 'keeps an older fully-proven epoch' },
-    {
-      lastFullyProven: 5,
-      syncedSlot: undefined,
-      expected: 3,
-      why: 'assumes the earliest epoch when no slot is synced',
-    },
-    { lastFullyProven: 5, syncedSlot: 1, expected: undefined, why: 'starts from scratch when no window has closed' },
-    {
-      lastFullyProven: undefined,
-      syncedSlot: 6,
-      expected: undefined,
-      why: 'starts from scratch when nothing is proven',
-    },
-  ])('resolveCatchUpStartEpoch $why', async ({ lastFullyProven, syncedSlot, expected }) => {
-    l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(
-      syncedSlot === undefined ? undefined : SlotNumber(syncedSlot),
-    );
-    const result = await proverNode.callResolveCatchUpStartEpoch(
-      lastFullyProven === undefined ? undefined : EpochNumber(lastFullyProven),
-    );
-    expect(result).toEqual(expected === undefined ? undefined : EpochNumber(expected));
+  describe('resolveCatchUpStartEpoch', () => {
+    // epochDuration=1 and proofSubmissionEpochs=1: at synced slot N, epochs up to N-2 can no longer be proven.
+    it.each([
+      { lastFullyProven: 5, syncedSlot: 6, expected: 4, why: 'lowers a proven epoch still in its window' },
+      { lastFullyProven: 3, syncedSlot: 6, expected: 3, why: 'keeps an older fully-proven epoch' },
+      {
+        lastFullyProven: 5,
+        syncedSlot: undefined,
+        expected: 3,
+        why: 'assumes the earliest epoch when no slot is synced',
+      },
+      { lastFullyProven: 5, syncedSlot: 1, expected: undefined, why: 'starts from scratch when no window has closed' },
+      {
+        lastFullyProven: undefined,
+        syncedSlot: 6,
+        expected: undefined,
+        why: 'starts from scratch when nothing is proven',
+      },
+    ])('$why', async ({ lastFullyProven, syncedSlot, expected }) => {
+      l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(
+        syncedSlot === undefined ? undefined : SlotNumber(syncedSlot),
+      );
+      const result = await proverNode.callResolveCatchUpStartEpoch(
+        lastFullyProven === undefined ? undefined : EpochNumber(lastFullyProven),
+      );
+      expect(result).toEqual(expected === undefined ? undefined : EpochNumber(expected));
+    });
   });
 
   // ---------------- helpers ----------------
