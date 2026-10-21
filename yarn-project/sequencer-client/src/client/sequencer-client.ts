@@ -149,7 +149,7 @@ export class SequencerClient {
 
     const globalsBuilder = deps.globalVariableBuilder;
 
-    const { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, feeConfigProvider, log);
+    const { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, log);
 
     const l1Constants = {
       l1GenesisTime,
@@ -263,24 +263,12 @@ export class SequencerClient {
 /**
  * Caps operator-provided per-block limits at checkpoint-level limits.
  * Returns undefined for any limit the operator didn't set — the checkpoint builder handles redistribution.
- *
- * The L2 gas limit is not capped here: the rollup's mana limit is live, and the checkpoint builder caps every block by
- * the mana left under the limit in force when it builds the block. Capping at startup would keep blocks at the old
- * limit after governance raises it.
  */
 function capPerBlockLimits(
   config: SequencerClientConfig,
-  feeConfigProvider: RollupFeeConfigProvider,
   log: ReturnType<typeof createLogger>,
 ): { maxL2BlockGas: number | undefined; maxDABlockGas: number | undefined; maxTxsPerBlock: number | undefined } {
   const maxL2BlockGas = config.maxL2BlockGas;
-  const rollupManaLimit = feeConfigProvider.getFeeConfig().manaLimit;
-  if (maxL2BlockGas !== undefined && BigInt(maxL2BlockGas) > rollupManaLimit) {
-    log.warn(
-      `Provided MAX_L2_BLOCK_GAS ${maxL2BlockGas} exceeds the current rollup mana limit ${rollupManaLimit} ` +
-        `(blocks are capped at the live limit when built)`,
-    );
-  }
 
   let maxDABlockGas = config.maxDABlockGas;
   if (maxDABlockGas !== undefined && maxDABlockGas > MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT) {
