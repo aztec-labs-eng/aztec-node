@@ -23,7 +23,7 @@ import {
   type ContractDataSource,
   ContractInstanceWithAddressSchema,
 } from '../contract/index.js';
-import { L1RollupConstantsResponseSchema } from '../epoch-helpers/index.js';
+import { L1RollupConstantsSchema } from '../epoch-helpers/index.js';
 import { LogResultSchema } from '../logs/log_result.js';
 import { ResolvedPrivateLogsQuerySchema, ResolvedPublicLogsQuerySchema } from '../logs/logs_query.js';
 import {
@@ -162,8 +162,7 @@ export const ArchiverApiSchema: ApiSchemaFor<ArchiverApi> = {
     input: z.tuple([schemas.AztecAddress, schemas.FunctionSelector]),
     output: optional(z.string()),
   }),
-  // The archiver no longer returns the deprecated `rollupManaLimit`; the schema accepts it from servers that still do.
-  getL1Constants: z.function({ input: z.tuple([]), output: L1RollupConstantsResponseSchema }),
+  getL1Constants: z.function({ input: z.tuple([]), output: L1RollupConstantsSchema }),
   isPruneDueAtSlot: z.function({ input: z.tuple([schemas.SlotNumber]), output: z.boolean() }),
   getGenesisValues: z.function({ input: z.tuple([]), output: z.object({ genesisArchiveRoot: schemas.Fr }) }),
   getL1Timestamp: z.function({ input: z.tuple([]), output: schemas.BigInt.optional() }),

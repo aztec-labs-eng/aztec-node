@@ -288,13 +288,6 @@ describe('ArchiverApiSchema', () => {
     expect(result).toEqual(EmptyL1RollupConstants);
   });
 
-  it('getL1Constants(from a server that still sends the deprecated rollupManaLimit)', async () => {
-    const olderServerResponse = { ...EmptyL1RollupConstants, rollupManaLimit: 1 };
-    handler.getL1Constants = () => Promise.resolve(olderServerResponse);
-    const result = await context.client.getL1Constants();
-    expect(result).toEqual(olderServerResponse);
-  });
-
   it('syncImmediate', async () => {
     await context.client.syncImmediate();
   });

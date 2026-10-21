@@ -53,7 +53,7 @@ import type {
   NodeInfo,
   ProtocolContractAddresses,
 } from '@aztec-labs/stdlib/contract';
-import type { L1RollupConstantsResponse } from '@aztec-labs/stdlib/epoch-helpers';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   GasFees,
   type ManaUsageEstimate,
@@ -322,9 +322,15 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.blockSource.getL2Tips();
   }
 
-  public async getL1Constants(): Promise<L1RollupConstantsResponse> {
+  public async getL1Constants(): Promise<L1RollupConstants> {
     const constants = await this.blockSource.getL1Constants();
-    return { ...constants, rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit) };
+    // Older clients' schemas still require `rollupManaLimit`, so keep sending it, now with the live value. Newer
+    // clients' schemas strip the extra key.
+    const response: L1RollupConstants & { rollupManaLimit: number } = {
+      ...constants,
+      rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
+    };
+    return response;
   }
 
   public getSyncedL2SlotNumber() {

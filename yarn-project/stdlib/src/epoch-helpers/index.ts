@@ -35,23 +35,6 @@ export const L1RollupConstantsSchema = zodFor<L1RollupConstants>()(
   }),
 );
 
-/**
- * {@link L1RollupConstants} as the node's `getL1Constants` RPC returns them. The node still fills the mana limit,
- * which older clients require when they parse the response; the schema accepts a response without it.
- */
-export type L1RollupConstantsResponse = L1RollupConstants & {
-  /**
-   * The rollup's mana limit when the node answered the call.
-   * @deprecated Governance can raise the limit at any time, so it is not a constant. Read it live from the rollup
-   * (`RollupContract.getManaLimit`) or from a `RollupFeeConfigProvider` instead.
-   */
-  rollupManaLimit?: number;
-};
-
-export const L1RollupConstantsResponseSchema = zodFor<L1RollupConstantsResponse>()(
-  L1RollupConstantsSchema.extend({ rollupManaLimit: z.number().optional() }),
-);
-
 /** Returns the timestamp for a given L2 slot. */
 export function getTimestampForSlot(
   slot: SlotNumber,

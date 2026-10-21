@@ -634,7 +634,7 @@ describe('aztec node', () => {
     });
 
     describe('getL1Constants', () => {
-      it('returns the deprecated rollupManaLimit from the live fee config', async () => {
+      it('keeps returning rollupManaLimit for older clients, from the live fee config', async () => {
         feeConfigProvider.setFeeConfig({ manaLimit: 100_000_000n });
         expect(await node.getL1Constants()).toEqual({ ...testL1Constants, rollupManaLimit: 100_000_000 });
 

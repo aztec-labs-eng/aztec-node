@@ -53,7 +53,7 @@ import {
   type ProtocolContractAddresses,
   ProtocolContractAddressesSchema,
 } from '../contract/index.js';
-import { type L1RollupConstantsResponse, L1RollupConstantsResponseSchema } from '../epoch-helpers/index.js';
+import { type L1RollupConstants, L1RollupConstantsSchema } from '../epoch-helpers/index.js';
 import { ManaUsageEstimate } from '../gas/fee_math.js';
 import { GasFees } from '../gas/gas_fees.js';
 import { type LogResult, LogResultSchema } from '../logs/log_result.js';
@@ -306,11 +306,8 @@ export interface AztecNode {
   /** Returns the tips of the L2 chain. */
   getChainTips(): Promise<L2Tips>;
 
-  /**
-   * Returns the rollup constants for the current chain, plus the deprecated `rollupManaLimit`, which is read live
-   * from the rollup's fee config when the call is answered.
-   */
-  getL1Constants(): Promise<L1RollupConstantsResponse>;
+  /** Returns the rollup constants for the current chain. */
+  getL1Constants(): Promise<L1RollupConstants>;
 
   /**
    * Returns the last L2 slot number for which the node has all L1 data needed to build the next checkpoint.
@@ -708,7 +705,7 @@ export const AztecNodeApiSchema: ApiSchemaFor<AztecNode> = {
 
   getChainTips: z.function({ input: z.tuple([]), output: L2TipsSchema }),
 
-  getL1Constants: z.function({ input: z.tuple([]), output: L1RollupConstantsResponseSchema }),
+  getL1Constants: z.function({ input: z.tuple([]), output: L1RollupConstantsSchema }),
 
   getSyncedL2SlotNumber: z.function({ input: z.tuple([]), output: SlotNumberSchema.optional() }),
 
