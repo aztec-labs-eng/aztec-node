@@ -827,6 +827,23 @@ describeWithAnvil('Rollup', () => {
     });
   });
 
+  describe('mana target and limit', () => {
+    it('reads the values governance set after the first read', async () => {
+      const rollupCheatCodes = new RollupCheatCodes(cheatCodes, deployed.l1ContractAddresses);
+      const initialTarget = await rollup.getManaTarget();
+      const initialLimit = await rollup.getManaLimit();
+      const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+
+      const raisedTarget = initialTarget + initialTarget / 2n;
+      await rollupCheatCodes.setManaTarget(raisedTarget);
+
+      expect(await rollup.getManaTarget()).toBe(raisedTarget);
+      expect(await rollup.getManaLimit()).toBe(raisedTarget * 2n);
+      expect(await rollup.getManaTarget({ blockNumber: pinnedBlock })).toBe(initialTarget);
+      expect(await rollup.getManaLimit({ blockNumber: pinnedBlock })).toBe(initialLimit);
+    });
+  });
+
   describe('isEpochSetUp', () => {
     let setupRollup: RollupContract;
     let setupRollupCheatCodes: RollupCheatCodes;

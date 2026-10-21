@@ -525,19 +525,16 @@ export class RollupContract {
     return Number(await this.rollup.read.getExitDelay());
   }
 
-  @memoize
-  getManaTarget(): Promise<bigint> {
-    return this.rollup.read.getManaTarget();
+  /** Returns the mana target. Not memoized: governance can raise it. */
+  async getManaTarget(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getManaTarget(options);
   }
 
-  @memoize
-  getProvingCostPerMana(): Promise<bigint> {
-    return this.rollup.read.getProvingCostPerManaInEth();
-  }
-
-  @memoize
-  getProvingCostPerManaInFeeAsset(): Promise<bigint> {
-    return this.rollup.read.getProvingCostPerManaInFeeAsset();
+  /** Returns the proving cost per mana in ETH. Not memoized: governance can change it. */
+  async getProvingCostPerMana(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getProvingCostPerManaInEth(options);
   }
 
   /** Returns the protocol fee margin in basis points. Not memoized: governance can change it. */
@@ -551,9 +548,10 @@ export class RollupContract {
     return EthAddress.fromString(await this.rollup.read.getProtocolFeeRecipient());
   }
 
-  @memoize
-  getManaLimit(): Promise<bigint> {
-    return this.rollup.read.getManaLimit();
+  /** Returns the mana limit per checkpoint (twice the mana target). Not memoized: governance can raise it. */
+  async getManaLimit(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getManaLimit(options);
   }
 
   @memoize
@@ -589,25 +587,16 @@ export class RollupContract {
     epochDuration: number;
     proofSubmissionEpochs: number;
     targetCommitteeSize: number;
-    rollupManaLimit: number;
   }> {
-    const [
-      l1StartBlock,
-      l1GenesisTime,
-      slotDuration,
-      epochDuration,
-      proofSubmissionEpochs,
-      targetCommitteeSize,
-      rollupManaLimit,
-    ] = await Promise.all([
-      this.getL1StartBlock(),
-      this.getL1GenesisTime(),
-      this.getSlotDuration(),
-      this.getEpochDuration(),
-      this.getProofSubmissionEpochs(),
-      this.getTargetCommitteeSize(),
-      this.getManaLimit(),
-    ]);
+    const [l1StartBlock, l1GenesisTime, slotDuration, epochDuration, proofSubmissionEpochs, targetCommitteeSize] =
+      await Promise.all([
+        this.getL1StartBlock(),
+        this.getL1GenesisTime(),
+        this.getSlotDuration(),
+        this.getEpochDuration(),
+        this.getProofSubmissionEpochs(),
+        this.getTargetCommitteeSize(),
+      ]);
     return {
       l1StartBlock,
       l1GenesisTime,
@@ -615,7 +604,6 @@ export class RollupContract {
       epochDuration: Number(epochDuration),
       proofSubmissionEpochs: Number(proofSubmissionEpochs),
       targetCommitteeSize,
-      rollupManaLimit: Number(rollupManaLimit),
     };
   }
 
