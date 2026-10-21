@@ -318,29 +318,34 @@ describe('ProverNode', () => {
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
   });
 
-  it('refuses to register a checkpoint whose messages do not match its inbox rolling hash, leaving the cursor for retry', async () => {
+  it('refuses a checkpoint whose messages do not match its inbox rolling hash, then registers it once they do', async () => {
     // The message source still serves a pre-reorg message list of the right length: its end hash differs from the
     // one the checkpoint committed to. Registering would freeze the stale list into the prover, so the pass fails
-    // and the cursor stays put for a later pass to read the recovered list.
+    // and the cursor stays put; once the source has recovered, redelivering the event registers the corrected list.
     setupNotFullyProven();
-    const checkpoint = makeCheckpoint(1, 1, 1);
-    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(makeMessageRange([Fr.random()], Fr.random()));
+    const inboxRollingHash = Fr.random();
+    const checkpoint = makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash, 2);
+    const event = mineCheckpoint(checkpoint);
 
-    await expect(proverNode.handleBlockStreamEvent(mineCheckpoint(checkpoint))).rejects.toThrow(
-      /do not match its inbox rolling hash/,
-    );
-
+    serveMessageRange([Fr.random(), Fr.random()], Fr.random());
+    await expect(proverNode.handleBlockStreamEvent(event)).rejects.toThrow(/do not match its inbox rolling hash/);
     expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)).toBeUndefined();
     expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
+
+    const corrected = [Fr.random(), Fr.random()];
+    serveMessageRange(corrected, inboxRollingHash);
+    await proverNode.handleBlockStreamEvent(event);
+    expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)?.l1ToL2Messages).toEqual(corrected);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
   it('registers a checkpoint with the messages whose end hash matches its inbox rolling hash', async () => {
     setupNotFullyProven();
     const inboxRollingHash = Fr.random();
-    const checkpoint = makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash);
+    const checkpoint = makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash, 2);
     const messages = [Fr.random(), Fr.random()];
-    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(makeMessageRange(messages, inboxRollingHash));
+    serveMessageRange(messages, inboxRollingHash);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(checkpoint));
 
@@ -755,6 +760,7 @@ describe('ProverNode', () => {
     blockNumber: number,
     archiveRoot: Fr = Fr.random(),
     inboxRollingHash: Fr = Fr.ZERO,
+    l1ToL2LeafCount: number = 0,
   ): Checkpoint {
     return {
       number: CheckpointNumber(checkpointNumber),
@@ -765,7 +771,7 @@ describe('ProverNode', () => {
           number: blockNumber,
           header: {
             hash: () => Promise.resolve('0x01'),
-            state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
+            state: { l1ToL2MessageTree: { nextAvailableLeafIndex: l1ToL2LeafCount } },
           },
         },
       ],
@@ -780,6 +786,19 @@ describe('ProverNode', () => {
       start: { totalMessageCount: 0n, rollingHash: Fr.ZERO },
       end: { totalMessageCount: BigInt(messages.length), rollingHash: endRollingHash },
     };
+  }
+
+  /**
+   * Serves `messages` from the message source only for the range `[0, messages.length)`, the one a checkpoint
+   * consuming them after a parent at leaf count zero must request; any other range throws.
+   */
+  function serveMessageRange(messages: Fr[], endRollingHash: Fr) {
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockImplementation((startLeafCount, endLeafCount) => {
+      if (startLeafCount !== 0n || endLeafCount !== BigInt(messages.length)) {
+        return Promise.reject(new Error(`Unexpected message range [${startLeafCount}, ${endLeafCount})`));
+      }
+      return Promise.resolve(makeMessageRange(messages, endRollingHash));
+    });
   }
 
   function makePublishedCheckpoint(checkpoint: Checkpoint): PublishedCheckpoint {
