@@ -84,7 +84,7 @@ Returns the rollup constants for the current chain.
 
 **Parameters**: None
 
-**Returns**: `L1RollupConstants`
+**Returns**: `L1RollupConstants`, plus `rollupManaLimit`. The mana limit is deprecated: governance can raise it, so it is not a constant. The node fills it with the live limit when it answers.
 
 **Example**:
 

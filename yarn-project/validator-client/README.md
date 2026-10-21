@@ -239,7 +239,7 @@ The full per-tx → per-block → per-checkpoint limits hierarchy, including how
 
 | Dimension | Source | Budget |
 | --- | --- | --- |
-| L2 gas (mana) | `rollup.getManaLimit()` | Fetched from L1 at startup |
+| L2 gas (mana) | `rollup.getManaLimit()` | Live: read from L1 by the `RollupFeeConfigTracker` once per L1 slot, since governance can raise it. Re-execution re-reads it before rejecting a checkpoint on mana alone |
 | DA gas | `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT` | 786,432 (6 blobs × 4096 fields × 32 gas/field) |
 | Blob fields | `BLOBS_PER_CHECKPOINT × FIELDS_PER_BLOB` | 24,576 minus checkpoint/block-end overhead |
 
@@ -247,7 +247,7 @@ The full per-tx → per-block → per-checkpoint limits hierarchy, including how
 
 Per-block budgets prevent one block from consuming the entire checkpoint budget. The checkpoint builder dynamically computes per-block limits before each block based on the remaining checkpoint budget and the number of remaining blocks.
 
-**Proposer**: When building a proposal (`isBuildingProposal: true`), the `CheckpointProposalJob` passes `maxBlocksPerCheckpoint` (from the timetable) and `perBlockAllocationMultiplier` (default 1.2) via opts to `CheckpointBuilder.buildBlock`. The builder computes a fair share as `min(perBlockLimit, ceil(remainingBudget / remainingBlocks * multiplier), remainingBudget)`. The multiplier greater than 1 allows early blocks to use more than their even share, since different blocks hit different limit dimensions (L2 gas, DA gas, blob fields) — a strict even split would waste capacity. As prior blocks consume budget, later blocks see tightened limits. This applies to all four dimensions (L2 gas, DA gas, blob fields, transaction count). Operators can set hard per-block caps via `SEQ_MAX_L2_BLOCK_GAS` / `SEQ_MAX_DA_BLOCK_GAS` / `SEQ_MAX_TX_PER_BLOCK` (capped at checkpoint limits at startup); these act as additional upper bounds alongside the redistribution.
+**Proposer**: When building a proposal (`isBuildingProposal: true`), the `CheckpointProposalJob` passes `maxBlocksPerCheckpoint` (from the timetable) and `perBlockAllocationMultiplier` (default 1.2) via opts to `CheckpointBuilder.buildBlock`. The builder computes a fair share as `min(perBlockLimit, ceil(remainingBudget / remainingBlocks * multiplier), remainingBudget)`. The multiplier greater than 1 allows early blocks to use more than their even share, since different blocks hit different limit dimensions (L2 gas, DA gas, blob fields) — a strict even split would waste capacity. As prior blocks consume budget, later blocks see tightened limits. This applies to all four dimensions (L2 gas, DA gas, blob fields, transaction count). Operators can set hard per-block caps via `SEQ_MAX_L2_BLOCK_GAS` / `SEQ_MAX_DA_BLOCK_GAS` / `SEQ_MAX_TX_PER_BLOCK` (the DA and tx-count caps are capped at checkpoint limits at startup, while the L2 gas cap is bounded by the live mana limit as each block is built); these act as additional upper bounds alongside the redistribution.
 
 **Validator**: When re-executing a proposal (`isBuildingProposal` unset), `capLimitsByCheckpointBudgets` only caps by the per-block limit and the total remaining checkpoint budget — no redistribution or multiplier is applied. This avoids false rejections due to differences between proposer and validator fair-share calculations. Validators can optionally set hard per-block limits via `VALIDATOR_MAX_L2_BLOCK_GAS`, `VALIDATOR_MAX_DA_BLOCK_GAS`, and `VALIDATOR_MAX_TX_PER_BLOCK`. When unset, no per-block limit is enforced (checkpoint-level protocol limits still apply). These are independent of the `SEQ_` vars so operators can tune proposer and validation limits separately.
 
@@ -261,7 +261,7 @@ Per-block budgets prevent one block from consuming the entire checkpoint budget.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `SEQ_MAX_L2_BLOCK_GAS` | *none* | Hard per-block L2 gas cap. Capped at `rollupManaLimit` at startup. When unset, redistribution dynamically computes per-block limits. |
+| `SEQ_MAX_L2_BLOCK_GAS` | *none* | Hard per-block L2 gas cap. Each block is further capped by the mana left under the live rollup mana limit. When unset, redistribution dynamically computes per-block limits. |
 | `SEQ_MAX_DA_BLOCK_GAS` | *none* | Hard per-block DA gas cap. Capped at `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT` at startup. When unset, redistribution handles it. |
 | `SEQ_MAX_TX_PER_BLOCK` | *none* | Hard per-block tx count cap. Capped at `SEQ_MAX_TX_PER_CHECKPOINT` at startup (if set). |
 | `SEQ_MAX_TX_PER_CHECKPOINT` | *none* | Total txs across all blocks in a checkpoint. When set, checkpoint-level capping and redistribution are enforced for tx count. |

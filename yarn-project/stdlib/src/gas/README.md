@@ -298,8 +298,10 @@ include.
 The outermost limits, enforced as proposal validity in `validateCheckpointLimits`
 (`stdlib/src/checkpoint/validate.ts`) and physically by blob encoding:
 
-- **Mana** — total L2 gas across all blocks ≤ `rollupManaLimit` (= `manaTarget × 2` on L1,
-  `l1-contracts/src/core/libraries/rollup/FeeLib.sol`).
+- **Mana** — total L2 gas across all blocks ≤ the rollup mana limit (= `manaTarget × 2` on L1,
+  `l1-contracts/src/core/libraries/rollup/FeeLib.sol`). Governance can raise the target at any time, so the node
+  reads the limit live through a `RollupFeeConfigProvider` (`rollup_fee_config.ts`) rather than at startup. The
+  archiver does not apply it to checkpoints it syncs from L1, since L1 already enforced it at `propose`.
 - **DA gas** — total DA gas ≤ raw `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT` (786,432).
 - **Blob fields** — total ≤ `BLOBS_PER_CHECKPOINT × FIELDS_PER_BLOB` (6 × 4,096 = 24,576).
 - **Tx counts** — total txs ≤ `maxTxsPerCheckpoint` when configured.
@@ -313,7 +315,7 @@ The outermost limits, enforced as proposal validity in `validateCheckpointLimits
 | Network DA admission limit              | min(271,200, ceil(784,448/10×1.5)) = 117,668 | per-tx (relay) | RPC, gossip, pending pool (`GasLimitsValidator`)         |
 | Network L2 admission limit              | min(6,540,000, ceil(manaLimit/10×1.2)) | per-tx (relay) | RPC, gossip, pending pool (`GasLimitsValidator`)         |
 | Per-block fair share + caps             | remaining budget / blocks × multiplier, min absolute caps & blob-field cap | per-block | `CheckpointBuilder.capLimitsByCheckpointBudgets`         |
-| `rollupManaLimit`                       | `manaTarget × 2`                | per-checkpoint | `validateCheckpointLimits`                                |
+| Rollup mana limit (`getManaLimit`)      | `manaTarget × 2`                | per-checkpoint | `validateCheckpointLimits` (proposer and validator)       |
 | `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT` | 786,432                         | per-checkpoint | `validateCheckpointLimits` + blob encoding                |
 | `BLOBS_PER_CHECKPOINT × FIELDS_PER_BLOB`| 24,576                          | per-checkpoint | `validateCheckpointLimits` + blob encoding                |
 

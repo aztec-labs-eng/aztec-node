@@ -9,6 +9,18 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec Node] The rollup mana limit is no longer an L1 constant
+
+Governance can raise the rollup's mana target, and with it the mana limit, while nodes are running, so the limit is
+no longer treated as a constant.
+
+- `L1RollupConstants` in `@aztec-labs/stdlib/epoch-helpers` no longer has a `rollupManaLimit` field. Read the limit
+  from the rollup with `RollupContract.getManaLimit()`, which is no longer memoized and accepts `{ blockNumber }`.
+- `aztec_getL1Constants` still returns `rollupManaLimit`, so older clients keep parsing the response, but the field
+  is deprecated. The node now fills it from the live limit when it answers, instead of the value it read at startup.
+- `RollupContract.getProvingCostPerManaInFeeAsset()` in `@aztec-labs/ethereum` is removed. Read
+  `getProvingCostPerMana()` for the cost in ETH.
+
 ### [Aztec.nr] ECDSA note and protocol contract interfaces are published with aztec-nr
 
 `ecdsa_public_key_note` and the protocol contract interfaces now ship in `aztec-labs-eng/aztec-nr`. Depending

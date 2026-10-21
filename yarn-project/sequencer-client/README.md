@@ -84,7 +84,7 @@ This flow introduces two failure modes that block building has to handle:
    └──────────────────┘
 ```
 
-`SequencerClient.new(config, deps)` is the entrypoint and is constructed by the full node. It reads L1 constants (`l1GenesisTime`, `slotDuration`, `rollupManaLimit`) from the rollup contract, builds the publisher factory, validator client wiring, and timetable, then instantiates the `Sequencer`. See `src/client/sequencer-client.ts`.
+`SequencerClient.new(config, deps)` is the entrypoint and is constructed by the full node. It reads L1 constants (`l1GenesisTime`, `slotDuration`) from the rollup contract, takes the rollup's live fee settings (including the mana limit) from the node's `RollupFeeConfigProvider`, builds the publisher factory, validator client wiring, and timetable, then instantiates the `Sequencer`. See `src/client/sequencer-client.ts`.
 
 ### Sequencer (work loop)
 
@@ -238,7 +238,7 @@ The configuration object is `SequencerConfig` (`src/sequencer/config.ts` + `src/
 | `maxTxsPerBlock` / `SEQ_MAX_TX_PER_BLOCK` | unset | Hard per-block tx cap (capped at `maxTxsPerCheckpoint` at startup). |
 | `maxTxsPerCheckpoint` / `SEQ_MAX_TX_PER_CHECKPOINT` | unset | Total tx cap across the checkpoint. Enables redistribution when set. |
 | `maxBlocksPerCheckpoint` / `MAX_BLOCKS_PER_CHECKPOINT` | 24 | Hard ceiling beyond what the timetable allows. Also caps the `indexWithinCheckpoint` accepted on inbound block proposals. |
-| `maxL2BlockGas` / `SEQ_MAX_L2_BLOCK_GAS` | unset | Per-block mana cap, capped at `rollupManaLimit`. |
+| `maxL2BlockGas` / `SEQ_MAX_L2_BLOCK_GAS` | unset | Per-block mana cap. Each block is also capped by the mana left under the live rollup mana limit. |
 | `maxDABlockGas` / `SEQ_MAX_DA_BLOCK_GAS` | unset | Per-block DA gas cap, capped at `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT`. |
 | `perBlockAllocationMultiplier` / `SEQ_PER_BLOCK_ALLOCATION_MULTIPLIER` | 1.2 | Multiplier passed to the checkpoint builder so early blocks can use slightly more than their even share. |
 | `redistributeCheckpointBudget` / `SEQ_REDISTRIBUTE_CHECKPOINT_BUDGET` | true | Legacy flag. Redistribution is always on during proposal building. |
