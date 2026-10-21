@@ -820,6 +820,7 @@ describe('CheckpointProposalJob', () => {
     targetEpoch?: EpochNumber;
     proposedCheckpointData?: ProposedCheckpointData;
     testHooks?: CheckpointProposalJobTestHooks;
+    syncedL1BlockNumber?: bigint;
   }): TestCheckpointProposalJob {
     const setStateFn = jest.fn();
     const eventEmitter = new EventEmitter() as TypedEventEmitter<SequencerEvents>;
@@ -830,6 +831,7 @@ describe('CheckpointProposalJob', () => {
       checkpointNumber,
       lastBlockNumber,
       CheckpointNumber(checkpointNumber - 1),
+      overrides?.syncedL1BlockNumber ?? 1n,
       proposer,
       publisher,
       attestorAddress,
@@ -884,12 +886,14 @@ describe('CheckpointProposalJob', () => {
     /** Creates a pipelined job for checkpoint 2, builds one block, and returns the job ready for executeAndAwait. */
     async function createPipelinedJobWithBlock(
       proposedCheckpointData?: ProposedCheckpointData,
+      opts: { syncedL1BlockNumber?: bigint } = {},
     ): Promise<TestCheckpointProposalJob> {
       checkpointNumber = CheckpointNumber(2);
 
       const pipelinedJob = createCheckpointProposalJob({
         targetSlot: SlotNumber(newSlotNumber + 1),
         proposedCheckpointData,
+        syncedL1BlockNumber: opts.syncedL1BlockNumber,
       });
       pipelinedJob.setTimetable(makeSingleBlockTimetable());
       dateProvider.setTime(pipelinedJob.getTimetable().getBuildFrameStart(SlotNumber(newSlotNumber + 1)) * 1000);
@@ -961,8 +965,9 @@ describe('CheckpointProposalJob', () => {
       expect(mismatchEvents).toHaveLength(0);
     });
 
-    it("derives the parent's fee header and the fee from the same L1 block", async () => {
-      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
+    it("derives the parent's fee header and the fee at the archiver's L1 sync point", async () => {
+      const syncPointBlock = 77n;
+      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent, { syncedL1BlockNumber: syncPointBlock });
       mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
       const grandparentFeeHeader = {
         manaUsed: 0n,
@@ -973,15 +978,19 @@ describe('CheckpointProposalJob', () => {
       };
       jest
         .spyOn(publisher.rollupContract, 'getCheckpoint')
-        .mockResolvedValue({ feeHeader: grandparentFeeHeader } as any);
-      const simulatedL1Block = 77n;
-      jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(simulatedL1Block);
-      // The tracker's cached head is at a different block with a different target than the block the fee is read at.
-      feeConfigProvider.setFeeConfig({ manaTarget: 20_000n, l1BlockNumber: simulatedL1Block - 5n });
+        .mockImplementation((_checkpoint, opts) =>
+          opts?.blockNumber === syncPointBlock
+            ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+            : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+        );
+      // L1's head has moved past the sync point; the job must not price against it.
+      jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(syncPointBlock + 2n);
+      // The tracker's cached head is at a different block with a different target than the sync point.
+      feeConfigProvider.setFeeConfig({ manaTarget: 20_000n, l1BlockNumber: syncPointBlock + 2n });
       jest
         .spyOn(feeConfigProvider, 'getFeeConfigAt')
         .mockImplementation(blockNumber =>
-          blockNumber === simulatedL1Block
+          blockNumber === syncPointBlock
             ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 10_000n, l1BlockNumber: blockNumber })
             : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
         );
@@ -989,7 +998,7 @@ describe('CheckpointProposalJob', () => {
       await pipelinedJob.executeAndAwait();
 
       const [, , , plan, options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      expect(options).toEqual({ blockNumber: simulatedL1Block });
+      expect(options).toEqual({ blockNumber: syncPointBlock });
       expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
         RollupContract.computeChildFeeHeader(
           grandparentFeeHeader,

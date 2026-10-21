@@ -325,6 +325,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointNumber,
       BlockNumber.ZERO,
       CheckpointNumber(checkpointNumber - 1),
+      1n, // syncedL1BlockNumber
       proposer,
       publisher,
       attestorAddress,

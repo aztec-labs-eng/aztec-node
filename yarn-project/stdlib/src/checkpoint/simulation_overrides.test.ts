@@ -51,6 +51,7 @@ describe('computePipelinedParentFeeHeader', () => {
       proposedCheckpointData: pendingData,
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       log: createLogger('test'),
     });
     expect(result).toBeUndefined();
@@ -71,6 +72,7 @@ describe('computePipelinedParentFeeHeader', () => {
       proposedCheckpointData: pendingData,
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       log: createLogger('test'),
     });
 
@@ -96,6 +98,7 @@ describe('computePipelinedParentFeeHeader', () => {
       proposedCheckpointData: pendingData,
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       log: createLogger('test'),
     });
 
@@ -155,6 +158,7 @@ describe('computePipelinedParentFeeHeader', () => {
         proposedCheckpointData: pendingData,
         rollup,
         feeConfigProvider,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/Grandparent checkpoint or feeHeader missing/);
@@ -169,6 +173,7 @@ describe('computePipelinedParentFeeHeader', () => {
         proposedCheckpointData: pendingData,
         rollup,
         feeConfigProvider,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/Grandparent checkpoint or feeHeader missing/);
@@ -183,6 +188,7 @@ describe('computePipelinedParentFeeHeader', () => {
         proposedCheckpointData: pendingData,
         rollup,
         feeConfigProvider,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/rpc error/);
@@ -237,6 +243,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       checkpointedCheckpointNumber: CheckpointNumber(4),
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });
@@ -255,6 +262,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       checkpointedCheckpointNumber: CheckpointNumber(0),
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });
@@ -281,6 +289,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
         feeConfigProvider,
+        l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
       }),
@@ -298,6 +307,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
         feeConfigProvider,
+        l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
       }),
@@ -311,6 +321,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       checkpointedCheckpointNumber: CheckpointNumber(2),
       rollup,
       feeConfigProvider,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });

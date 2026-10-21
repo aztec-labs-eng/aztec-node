@@ -768,6 +768,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointedCheckpointNumber: syncedTo.checkpointedCheckpointNumber,
       rollup: this.rollupContract,
       feeConfigProvider: this.feeConfigProvider,
+      l1BlockNumber: syncedTo.l1BlockNumber,
       signatureContext: this.signatureContext,
       log: this.log,
     });
@@ -860,6 +861,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedTo.blockNumber,
       syncedTo.checkpointedCheckpointNumber,
+      syncedTo.l1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -876,6 +878,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     checkpointNumber: CheckpointNumber,
     syncedToBlockNumber: BlockNumber,
     checkpointedCheckpointNumber: CheckpointNumber,
+    syncedL1BlockNumber: bigint,
     proposer: EthAddress | undefined,
     publisher: SequencerPublisher,
     attestorAddress: EthAddress,
@@ -888,6 +891,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedToBlockNumber,
       checkpointedCheckpointNumber,
+      syncedL1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -1014,7 +1018,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     ] as const);
 
     const [worldState, frontier, p2p, l1ToL2MessageSourceTips] = syncedBlocks;
-    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus } = frontier;
+    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus, l1SyncPoint } = frontier;
+    if (l1SyncPoint === undefined) {
+      this.log.debug(`Cannot propose block at next L2 slot ${slot}: the archiver has no L1 sync point yet`, { slot });
+      return undefined;
+    }
     const l2Tips = { proposed: frontier.tips.proposed, checkpointed: frontier.tips.checkpointed };
 
     const result =
@@ -1101,6 +1109,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       proposedCheckpointData,
       syncedL2Slot,
       pendingChainValidationStatus,
+      l1BlockNumber: l1SyncPoint.blockNumber,
     };
   }
 
@@ -1564,4 +1573,6 @@ type SequencerSyncCheckResult = {
   proposedCheckpointData?: ProposedCheckpointData;
   syncedL2Slot: SlotNumber;
   pendingChainValidationStatus: ValidateCheckpointResult;
+  /** L1 block of the archiver sync point the frontier above was read at. */
+  l1BlockNumber: bigint;
 };

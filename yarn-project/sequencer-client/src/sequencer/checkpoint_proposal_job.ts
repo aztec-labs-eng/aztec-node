@@ -181,6 +181,8 @@ export class CheckpointProposalJob implements Traceable {
     private readonly checkpointNumber: CheckpointNumber,
     private readonly syncedToBlockNumber: BlockNumber,
     private readonly checkpointedCheckpointNumber: CheckpointNumber,
+    /** L1 block of the archiver sync point the sequencer checked before starting this job. */
+    private readonly syncedL1BlockNumber: bigint,
     // TODO(palla/mbps): Can we remove the proposer in favor of attestorAddress? Need to check fisherman-node flows.
     private readonly proposer: EthAddress | undefined,
     private readonly publisher: SequencerPublisher,
@@ -955,9 +957,9 @@ export class CheckpointProposalJob implements Traceable {
       // mana-min-fee simulation (in the globals builder) and the pre-gossip
       // validateCheckpointHeaderAndInbox preflight see the chain tip the eventual L1 send will see.
       // The fee simulation and the pipelined parent's fee header are read at one L1 block, so the quote does not mix
-      // two L1 snapshots (governance can change the mana target in between). It is L1's latest block, read now, which
-      // keeps the quote as close as it can be to the state the propose lands on.
-      const feeL1BlockNumber = await this.publisher.rollupContract.client.getBlockNumber({ cacheTime: 0 });
+      // two L1 snapshots (governance can change the mana target in between). It is the L1 block of the archiver sync
+      // point the sequencer checked was up to date before starting this job, the state the rest of the job builds on.
+      const feeL1BlockNumber = this.syncedL1BlockNumber;
       const simulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
         checkpointNumber: this.checkpointNumber,
         proposedCheckpointData: this.proposedCheckpointData,

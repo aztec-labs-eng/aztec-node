@@ -329,6 +329,26 @@ describe('NextBlockFeeCache', () => {
       );
     });
 
+    it('prices on the checkpointed tip until the archiver has an L1 sync point', async () => {
+      // Without a sync point there is no L1 block to derive the proposed parent's fee header at.
+      rollupContract.getCheckpoint.mockRejectedValue(new Error('Unexpected unpinned read'));
+      const proposedCheckpoint = makeProposedCheckpointData({
+        checkpointNumber: CheckpointNumber(3),
+        lastBlock: BlockNumber(5),
+        slotNumber: SlotNumber(30),
+      });
+
+      await cache.refresh(
+        makeFrontier(boundaryArgs({ checkpointed: CheckpointNumber(2), proposedCheckpoint, l1SyncPoint: undefined })),
+      );
+
+      expect(overridesPlanOf()?.chainTipsOverride).toEqual({
+        pending: CheckpointNumber(2),
+        proven: CheckpointNumber(2),
+      });
+      expect(overridesPlanOf()?.pendingCheckpointState).toBeUndefined();
+    });
+
     it('prices on the checkpointed tip when the frontier runs more than one checkpoint ahead of L1', async () => {
       // L1 keeps no `tempCheckpointLogs` cell for a checkpoint it has not seen, so the grandparent read the
       // pipelined fee header derives from reverts while the checkpoints between it and the tip are in flight.
