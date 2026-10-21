@@ -15,7 +15,10 @@ export type RollupFeeConfig = {
 
 /** Source of the rollup's live fee settings. */
 export interface RollupFeeConfigProvider {
-  /** Most recent config read from L1. Never older than one refresh interval. */
+  /**
+   * Last config successfully read from L1. Usually at most one refresh interval old, but it stays at the last good
+   * read for as long as L1 reads keep failing.
+   */
   getFeeConfig(): RollupFeeConfig;
   /** Config as of the given L1 block, for callers pricing fees at a pinned block. */
   getFeeConfigAt(l1BlockNumber: bigint): Promise<RollupFeeConfig>;
