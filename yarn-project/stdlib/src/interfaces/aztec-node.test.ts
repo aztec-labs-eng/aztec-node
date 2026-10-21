@@ -124,6 +124,12 @@ describe('AztecNodeApiSchema', () => {
     expect(result).toEqual({ ...EmptyL1RollupConstants, rollupManaLimit: 100_000_000 });
   });
 
+  it('getL1Constants (from a server that leaves out the deprecated rollupManaLimit)', async () => {
+    handler.getL1Constants = () => Promise.resolve(EmptyL1RollupConstants);
+    const result = await context.client.getL1Constants();
+    expect(result).toEqual(EmptyL1RollupConstants);
+  });
+
   it('getSyncedL2SlotNumber', async () => {
     const result = await context.client.getSyncedL2SlotNumber();
     expect(result).toEqual(SlotNumber(1));
