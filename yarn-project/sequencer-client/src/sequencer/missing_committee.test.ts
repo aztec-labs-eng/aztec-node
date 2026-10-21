@@ -102,7 +102,6 @@ describe('logMissingCommittee', () => {
     ethereumSlotDuration: 4,
     proofSubmissionEpochs: 2,
     targetCommitteeSize: 48,
-    rollupManaLimit: Number.MAX_SAFE_INTEGER,
   };
 
   function makeCtx(opts: {

@@ -50,7 +50,7 @@ import {
  */
 export type AutomineSequencerConstants = Pick<
   L1RollupConstants,
-  'ethereumSlotDuration' | 'l1GenesisTime' | 'slotDuration' | 'rollupManaLimit' | 'epochDuration'
+  'ethereumSlotDuration' | 'l1GenesisTime' | 'slotDuration' | 'epochDuration'
 >;
 
 /** Dependencies for the AutomineSequencer. */

@@ -9,7 +9,11 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import {
+  type RollupFeeConfigProvider,
+  type TxAdmissionMinFeesProvider,
+  getNetworkTxGasLimits,
+} from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   P2PConnectivity,
@@ -246,6 +250,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     private proofVerifier: ClientProtocolCircuitVerifier,
     private worldStateSynchronizer: WorldStateSynchronizer,
     private nextBlockMinFeesProvider: TxAdmissionMinFeesProvider,
+    private feeConfigProvider: RollupFeeConfigProvider,
     telemetry: TelemetryClient,
     logger: Logger = createLogger('p2p:libp2p_service'),
     private txValidationCache?: TxValidationCache,
@@ -362,6 +367,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       worldStateSynchronizer: WorldStateSynchronizer;
       peerStore: AztecAsyncKVStore;
       nextBlockMinFeesProvider: TxAdmissionMinFeesProvider;
+      feeConfigProvider: RollupFeeConfigProvider;
       telemetry: TelemetryClient;
       logger: Logger;
       packageVersion: string;
@@ -376,6 +382,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       proofVerifier,
       peerStore,
       nextBlockMinFeesProvider,
+      feeConfigProvider,
       telemetry,
       logger,
       packageVersion,
@@ -604,6 +611,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       proofVerifier,
       worldStateSynchronizer,
       nextBlockMinFeesProvider,
+      feeConfigProvider,
       telemetry,
       logger,
       txValidationCache,
@@ -1993,7 +2001,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     ];
     const blockNumber = BlockNumber(currentBlockNumber + 1);
     const l1Constants = await this.archiver.getL1Constants();
-    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
+    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
 
     return createFirstStageTxValidationsForGossipedTransactions(
       nextSlotTimestamp,

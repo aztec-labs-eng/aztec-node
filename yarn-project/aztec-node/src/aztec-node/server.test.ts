@@ -44,7 +44,7 @@ import {
 import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   L2LogsSource,
   MerkleTreeReadOperations,
@@ -154,6 +154,7 @@ describe('aztec node', () => {
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
   let nextBlockPredictor: NextBlockPredictor;
+  let feeConfigProvider: FixedRollupFeeConfigProvider;
   let nodeConfig: AztecNodeConfig;
 
   const chainId = new Fr(12345);
@@ -296,10 +297,12 @@ describe('aztec node', () => {
       new MockDateProvider(),
     );
 
+    feeConfigProvider = new FixedRollupFeeConfigProvider();
     nextBlockPredictor = NextBlockPredictor.create({
       blockSource: l2BlockSource,
       globalVariableBuilder: globalVariablesBuilder,
       rollupContract,
+      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: 12345, rollupAddress: EthAddress.ZERO },
       dateProvider: new MockDateProvider(),
@@ -325,6 +328,7 @@ describe('aztec node', () => {
         rollupContract,
         feeProvider,
         nextBlockPredictor,
+        feeConfigProvider,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -626,6 +630,17 @@ describe('aztec node', () => {
       it('returns the correct node version', async () => {
         const nodeInfo = await node.getNodeInfo();
         expect(nodeInfo.nodeVersion).toBe(getPackageVersion());
+      });
+    });
+
+    describe('getL1Constants', () => {
+      it('returns the deprecated rollupManaLimit from the live fee config', async () => {
+        feeConfigProvider.setFeeConfig({ manaLimit: 100_000_000n });
+        expect(await node.getL1Constants()).toEqual({ ...testL1Constants, rollupManaLimit: 100_000_000 });
+
+        // Governance raises the limit while the node runs.
+        feeConfigProvider.setFeeConfig({ manaLimit: 150_000_000n });
+        expect(await node.getL1Constants()).toEqual({ ...testL1Constants, rollupManaLimit: 150_000_000 });
       });
     });
 
@@ -1528,6 +1543,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
+          feeConfigProvider: new FixedRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1717,6 +1733,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
+          feeConfigProvider: new FixedRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1787,6 +1804,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
+        feeConfigProvider: new FixedRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1842,6 +1860,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
+        feeConfigProvider: new FixedRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),

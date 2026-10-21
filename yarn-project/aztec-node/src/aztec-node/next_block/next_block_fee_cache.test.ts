@@ -8,7 +8,7 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { ManualDateProvider } from '@aztec-labs/foundation/timer';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import type { CheckpointGlobalVariables, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -34,6 +34,7 @@ describe('NextBlockFeeCache', () => {
   let epochCache: MockProxy<EpochCacheInterface>;
   let dateProvider: ManualDateProvider;
   let cache: NextBlockFeeCache;
+  let feeConfigProvider: FixedRollupFeeConfigProvider;
 
   /** Distinct fee per pricing call, so a re-price is visible in the value a reader gets back. */
   let priceCount: number;
@@ -89,10 +90,12 @@ describe('NextBlockFeeCache', () => {
       Promise.resolve(globalsFor(slotNumber, ++priceCount)),
     );
 
+    feeConfigProvider = new FixedRollupFeeConfigProvider();
     cache = new NextBlockFeeCache({
       blockSource,
       globalVariableBuilder,
       rollupContract,
+      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: CHAIN_ID.toNumber(), rollupAddress: EthAddress.random() },
       dateProvider,
@@ -268,7 +271,7 @@ describe('NextBlockFeeCache', () => {
       });
       const grandparentFeeHeader = makeFeeHeader();
       rollupContract.getCheckpoint.mockResolvedValue({ feeHeader: grandparentFeeHeader } as never);
-      rollupContract.getManaTarget.mockResolvedValue(1000n);
+      feeConfigProvider.setFeeConfig({ manaTarget: 1000n });
       const childFeeHeader = makeFeeHeader();
       jest.spyOn(RollupContract, 'computeChildFeeHeader').mockReturnValue(childFeeHeader);
 
@@ -327,6 +330,7 @@ describe('NextBlockFeeCache', () => {
         cache = new NextBlockFeeCache({
           blockSource,
           globalVariableBuilder,
+          feeConfigProvider,
           epochCache,
           signatureContext: { chainId: CHAIN_ID.toNumber(), rollupAddress: EthAddress.random() },
           dateProvider,

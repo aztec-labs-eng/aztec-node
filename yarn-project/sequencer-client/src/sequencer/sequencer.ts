@@ -35,6 +35,7 @@ import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   MIN_PER_BLOCK_ALLOCATION_MULTIPLIER,
   MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER,
+  type RollupFeeConfigProvider,
   computeNetworkTxGasLimits,
 } from '@aztec-labs/stdlib/gas';
 import {
@@ -162,6 +163,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     protected epochCache: EpochCache,
     protected rollupContract: RollupContract,
     protected inboxContract: InboxContract,
+    protected feeConfigProvider: RollupFeeConfigProvider,
     config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>,
     protected telemetry: TelemetryClient = getTelemetryClient(),
     protected log = createLogger('sequencer'),
@@ -325,7 +327,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // the node simply builds smaller blocks and such txs stay in the pool for other proposers. Warn only.
     const networkLimit = computeNetworkTxGasLimits({
       maxBlocksPerCheckpoint,
-      manaCheckpointBudget: this.l1Constants.rollupManaLimit,
+      manaCheckpointBudget: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
     });
     if (config.maxDABlockGas !== undefined && config.maxDABlockGas < networkLimit.daGas) {
       this.log.warn(
@@ -765,6 +767,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       invalidateToPendingCheckpointNumber: invalidateCheckpoint?.forcePendingCheckpointNumber,
       checkpointedCheckpointNumber: syncedTo.checkpointedCheckpointNumber,
       rollup: this.rollupContract,
+      feeConfigProvider: this.feeConfigProvider,
       signatureContext: this.signatureContext,
       log: this.log,
     });
@@ -899,6 +902,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.checkpointsBuilder,
       this.l2BlockSource,
       this.l1Constants,
+      this.feeConfigProvider,
       this.signatureContext,
       this.config,
       this.timetable,

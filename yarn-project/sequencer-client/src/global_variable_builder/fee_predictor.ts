@@ -8,6 +8,7 @@ import {
   GasFees,
   MIN_ETH_PER_FEE_ASSET,
   ManaUsageEstimate,
+  type RollupFeeConfigProvider,
   computeExcessMana,
   computeManaMinFee,
 } from '@aztec-labs/stdlib/gas';
@@ -38,6 +39,7 @@ export class FeePredictor {
 
   constructor(
     private readonly rollupContract: RollupContract,
+    private readonly feeConfigProvider: RollupFeeConfigProvider,
     private readonly dateProvider: DateProvider,
     config: { slotDuration: number; l1GenesisTime: bigint; ethereumSlotDuration: number },
   ) {
@@ -55,15 +57,13 @@ export class FeePredictor {
     // Pin all non-constant queries to this L1 block number for a consistent snapshot.
     const opts = { blockNumber };
 
-    // Cached constants don't need pinning
-    const [manaTarget, manaLimit, provingCostPerManaEth, epochDuration, protocolFeeMarginBps] = await Promise.all([
-      this.rollupContract.getManaTarget(),
-      this.rollupContract.getManaLimit(),
-      this.rollupContract.getProvingCostPerMana(),
+    // Governance can change the fee settings, so they are read at the snapshot block too. The epoch duration has no
+    // setter, so its memoized value needs no pinning.
+    const [feeConfig, epochDuration] = await Promise.all([
+      this.feeConfigProvider.getFeeConfigAt(blockNumber),
       this.rollupContract.getEpochDuration(),
-      // Not a cached constant: governance can change the margin, so pin it to the snapshot block.
-      this.rollupContract.getProtocolFeeMargin(opts),
     ]);
+    const { manaTarget, manaLimit, provingCostPerManaInEth: provingCostPerManaEth, protocolFeeMarginBps } = feeConfig;
 
     // First, compute the earliest possible nextSlot independently of the checkpoint, so we can
     // evaluate pruneability at the prediction start timestamp instead of the current L1 block time.

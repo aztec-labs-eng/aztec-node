@@ -20,7 +20,13 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
-import { FEE_ORACLE_LAG, type GasFees, ManaUsageEstimate, computeExcessMana } from '@aztec-labs/stdlib/gas';
+import {
+  FEE_ORACLE_LAG,
+  type GasFees,
+  ManaUsageEstimate,
+  RollupFeeConfigTracker,
+  computeExcessMana,
+} from '@aztec-labs/stdlib/gas';
 import { foundry } from 'viem/chains';
 
 import { FeePredictor } from './fee_predictor.js';
@@ -108,7 +114,12 @@ describeAcrossL1Forks('FeePredictor', () => {
 
   /** Reads state at the current L1 block and predicts from it, mirroring how FeeProviderImpl drives the predictor. */
   async function predictMinFees(manaUsage: ManaUsageEstimate): Promise<GasFees[]> {
-    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const predictor = new FeePredictor(
+      rollup,
+      await RollupFeeConfigTracker.create(rollup),
+      dateProvider,
+      feePredictorConfig,
+    );
     const state = await predictor.computeState(await publicClient.getBlockNumber({ cacheTime: 0 }));
     return predictor.computePredictions(state, manaUsage);
   }
@@ -377,7 +388,12 @@ describeAcrossL1Forks('FeePredictor', () => {
     await rollupCheatCodes.setProtocolFeeMargin(2000);
     expect(await rollup.getProtocolFeeMargin()).toBe(2000);
 
-    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const predictor = new FeePredictor(
+      rollup,
+      await RollupFeeConfigTracker.create(rollup),
+      dateProvider,
+      feePredictorConfig,
+    );
     const state = await predictor.computeState(pinnedBlock);
 
     expect(state.protocolFeeMarginBps).toBe(1000n);

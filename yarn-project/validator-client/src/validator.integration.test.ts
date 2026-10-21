@@ -29,7 +29,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, Gas, GasFees } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import {
@@ -65,7 +65,6 @@ describe('ValidatorClient Integration', () => {
     proofSubmissionEpochs: 2,
     l1StartBlock: 0n,
     targetCommitteeSize: 48,
-    rollupManaLimit: 200_000_000,
   };
 
   const emptyL1ToL2Messages: Fr[] = [];
@@ -76,6 +75,7 @@ describe('ValidatorClient Integration', () => {
     archiver: NoopL1Archiver;
     synchronizer: ServerWorldStateSynchronizer;
     checkpointsBuilder: FullNodeCheckpointsBuilder;
+    feeConfigProvider: FixedRollupFeeConfigProvider;
     p2pClient: MockProxy<P2P>;
     validator: ValidatorClient;
     inbox: FakeInbox;
@@ -155,19 +155,20 @@ describe('ValidatorClient Integration', () => {
     const avmSimulator = await AvmSimulatorPool.spawn({ wsdbIpcPath: worldStateDb.getIpcPath() });
 
     // Create real checkpoints builder
+    const feeConfigProvider = new FixedRollupFeeConfigProvider({ manaLimit: 200_000_000n });
     const checkpointsBuilder = new FullNodeCheckpointsBuilder(
       {
         l1GenesisTime: l1Constants.l1GenesisTime,
         slotDuration: l1Constants.slotDuration,
         l1ChainId: chainId.toNumber(),
         rollupVersion: version.toNumber(),
-        rollupManaLimit: 200_000_000,
         txPublicSetupAllowListExtend: [],
       },
       synchronizer,
       archiver,
       dateProvider,
       avmSimulator,
+      feeConfigProvider,
       /*telemetryClient=*/ undefined,
       /*debugLogStore=*/ undefined,
     );
@@ -246,6 +247,7 @@ describe('ValidatorClient Integration', () => {
       archiver,
       synchronizer,
       checkpointsBuilder,
+      feeConfigProvider,
       p2pClient,
       validator,
       inbox,
@@ -704,10 +706,10 @@ describe('ValidatorClient Integration', () => {
       const manaFirstTwo =
         blocks[0].block.header.totalManaUsed.toNumber() + blocks[1].block.header.totalManaUsed.toNumber();
 
-      // Set rollupManaLimit to only cover the first two blocks' actual mana.
+      // Set the rollup mana limit to only cover the first two blocks' actual mana.
       // Block 3 re-execution will have 0 remaining mana, so the actual gas check
       // in the public processor will reject all txs, producing a tx count mismatch.
-      attestor.checkpointsBuilder.updateConfig({ rollupManaLimit: manaFirstTwo });
+      attestor.feeConfigProvider.setFeeConfig({ manaLimit: BigInt(manaFirstTwo) });
 
       // Blocks 1 and 2 should validate successfully
       await attestorValidateBlocks(blocks.slice(0, 2));

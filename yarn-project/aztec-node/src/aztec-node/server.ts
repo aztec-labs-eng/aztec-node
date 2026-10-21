@@ -53,8 +53,13 @@ import type {
   NodeInfo,
   ProtocolContractAddresses,
 } from '@aztec-labs/stdlib/contract';
-import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees, type ManaUsageEstimate, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import type { L1RollupConstantsResponse } from '@aztec-labs/stdlib/epoch-helpers';
+import {
+  GasFees,
+  type ManaUsageEstimate,
+  type RollupFeeConfigProvider,
+  getNetworkTxGasLimits,
+} from '@aztec-labs/stdlib/gas';
 import type {
   AztecNode,
   AztecNodeAdmin,
@@ -146,6 +151,8 @@ export interface AztecNodeServiceDeps {
   rollupContract: RollupContract | undefined;
   feeProvider: FeeProvider;
   nextBlockPredictor: NextBlockPredictor;
+  /** Live rollup fee settings, for the mana limit tx gas limits are derived from. Stopped with the node. */
+  feeConfigProvider: RollupFeeConfigProvider;
   epochCache: EpochCacheInterface;
   packageVersion: string;
   peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -199,6 +206,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   protected readonly rollupContract: RollupContract | undefined;
   protected readonly feeProvider: FeeProvider;
   protected readonly nextBlockPredictor: NextBlockPredictor;
+  protected readonly feeConfigProvider: RollupFeeConfigProvider;
   protected readonly epochCache: EpochCacheInterface;
   protected readonly packageVersion: string;
   private peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -231,6 +239,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.rollupContract = deps.rollupContract;
     this.feeProvider = deps.feeProvider;
     this.nextBlockPredictor = deps.nextBlockPredictor;
+    this.feeConfigProvider = deps.feeConfigProvider;
     this.epochCache = deps.epochCache;
     this.packageVersion = deps.packageVersion;
     this.peerProofVerifier = deps.peerProofVerifier;
@@ -313,8 +322,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.blockSource.getL2Tips();
   }
 
-  public getL1Constants(): Promise<L1RollupConstants> {
-    return this.blockSource.getL1Constants();
+  public async getL1Constants(): Promise<L1RollupConstantsResponse> {
+    const constants = await this.blockSource.getL1Constants();
+    return { ...constants, rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit) };
   }
 
   public getSyncedL2SlotNumber() {
@@ -465,7 +475,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // timetable's blocks-per-checkpoint and the network-minimum per-block multipliers) — never this node's
     // local caps or configured multipliers, which can make the node stricter at block-building time but
     // cannot define what the network accepts for relay. Clients read txsLimits to set fallback gas limits.
-    const maxTxGas = getNetworkTxGasLimits(this.config, l1Constants);
+    const maxTxGas = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
 
     const nodeInfo: NodeInfo = {
       nodeVersion,
@@ -632,6 +642,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     await tryStop(this.p2pClient);
     await tryStop(this.nextBlockPredictor);
     await tryStop(this.feeProvider);
+    await tryStop(this.feeConfigProvider);
     // Dispose the AVM backend before world state: it kills the bb-avm-sim processes and closes the CDB IPC
     // server, releasing their connections to the WSDB so it shuts down cleanly (and freeing the
     // Server/Socket/ChildProcess handles that would otherwise keep the process alive after teardown).
@@ -827,7 +838,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     const l1Constants = await this.blockSource.getL1Constants();
     // Enforce the same network admission limit the node advertises in getNodeInfo (network-wide, not this
     // node's local caps), so a tx the wallet sized against txsLimits is not rejected here.
-    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
+    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
     const validator = createTxValidatorForAcceptingTxsOverRPC(
       db,
       this.contractDataSource,

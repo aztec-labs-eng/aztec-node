@@ -87,7 +87,7 @@ export interface PublicProcessorValidator {
   nullifierCache?: { addNullifiers: (nullifiers: Buffer[]) => void };
 }
 
-export type FullNodeBlockBuilderConfig = Pick<L1RollupConstants, 'l1GenesisTime' | 'slotDuration' | 'rollupManaLimit'> &
+export type FullNodeBlockBuilderConfig = Pick<L1RollupConstants, 'l1GenesisTime' | 'slotDuration'> &
   Pick<ChainConfig, 'l1ChainId' | 'rollupVersion'> &
   Pick<
     SequencerConfig,
@@ -112,7 +112,6 @@ export const FullNodeBlockBuilderConfigKeys: (keyof FullNodeBlockBuilderConfig)[
   'maxTxsPerCheckpoint',
   'maxL2BlockGas',
   'maxDABlockGas',
-  'rollupManaLimit',
 ] as const;
 
 /** Thrown when the number of successfully processed transactions is below the required minimum. */

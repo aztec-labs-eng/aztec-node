@@ -2264,7 +2264,7 @@ export class ProposalHandler {
     // Complete the checkpoint to get computed values
     const computedCheckpoint = await checkpointBuilder.completeCheckpoint();
 
-    const mismatch = this.compareRebuiltCheckpoint(computedCheckpoint, proposal, inputs, proposalInfo);
+    const mismatch = await this.compareRebuiltCheckpoint(computedCheckpoint, proposal, inputs, proposalInfo);
     if (mismatch) {
       return mismatch;
     }
@@ -2455,12 +2455,12 @@ export class ProposalHandler {
    * Compares the rebuilt checkpoint with the proposal: header, archive root and epoch out hash, then the checkpoint's
    * own limits. Returns the first mismatch, or undefined when everything matches.
    */
-  private compareRebuiltCheckpoint(
+  private async compareRebuiltCheckpoint(
     computedCheckpoint: Checkpoint,
     proposal: CheckpointProposalCore,
     inputs: CheckpointRebuildInputs,
     proposalInfo: LogData,
-  ): CheckpointProposalValidationFailureResult | undefined {
+  ): Promise<CheckpointProposalValidationFailureResult | undefined> {
     const { checkpointNumber, previousCheckpointOutHashes } = inputs;
 
     // Compare checkpoint header with proposal
@@ -2500,20 +2500,53 @@ export class ProposalHandler {
     }
 
     // Final round of validations on the checkpoint, just in case.
-    try {
-      validateCheckpoint(computedCheckpoint, {
-        rollupManaLimit: this.checkpointsBuilder.getConfig().rollupManaLimit,
-        maxDABlockGas: this.config.validateMaxDABlockGas,
-        maxL2BlockGas: this.config.validateMaxL2BlockGas,
-        maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
-        maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
-      });
-    } catch (err) {
-      this.log.warn(`Checkpoint validation failed: ${err}`, proposalInfo);
+    const validationError = await this.validateRebuiltCheckpointLimits(computedCheckpoint);
+    if (validationError) {
+      this.log.warn(`Checkpoint validation failed: ${validationError}`, proposalInfo);
       return { isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber };
     }
 
     return undefined;
+  }
+
+  /**
+   * Validates the rebuilt checkpoint against its limits and returns the error, if any. The mana limit is a cached copy
+   * of a value governance can raise on L1, and a rejection here is slashable, so a checkpoint that fails on mana alone
+   * is checked once more against a fresh L1 read before it is rejected. Any other failure is returned without one.
+   */
+  private async validateRebuiltCheckpointLimits(checkpoint: Checkpoint): Promise<Error | undefined> {
+    const opts = {
+      maxDABlockGas: this.config.validateMaxDABlockGas,
+      maxL2BlockGas: this.config.validateMaxL2BlockGas,
+      maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
+      maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
+    };
+    const validateWithManaLimit = (manaLimit: bigint | undefined): Error | undefined => {
+      try {
+        validateCheckpoint(checkpoint, {
+          ...opts,
+          rollupManaLimit: manaLimit === undefined ? undefined : Number(manaLimit),
+        });
+        return undefined;
+      } catch (err) {
+        return err instanceof Error ? err : new Error(String(err));
+      }
+    };
+
+    const feeConfigProvider = this.checkpointsBuilder.getFeeConfigProvider();
+    const cached = feeConfigProvider.getFeeConfig();
+    const error = validateWithManaLimit(cached.manaLimit);
+    if (error === undefined || validateWithManaLimit(undefined) !== undefined) {
+      return error;
+    }
+
+    const refreshed = await feeConfigProvider.refresh();
+    this.log.verbose(`Re-read the rollup mana limit from L1 before rejecting a checkpoint over the cached limit`, {
+      cachedManaLimit: cached.manaLimit,
+      refreshedManaLimit: refreshed.manaLimit,
+      checkpointNumber: checkpoint.number,
+    });
+    return validateWithManaLimit(refreshed.manaLimit);
   }
 
   /** Extracts checkpoint global variables from a block. */

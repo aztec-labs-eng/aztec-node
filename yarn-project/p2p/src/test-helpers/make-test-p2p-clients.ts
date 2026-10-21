@@ -5,7 +5,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 
@@ -108,6 +108,7 @@ export async function makeTestP2PClient(
       getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
       getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
     },
+    new FixedRollupFeeConfigProvider(),
     'test-p2p-client',
     undefined,
     undefined,

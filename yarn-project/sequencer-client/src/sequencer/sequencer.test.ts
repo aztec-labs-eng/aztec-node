@@ -41,7 +41,7 @@ import {
 import { Checkpoint, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import {
   type MerkleTreeWriteOperations,
   type SequencerConfig,
@@ -97,10 +97,7 @@ describe('sequencer', () => {
 
   let block: L2Block;
   let globalVariables: GlobalVariables;
-  let l1Constants: Pick<
-    L1RollupConstants,
-    'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'rollupManaLimit' | 'epochDuration'
-  >;
+  let l1Constants: Pick<L1RollupConstants, 'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'epochDuration'>;
 
   let sequencer: TestSequencer;
   let config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
@@ -216,7 +213,6 @@ describe('sequencer', () => {
       slotDuration,
       ethereumSlotDuration,
       epochDuration,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     epochCache = mockDeep<EpochCache>();
@@ -279,7 +275,6 @@ describe('sequencer', () => {
     rollupContract.getCheckpoint.mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
-    rollupContract.getManaTarget.mockResolvedValue(10_000n);
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue(omit(globalVariables, 'blockNumber'));
@@ -442,6 +437,7 @@ describe('sequencer', () => {
       epochCache,
       rollupContract,
       inboxContract,
+      new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
       config,
     );
     sequencer.updateConfig(config);
@@ -476,6 +472,7 @@ describe('sequencer', () => {
         epochCache,
         rollupContract,
         inboxContract,
+        new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
         sequencerConfig,
       );
     };
@@ -2118,7 +2115,6 @@ describe('sequencer', () => {
       ethereumSlotDuration,
       proofSubmissionEpochs: 2,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     beforeEach(() => {

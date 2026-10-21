@@ -10,6 +10,7 @@ import {
 import { type ProposerTimetableConfig, buildProposerTimetable } from '../timetable/build_proposer_timetable.js';
 import type { SlotTimingConstants } from '../timetable/consensus_timetable.js';
 import { Gas } from './gas.js';
+import type { RollupFeeConfig } from './rollup_fee_config.js';
 
 /**
  * Network-minimum per-block budget multiplier for L2 gas and tx-count allocation. A block packer must
@@ -75,7 +76,7 @@ export function getDaCheckpointBudgetForTxs(maxBlocksPerCheckpoint: number): num
  * raw blob capacity net of encoding overhead for every block — so the admission limit is consistent with the
  * builder's blob-field cap.
  *
- * @param manaCheckpointBudget - L2 (mana) budget per checkpoint (`rollupManaLimit`).
+ * @param manaCheckpointBudget - L2 (mana) budget per checkpoint (the rollup's live mana limit).
  */
 export function computeNetworkTxGasLimits(opts: { maxBlocksPerCheckpoint: number; manaCheckpointBudget: number }): Gas {
   const blocks = Math.max(1, opts.maxBlocksPerCheckpoint);
@@ -101,15 +102,17 @@ export function computeNetworkTxGasLimits(opts: { maxBlocksPerCheckpoint: number
 }
 
 /**
- * Network tx gas limits derived from a sequencer/p2p config and the L1 slot-timing + mana constants. The
- * single source of truth shared by `getNodeInfo` (advertising) and the RPC/gossip/pool gas validators
- * (enforcing), so a node never rejects a tx it advertised as admissible. Always uses the network-minimum
- * multipliers, never the node's (possibly higher) configured multipliers.
+ * Network tx gas limits derived from a sequencer/p2p config, the L1 slot-timing constants and the rollup's live
+ * mana limit. The single source of truth shared by `getNodeInfo` (advertising) and the RPC/gossip/pool gas
+ * validators (enforcing), so a node never rejects a tx it advertised as admissible. Always uses the network-minimum
+ * multipliers, never the node's (possibly higher) configured multipliers. Callers pass the fee config they read for
+ * this call, so a mana limit raised by governance takes effect without a restart.
  */
 export function getNetworkTxGasLimits(
   config: ProposerTimetableConfig,
-  l1Constants: SlotTimingConstants & { rollupManaLimit: number },
+  l1Constants: SlotTimingConstants,
+  feeConfig: Pick<RollupFeeConfig, 'manaLimit'>,
 ): Gas {
   const maxBlocksPerCheckpoint = buildProposerTimetable(config, l1Constants).getMaxBlocksPerCheckpoint();
-  return computeNetworkTxGasLimits({ maxBlocksPerCheckpoint, manaCheckpointBudget: l1Constants.rollupManaLimit });
+  return computeNetworkTxGasLimits({ maxBlocksPerCheckpoint, manaCheckpointBudget: Number(feeConfig.manaLimit) });
 }

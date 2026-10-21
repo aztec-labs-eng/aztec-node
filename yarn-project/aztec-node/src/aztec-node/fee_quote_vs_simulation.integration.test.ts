@@ -26,7 +26,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { L1PublishedData, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import { GasFees, ManaUsageEstimate, RollupFeeConfigTracker } from '@aztec-labs/stdlib/gas';
 import type { L2LogsSource, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -192,7 +192,15 @@ describeWithAnvil('fee quote vs public simulation', () => {
   const startNodeAt = async (nodeClockSlotStart: bigint) => {
     dateProvider.setTime(Number(nodeClockSlotStart) * 1000);
 
-    feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, blockSource);
+    // Not started: the scenarios below drive every read, and pinned reads go straight to L1.
+    const feeConfigProvider = await RollupFeeConfigTracker.create(rollup);
+    feeProvider = new FeeProviderImpl(
+      dateProvider,
+      publicClient,
+      globalVariableBuilderConfig,
+      blockSource,
+      feeConfigProvider,
+    );
     // Long polling interval: every refresh in these scenarios is driven explicitly, as an archiver pass would.
     await feeProvider.start(60_000);
 
@@ -207,6 +215,7 @@ describeWithAnvil('fee quote vs public simulation', () => {
       blockSource,
       globalVariableBuilder,
       rollupContract: rollup,
+      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: foundry.id, rollupAddress: config.rollupAddress },
       dateProvider,
@@ -231,6 +240,7 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollupContract: rollup,
       feeProvider,
       nextBlockPredictor,
+      feeConfigProvider,
       epochCache,
       packageVersion: getPackageVersion(),
       peerProofVerifier: new TestCircuitVerifier(),
@@ -308,7 +318,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       epochDuration,
       proofSubmissionEpochs,
       targetCommitteeSize,
-      rollupManaLimit,
       lagInEpochsForValidatorSet,
       lagInEpochsForRandao,
     ] = await Promise.all([
@@ -316,7 +325,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollup.getEpochDuration(),
       rollup.getProofSubmissionEpochs(),
       rollup.getTargetCommitteeSize(),
-      rollup.getManaLimit(),
       rollup.getLagInEpochsForValidatorSet(),
       rollup.getLagInEpochsForRandao(),
     ]);
@@ -330,7 +338,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
         ethereumSlotDuration,
         proofSubmissionEpochs: Number(proofSubmissionEpochs),
         targetCommitteeSize: Number(targetCommitteeSize),
-        rollupManaLimit: Number(rollupManaLimit),
         lagInEpochsForValidatorSet: Number(lagInEpochsForValidatorSet),
         lagInEpochsForRandao: Number(lagInEpochsForRandao),
       },

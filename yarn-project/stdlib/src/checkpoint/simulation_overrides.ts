@@ -7,6 +7,7 @@ import {
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 
+import type { RollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
 import type { CoordinationSignatureContext } from '../p2p/signature_utils.js';
 import type { ProposedCheckpointData } from './checkpoint_data.js';
 import { computeCheckpointPayloadDigest } from './digest.js';
@@ -14,6 +15,8 @@ import { computeCheckpointPayloadDigest } from './digest.js';
 type CheckpointSimulationOverridesPlanInput = {
   /** Target rollup contract. */
   rollup: RollupContract;
+  /** Live rollup fee settings, for the mana target the pipelined parent's fee header is derived with. */
+  feeConfigProvider: RollupFeeConfigProvider;
   /** Checkpoint number to be proposed. */
   checkpointNumber: CheckpointNumber;
   /** Logger instance. */
@@ -103,6 +106,7 @@ export async function buildCheckpointSimulationOverridesPlan(
       checkpointNumber: input.checkpointNumber,
       proposedCheckpointData: input.proposedCheckpointData,
       rollup: input.rollup,
+      feeConfigProvider: input.feeConfigProvider,
       log: input.log,
     });
     if (feeHeader) {
@@ -136,6 +140,7 @@ type PipelinedParentFeeHeaderInput = {
   checkpointNumber: CheckpointNumber;
   proposedCheckpointData: ProposedCheckpointData;
   rollup: RollupContract;
+  feeConfigProvider: RollupFeeConfigProvider;
   log: Logger;
 };
 
@@ -154,10 +159,10 @@ export async function computePipelinedParentFeeHeader(
 
   const grandparentCheckpointNumber = CheckpointNumber(input.checkpointNumber - 2);
 
-  const [grandparentCheckpoint, manaTarget] = await Promise.all([
-    input.rollup.getCheckpoint(grandparentCheckpointNumber),
-    input.rollup.getManaTarget(),
-  ]);
+  const grandparentCheckpoint = await input.rollup.getCheckpoint(grandparentCheckpointNumber);
+  // The latest target rather than one pinned to a sync point: the grandparent is read at L1's latest block too, and
+  // L1 checks the quoted fee against the target in force when the propose lands.
+  const { manaTarget } = input.feeConfigProvider.getFeeConfig();
 
   if (!grandparentCheckpoint?.feeHeader) {
     throw new Error(

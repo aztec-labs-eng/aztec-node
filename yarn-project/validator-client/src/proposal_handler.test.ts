@@ -27,6 +27,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { RollupFeeConfig, RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   ITxProvider,
   ValidatorClientFullConfig,
@@ -138,6 +139,7 @@ describe('ProposalHandler checkpoint validation', () => {
   let inbox: FakeInbox;
   let epochCache: MockProxy<EpochCache>;
   let checkpointsBuilder: MockProxy<FullNodeCheckpointsBuilder>;
+  let feeConfigProvider: MockProxy<RollupFeeConfigProvider>;
   let dateProvider: TestDateProvider;
   let metrics: MockProxy<ValidatorMetrics>;
   let config: ValidatorClientFullConfig;
@@ -164,8 +166,17 @@ describe('ProposalHandler checkpoint validation', () => {
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
     });
+    feeConfigProvider = mock<RollupFeeConfigProvider>();
+    feeConfigProvider.getFeeConfig.mockReturnValue({
+      manaTarget: 100_000_000n,
+      manaLimit: 200_000_000n,
+      provingCostPerManaInEth: 0n,
+      protocolFeeMarginBps: 0,
+      l1BlockNumber: 1n,
+    });
+    feeConfigProvider.refresh.mockImplementation(() => Promise.resolve(feeConfigProvider.getFeeConfig()));
+    checkpointsBuilder.getFeeConfigProvider.mockReturnValue(feeConfigProvider);
 
     epochCache = mock<EpochCache>();
     epochCache.getL1Constants.mockReturnValue({
@@ -1137,7 +1148,10 @@ describe('ProposalHandler checkpoint validation', () => {
     });
 
     /** Sets up a rebuild that matches the proposal in every comparison; returns the header the proposal signs. */
-    function setupMatchingRebuild(headerOverrides: Partial<FieldsOf<CheckpointHeader>> = {}) {
+    function setupMatchingRebuild(
+      headerOverrides: Partial<FieldsOf<CheckpointHeader>> = {},
+      { totalManaUsed }: { totalManaUsed?: number } = {},
+    ) {
       const lastArchiveRoot = Fr.random();
       const header = makeMatchingHeader({ lastArchiveRoot, ...headerOverrides });
 
@@ -1150,6 +1164,9 @@ describe('ProposalHandler checkpoint validation', () => {
         timestamp: header.timestamp,
       });
       unfreeze(blockHeader).lastArchive = new AppendOnlyTreeSnapshot(lastArchiveRoot, TreeLeafIndex(0));
+      if (totalManaUsed !== undefined) {
+        unfreeze(blockHeader).totalManaUsed = new Fr(totalManaUsed);
+      }
 
       const minimalBlock = {
         archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
@@ -1184,6 +1201,55 @@ describe('ProposalHandler checkpoint validation', () => {
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
       expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
       expect(mockDispose).toHaveBeenCalled();
+    });
+
+    describe('rollup mana limit raised by governance', () => {
+      const feeConfigWithLimit = (manaLimit: bigint): RollupFeeConfig => ({
+        manaTarget: manaLimit / 2n,
+        manaLimit,
+        provingCostPerManaInEth: 0n,
+        protocolFeeMarginBps: 0,
+        l1BlockNumber: 1n,
+      });
+
+      beforeEach(() => {
+        // The node cached a 200M limit; L1 has since raised it to 300M.
+        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(200_000_000n));
+        feeConfigProvider.refresh.mockResolvedValue(feeConfigWithLimit(300_000_000n));
+      });
+
+      it('accepts a proposal above the cached limit but within the limit L1 enforces now', async () => {
+        const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
+
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+        expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
+      });
+
+      it('rejects a proposal above the limit L1 enforces now', async () => {
+        const header = setupMatchingRebuild({}, { totalManaUsed: 350_000_000 });
+
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'checkpoint_validation_failed',
+          checkpointNumber: CheckpointNumber(1),
+        });
+      });
+
+      it('does not re-read L1 when the checkpoint fails a check other than the mana limit', async () => {
+        setupDeepValidationMocks({
+          header: makeMatchingHeader(),
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
+          blocks: [],
+        });
+
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: makeMatchingHeader() });
+        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+        expect(result).toMatchObject({ isValid: false, reason: 'checkpoint_validation_failed' });
+        expect(feeConfigProvider.refresh).not.toHaveBeenCalled();
+      });
     });
 
     // A local fault while validating is not a verdict about the proposal: it escapes, caches nothing, records no

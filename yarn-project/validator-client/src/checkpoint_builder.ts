@@ -19,7 +19,7 @@ import { type BlockHash, L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas } from '@aztec-labs/stdlib/gas';
+import { Gas, type RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   type BuildBlockInCheckpointResult,
@@ -56,6 +56,7 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
     private checkpointBuilder: LightweightCheckpointBuilder,
     private fork: MerkleTreeWriteOperations,
     private config: FullNodeBlockBuilderConfig,
+    private feeConfigProvider: RollupFeeConfigProvider,
     private contractDataSource: ContractDataSource,
     private dateProvider: DateProvider,
     private telemetryClient: TelemetryClient,
@@ -203,7 +204,7 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
     // IMPORTANT: This assumes mana is computed solely based on L2 gas used in transactions.
     // This may change in the future.
     const usedMana = sum(existingBlocks.map(b => b.header.totalManaUsed.toNumber()));
-    const remainingMana = this.config.rollupManaLimit - usedMana;
+    const remainingMana = Number(this.feeConfigProvider.getFeeConfig().manaLimit) - usedMana;
 
     // Remaining DA gas
     const usedDAGas = sum(existingBlocks.map(b => b.computeDAGasUsed())) ?? 0;
@@ -317,6 +318,7 @@ export class FullNodeCheckpointsBuilder implements ICheckpointsBuilder {
     private contractDataSource: ContractDataSource,
     private dateProvider: DateProvider,
     private avmSimulator: AvmSimulator,
+    private feeConfigProvider: RollupFeeConfigProvider,
     private telemetryClient: TelemetryClient = getTelemetryClient(),
     private debugLogStore: DebugLogStore = new NullDebugLogStore(),
   ) {
@@ -325,6 +327,11 @@ export class FullNodeCheckpointsBuilder implements ICheckpointsBuilder {
 
   public getConfig(): FullNodeBlockBuilderConfig {
     return this.config;
+  }
+
+  /** Live rollup fee settings, including the mana limit checkpoints are built and validated against. */
+  public getFeeConfigProvider(): RollupFeeConfigProvider {
+    return this.feeConfigProvider;
   }
 
   public updateConfig(config: Partial<FullNodeBlockBuilderConfig>) {
@@ -368,6 +375,7 @@ export class FullNodeCheckpointsBuilder implements ICheckpointsBuilder {
       lightweightBuilder,
       fork,
       this.config,
+      this.feeConfigProvider,
       this.contractDataSource,
       this.dateProvider,
       this.telemetryClient,
@@ -441,6 +449,7 @@ export class FullNodeCheckpointsBuilder implements ICheckpointsBuilder {
       lightweightBuilder,
       fork,
       this.config,
+      this.feeConfigProvider,
       this.contractDataSource,
       this.dateProvider,
       this.telemetryClient,

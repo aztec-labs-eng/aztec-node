@@ -110,7 +110,6 @@ describe('EpochCache', () => {
       epochDuration: EPOCH_DURATION,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       lagInEpochsForValidatorSet: 2,
       lagInEpochsForRandao: 2,
     };

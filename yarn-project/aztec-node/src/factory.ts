@@ -39,6 +39,7 @@ import {
   createSlasher,
 } from '@aztec-labs/slasher';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { RollupFeeConfigTracker } from '@aztec-labs/stdlib/gas';
 import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
@@ -185,12 +186,11 @@ export async function createAztecNodeService(
   // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
   // bucket ring before accepting it, so every node needs one, validator or not.
   const inboxContract = new InboxContract(publicClient, config.inboxAddress);
-  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup, rollupManaLimit] = await Promise.all([
+  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
     rollupContract.getL1GenesisTime(),
     rollupContract.getSlotDuration(),
     rollupContract.getEpochDuration(),
     rollupContract.getVersion(),
-    rollupContract.getManaLimit().then(Number),
   ] as const);
 
   config.rollupVersion ??= Number(rollupVersionFromRollup);
@@ -211,6 +211,15 @@ export async function createAztecNodeService(
   // Track started resources so we can clean up on partial failure during node creation.
   const started: { stop?(): Promise<void> | void }[] = [];
   try {
+    // Governance can change the rollup's fee settings (the mana target and limit among them) at any time, so every
+    // component that needs them reads them from this tracker rather than from a copy taken at startup.
+    const feeConfigTracker = await RollupFeeConfigTracker.create(rollupContract, {
+      pollingIntervalMs: config.ethereumSlotDuration * 1000,
+      logger: log.createChild('rollup-fee-config'),
+    });
+    feeConfigTracker.start();
+    started.push(feeConfigTracker);
+
     config.skipOrphanProposedBlockPruning ||= !!config.useAutomineSequencer;
 
     checkConfigMatchesRollup(config, {
@@ -278,7 +287,13 @@ export async function createAztecNodeService(
     };
 
     const globalVariableBuilder = new GlobalVariableBuilder(publicClient, globalVariableBuilderConfig);
-    const feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, archiver);
+    const feeProvider = new FeeProviderImpl(
+      dateProvider,
+      publicClient,
+      globalVariableBuilderConfig,
+      archiver,
+      feeConfigTracker,
+    );
     await feeProvider.start();
     started.push(feeProvider);
 
@@ -286,6 +301,7 @@ export async function createAztecNodeService(
       blockSource: archiver,
       globalVariableBuilder,
       rollupContract,
+      feeConfigProvider: feeConfigTracker,
       epochCache,
       signatureContext: { chainId: ethereumChain.chainInfo.id, rollupAddress: config.rollupAddress },
       dateProvider,
@@ -321,6 +337,7 @@ export async function createAztecNodeService(
       worldStateSynchronizer,
       epochCache,
       new AdmissionMinFeesProvider(nextBlockPredictor, feeProvider),
+      feeConfigTracker,
       packageVersion,
       dateProvider,
       telemetry,
@@ -340,13 +357,13 @@ export async function createAztecNodeService(
         ...config,
         l1GenesisTime,
         slotDuration: Number(slotDuration),
-        rollupManaLimit,
         maxTxsPerCheckpoint: config.validateMaxTxsPerCheckpoint,
       },
       worldStateSynchronizer,
       archiver,
       dateProvider,
       avmSimulator,
+      feeConfigTracker,
       telemetry,
     );
 
@@ -563,11 +580,12 @@ export async function createAztecNodeService(
 
       // Create and start the sequencer client
       const checkpointsBuilder = new CheckpointsBuilder(
-        { ...config, l1GenesisTime, slotDuration: Number(slotDuration), rollupManaLimit },
+        { ...config, l1GenesisTime, slotDuration: Number(slotDuration) },
         worldStateSynchronizer,
         archiver,
         dateProvider,
         avmSimulator,
+        feeConfigTracker,
         telemetry,
         debugLogStore,
       );
@@ -596,7 +614,6 @@ export async function createAztecNodeService(
             l1GenesisTime,
             slotDuration: Number(slotDuration),
             ethereumSlotDuration: config.ethereumSlotDuration,
-            rollupManaLimit,
           },
           autoSettle: config.automineEnableProveEpoch,
           log,
@@ -612,6 +629,7 @@ export async function createAztecNodeService(
           worldStateSynchronizer,
           slasherClient,
           checkpointsBuilder,
+          feeConfigProvider: feeConfigTracker,
           l2BlockSource: archiver,
           l1ToL2MessageSource: archiver,
           telemetry,
@@ -683,6 +701,7 @@ export async function createAztecNodeService(
       rollupContract,
       feeProvider,
       nextBlockPredictor,
+      feeConfigProvider: feeConfigTracker,
       epochCache,
       packageVersion,
       peerProofVerifier,

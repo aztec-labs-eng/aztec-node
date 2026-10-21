@@ -18,7 +18,7 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { type BlockProposal, P2PMessage, TopicType } from '@aztec-labs/stdlib/p2p';
@@ -139,6 +139,7 @@ class TestLibP2PService extends LibP2PService {
         getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
         getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
       },
+      new FixedRollupFeeConfigProvider(),
       telemetry,
       logger,
     );
@@ -435,6 +436,7 @@ process.on('message', async msg => {
           getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
           getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
         },
+        new FixedRollupFeeConfigProvider(),
         'test-p2p-bench-worker',
         undefined,
         telemetry as TelemetryClient,

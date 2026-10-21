@@ -18,6 +18,7 @@ import type { P2P, TxProvider } from '@aztec-labs/p2p';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { FixedRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   SlasherConfig,
   ValidatorClientFullConfig,
@@ -104,8 +105,10 @@ describe('ValidatorClient HA Integration', () => {
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
     });
+    checkpointsBuilder.getFeeConfigProvider.mockReturnValue(
+      new FixedRollupFeeConfigProvider({ manaLimit: 200_000_000n }),
+    );
     worldState = mock<WorldStateSynchronizer>();
     epochCache = mock<EpochCache>();
     epochCache.getL1Constants.mockReturnValue({

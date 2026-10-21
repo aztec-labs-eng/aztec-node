@@ -40,7 +40,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import {
   InsufficientValidTxsError,
   type MerkleTreeWriteOperations,
@@ -178,7 +178,6 @@ describe('CheckpointProposalJob', () => {
       epochDuration: 16,
       proofSubmissionEpochs: 4,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     // ManualDateProvider freezes time (it does not track real wall-clock progression), so timing-sensitive
@@ -212,7 +211,6 @@ describe('CheckpointProposalJob', () => {
     jest.spyOn(publisher.rollupContract, 'getCheckpoint').mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
-    jest.spyOn(publisher.rollupContract, 'getManaTarget').mockResolvedValue(10_000n);
     publisher.sendRequestsAt.mockResolvedValue({
       result: { receipt: { status: 'success' } as TransactionReceipt },
       successfulActions: ['propose'],
@@ -844,6 +842,7 @@ describe('CheckpointProposalJob', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
+      new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
       signatureContext,
       config,
       timetable,

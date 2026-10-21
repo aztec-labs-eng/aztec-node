@@ -39,7 +39,7 @@ import {
   validateCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
 import { computeQuorum, getLastL1SlotTimestampForL2Slot, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas } from '@aztec-labs/stdlib/gas';
+import { Gas, type RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   InsufficientValidTxsError,
@@ -196,6 +196,7 @@ export class CheckpointProposalJob implements Traceable {
     private readonly checkpointsBuilder: FullNodeCheckpointsBuilder,
     private readonly blockSink: L2BlockSink & ProposedCheckpointSink,
     private readonly l1Constants: SequencerRollupConstants,
+    private readonly feeConfigProvider: RollupFeeConfigProvider,
     private readonly signatureContext: CoordinationSignatureContext,
     protected config: ResolvedSequencerConfig,
     protected timetable: ProposerTimetable,
@@ -959,6 +960,7 @@ export class CheckpointProposalJob implements Traceable {
         invalidateToPendingCheckpointNumber: this.invalidateCheckpoint?.forcePendingCheckpointNumber,
         checkpointedCheckpointNumber: this.checkpointedCheckpointNumber,
         rollup: this.publisher.rollupContract,
+        feeConfigProvider: this.feeConfigProvider,
         signatureContext: this.signatureContext,
         log: this.log,
       });
@@ -1103,7 +1105,7 @@ export class CheckpointProposalJob implements Traceable {
       // Otherwise, checkpoint-level budgets were already enforced by the redistribution logic.
       try {
         validateCheckpoint(checkpoint, {
-          rollupManaLimit: this.l1Constants.rollupManaLimit,
+          rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
           maxL2BlockGas: this.config.maxL2BlockGas,
           maxDABlockGas: this.config.maxDABlockGas,
           maxTxsPerBlock: this.config.maxTxsPerBlock,

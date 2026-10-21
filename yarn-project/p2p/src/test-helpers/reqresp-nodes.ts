@@ -6,7 +6,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import { type ChainConfig, emptyChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   IVCProofVerificationResult,
@@ -179,6 +179,7 @@ export async function createTestLibP2PService(
       getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
       getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
     },
+    new FixedRollupFeeConfigProvider(),
     telemetry,
   );
 }
