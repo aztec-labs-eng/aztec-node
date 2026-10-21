@@ -9,6 +9,8 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+## 6.0.0
+
 ### [Aztec.nr] ECDSA note and protocol contract interfaces are published with aztec-nr
 
 `ecdsa_public_key_note` and the protocol contract interfaces now ship in `aztec-labs-eng/aztec-nr`. Depending
@@ -104,8 +106,6 @@ To prove membership against a given archive root, including a block's own post-b
 ```
 
 Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
-
-## 6.0.0-rc.1
 
 ### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
 
