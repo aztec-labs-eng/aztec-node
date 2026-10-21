@@ -62,13 +62,13 @@ registry. Verdaccio proxies npmjs for third-party packages and the foundation pi
 - checks the result with `npm ci` and `npm ls`.
 
 The resulting archive holds the manifest, the npm lock, and a hash of the inputs that decide the
-lock: the Yarn lock, the root resolutions, the generator, the package rewrite rules, and the
-workspace manifest fields that npm copies into a lock entry (dependencies, `bin`, `engines`,
-`os`/`cpu`, install scripts, ...). It is copied into the aztec-up test image, whose cache key
-includes the same hash, and on an image-cache hit the build reads it back out of that image. The
-cached Verdaccio seed and the cached lock share the same input hash, so a reused lock always comes
-with a seed that holds its tarballs. The test image's registry is offline and installs from that
-seed.
+lock: the Yarn lock, the root resolutions, the generator, the aztec-up build script, the package
+rewrite rules, and the workspace manifest fields that npm copies into a lock entry (dependencies,
+`bin`, `engines`, `os`/`cpu`, install scripts, ...). It is copied into the aztec-up test image,
+whose cache key covers the same inputs, and on an image-cache hit the build reads it back out of
+that image. The cached Verdaccio seed and the cached lock share the same input hash, so a reused
+lock always comes with a seed that holds its tarballs. The test image's registry is offline and
+installs from that seed.
 
 ### Release
 
