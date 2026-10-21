@@ -52,17 +52,19 @@ export class SlasherOffensesStore {
         return undefined;
       }
 
-      const roundKeys = new Set<string>();
-      for await (const roundKey of this.roundsOffenses.keysAsync()) {
-        roundKeys.add(roundKey);
+      const indexEntries: [string, string][] = [];
+      for await (const entry of this.roundsOffenses.entriesAsync()) {
+        indexEntries.push(entry);
       }
       const offenses: [string, Offense][] = [];
       for await (const [key, buffer] of this.offenses.entriesAsync()) {
         offenses.push([key, deserializeOffense(buffer)]);
       }
 
-      for (const roundKey of roundKeys) {
-        await this.roundsOffenses.delete(roundKey);
+      // Remove each pair rather than whole round keys: within a transaction, adding a value under a key cancels a
+      // pending delete of that whole key, which would keep the key's old values when a new round reuses an old number.
+      for (const [roundKey, offenseKey] of indexEntries) {
+        await this.roundsOffenses.deleteValue(roundKey, offenseKey);
       }
       for (const [key, offense] of offenses) {
         await this.roundsOffenses.set(this.getRoundKey(getRoundForOffense(offense, this.settings)), key);
