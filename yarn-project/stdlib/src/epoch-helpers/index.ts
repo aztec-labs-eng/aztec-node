@@ -11,7 +11,6 @@ export type L1RollupConstants = {
   ethereumSlotDuration: number;
   proofSubmissionEpochs: number;
   targetCommitteeSize: number;
-  rollupManaLimit: number;
 };
 
 export const EmptyL1RollupConstants: L1RollupConstants = {
@@ -22,7 +21,6 @@ export const EmptyL1RollupConstants: L1RollupConstants = {
   ethereumSlotDuration: 1,
   proofSubmissionEpochs: 1,
   targetCommitteeSize: 48,
-  rollupManaLimit: Number.MAX_SAFE_INTEGER,
 };
 
 export const L1RollupConstantsSchema = zodFor<L1RollupConstants>()(
@@ -34,8 +32,24 @@ export const L1RollupConstantsSchema = zodFor<L1RollupConstants>()(
     ethereumSlotDuration: z.number(),
     proofSubmissionEpochs: z.number(),
     targetCommitteeSize: z.number(),
-    rollupManaLimit: z.number(),
   }),
+);
+
+/**
+ * {@link L1RollupConstants} as the node's `getL1Constants` RPC returns them. Keeps the mana limit field that older
+ * clients still require when they parse the response.
+ */
+export type L1RollupConstantsResponse = L1RollupConstants & {
+  /**
+   * The rollup's mana limit when the node answered the call.
+   * @deprecated Governance can raise the limit at any time, so it is not a constant. Read it live from the rollup
+   * (`RollupContract.getManaLimit`) or from a `RollupFeeConfigProvider` instead.
+   */
+  rollupManaLimit: number;
+};
+
+export const L1RollupConstantsResponseSchema = zodFor<L1RollupConstantsResponse>()(
+  L1RollupConstantsSchema.extend({ rollupManaLimit: z.number() }),
 );
 
 /** Returns the timestamp for a given L2 slot. */

@@ -37,7 +37,7 @@ import {
   ProtocolContractsNames,
   getContractClassFromArtifact,
 } from '../contract/index.js';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '../epoch-helpers/index.js';
+import { EmptyL1RollupConstants, type L1RollupConstantsResponse } from '../epoch-helpers/index.js';
 import { GasFees } from '../gas/gas_fees.js';
 import { PublicKeys } from '../keys/public_keys.js';
 import { type LogResult, randomLogResult } from '../logs/log_result.js';
@@ -121,7 +121,7 @@ describe('AztecNodeApiSchema', () => {
 
   it('getL1Constants', async () => {
     const result = await context.client.getL1Constants();
-    expect(result).toEqual(EmptyL1RollupConstants);
+    expect(result).toEqual({ ...EmptyL1RollupConstants, rollupManaLimit: 100_000_000 });
   });
 
   it('getSyncedL2SlotNumber', async () => {
@@ -771,8 +771,8 @@ class MockAztecNode implements AztecNode {
     });
   }
 
-  getL1Constants(): Promise<L1RollupConstants> {
-    return Promise.resolve(EmptyL1RollupConstants);
+  getL1Constants(): Promise<L1RollupConstantsResponse> {
+    return Promise.resolve({ ...EmptyL1RollupConstants, rollupManaLimit: 100_000_000 });
   }
 
   getSyncedL2SlotNumber(): Promise<SlotNumber | undefined> {

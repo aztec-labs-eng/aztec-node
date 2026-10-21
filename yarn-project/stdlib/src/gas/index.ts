@@ -3,4 +3,5 @@ export * from './gas.js';
 export * from './gas_fees.js';
 export * from './gas_settings.js';
 export * from './gas_used.js';
+export * from './rollup_fee_config.js';
 export * from './tx_gas_limits.js';

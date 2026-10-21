@@ -162,7 +162,12 @@ export const ArchiverApiSchema: ApiSchemaFor<ArchiverApi> = {
     input: z.tuple([schemas.AztecAddress, schemas.FunctionSelector]),
     output: optional(z.string()),
   }),
-  getL1Constants: z.function({ input: z.tuple([]), output: L1RollupConstantsSchema }),
+  // The archiver does not track the live mana limit, so it no longer returns the deprecated `rollupManaLimit`; the
+  // schema accepts it from servers that still send it.
+  getL1Constants: z.function({
+    input: z.tuple([]),
+    output: L1RollupConstantsSchema.extend({ rollupManaLimit: z.number().optional() }),
+  }),
   isPruneDueAtSlot: z.function({ input: z.tuple([schemas.SlotNumber]), output: z.boolean() }),
   getGenesisValues: z.function({ input: z.tuple([]), output: z.object({ genesisArchiveRoot: schemas.Fr }) }),
   getL1Timestamp: z.function({ input: z.tuple([]), output: schemas.BigInt.optional() }),
