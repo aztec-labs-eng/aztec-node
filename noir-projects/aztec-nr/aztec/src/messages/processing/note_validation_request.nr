@@ -5,7 +5,7 @@ use crate::protocol::{address::AztecAddress, traits::{Deserialize, Serialize}};
 /// `aztec_utl_validateAndStoreEnqueuedNotesAndEvents` oracle expects for values of this type to be stored in a
 /// `EphemeralArray`.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct NoteValidationRequest {
+pub struct NoteValidationRequest {
     contract_address: AztecAddress,
     owner: AztecAddress,
     storage_slot: Field,
@@ -42,5 +42,25 @@ impl NoteValidationRequest {
             nullifier,
             tx_hash,
         }
+    }
+
+    /// The account the note's hash and nullifier are computed for.
+    pub fn owner(self) -> AztecAddress {
+        self.owner
+    }
+
+    /// The storage slot the note is indexed under.
+    pub fn storage_slot(self) -> Field {
+        self.storage_slot
+    }
+
+    /// The packed note content that note retrieval later returns.
+    pub fn packed_note(self) -> BoundedVec<Field, MAX_NOTE_PACKED_LEN> {
+        self.packed_note
+    }
+
+    /// The transaction whose effects must include the note.
+    pub fn tx_hash(self) -> Field {
+        self.tx_hash
     }
 }
