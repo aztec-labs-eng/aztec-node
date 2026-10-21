@@ -239,7 +239,7 @@ The full per-tx → per-block → per-checkpoint limits hierarchy, including how
 
 | Dimension | Source | Budget |
 | --- | --- | --- |
-| L2 gas (mana) | `rollup.getManaLimit()` | Live: read from L1 by the `RollupFeeConfigTracker` once per L1 slot, since governance can raise it. Re-execution re-reads it before rejecting a checkpoint on mana alone |
+| L2 gas (mana) | `rollup.getManaLimit()` | Live: kept in step with L1 by the `RollupFeeConfigTracker`, since governance can raise it. Re-execution re-reads it before rejecting on mana alone |
 | DA gas | `MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT` | 786,432 (6 blobs × 4096 fields × 32 gas/field) |
 | Blob fields | `BLOBS_PER_CHECKPOINT × FIELDS_PER_BLOB` | 24,576 minus checkpoint/block-end overhead |
 
