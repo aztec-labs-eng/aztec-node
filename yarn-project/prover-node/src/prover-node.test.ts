@@ -4,13 +4,19 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { AvmSimulator } from '@aztec-labs/simulator/server';
-import { L2Block, type L2BlockSource, type L2BlockStreamEvent, type L2Tips } from '@aztec-labs/stdlib/block';
+import {
+  type BlockData,
+  L2Block,
+  type L2BlockSource,
+  type L2BlockStreamEvent,
+  type L2Tips,
+} from '@aztec-labs/stdlib/block';
 import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { InboxMessageRange, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { BlockHeader, GlobalVariables } from '@aztec-labs/stdlib/tx';
 import { L1Metrics } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
@@ -380,21 +386,7 @@ describe('ProverNode', () => {
     // The proof that moved the tip over epoch 1 may be another prover's, or one that landed while the
     // epoch was open. L1 still rewards our full-epoch proof, so the epoch's checkpoints must be proven.
     setupRegistrationSuccess();
-    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
-    l2BlockSource.getBlockData.mockImplementation((query: any) =>
-      Promise.resolve(
-        Number(query.number) <= 1
-          ? ({
-              header: {
-                getSlot: () => SlotNumber(1),
-                lastArchive: { root: Fr.ZERO },
-                state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
-              },
-            } as any)
-          : undefined,
-      ),
-    );
-    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    setupEpochOneFullyProven();
     rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
@@ -407,11 +399,7 @@ describe('ProverNode', () => {
     // Such a node never opens the full session and `startProof` refuses a covered epoch, so proving the epoch's
     // checkpoints would be wasted even though our full-epoch proof of it is not on L1.
     proverNode = createProverNode({ proverNodeDisableFullEpochProving: true });
-    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
-    l2BlockSource.getBlockData.mockImplementation((query: any) =>
-      Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
-    );
-    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    setupEpochOneFullyProven();
     rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
@@ -803,6 +791,21 @@ describe('ProverNode', () => {
     node.setSessionManager(sessionManager);
     node.setPublishingService(publishingService);
     return node;
+  }
+
+  /**
+   * Proven tip at block 1, the last block of epoch 1 (epochDuration=1, slot 1) with no block after it, so
+   * `isEpochFullyProven(1)` holds. Blocks 0 and 1 have empty headers at slot 1, which registration reads as zero state.
+   */
+  function setupEpochOneFullyProven() {
+    const blockData = mock<BlockData>({
+      header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }) }),
+    });
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
+    l2BlockSource.getBlockData.mockImplementation(query =>
+      Promise.resolve('number' in query && query.number <= 1 ? blockData : undefined),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
   }
 
   /** Bypass `isEpochFullyProven` so checkpoint events register normally. */
