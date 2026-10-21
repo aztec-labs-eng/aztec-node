@@ -966,7 +966,6 @@ export class CheckpointProposalJob implements Traceable {
         invalidateToPendingCheckpointNumber: this.invalidateCheckpoint?.forcePendingCheckpointNumber,
         checkpointedCheckpointNumber: this.checkpointedCheckpointNumber,
         rollup: this.publisher.rollupContract,
-        feeConfigProvider: this.feeConfigProvider,
         l1BlockNumber: feeL1BlockNumber,
         signatureContext: this.signatureContext,
         log: this.log,

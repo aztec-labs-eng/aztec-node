@@ -1,5 +1,4 @@
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
-import { LruMap } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 
@@ -21,53 +20,37 @@ export interface RollupFeeConfigProvider {
    * read for as long as L1 reads keep failing.
    */
   getFeeConfig(): RollupFeeConfig;
-  /** Config as of the given L1 block, for callers pricing fees at a pinned block. */
-  getFeeConfigAt(l1BlockNumber: bigint): Promise<RollupFeeConfig>;
 }
 
-/** Default polling interval. Each pass reads L1's block number through the client's cache, so it is cheap. */
+/**
+ * Default polling interval. Each pass reads L1's block number through the client's cache, and reads the fee settings
+ * only when that block is newer than the last read, so it is cheap.
+ */
 const DEFAULT_POLLING_INTERVAL_MS = 1_000;
-
-/** Default number of pinned reads kept when the caller does not size the cache. */
-const DEFAULT_PINNED_READS_CAPACITY = 64;
 
 /** Keeps a RollupFeeConfig in step with L1 by polling the rollup. */
 export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
-  /** Pinned reads by L1 block number, including the ones still in flight, least recently used evicted first. */
-  private readonly pinnedReads: LruMap<bigint, Promise<RollupFeeConfig>>;
   private readonly loop: RunningPromise;
 
   private constructor(
     private readonly rollup: RollupContract,
     private latest: RollupFeeConfig,
     pollingIntervalMs: number,
-    pinnedReadsCapacity: number,
     private readonly log: Logger,
   ) {
-    this.pinnedReads = new LruMap(pinnedReadsCapacity);
     this.loop = new RunningPromise(() => this.poll(), log, pollingIntervalMs);
   }
 
-  /**
-   * Does the first read, so getFeeConfig() always has a value.
-   * @param opts.pinnedReadsCapacity - How many pinned reads to keep. Size it to the L1 blocks pinned readers may still
-   * ask about, so their repeated reads at the same blocks are served from memory.
-   */
+  /** Does the first read, so getFeeConfig() always has a value. */
   public static async create(
     rollup: RollupContract,
-    opts: { pollingIntervalMs?: number; pinnedReadsCapacity?: number; logger?: Logger } = {},
+    opts: { pollingIntervalMs?: number; logger?: Logger } = {},
   ): Promise<RollupFeeConfigTracker> {
     const log = opts.logger ?? createLogger('rollup-fee-config');
     const l1BlockNumber = await rollup.client.getBlockNumber();
     const initial = await readRollupFeeConfig(rollup, l1BlockNumber);
     log.info(`Read rollup fee config at L1 block ${l1BlockNumber}`, initial);
-    return new RollupFeeConfigTracker(
-      rollup,
-      initial,
-      opts.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS,
-      opts.pinnedReadsCapacity ?? DEFAULT_PINNED_READS_CAPACITY,
-      log,
-    );
+    return new RollupFeeConfigTracker(rollup, initial, opts.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS, log);
   }
 
   public start(): void {
@@ -82,34 +65,18 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
     return this.latest;
   }
 
-  public getFeeConfigAt(l1BlockNumber: bigint): Promise<RollupFeeConfig> {
-    const cached = this.pinnedReads.get(l1BlockNumber);
-    if (cached) {
-      return cached;
-    }
-
-    const read = readRollupFeeConfig(this.rollup, l1BlockNumber).then(config => {
-      this.offer(config);
-      return config;
-    });
-    this.pinnedReads.set(l1BlockNumber, read);
-    // A failed read is dropped so the next caller for that block retries it. The rejection still reaches the caller.
-    read.catch(() => {
-      if (this.pinnedReads.get(l1BlockNumber) === read) {
-        this.pinnedReads.delete(l1BlockNumber);
-      }
-    });
-    return read;
-  }
-
   /**
-   * One pass of the polling loop: reads the config at L1's latest block, sharing any pinned read for it. It takes the
-   * client's cached block number, so a pass within the cache window costs no new reads. A failed read only logs: the
-   * last value stays until a later pass succeeds.
+   * One pass of the polling loop: reads the config at L1's latest block. It takes the client's cached block number and
+   * skips blocks it has already read, so a pass within the cache window costs no new reads. A failed read only logs:
+   * the last value stays until a later pass succeeds.
    */
   private async poll(): Promise<void> {
     try {
-      this.offer(await this.getFeeConfigAt(await this.rollup.client.getBlockNumber()));
+      const l1BlockNumber = await this.rollup.client.getBlockNumber();
+      if (l1BlockNumber <= this.latest.l1BlockNumber) {
+        return;
+      }
+      this.offer(await readRollupFeeConfig(this.rollup, l1BlockNumber));
     } catch (err) {
       this.log.warn(`Failed to refresh rollup fee config from L1, keeping the last value`, {
         err,
@@ -154,10 +121,6 @@ export class TestRollupFeeConfigProvider implements RollupFeeConfigProvider {
 
   public getFeeConfig(): RollupFeeConfig {
     return this.config;
-  }
-
-  public getFeeConfigAt(_l1BlockNumber: bigint): Promise<RollupFeeConfig> {
-    return Promise.resolve(this.config);
   }
 }
 

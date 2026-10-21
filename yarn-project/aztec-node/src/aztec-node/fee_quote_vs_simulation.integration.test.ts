@@ -26,7 +26,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { L1PublishedData, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, ManaUsageEstimate, RollupFeeConfigTracker } from '@aztec-labs/stdlib/gas';
+import { GasFees, ManaUsageEstimate, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { L2LogsSource, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -192,15 +192,7 @@ describeWithAnvil('fee quote vs public simulation', () => {
   const startNodeAt = async (nodeClockSlotStart: bigint) => {
     dateProvider.setTime(Number(nodeClockSlotStart) * 1000);
 
-    // Not started: the scenarios below drive every read, and pinned reads go straight to L1.
-    const feeConfigProvider = await RollupFeeConfigTracker.create(rollup);
-    feeProvider = new FeeProviderImpl(
-      dateProvider,
-      publicClient,
-      globalVariableBuilderConfig,
-      blockSource,
-      feeConfigProvider,
-    );
+    feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, blockSource);
     // Long polling interval: every refresh in these scenarios is driven explicitly, as an archiver pass would.
     await feeProvider.start(60_000);
 
@@ -215,7 +207,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       blockSource,
       globalVariableBuilder,
       rollupContract: rollup,
-      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: foundry.id, rollupAddress: config.rollupAddress },
       dateProvider,
@@ -240,7 +231,8 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollupContract: rollup,
       feeProvider,
       nextBlockPredictor,
-      feeConfigProvider,
+      // The fee config only sets the node's tx gas limits here; the test provider leaves them unbounded.
+      feeConfigProvider: new TestRollupFeeConfigProvider(),
       epochCache,
       packageVersion: getPackageVersion(),
       peerProofVerifier: new TestCircuitVerifier(),

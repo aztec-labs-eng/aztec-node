@@ -8,7 +8,7 @@ import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import type { L1SyncPoint, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { getNextL1SlotTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees, ManaUsageEstimate, type RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
+import { GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
 import type { FeeAsOf, FeeProvider } from '@aztec-labs/stdlib/tx';
 
 import { type FeeOracleState, FeePredictor } from './fee_predictor.js';
@@ -62,13 +62,12 @@ export class FeeProviderImpl implements FeeProvider {
     private readonly publicClient: ViemPublicClient,
     config: GlobalVariableBuilderConfig,
     private readonly syncPointSource: Pick<L2BlockSource, 'getL1SyncPoint'>,
-    feeConfigProvider: RollupFeeConfigProvider,
   ) {
     this.ethereumSlotDuration = config.ethereumSlotDuration;
     this.l1GenesisTime = config.l1GenesisTime;
 
     this.rollupContract = new RollupContract(this.publicClient, config.rollupAddress);
-    this.feePredictor = new FeePredictor(this.rollupContract, feeConfigProvider, this.dateProvider, {
+    this.feePredictor = new FeePredictor(this.rollupContract, this.dateProvider, {
       slotDuration: config.slotDuration,
       l1GenesisTime: config.l1GenesisTime,
       ethereumSlotDuration: config.ethereumSlotDuration,

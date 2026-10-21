@@ -277,6 +277,7 @@ describe('sequencer', () => {
     rollupContract.getCheckpoint.mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
+    rollupContract.getManaTarget.mockResolvedValue(10_000n);
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue(omit(globalVariables, 'blockNumber'));
@@ -424,7 +425,7 @@ describe('sequencer', () => {
       // One block sub-slot is below the streaming-Inbox catch-up floor; this fixture is not a production profile.
       allowUnsafeInboxCatchupCapacity: true,
     };
-    feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     sequencer = new TestSequencer(
       publisherFactory,
       validatorClient,
@@ -475,7 +476,7 @@ describe('sequencer', () => {
         epochCache,
         rollupContract,
         inboxContract,
-        new TestRollupFeeConfigProvider({ manaTarget: 10_000n }),
+        new TestRollupFeeConfigProvider(),
         sequencerConfig,
       );
     };
@@ -1864,15 +1865,10 @@ describe('sequencer', () => {
           ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
           : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
       );
-      // The tracker's head has a target governance set after the sync point.
-      feeConfigProvider.setFeeConfig({ manaTarget: 2000n, l1BlockNumber: syncPointBlock + 3n });
-      jest
-        .spyOn(feeConfigProvider, 'getFeeConfigAt')
-        .mockImplementation(blockNumber =>
-          blockNumber === syncPointBlock
-            ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 1000n, l1BlockNumber: blockNumber })
-            : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
-        );
+      // Governance raised the target after the sync point: L1's latest state has 2000, the sync point 1000.
+      rollupContract.getManaTarget.mockImplementation(opts =>
+        Promise.resolve(opts?.blockNumber === syncPointBlock ? 1000n : 2000n),
+      );
 
       await sequencer.work();
 

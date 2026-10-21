@@ -59,7 +59,6 @@ export class TXEStateMachine {
     const nextBlockPredictor = NextBlockPredictor.create({
       blockSource: archiver,
       globalVariableBuilder,
-      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: CHAIN_ID, rollupAddress: EthAddress.ZERO },
       dateProvider: new DateProvider(),

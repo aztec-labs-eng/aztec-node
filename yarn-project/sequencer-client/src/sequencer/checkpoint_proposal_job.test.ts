@@ -212,6 +212,7 @@ describe('CheckpointProposalJob', () => {
     jest.spyOn(publisher.rollupContract, 'getCheckpoint').mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
+    jest.spyOn(publisher.rollupContract, 'getManaTarget').mockResolvedValue(10_000n);
     publisher.sendRequestsAt.mockResolvedValue({
       result: { receipt: { status: 'success' } as TransactionReceipt },
       successfulActions: ['propose'],
@@ -221,7 +222,7 @@ describe('CheckpointProposalJob', () => {
     });
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
-    feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue({
       slotNumber: globalVariables.slotNumber,
       timestamp: globalVariables.timestamp,
@@ -985,15 +986,10 @@ describe('CheckpointProposalJob', () => {
         );
       // L1's head has moved past the sync point; the job must not price against it.
       jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(syncPointBlock + 2n);
-      // The tracker's cached head is at a different block with a different target than the sync point.
-      feeConfigProvider.setFeeConfig({ manaTarget: 20_000n, l1BlockNumber: syncPointBlock + 2n });
+      // Governance raised the target after the sync point: L1's latest state has 20000, the sync point 10000.
       jest
-        .spyOn(feeConfigProvider, 'getFeeConfigAt')
-        .mockImplementation(blockNumber =>
-          blockNumber === syncPointBlock
-            ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 10_000n, l1BlockNumber: blockNumber })
-            : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
-        );
+        .spyOn(publisher.rollupContract, 'getManaTarget')
+        .mockImplementation(opts => Promise.resolve(opts?.blockNumber === syncPointBlock ? 10_000n : 20_000n));
 
       await pipelinedJob.executeAndAwait();
 

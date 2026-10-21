@@ -767,7 +767,6 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       invalidateToPendingCheckpointNumber: invalidateCheckpoint?.forcePendingCheckpointNumber,
       checkpointedCheckpointNumber: syncedTo.checkpointedCheckpointNumber,
       rollup: this.rollupContract,
-      feeConfigProvider: this.feeConfigProvider,
       l1BlockNumber: syncedTo.l1BlockNumber,
       signatureContext: this.signatureContext,
       log: this.log,

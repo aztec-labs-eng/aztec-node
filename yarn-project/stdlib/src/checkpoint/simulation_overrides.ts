@@ -7,7 +7,6 @@ import {
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 
-import type { RollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
 import type { CoordinationSignatureContext } from '../p2p/signature_utils.js';
 import type { ProposedCheckpointData } from './checkpoint_data.js';
 import { computeCheckpointPayloadDigest } from './digest.js';
@@ -15,8 +14,6 @@ import { computeCheckpointPayloadDigest } from './digest.js';
 type CheckpointSimulationOverridesPlanInput = {
   /** Target rollup contract. */
   rollup: RollupContract;
-  /** Live rollup fee settings, for the mana target the pipelined parent's fee header is derived with. */
-  feeConfigProvider: RollupFeeConfigProvider;
   /**
    * L1 block the caller runs its fee simulation at. The pipelined parent's fee header is derived from the L1 state at
    * that block too, so the fee quote does not mix two L1 snapshots.
@@ -111,7 +108,6 @@ export async function buildCheckpointSimulationOverridesPlan(
       checkpointNumber: input.checkpointNumber,
       proposedCheckpointData: input.proposedCheckpointData,
       rollup: input.rollup,
-      feeConfigProvider: input.feeConfigProvider,
       l1BlockNumber: input.l1BlockNumber,
       log: input.log,
     });
@@ -146,7 +142,6 @@ type PipelinedParentFeeHeaderInput = {
   checkpointNumber: CheckpointNumber;
   proposedCheckpointData: ProposedCheckpointData;
   rollup: RollupContract;
-  feeConfigProvider: RollupFeeConfigProvider;
   /** L1 block to read the grandparent and the mana target at. */
   l1BlockNumber: bigint;
   log: Logger;
@@ -167,10 +162,10 @@ export async function computePipelinedParentFeeHeader(
 
   const grandparentCheckpointNumber = CheckpointNumber(input.checkpointNumber - 2);
 
-  const { l1BlockNumber } = input;
-  const [grandparentCheckpoint, { manaTarget }] = await Promise.all([
-    input.rollup.getCheckpoint(grandparentCheckpointNumber, { blockNumber: l1BlockNumber }),
-    input.feeConfigProvider.getFeeConfigAt(l1BlockNumber),
+  const opts = { blockNumber: input.l1BlockNumber };
+  const [grandparentCheckpoint, manaTarget] = await Promise.all([
+    input.rollup.getCheckpoint(grandparentCheckpointNumber, opts),
+    input.rollup.getManaTarget(opts),
   ]);
 
   if (!grandparentCheckpoint?.feeHeader) {

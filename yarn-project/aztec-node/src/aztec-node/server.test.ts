@@ -302,7 +302,6 @@ describe('aztec node', () => {
       blockSource: l2BlockSource,
       globalVariableBuilder: globalVariablesBuilder,
       rollupContract,
-      feeConfigProvider,
       epochCache,
       signatureContext: { chainId: 12345, rollupAddress: EthAddress.ZERO },
       dateProvider: new MockDateProvider(),

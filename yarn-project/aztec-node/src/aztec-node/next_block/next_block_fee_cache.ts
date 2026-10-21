@@ -12,7 +12,6 @@ import { type DateProvider, executeTimeout } from '@aztec-labs/foundation/timer'
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
 import { buildCheckpointSimulationOverridesPlan } from '@aztec-labs/stdlib/checkpoint';
-import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type { CheckpointGlobalVariables, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
 
@@ -57,8 +56,6 @@ export interface NextBlockFeeCacheDeps {
    * degrade to a pinned-tips plan (non-pipelined fees) instead.
    */
   rollupContract?: RollupContract;
-  /** Live rollup fee settings, for the mana target a pipelined parent's fee header is derived with. */
-  feeConfigProvider: RollupFeeConfigProvider;
   epochCache: EpochCacheInterface;
   signatureContext: CoordinationSignatureContext;
   dateProvider: DateProvider;
@@ -90,7 +87,6 @@ export class NextBlockFeeCache {
   private readonly blockSource: L2BlockSource;
   private readonly globalVariableBuilder: GlobalVariableBuilder;
   private readonly rollupContract: RollupContract | undefined;
-  private readonly feeConfigProvider: RollupFeeConfigProvider;
   private readonly epochCache: EpochCacheInterface;
   private readonly signatureContext: CoordinationSignatureContext;
   private readonly dateProvider: DateProvider;
@@ -106,7 +102,6 @@ export class NextBlockFeeCache {
     this.blockSource = deps.blockSource;
     this.globalVariableBuilder = deps.globalVariableBuilder;
     this.rollupContract = deps.rollupContract;
-    this.feeConfigProvider = deps.feeConfigProvider;
     this.epochCache = deps.epochCache;
     this.signatureContext = deps.signatureContext;
     this.dateProvider = deps.dateProvider;
@@ -303,7 +298,6 @@ export class NextBlockFeeCache {
       invalidateToPendingCheckpointNumber,
       checkpointedCheckpointNumber,
       rollup,
-      feeConfigProvider: this.feeConfigProvider,
       // The same L1 block the fee simulation is pinned to, so the parent's fee header and the fee agree.
       l1BlockNumber: l1SyncPoint.blockNumber,
       signatureContext: this.signatureContext,

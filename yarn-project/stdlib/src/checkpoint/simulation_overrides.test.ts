@@ -3,10 +3,8 @@ import { BlockNumber, CheckpointNumber, TreeLeafIndex } from '@aztec-labs/founda
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
-import { TestRollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
 import type { CoordinationSignatureContext } from '../p2p/signature_utils.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
@@ -15,11 +13,9 @@ import { buildCheckpointSimulationOverridesPlan, computePipelinedParentFeeHeader
 
 describe('computePipelinedParentFeeHeader', () => {
   let rollup: ReturnType<typeof mock<RollupContract>>;
-  let feeConfigProvider: TestRollupFeeConfigProvider;
 
   beforeEach(() => {
     rollup = mock<RollupContract>();
-    feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
   });
 
   // Use checkpoint 3 so the grandparent (checkpoint 1) is valid
@@ -50,7 +46,6 @@ describe('computePipelinedParentFeeHeader', () => {
       checkpointNumber: CheckpointNumber(1),
       proposedCheckpointData: pendingData,
       rollup,
-      feeConfigProvider,
       l1BlockNumber: 1n,
       log: createLogger('test'),
     });
@@ -59,7 +54,7 @@ describe('computePipelinedParentFeeHeader', () => {
 
   function mockRollup(overrides: { grandparentCheckpoint?: any; manaTarget?: bigint }) {
     rollup.getCheckpoint.mockResolvedValue(overrides.grandparentCheckpoint);
-    feeConfigProvider.setFeeConfig({ manaTarget: overrides.manaTarget ?? 10_000n });
+    rollup.getManaTarget.mockResolvedValue(overrides.manaTarget ?? 10_000n);
   }
 
   it('computes fee header from grandparent checkpoint', async () => {
@@ -71,7 +66,6 @@ describe('computePipelinedParentFeeHeader', () => {
       checkpointNumber: pipelinedCheckpointNumber,
       proposedCheckpointData: pendingData,
       rollup,
-      feeConfigProvider,
       l1BlockNumber: 1n,
       log: createLogger('test'),
     });
@@ -87,32 +81,6 @@ describe('computePipelinedParentFeeHeader', () => {
     expect(result).toEqual(expected);
   });
 
-  it("uses the provider's current mana target after governance raises it", async () => {
-    const startupTarget = 1_000n;
-    const raisedTarget = 2_000n;
-    mockRollup({ grandparentCheckpoint: { feeHeader: grandparentFeeHeader }, manaTarget: startupTarget });
-    feeConfigProvider.setFeeConfig({ manaTarget: raisedTarget });
-
-    const result = await computePipelinedParentFeeHeader({
-      checkpointNumber: pipelinedCheckpointNumber,
-      proposedCheckpointData: pendingData,
-      rollup,
-      feeConfigProvider,
-      l1BlockNumber: 1n,
-      log: createLogger('test'),
-    });
-
-    // The grandparent's excess plus used mana (4000) sits between the two targets, so the parent's excess differs.
-    expect(result).toEqual(
-      RollupContract.computeChildFeeHeader(
-        grandparentFeeHeader,
-        pendingData.totalManaUsed,
-        pendingData.feeAssetPriceModifier,
-        raisedTarget,
-      ),
-    );
-  });
-
   it('reads the grandparent and the mana target at the L1 block the caller simulates at', async () => {
     const simulatedL1Block = 7n;
     rollup.getCheckpoint.mockImplementation((_checkpoint, opts) =>
@@ -120,21 +88,15 @@ describe('computePipelinedParentFeeHeader', () => {
         ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
         : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
     );
-    // The provider's head has a target governance set after the simulated block.
-    feeConfigProvider.setFeeConfig({ manaTarget: 2_000n, l1BlockNumber: simulatedL1Block + 3n });
-    jest
-      .spyOn(feeConfigProvider, 'getFeeConfigAt')
-      .mockImplementation(blockNumber =>
-        blockNumber === simulatedL1Block
-          ? Promise.resolve({ ...feeConfigProvider.getFeeConfig(), manaTarget: 1_000n, l1BlockNumber: blockNumber })
-          : Promise.reject(new Error(`Unexpected pinned read at L1 block ${blockNumber}`)),
-      );
+    // Governance raised the target after the simulated block: the latest state has 2000, the simulated block 1000.
+    rollup.getManaTarget.mockImplementation(opts =>
+      Promise.resolve(opts?.blockNumber === simulatedL1Block ? 1_000n : 2_000n),
+    );
 
     const result = await computePipelinedParentFeeHeader({
       checkpointNumber: pipelinedCheckpointNumber,
       proposedCheckpointData: pendingData,
       rollup,
-      feeConfigProvider,
       l1BlockNumber: simulatedL1Block,
       log: createLogger('test'),
     });
@@ -157,7 +119,6 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
-        feeConfigProvider,
         l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
@@ -172,7 +133,6 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
-        feeConfigProvider,
         l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
@@ -187,7 +147,6 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
-        feeConfigProvider,
         l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
@@ -197,7 +156,6 @@ describe('computePipelinedParentFeeHeader', () => {
 
 describe('buildCheckpointSimulationOverridesPlan', () => {
   let rollup: ReturnType<typeof mock<RollupContract>>;
-  const feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
 
   const chainId = new Fr(12345);
   const signatureContext: CoordinationSignatureContext = {
@@ -221,6 +179,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
 
   function mockGrandparentFeeHeader() {
     rollup.getCheckpoint.mockResolvedValue({ feeHeader: grandparentFeeHeader } as any);
+    rollup.getManaTarget.mockResolvedValue(10_000n);
   }
 
   function makeProposedParent(checkpointNumber: CheckpointNumber): ProposedCheckpointData {
@@ -242,7 +201,6 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       checkpointNumber: checkpointNumberUnderTest,
       checkpointedCheckpointNumber: CheckpointNumber(4),
       rollup,
-      feeConfigProvider,
       l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
@@ -261,7 +219,6 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       proposedCheckpointData: proposedData,
       checkpointedCheckpointNumber: CheckpointNumber(0),
       rollup,
-      feeConfigProvider,
       l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
@@ -288,7 +245,6 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         proposedCheckpointData: proposedData,
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
-        feeConfigProvider,
         l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
@@ -306,7 +262,6 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         invalidateToPendingCheckpointNumber: CheckpointNumber(0),
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
-        feeConfigProvider,
         l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
@@ -320,7 +275,6 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       invalidateToPendingCheckpointNumber: CheckpointNumber(0),
       checkpointedCheckpointNumber: CheckpointNumber(2),
       rollup,
-      feeConfigProvider,
       l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),

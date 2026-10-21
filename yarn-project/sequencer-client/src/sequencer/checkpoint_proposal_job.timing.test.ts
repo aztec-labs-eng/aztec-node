@@ -340,7 +340,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
-      new TestRollupFeeConfigProvider({ manaTarget: 10_000n }),
+      new TestRollupFeeConfigProvider(),
       signatureContext,
       config,
       timetable,
