@@ -91,6 +91,24 @@ function contractSender<C>(step: ContractStep<C>): (resolve: Resolver) => AztecA
   return step.universal ? step.from : step.deployer;
 }
 
+/**
+ * The contract aliases a pure resolver callback looks up, extracted by dry-running it against a
+ * resolver that records each `contract(alias)` lookup instead of resolving it. The callback's return
+ * value is discarded and the ZERO addresses never leave this function — which is what requires such
+ * callbacks to be pure: they run here with fake addresses and again later with real ones.
+ */
+function referencedContracts(run: (resolve: Resolver) => unknown): string[] {
+  const references = new Set<string>();
+  run({
+    account: () => AztecAddress.ZERO,
+    contract: alias => {
+      references.add(alias);
+      return AztecAddress.ZERO;
+    },
+  });
+  return [...references];
+}
+
 /** One tx to send: a single contract publish, or a batch of same-account actions. */
 interface ExecutionUnit {
   label: string;
@@ -166,12 +184,15 @@ class DeploymentRun<C extends Steps> {
 
   private readonly resolver: Resolver;
   private readonly ctx: Ctx<C>;
+  /** Set only when the spec gave a URL — a connected node serves the debug API for warping itself. */
+  private readonly nodeUrl: string | undefined;
 
   private constructor(
     private readonly spec: DeploymentSpec<C>,
     private readonly node: AztecNode,
     private readonly wallet: EmbeddedWallet,
   ) {
+    this.nodeUrl = typeof spec.node === 'string' ? spec.node : undefined;
     this.local = spec.local ?? false;
     this.label = spec.label ?? (this.local ? 'local' : 'network');
     this.reporter = spec.reporter ?? consoleReporter();
@@ -210,7 +231,7 @@ class DeploymentRun<C extends Steps> {
   /** Validates the spec, connects the node + ephemeral wallet, then resolves accounts and class ids. */
   public static async create<C extends Steps>(spec: DeploymentSpec<C>): Promise<DeploymentRun<C>> {
     DeploymentRun.validateSpec(spec);
-    const node = spec.node ?? createAztecNodeClient(spec.nodeUrl!);
+    const node = typeof spec.node === 'string' ? createAztecNodeClient(spec.node) : spec.node;
     const wallet = await EmbeddedWallet.create(node, {
       ephemeral: true,
       pxeConfig: { ...getPXEConfig(), proverEnabled: !(spec.local ?? false) },
@@ -223,8 +244,8 @@ class DeploymentRun<C extends Steps> {
 
   /** Static spec validation — everything that can be rejected before touching the network. */
   private static validateSpec<C extends Steps>(spec: DeploymentSpec<C>): void {
-    if (!spec.node && !spec.nodeUrl) {
-      throw new Error('runDeployment requires either `node` or `nodeUrl` on the spec.');
+    if (!spec.node) {
+      throw new Error('runDeployment requires a `node` on the spec — a JSON-RPC URL or a connected node.');
     }
     const steps = Object.entries(spec.steps) as [string, StepSpec<C>][];
     const aliases = new Set(steps.map(([alias]) => alias));
@@ -389,7 +410,7 @@ class DeploymentRun<C extends Steps> {
     return prepareFeeSession({
       local: this.local,
       node: this.node,
-      nodeUrl: this.spec.nodeUrl,
+      nodeUrl: this.nodeUrl,
       wallet: this.wallet,
       state: this.state,
       persist: () => this.persist(),
@@ -479,22 +500,7 @@ class DeploymentRun<C extends Steps> {
   private recordContractRefs(): Map<string, string[]> {
     const contractRefs = new Map<string, string[]>();
     for (const [alias, step] of this.contractSteps) {
-      const refs = new Set<string>();
-      if (step.initializerArgs) {
-        // Dry-run `initializerArgs` with a resolver that records each `contract(alias)` lookup instead of resolving
-        // it. The returned args are discarded — this call only extracts references — and the ZERO addresses never
-        // leave this block. This is what requires `initializerArgs` to be pure: it runs here with fake addresses and
-        // again later (in resolveDeterministicContracts) with real ones.
-        const recording: Resolver = {
-          account: () => AztecAddress.ZERO,
-          contract: referenced => {
-            refs.add(referenced);
-            return AztecAddress.ZERO;
-          },
-        };
-        step.initializerArgs(recording);
-      }
-      contractRefs.set(alias, [...refs]);
+      contractRefs.set(alias, step.initializerArgs ? referencedContracts(step.initializerArgs) : []);
     }
     return contractRefs;
   }
@@ -545,15 +551,90 @@ class DeploymentRun<C extends Steps> {
   }
 
   /**
-   * Attempts to resolve a deferred contract from current on-chain state. True if the args
-   * resolved AND the instance is already published — i.e. there is no work left for it this run.
+   * Attempts to resolve a deferred contract from current on-chain state, and reports whether there
+   * is no work left for it this run — the args resolved AND the instance is already published.
+   * Attempted only once every step it declares is in place, actions included: its args read their
+   * effects, so resolving earlier would derive the address from state that does not exist yet.
    */
   private async tryResolveDeferred(alias: string, step: ContractStep<C>): Promise<boolean> {
+    if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
+      return false;
+    }
+    await this.resolveDeferred(alias, step);
+    return this.isPublished(alias);
+  }
+
+  /** Resolves a deferred contract's address from its args, read against the current state. */
+  private async resolveDeferred(alias: string, step: ContractStep<C>): Promise<void> {
+    const args = await this.runRecorded(alias, `Deferred initializer args for contract "${alias}"`, ctx =>
+      step.deferredInitializerArgs!(ctx),
+    );
+    await this.resolveContract(alias, step, args);
+  }
+
+  /**
+   * Whether the steps `alias` declares as dependencies are all in place: a contract published or
+   * registered per its mode, a fund step above its threshold, an action already done. With
+   * `contractsOnly`, contracts alone — a gate exists to observe whether the actions and funds it
+   * follows landed, so it must still run once the contracts it reads are there.
+   */
+  private async dependenciesReady(alias: string, { contractsOnly }: { contractsOnly: boolean }): Promise<boolean> {
+    const step = getOrThrow(this.steps, alias, 'step');
+    for (const dependency of [...(this.contractRefs.get(alias) ?? []), ...(step.dependsOn ?? [])]) {
+      if (contractsOnly && getOrThrow(this.steps, dependency, 'step').kind !== 'contract') {
+        continue;
+      }
+      if (!(await this.done(dependency))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Runs a user callback against a ctx that records every contract alias it looks up, then requires
+   * those to be declared in the step's `dependsOn` — an undeclared read is state nothing checked was
+   * in place. The check runs even when the callback throws, so a callback that catches its own
+   * errors (the usual shape for a getter that reverts when unset) can't hide one.
+   */
+  private async runRecorded<T>(alias: string, description: string, run: (ctx: Ctx<C>) => T | Promise<T>): Promise<T> {
+    const references = new Set<string>();
+    const ctx: Ctx<C> = {
+      ...this.ctx,
+      contract: reference => {
+        references.add(reference);
+        return this.resolver.contract(reference);
+      },
+      instance: ((reference: string) => {
+        references.add(reference);
+        return getOrThrow(this.contractInstances, reference, 'contract instance');
+      }) as Ctx<C>['instance'],
+    };
+    let result: T;
     try {
-      await this.resolveContract(alias, step, await step.deferredInitializerArgs!(this.ctx));
-      return await this.isPublished(alias);
-    } catch {
-      return false; // args not resolvable yet — they read state this run creates
+      result = await run(ctx);
+    } catch (error) {
+      this.assertReferencesDeclared(alias, description, references, error);
+      throw error;
+    }
+    this.assertReferencesDeclared(alias, description, references);
+    return result;
+  }
+
+  /**
+   * Rejects contract aliases the callback read but the step doesn't declare. `cause` carries the
+   * error the callback threw, since an undeclared read is the likeliest reason it did.
+   */
+  private assertReferencesDeclared(alias: string, description: string, references: Set<string>, cause?: unknown): void {
+    const step = getOrThrow(this.steps, alias, 'step');
+    const declared = new Set([...(this.contractRefs.get(alias) ?? []), ...(step.dependsOn ?? [])]);
+    const undeclared = [...references].filter(reference => !declared.has(reference));
+    if (undeclared.length > 0) {
+      throw new Error(
+        `${description} reads ${undeclared.map(reference => `"${reference}"`).join(', ')} but does not declare it in` +
+          ` dependsOn. Declare every step it reads, so it only runs once they are in place.`,
+        { cause },
+      );
     }
   }
 
@@ -573,19 +654,21 @@ class DeploymentRun<C extends Steps> {
 
   /**
    * A fund step's idempotency gate: whether the recipient's public Fee Juice balance already
-   * clears the step's threshold. Memoized per run.
+   * clears the step's threshold. A recipient this run has yet to put in place holds nothing, so the
+   * balance is read only once the contracts its selector references are there. Memoized per run.
    */
   private fundGate(alias: string): Promise<boolean> {
     const step = getOrThrow(this.fundSteps, alias, 'fund step');
     let cached = this.fundGateCache.get(alias);
     if (!cached) {
       cached = (async () => {
-        try {
-          const recipient = step.recipient(this.resolver);
-          return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
-        } catch {
-          return false; // recipient not resolvable yet (e.g. a deferred contract) ⇒ fund this run
+        for (const reference of referencedContracts(step.recipient)) {
+          if (!(await this.done(reference))) {
+            return false;
+          }
         }
+        const recipient = step.recipient(this.resolver);
+        return (await publicFeeJuiceBalance(this.wallet, recipient, step.from(this.resolver))) >= step.threshold;
       })();
       this.fundGateCache.set(alias, cached);
     }
@@ -593,8 +676,10 @@ class DeploymentRun<C extends Steps> {
   }
 
   /**
-   * An action's `done` gate, memoized per run. Gates may consult other steps via `ctx.done`, so a
-   * gate that (transitively) depends on itself throws {@link GateCycleError}.
+   * An action's `done` gate, memoized per run. Invoked only once the contracts the action declares
+   * are in place: until then the action cannot have run, and the gate would read state that does not
+   * exist. Gates may consult other steps via `ctx.done`, so a gate that (transitively) depends on
+   * itself throws {@link GateCycleError}.
    */
   private actionGate(alias: string): Promise<boolean> {
     const step = this.actionSteps.get(alias);
@@ -610,14 +695,10 @@ class DeploymentRun<C extends Steps> {
     }
     this.gateInProgress.add(alias);
     const pending = (async () => {
-      try {
-        return await step.done(this.ctx);
-      } catch (error) {
-        if (error instanceof GateCycleError) {
-          throw error;
-        }
-        return false; // e.g. a target contract isn't published yet ⇒ not done
+      if (!(await this.dependenciesReady(alias, { contractsOnly: true }))) {
+        return false;
       }
+      return this.runRecorded(alias, `Idempotency gate for action "${alias}"`, ctx => step.done(ctx));
     })().finally(() => this.gateInProgress.delete(alias));
     this.gateCache.set(alias, pending);
     return pending;
@@ -708,9 +789,9 @@ class DeploymentRun<C extends Steps> {
         account,
         send: async fee => {
           if (isDeferred(step)) {
-            // Re-resolve with post-`dependsOn` state: the inventory attempt either failed or ran
+            // Re-resolve with post-`dependsOn` state: the inventory attempt was skipped or ran
             // before this run's earlier layers landed.
-            await this.resolveContract(alias, step, await step.deferredInitializerArgs!(this.ctx));
+            await this.resolveDeferred(alias, step);
           }
           const classId = getOrThrow(this.classIds, alias, 'class id');
           const deployMethod = getOrThrow(this.deployMethods, alias, 'deploy method');
@@ -752,7 +833,7 @@ class DeploymentRun<C extends Steps> {
           const claim = await obtainFeeJuiceClaim({
             local: this.local,
             node: this.node,
-            nodeUrl: this.spec.nodeUrl,
+            nodeUrl: this.nodeUrl,
             recipient,
             amount: step.amount,
             l1: { l1FunderKey: step.l1FunderKey, l1RpcUrl: step.l1RpcUrl, l1ChainId: step.l1ChainId },
@@ -795,7 +876,11 @@ class DeploymentRun<C extends Steps> {
           account,
           send: async fee => {
             const interactions = await Promise.all(
-              batch.map(alias => getOrThrow(this.actionSteps, alias, 'action').call(this.ctx)),
+              batch.map(alias =>
+                this.runRecorded(alias, `Call for action "${alias}"`, ctx =>
+                  getOrThrow(this.actionSteps, alias, 'action').call(ctx),
+                ),
+              ),
             );
             const sendOptions = { from: account, fee, wait: { timeout: 120 } };
             return interactions.length === 1

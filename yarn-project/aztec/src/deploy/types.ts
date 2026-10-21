@@ -5,11 +5,7 @@
  * (published on-chain, or registered privately in the PXE) or an `action` (a tx) — sent from named
  * {@link AccountSpec | accounts}. {@link runDeployment} resolves deterministic addresses upfront,
  * inventories what's on-chain, funds the accounts, and executes only what's missing in dependency
- * order — idempotently and resumably. The framework never reads the environment; callers pipe in
- * secrets/config.
- *
- * Generic over the steps map, so `ctx.instance("alias")` is typed as the exact contract that
- * alias's class produces — no casts.
+ * order — idempotently and resumably.
  */
 import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
@@ -26,7 +22,7 @@ import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { DeployReporter } from './reporter.js';
 
 /**
- * How a step's txs are paid.
+ * How txs are paid.
  * - `sponsored`: a SponsoredFPC pays (the local-network default).
  * - `fee-juice`: the account pays from its own Fee Juice; if below `threshold` with work to do,
  *   bridge `fundAmount` from L1 and claim it on the first paying tx. `l1FunderKey`/`l1RpcUrl`/
@@ -56,7 +52,11 @@ export type FeePolicy =
 
 /** An account the deployment sends from: a v0 initializerless Schnorr account (no deploy tx). */
 export interface AccountSpec {
-  /** The account secret, piped in by the caller (env/vault/generated) — never read by the framework. */
+  /**
+   * The account's privacy master secret — the seed its nullifier, viewing and tagging keys derive
+   * from. The signing key is derived from it too, separately (domain-separated as the master
+   * message-signing key), so this one value pins the account.
+   */
   secret: Fr;
   /** Fee policy for this account's txs, overriding {@link DeploymentSpec.fees}. */
   fees?: FeePolicy;
@@ -73,10 +73,10 @@ export interface Resolver {
 }
 
 /**
- * A generated contract class (e.g. `TokenContract`): the single source of both the artifact and a
- * typed `.at`. Carries the instance type `T`, surfaced by {@link Ctx.instance}.
+ * The static side of a codegen'd contract class (e.g. `TokenContract`): the single source of both
+ * the artifact and a typed `.at`. Carries the instance type `T`, surfaced by {@link Ctx.instance}.
  */
-export interface ContractClass<T extends ContractBase = ContractBase> {
+export interface GeneratedContractClass<T extends ContractBase = ContractBase> {
   artifact: ContractArtifact;
   at(address: AztecAddress, wallet: Wallet): T;
 }
@@ -102,51 +102,70 @@ type ContractSender =
       deployer?: never;
     };
 
+/** What a contract step declares however its sender and initializer args are given. */
+interface ContractStepBase<T extends ContractBase = ContractBase> {
+  kind: 'contract';
+  /** The generated contract class — provides the artifact and the typed `.at`. */
+  contract: GeneratedContractClass<T>;
+  /** Per-contract salt, overriding {@link DeploymentSpec.salt}. */
+  salt?: Fr;
+  /**
+   * For contracts that own private notes (e.g. an FPC): the contract's privacy master secret. The
+   * framework derives its `PublicKeys` from it. Omit for ordinary contracts (default keys).
+   */
+  secret?: Fr;
+  /** Name of a non-default `#[initializer]` to call. Defaults to the contract's constructor. */
+  initializer?: string;
+}
+
+/**
+ * How a contract step's initializer args are produced — the two ways are exclusive, so a step can
+ * only pick one.
+ */
+type ContractInitializerArgs<C> =
+  | {
+      mode: 'publish' | 'register';
+      /**
+       * Deterministic initializer args — a pure function of resolved addresses + static config. Its
+       * contract→contract dependencies are auto-derived and the address is resolved UPFRONT.
+       */
+      initializerArgs?: (resolve: Resolver) => unknown[];
+      deferredInitializerArgs?: never;
+      /** Steps that must complete first, on top of those auto-derived from {@link initializerArgs}. */
+      dependsOn?: string[];
+    }
+  | {
+      /** Deferred args resolve once the run is underway, so there has to be a tx to defer. */
+      mode: 'publish';
+      /**
+       * Runtime initializer args — may read live state (e.g. `ctx.instance(x).methods.f().simulate()`).
+       * Resolved at inventory time when the state it reads already exists (the re-run case, which is
+       * what makes re-runs no-ops), and otherwise AT EXECUTION TIME, once {@link dependsOn} has run.
+       */
+      deferredInitializerArgs: (ctx: Ctx<C>) => unknown[] | Promise<unknown[]>;
+      initializerArgs?: never;
+      /**
+       * The steps whose effects the args read — an explicit empty array if they only read
+       * pre-existing state. The args resolve only once these are in place, and a contract they read
+       * without declaring it here is rejected.
+       */
+      dependsOn: string[];
+    };
+
 /**
  * A step that puts a contract on-chain (or in the PXE):
  * - `publish`  → register the class + deploy the instance + run its initializer (a tx).
  * - `register` → private; only derive the deterministic address and register it in the PXE (no tx).
  *
  * The address is deterministic in (class id, deployer, salt, initializer + its args) — with the
- * deployer omitted for {@link ContractSender | universal} steps. Provide args via
- * {@link initializerArgs} (deterministic — addresses/static, resolved UPFRONT) or
- * {@link deferredInitializerArgs} (may read runtime state — resolved AT EXECUTION TIME). At most one.
+ * deployer omitted for {@link ContractSender | universal} steps. Args come from
+ * {@link ContractInitializerArgs | either} `initializerArgs` (deterministic — addresses/static,
+ * resolved UPFRONT) or `deferredInitializerArgs` (may read runtime state — resolved AT EXECUTION
+ * TIME).
  */
-export type ContractStep<C = Steps, T extends ContractBase = ContractBase> = ContractSender & {
-  kind: 'contract';
-  /** The generated contract class — provides the artifact and the typed `.at`. */
-  contract: ContractClass<T>;
-  mode: 'publish' | 'register';
-  /** Per-contract salt, overriding {@link DeploymentSpec.salt}. */
-  salt?: Fr;
-  /**
-   * For contracts that own private notes (e.g. an FPC): the contract's key secret. The framework
-   * derives the deploy `publicKeys` from it (so the address depends on it) and registers it in the
-   * PXE with it so its notes decrypt. Omit for ordinary contracts (default keys).
-   */
-  secret?: Fr;
-  /** Name of a non-default `#[initializer]` to call. Defaults to the contract's constructor. */
-  initializer?: string;
-  /**
-   * Deterministic initializer args — a pure function of resolved addresses + static config. Its
-   * contract→contract dependencies are auto-derived and the address is resolved UPFRONT. Mutually
-   * exclusive with {@link deferredInitializerArgs}.
-   */
-  initializerArgs?: (resolve: Resolver) => unknown[];
-  /**
-   * Runtime initializer args — may read live state (e.g. `ctx.instance(x).methods.f().simulate()`).
-   * Resolved at inventory time when the state it reads already exists (the re-run case, which is
-   * what makes re-runs no-ops), and otherwise AT EXECUTION TIME, once {@link dependsOn} has run.
-   * Mutually exclusive with {@link initializerArgs}.
-   */
-  deferredInitializerArgs?: (ctx: Ctx<C>) => unknown[] | Promise<unknown[]>;
-  /**
-   * Steps that must complete first. Auto-derived from {@link initializerArgs}. Required for
-   * deferred contracts: declare the steps whose effects the args read, or an explicit empty array
-   * if they only read pre-existing state.
-   */
-  dependsOn?: string[];
-};
+export type ContractStep<C = Steps, T extends ContractBase = ContractBase> = ContractStepBase<T> &
+  ContractSender &
+  ContractInitializerArgs<C>;
 
 /** A step that sends a tx once its dependencies exist. */
 export interface ActionStep<C = Steps> {
@@ -158,9 +177,16 @@ export interface ActionStep<C = Steps> {
    * creates required authwits at send time, so the interaction usually needs no `.with(...)`.
    */
   call: (ctx: Ctx<C>) => ContractFunctionInteraction | Promise<ContractFunctionInteraction>;
-  /** Idempotency gate: if it resolves true, the action is skipped this run. */
+  /**
+   * Idempotency gate: if it resolves true, the action is skipped this run. Not consulted until the
+   * contracts in {@link dependsOn} are in place. Anything it throws aborts the run.
+   */
   done: (ctx: Ctx<C>) => Promise<boolean>;
-  /** Steps that must complete first (contracts it calls, actions it follows). */
+  /**
+   * Steps that must complete first: every contract this action calls or its {@link done} gate
+   * reads, plus the actions it follows. A contract {@link call} or {@link done} reads without
+   * declaring it here is rejected.
+   */
   dependsOn?: string[];
 }
 
@@ -203,7 +229,7 @@ export type StepSpec<C = Steps> = ContractStep<C> | ActionStep<C> | FundStep;
 export type Steps = Record<string, StepSpec<any>>;
 
 /** The concrete contract type a contract step produces (else the base type). */
-export type InstanceOf<S> = S extends { contract: ContractClass<infer T> } ? T : ContractBase;
+export type InstanceOf<S> = S extends { contract: GeneratedContractClass<infer T> } ? T : ContractBase;
 /** The aliases of the contract steps in C — so `ctx.instance` only accepts those. */
 export type ContractAlias<C> = {
   [K in keyof C]: C[K] extends { kind: 'contract' } ? K : never;
@@ -234,16 +260,12 @@ export interface Ctx<C = Steps> extends Resolver {
 /** The full declarative input to {@link runDeployment}: target, accounts, steps, fees, and hooks. */
 export interface DeploymentSpec<C extends Steps = Steps> {
   /**
-   * Aztec node JSON-RPC URL; one of this or {@link node} is required. When {@link node} is also
-   * provided, only used to reach the node's debug API for local time-warping while a bridge settles.
+   * The node to deploy against: a JSON-RPC URL, or an already-connected node (e.g. an in-process
+   * `AztecNodeService` from a test fixture, or a client built with custom headers). Local
+   * time-warping while a bridge settles reaches the debug API through whichever is given — a URL
+   * builds a debug client, an in-process node serves it directly.
    */
-  nodeUrl?: string;
-  /**
-   * An already-connected node to deploy against — e.g. an in-process `AztecNodeService` from a test
-   * fixture. Takes precedence over {@link nodeUrl}; pass {@link nodeUrl} too if you bridge with the
-   * `fee-juice` policy against an in-process local node (the warp path needs its debug API URL).
-   */
-  node?: AztecNode;
+  node: string | AztecNode;
   /**
    * Whether the target is a local (anvil) network. Local uses the deterministic sandbox defaults:
    * sponsored fees, no real proofs, warp-based L1→L2 message advancement, and anvil's dev funder.
