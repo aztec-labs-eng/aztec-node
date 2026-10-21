@@ -244,7 +244,7 @@ export async function createAztecNodeService(
     started.push({ stop: () => avmSimulator[Symbol.asyncDispose]() });
     const archiver = await createArchiver(
       config,
-      { blobClient, epochCache, telemetry, dateProvider },
+      { blobClient, epochCache, telemetry, dateProvider, feeConfigProvider: feeConfigTracker },
       { blockUntilSync: !config.skipArchiverInitialSync },
       initialHeader,
       initialBlockHash,

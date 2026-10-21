@@ -15,6 +15,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 /**
@@ -23,7 +24,7 @@ import { BlockHeader } from '@aztec-labs/stdlib/tx';
  * without needing any of the extra overhead that the Archiver itself requires (i.e. an L1 client).
  */
 export class TXEArchiver extends ArchiverDataSourceBase {
-  private readonly updater = new ArchiverDataStoreUpdater(this.stores);
+  private readonly updater = new ArchiverDataStoreUpdater(this.stores, new TestRollupFeeConfigProvider());
 
   constructor(db: AztecAsyncKVStore) {
     super(

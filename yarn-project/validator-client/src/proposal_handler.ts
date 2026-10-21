@@ -29,9 +29,10 @@ import type { P2P, PeerId } from '@aztec-labs/p2p';
 import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
+  CheckpointValidationError,
   getPreviousCheckpointInboxRollingHash,
   getPreviousCheckpointOutHashes,
-  validateCheckpoint,
+  validateCheckpointWithLiveManaLimit,
 } from '@aztec-labs/stdlib/checkpoint';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas } from '@aztec-labs/stdlib/gas';
@@ -2545,38 +2546,25 @@ export class ProposalHandler {
    * failed read rejects, and the error escapes as a local fault: no verdict is cached, recorded or reported.
    */
   private async validateRebuiltCheckpointLimits(checkpoint: Checkpoint): Promise<Error | undefined> {
-    const opts = {
-      maxDABlockGas: this.config.validateMaxDABlockGas,
-      maxL2BlockGas: this.config.validateMaxL2BlockGas,
-      maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
-      maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
-    };
-    const validateWithManaLimit = (manaLimit: bigint | undefined): Error | undefined => {
-      try {
-        validateCheckpoint(checkpoint, {
-          ...opts,
-          rollupManaLimit: manaLimit === undefined ? undefined : Number(manaLimit),
-        });
-        return undefined;
-      } catch (err) {
-        return err instanceof Error ? err : new Error(String(err));
+    try {
+      await validateCheckpointWithLiveManaLimit(
+        checkpoint,
+        this.checkpointsBuilder.getFeeConfigProvider(),
+        {
+          maxDABlockGas: this.config.validateMaxDABlockGas,
+          maxL2BlockGas: this.config.validateMaxL2BlockGas,
+          maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
+          maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
+        },
+        this.log,
+      );
+      return undefined;
+    } catch (err) {
+      if (err instanceof CheckpointValidationError) {
+        return err;
       }
-    };
-
-    const feeConfigProvider = this.checkpointsBuilder.getFeeConfigProvider();
-    const cached = feeConfigProvider.getFeeConfig();
-    const error = validateWithManaLimit(cached.manaLimit);
-    if (error === undefined || validateWithManaLimit(undefined) !== undefined) {
-      return error;
+      throw err;
     }
-
-    const refreshed = await feeConfigProvider.refresh();
-    this.log.verbose(`Re-read the rollup mana limit from L1 before rejecting a checkpoint over the cached limit`, {
-      cachedManaLimit: cached.manaLimit,
-      refreshedManaLimit: refreshed.manaLimit,
-      checkpointNumber: checkpoint.number,
-    });
-    return validateWithManaLimit(refreshed.manaLimit);
   }
 
   /** Extracts checkpoint global variables from a block. */

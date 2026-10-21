@@ -24,6 +24,12 @@ import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts'
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { CheckpointValidationError } from '@aztec-labs/stdlib/checkpoint';
+import {
+  type RollupFeeConfig,
+  type RollupFeeConfigProvider,
+  TestRollupFeeConfigProvider,
+} from '@aztec-labs/stdlib/gas';
 import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -32,6 +38,7 @@ import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { readFileSync } from 'fs';
+import { type MockProxy, mock } from 'jest-mock-extended';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -163,7 +170,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
   beforeEach(async () => {
     store = createArchiverDataStores(await openTmpStore('data_store_updater_test'), GENESIS_BLOCK_HEADER_HASH);
-    updater = new ArchiverDataStoreUpdater(store);
+    updater = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider());
 
     // Create contract class log from sample fixture data
     contractClassLog = ContractClassLog.fromBuffer(getSampleContractClassPublishedEventPayload());
@@ -809,18 +816,57 @@ describe('ArchiverDataStoreUpdater', () => {
   });
 
   describe('rollup mana limit', () => {
-    it('ingests an L1 checkpoint whose mana exceeds the limit the node read at startup', async () => {
-      // Governance can raise the mana target after the node starts (here, from a limit of 1000), and L1 enforces the
-      // live limit at propose, so the checkpoint is valid even though it uses more mana than the startup limit.
+    let feeConfigProvider: MockProxy<RollupFeeConfigProvider>;
+    let manaUpdater: ArchiverDataStoreUpdater;
+
+    const feeConfigWithLimit = (manaLimit: bigint): RollupFeeConfig => ({
+      manaTarget: manaLimit / 2n,
+      manaLimit,
+      provingCostPerManaInEth: 0n,
+      protocolFeeMarginBps: 0,
+      l1BlockNumber: 1n,
+    });
+
+    /** An L1 checkpoint whose blocks' mana adds up to `totalManaUsed`. */
+    const makeCheckpointUsingMana = async (totalManaUsed: number) => {
       const block = await L2Block.random(BlockNumber(1), {
         checkpointNumber: CheckpointNumber(1),
         slotNumber: SlotNumber(100),
-        totalManaUsed: new Fr(1_500),
+        totalManaUsed: new Fr(totalManaUsed),
       });
+      return makePublishedCheckpoint(makeCheckpoint([block]), 10);
+    };
 
-      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
+    beforeEach(() => {
+      // The node cached a limit of 1000; governance has since raised it to 2000 on L1.
+      feeConfigProvider = mock<RollupFeeConfigProvider>();
+      feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(1_000n));
+      feeConfigProvider.refresh.mockResolvedValue(feeConfigWithLimit(2_000n));
+      manaUpdater = new ArchiverDataStoreUpdater(store, feeConfigProvider);
+    });
+
+    it('ingests a checkpoint above the cached limit once a re-read returns the limit L1 enforces now', async () => {
+      await manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)]);
 
       expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+
+    it('rejects a checkpoint above the limit L1 enforces now', async () => {
+      await expect(manaUpdater.addCheckpoints([await makeCheckpointUsingMana(2_500)])).rejects.toThrow(
+        CheckpointValidationError,
+      );
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
+    });
+
+    it('propagates a failed re-read without storing the checkpoint, so the next sync pass retries it', async () => {
+      feeConfigProvider.refresh.mockRejectedValue(new Error('L1 RPC unreachable'));
+
+      await expect(manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)])).rejects.toThrow(
+        'L1 RPC unreachable',
+      );
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
     });
   });
 
@@ -908,7 +954,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('does not refresh the cache when the writer transaction aborts', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const tipsBefore = await l2FrontierCache.getL2Tips();
 
@@ -931,7 +977,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('serves tips and the proposed checkpoint from the same instant while a promotion commits', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),

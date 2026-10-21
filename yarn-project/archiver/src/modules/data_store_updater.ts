@@ -11,13 +11,14 @@ import type { BlockData, L2Block, ValidateCheckpointResult } from '@aztec-labs/s
 import {
   type ProposedCheckpointInput,
   type PublishedCheckpoint,
-  validateCheckpoint,
+  validateCheckpointWithLiveManaLimit,
 } from '@aztec-labs/stdlib/checkpoint';
 import {
   type ContractClassPublicWithCommitment,
   computeContractAddressFromInstance,
   computeContractClassId,
 } from '@aztec-labs/stdlib/contract';
+import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import type { InboxMessagePosition, InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
@@ -71,6 +72,7 @@ export class ArchiverDataStoreUpdater {
 
   constructor(
     private stores: ArchiverDataStores,
+    private readonly feeConfigProvider: RollupFeeConfigProvider,
     private l2FrontierCache?: L2FrontierCache,
   ) {}
 
@@ -203,14 +205,12 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: PublishedCheckpoint,
     evictProposedFrom?: CheckpointNumber,
   ): Promise<ReconcileCheckpointsResult> {
-    // No mana cap: L1 already enforced its live mana limit when the checkpoint was proposed, and governance can raise
-    // that limit after this node started, so a cap read at startup would reject checkpoints L1 accepted.
-    const validateOpts = {};
-    for (const checkpoint of checkpoints) {
-      validateCheckpoint(checkpoint.checkpoint, validateOpts);
-    }
-    if (promoteProposed) {
-      validateCheckpoint(promoteProposed.checkpoint, validateOpts);
+    // L1 checks only the checkpoint header's mana against its limit, not the sum of the blocks' mana, so the sum is
+    // checked here. Against the live limit rather than one read at startup or at the checkpoint's L1 block: governance
+    // can raise the limit after this node started and only ever raises it, so the live value is a safe upper bound and
+    // needs no historical L1 state. A failed re-read propagates, so the sync retries the batch on its next pass.
+    for (const checkpoint of [...checkpoints, ...(promoteProposed ? [promoteProposed] : [])]) {
+      await validateCheckpointWithLiveManaLimit(checkpoint.checkpoint, this.feeConfigProvider, {}, this.log);
     }
 
     await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));

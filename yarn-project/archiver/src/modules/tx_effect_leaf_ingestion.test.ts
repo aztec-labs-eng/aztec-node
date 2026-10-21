@@ -7,6 +7,7 @@ import {
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { jest } from '@jest/globals';
 
@@ -66,7 +67,7 @@ describe('tx effect leaf ingestion', () => {
     const db = await openTmpStore('tx_effect_leaf_ingestion');
     try {
       const stores = createArchiverDataStores(db, BlockHash.random());
-      const updater = new ArchiverDataStoreUpdater(stores);
+      const updater = new ArchiverDataStoreUpdater(stores, new TestRollupFeeConfigProvider());
       const block = await L2Block.random(BlockNumber(1), {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),

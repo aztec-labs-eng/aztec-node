@@ -173,6 +173,7 @@ export async function createArchiver(
     l1Constants,
     events,
     instrumentation.tracer,
+    deps.feeConfigProvider,
     l2FrontierCache,
     undefined, // log (use default)
   );
@@ -193,6 +194,7 @@ export async function createArchiver(
     initialHeader,
     initialBlockHash,
     l2FrontierCache,
+    deps.feeConfigProvider,
     deps.dateProvider ?? new DateProvider(),
   );
 
