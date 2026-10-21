@@ -175,7 +175,6 @@ describe('ProposalHandler checkpoint validation', () => {
       protocolFeeMarginBps: 0,
       l1BlockNumber: 1n,
     });
-    feeConfigProvider.refresh.mockImplementation(() => Promise.resolve(feeConfigProvider.getFeeConfig()));
     checkpointsBuilder.getFeeConfigProvider.mockReturnValue(feeConfigProvider);
 
     epochCache = mock<EpochCache>();
@@ -1212,13 +1211,9 @@ describe('ProposalHandler checkpoint validation', () => {
         l1BlockNumber: 1n,
       });
 
-      beforeEach(() => {
-        // The node cached a 200M limit; L1 has since raised it to 300M.
-        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(200_000_000n));
-        feeConfigProvider.refresh.mockResolvedValue(feeConfigWithLimit(300_000_000n));
-      });
-
-      it('accepts a proposal above the cached limit but within the limit L1 enforces now', async () => {
+      it('accepts a proposal above the startup limit once the provider has the raised limit', async () => {
+        // The node started with 200M; governance has since raised it to 300M and the provider has caught up.
+        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(300_000_000n));
         const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
 
         const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -1226,8 +1221,9 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
       });
 
-      it('rejects a proposal above the limit L1 enforces now', async () => {
-        const header = setupMatchingRebuild({}, { totalManaUsed: 350_000_000 });
+      it("rejects a proposal above the provider's current limit", async () => {
+        feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(200_000_000n));
+        const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
 
         const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
         const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
@@ -1236,19 +1232,6 @@ describe('ProposalHandler checkpoint validation', () => {
           reason: 'checkpoint_validation_failed',
           checkpointNumber: CheckpointNumber(1),
         });
-      });
-
-      it('does not re-read L1 when the checkpoint fails a check other than the mana limit', async () => {
-        setupDeepValidationMocks({
-          header: makeMatchingHeader(),
-          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
-          blocks: [],
-        });
-
-        const proposal = await makeProposal({ archiveRoot, checkpointHeader: makeMatchingHeader() });
-        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
-        expect(result).toMatchObject({ isValid: false, reason: 'checkpoint_validation_failed' });
-        expect(feeConfigProvider.refresh).not.toHaveBeenCalled();
       });
     });
 
@@ -1285,17 +1268,6 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toBeUndefined();
       }
-
-      it('escapes when re-reading the mana limit fails for a checkpoint over the cached limit', async () => {
-        const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
-        feeConfigProvider.refresh.mockRejectedValue(new Error('L1 RPC unreachable'));
-
-        // The cached 200M limit may be stale, so the rejection must not become a slashable verdict.
-        await expectEscapesWithoutVerdict(
-          await makeProposal({ archiveRoot, checkpointHeader: header }),
-          'L1 RPC unreachable',
-        );
-      });
 
       it('escapes when the ancestry lookup fails', async () => {
         const header = setupMatchingRebuild();

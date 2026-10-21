@@ -25,11 +25,7 @@ import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
 import { CheckpointValidationError } from '@aztec-labs/stdlib/checkpoint';
-import {
-  type RollupFeeConfig,
-  type RollupFeeConfigProvider,
-  TestRollupFeeConfigProvider,
-} from '@aztec-labs/stdlib/gas';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -38,7 +34,6 @@ import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { readFileSync } from 'fs';
-import { type MockProxy, mock } from 'jest-mock-extended';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -816,16 +811,8 @@ describe('ArchiverDataStoreUpdater', () => {
   });
 
   describe('rollup mana limit', () => {
-    let feeConfigProvider: MockProxy<RollupFeeConfigProvider>;
+    let feeConfigProvider: TestRollupFeeConfigProvider;
     let manaUpdater: ArchiverDataStoreUpdater;
-
-    const feeConfigWithLimit = (manaLimit: bigint): RollupFeeConfig => ({
-      manaTarget: manaLimit / 2n,
-      manaLimit,
-      provingCostPerManaInEth: 0n,
-      protocolFeeMarginBps: 0,
-      l1BlockNumber: 1n,
-    });
 
     /** An L1 checkpoint whose blocks' mana adds up to `totalManaUsed`. */
     const makeCheckpointUsingMana = async (totalManaUsed: number) => {
@@ -838,35 +825,28 @@ describe('ArchiverDataStoreUpdater', () => {
     };
 
     beforeEach(() => {
-      // The node cached a limit of 1000; governance has since raised it to 2000 on L1.
-      feeConfigProvider = mock<RollupFeeConfigProvider>();
-      feeConfigProvider.getFeeConfig.mockReturnValue(feeConfigWithLimit(1_000n));
-      feeConfigProvider.refresh.mockResolvedValue(feeConfigWithLimit(2_000n));
+      // The limit the node read at startup.
+      feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: 1_000n });
       manaUpdater = new ArchiverDataStoreUpdater(store, feeConfigProvider);
     });
 
-    it('ingests a checkpoint above the cached limit once a re-read returns the limit L1 enforces now', async () => {
+    it('ingests a checkpoint over the startup limit once the provider has the raised limit', async () => {
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+
       await manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)]);
 
       expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
     });
 
-    it('rejects a checkpoint above the limit L1 enforces now', async () => {
-      await expect(manaUpdater.addCheckpoints([await makeCheckpointUsingMana(2_500)])).rejects.toThrow(
-        CheckpointValidationError,
-      );
+    it('rejects a checkpoint over the current limit, and ingests it on a later pass once the limit is raised', async () => {
+      const checkpoint = await makeCheckpointUsingMana(1_500);
 
+      await expect(manaUpdater.addCheckpoints([checkpoint])).rejects.toThrow(CheckpointValidationError);
       expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
-    });
 
-    it('propagates a failed re-read without storing the checkpoint, so the next sync pass retries it', async () => {
-      feeConfigProvider.refresh.mockRejectedValue(new Error('L1 RPC unreachable'));
-
-      await expect(manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)])).rejects.toThrow(
-        'L1 RPC unreachable',
-      );
-
-      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+      await manaUpdater.addCheckpoints([checkpoint]);
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
     });
   });
 

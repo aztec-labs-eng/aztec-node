@@ -15,7 +15,7 @@ import {
   type CheckpointProposalHash,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
-import { pick, sum } from '@aztec-labs/foundation/collection';
+import { pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -29,10 +29,9 @@ import type { P2P, PeerId } from '@aztec-labs/p2p';
 import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
-  CheckpointValidationError,
   getPreviousCheckpointInboxRollingHash,
   getPreviousCheckpointOutHashes,
-  validateCheckpointWithLiveManaLimit,
+  validateCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas } from '@aztec-labs/stdlib/gas';
@@ -1825,7 +1824,6 @@ export class ProposalHandler {
     // Get prior blocks in this checkpoint (same slot before current block)
     const allBlocksInSlot = await this.blockSource.getBlocksForSlot(slot);
     const priorBlocks = allBlocksInSlot.filter(b => b.number < blockNumber && b.header.getSlot() === slot);
-    await this.refreshManaLimitIfExceeded(priorBlocks, blockHeader, { blockNumber, slot });
 
     // Fork before the block to be built
     const parentBlockNumber = BlockNumber(blockNumber - 1);
@@ -1927,34 +1925,6 @@ export class ProposalHandler {
       reexecutionTimeMs,
       totalManaUsed,
     };
-  }
-
-  /**
-   * Re-reads the rollup mana limit from L1 when a block proposal claims more checkpoint mana than the cached limit
-   * allows. Re-execution caps the block at the mana left under the cached limit, so an honest block that uses headroom
-   * governance has just added would otherwise lose txs and be rejected before the checkpoint-level check could
-   * re-read the limit. A failed read rejects, so the block is not judged against a limit this node could not confirm:
-   * the proposal is refused as `unknown_error`, which is not slashable.
-   */
-  private async refreshManaLimitIfExceeded(
-    priorBlocks: L2Block[],
-    blockHeader: BlockHeader,
-    logData: LogData,
-  ): Promise<void> {
-    const feeConfigProvider = this.checkpointsBuilder.getFeeConfigProvider();
-    const cachedManaLimit = feeConfigProvider.getFeeConfig().manaLimit;
-    const claimedMana =
-      sum(priorBlocks.map(block => block.header.totalManaUsed.toNumber())) + blockHeader.totalManaUsed.toNumber();
-    if (BigInt(claimedMana) <= cachedManaLimit) {
-      return;
-    }
-    const refreshed = await feeConfigProvider.refresh();
-    this.log.verbose(`Re-read the rollup mana limit from L1 before re-executing a block over the cached limit`, {
-      ...logData,
-      claimedMana,
-      cachedManaLimit,
-      refreshedManaLimit: refreshed.manaLimit,
-    });
   }
 
   /**
@@ -2294,7 +2264,7 @@ export class ProposalHandler {
     // Complete the checkpoint to get computed values
     const computedCheckpoint = await checkpointBuilder.completeCheckpoint();
 
-    const mismatch = await this.compareRebuiltCheckpoint(computedCheckpoint, proposal, inputs, proposalInfo);
+    const mismatch = this.compareRebuiltCheckpoint(computedCheckpoint, proposal, inputs, proposalInfo);
     if (mismatch) {
       return mismatch;
     }
@@ -2485,12 +2455,12 @@ export class ProposalHandler {
    * Compares the rebuilt checkpoint with the proposal: header, archive root and epoch out hash, then the checkpoint's
    * own limits. Returns the first mismatch, or undefined when everything matches.
    */
-  private async compareRebuiltCheckpoint(
+  private compareRebuiltCheckpoint(
     computedCheckpoint: Checkpoint,
     proposal: CheckpointProposalCore,
     inputs: CheckpointRebuildInputs,
     proposalInfo: LogData,
-  ): Promise<CheckpointProposalValidationFailureResult | undefined> {
+  ): CheckpointProposalValidationFailureResult | undefined {
     const { checkpointNumber, previousCheckpointOutHashes } = inputs;
 
     // Compare checkpoint header with proposal
@@ -2529,42 +2499,22 @@ export class ProposalHandler {
       return { isValid: false, reason: 'out_hash_mismatch', checkpointNumber };
     }
 
-    // Final round of validations on the checkpoint, just in case.
-    const validationError = await this.validateRebuiltCheckpointLimits(computedCheckpoint);
-    if (validationError) {
-      this.log.warn(`Checkpoint validation failed: ${validationError}`, proposalInfo);
+    // Final round of validations on the checkpoint, just in case. The mana limit is the tracker's live value, which can
+    // trail a governance increase on L1 by a polling interval.
+    try {
+      validateCheckpoint(computedCheckpoint, {
+        rollupManaLimit: Number(this.checkpointsBuilder.getFeeConfigProvider().getFeeConfig().manaLimit),
+        maxDABlockGas: this.config.validateMaxDABlockGas,
+        maxL2BlockGas: this.config.validateMaxL2BlockGas,
+        maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
+        maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
+      });
+    } catch (err) {
+      this.log.warn(`Checkpoint validation failed: ${err}`, proposalInfo);
       return { isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber };
     }
 
     return undefined;
-  }
-
-  /**
-   * Validates the rebuilt checkpoint against its limits and returns the error, if any. The mana limit is a cached copy
-   * of a value governance can raise on L1, and a rejection here is slashable, so a checkpoint that fails on mana alone
-   * is checked once more against a fresh L1 read before it is rejected. Any other failure is returned without one. A
-   * failed read rejects, and the error escapes as a local fault: no verdict is cached, recorded or reported.
-   */
-  private async validateRebuiltCheckpointLimits(checkpoint: Checkpoint): Promise<Error | undefined> {
-    try {
-      await validateCheckpointWithLiveManaLimit(
-        checkpoint,
-        this.checkpointsBuilder.getFeeConfigProvider(),
-        {
-          maxDABlockGas: this.config.validateMaxDABlockGas,
-          maxL2BlockGas: this.config.validateMaxL2BlockGas,
-          maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
-          maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
-        },
-        this.log,
-      );
-      return undefined;
-    } catch (err) {
-      if (err instanceof CheckpointValidationError) {
-        return err;
-      }
-      throw err;
-    }
   }
 
   /** Extracts checkpoint global variables from a block. */

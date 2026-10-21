@@ -1,10 +1,8 @@
 import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { sum } from '@aztec-labs/foundation/collection';
-import type { Logger } from '@aztec-labs/foundation/log';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
-import type { RollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
 import type { Checkpoint } from './checkpoint.js';
 
 export class CheckpointValidationError extends Error {
@@ -45,49 +43,6 @@ export function validateCheckpoint(
   validateCheckpointStructure(checkpoint, { maxBlocksPerCheckpoint: opts.maxBlocksPerCheckpoint });
   validateCheckpointLimits(checkpoint, opts);
   validateCheckpointBlocksLimits(checkpoint, opts);
-}
-
-/** Limits {@link validateCheckpoint} checks a checkpoint against. */
-type ValidateCheckpointOptions = Parameters<typeof validateCheckpoint>[1];
-
-/**
- * Validates a checkpoint against the rollup's mana limit as the provider has it cached, plus the other given limits.
- * The cached limit can trail a governance increase on L1, and L1 only ever raises it, so a checkpoint that fails on
- * mana alone is checked once more against a fresh read before it is rejected. Any other failure throws without one.
- * Throws a {@link CheckpointValidationError} for an invalid checkpoint, and rejects with the read's own error when the
- * re-read fails, so callers can tell an invalid checkpoint from one they could not check.
- */
-export async function validateCheckpointWithLiveManaLimit(
-  checkpoint: Checkpoint,
-  feeConfigProvider: Pick<RollupFeeConfigProvider, 'getFeeConfig' | 'refresh'>,
-  opts: Omit<ValidateCheckpointOptions, 'rollupManaLimit'> = {},
-  log?: Logger,
-): Promise<void> {
-  const validateWithManaLimit = (manaLimit: bigint | undefined) =>
-    validateCheckpoint(checkpoint, {
-      ...opts,
-      rollupManaLimit: manaLimit === undefined ? undefined : Number(manaLimit),
-    });
-
-  const cachedManaLimit = feeConfigProvider.getFeeConfig().manaLimit;
-  try {
-    validateWithManaLimit(cachedManaLimit);
-    return;
-  } catch (err) {
-    try {
-      validateWithManaLimit(undefined);
-    } catch {
-      throw err;
-    }
-  }
-
-  const refreshed = await feeConfigProvider.refresh();
-  log?.verbose(`Re-read the rollup mana limit from L1 before rejecting a checkpoint over the cached limit`, {
-    checkpointNumber: checkpoint.number,
-    cachedManaLimit,
-    refreshedManaLimit: refreshed.manaLimit,
-  });
-  validateWithManaLimit(refreshed.manaLimit);
 }
 
 /**

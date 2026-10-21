@@ -29,7 +29,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas, GasFees, type RollupFeeConfig, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import {
@@ -55,32 +55,6 @@ import { ValidatorClient } from './validator.js';
 
 jest.setTimeout(60_000);
 
-/** A fee config provider whose cached values lag L1 until refreshed, as the tracker's do between polls. */
-class LaggingRollupFeeConfigProvider extends TestRollupFeeConfigProvider {
-  private onL1: Partial<RollupFeeConfig> | undefined;
-  private refreshError: Error | undefined;
-
-  /** Changes the values on L1 without touching the cached ones; the next refresh picks them up. */
-  public setFeeConfigOnL1(config: Partial<RollupFeeConfig>): void {
-    this.onL1 = config;
-  }
-
-  /** Makes every refresh fail with the given error, as an unreachable L1 RPC would. */
-  public failRefreshes(err: Error): void {
-    this.refreshError = err;
-  }
-
-  public override refresh(): Promise<RollupFeeConfig> {
-    if (this.refreshError) {
-      return Promise.reject(this.refreshError);
-    }
-    if (this.onL1) {
-      this.setFeeConfig(this.onL1);
-    }
-    return super.refresh();
-  }
-}
-
 describe('ValidatorClient Integration', () => {
   // Constants for L1
   const l1Constants: L1RollupConstants = {
@@ -101,7 +75,7 @@ describe('ValidatorClient Integration', () => {
     archiver: NoopL1Archiver;
     synchronizer: ServerWorldStateSynchronizer;
     checkpointsBuilder: FullNodeCheckpointsBuilder;
-    feeConfigProvider: LaggingRollupFeeConfigProvider;
+    feeConfigProvider: TestRollupFeeConfigProvider;
     p2pClient: MockProxy<P2P>;
     validator: ValidatorClient;
     inbox: FakeInbox;
@@ -181,7 +155,7 @@ describe('ValidatorClient Integration', () => {
     const avmSimulator = await AvmSimulatorPool.spawn({ wsdbIpcPath: worldStateDb.getIpcPath() });
 
     // Create real checkpoints builder
-    const feeConfigProvider = new LaggingRollupFeeConfigProvider({ manaLimit: 200_000_000n });
+    const feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: 200_000_000n });
     const checkpointsBuilder = new FullNodeCheckpointsBuilder(
       {
         l1GenesisTime: l1Constants.l1GenesisTime,
@@ -749,59 +723,28 @@ describe('ValidatorClient Integration', () => {
       expect(isValid).toBe(false);
     });
 
-    describe('with a cached mana limit that governance has since raised on L1', () => {
-      /** Builds a three-block checkpoint and caches a limit that only covers its first two blocks. */
-      async function buildWithStaleLimit() {
-        const { blocks } = await buildCheckpoint(
-          CheckpointNumber(1),
-          slotNumber,
-          emptyL1ToL2Messages,
-          emptyPreviousCheckpointOutHashes,
-          BlockNumber(1),
-          3,
-          () => buildTxs(2),
-        );
-        const manaOf = (i: number) => blocks[i].block.header.totalManaUsed.toNumber();
-        const manaFirstTwo = manaOf(0) + manaOf(1);
-        attestor.feeConfigProvider.setFeeConfig({ manaLimit: BigInt(manaFirstTwo) });
-        await attestorValidateBlocks(blocks.slice(0, 2));
-        return { blocks, manaAll: manaFirstTwo + manaOf(2) };
-      }
+    it('accepts a block over the startup mana limit once the provider has the raised limit', async () => {
+      const { blocks } = await buildCheckpoint(
+        CheckpointNumber(1),
+        slotNumber,
+        emptyL1ToL2Messages,
+        emptyPreviousCheckpointOutHashes,
+        BlockNumber(1),
+        3,
+        () => buildTxs(2),
+      );
+      const manaOf = (i: number) => blocks[i].block.header.totalManaUsed.toNumber();
 
-      it('accepts a block that fits the limit L1 enforces now', async () => {
-        const { blocks, manaAll } = await buildWithStaleLimit();
-        attestor.feeConfigProvider.setFeeConfigOnL1({ manaLimit: BigInt(manaAll) });
+      // The node started with a limit that only covers the first two blocks, then governance raised it.
+      attestor.feeConfigProvider.setFeeConfig({ manaLimit: BigInt(manaOf(0) + manaOf(1)) });
+      await attestorValidateBlocks(blocks.slice(0, 2));
+      attestor.feeConfigProvider.setFeeConfig({ manaLimit: BigInt(manaOf(0) + manaOf(1) + manaOf(2)) });
 
-        const isValid = await attestor.validator.validateBlockProposal(
-          ValidatedBlockProposal(blocks[2].proposal),
-          mockPeerId,
-        );
-        expect(isValid).toBe(true);
-      });
-
-      it('rejects a block that exceeds the limit L1 enforces now', async () => {
-        const { blocks, manaAll } = await buildWithStaleLimit();
-        attestor.feeConfigProvider.setFeeConfigOnL1({ manaLimit: BigInt(manaAll - 1) });
-
-        const isValid = await attestor.validator.validateBlockProposal(
-          ValidatedBlockProposal(blocks[2].proposal),
-          mockPeerId,
-        );
-        expect(isValid).toBe(false);
-      });
-
-      it('refuses a block it cannot re-check without recording a slashable offense', async () => {
-        const { blocks, manaAll } = await buildWithStaleLimit();
-        attestor.feeConfigProvider.setFeeConfigOnL1({ manaLimit: BigInt(manaAll) });
-        attestor.feeConfigProvider.failRefreshes(new Error('L1 RPC unreachable'));
-
-        const isValid = await attestor.validator.validateBlockProposal(
-          ValidatedBlockProposal(blocks[2].proposal),
-          mockPeerId,
-        );
-        expect(isValid).toBe(false);
-        expect(attestor.validator.getProposalHandler().hasInvalidProposals(slotNumber)).toBe(false);
-      });
+      const isValid = await attestor.validator.validateBlockProposal(
+        ValidatedBlockProposal(blocks[2].proposal),
+        mockPeerId,
+      );
+      expect(isValid).toBe(true);
     });
 
     it('refuses block proposal with mismatching l1 to l2 messages', async () => {
