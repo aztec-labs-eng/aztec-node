@@ -509,22 +509,32 @@ export class FakeL1State {
   /**
    * Simulates the latest entry for a checkpoint number being invalidated on L1 and the identical checkpoint being
    * proposed again at a later L1 block with a different set of signers. Both entries share the same archive root, and
-   * both remain visible as CheckpointProposed events.
+   * both remain visible as CheckpointProposed events. With `reorged`, the latest entry is instead dropped, as when an
+   * L1 reorg removed the original propose and the identical checkpoint was proposed again with different attestations.
    */
   async repostCheckpoint(
     checkpointNumber: CheckpointNumber,
-    opts: { l1BlockNumber: bigint; signers: Secp256k1Signer[] },
+    opts: {
+      l1BlockNumber: bigint;
+      signers: Secp256k1Signer[];
+      spareAttestationsBitmapBit?: boolean;
+      reorged?: boolean;
+    },
   ): Promise<void> {
     const previous = this.checkpoints.findLast(cpData => cpData.checkpointNumber === checkpointNumber);
     if (!previous) {
       throw new Error(`Checkpoint ${checkpointNumber} not found`);
     }
-    previous.pruned = true;
+    if (opts.reorged) {
+      this.checkpoints = this.checkpoints.filter(cpData => cpData !== previous);
+    } else {
+      previous.pruned = true;
+    }
 
     const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
       previous.checkpoint,
       opts.signers,
-      false,
+      opts.spareAttestationsBitmapBit ?? false,
     );
     this.checkpoints.push({
       ...previous,
@@ -621,6 +631,25 @@ export class FakeL1State {
     });
 
     mockRollup.canPruneAtTime.mockImplementation(() => Promise.resolve(this.canPruneResult));
+
+    mockRollup.getCheckpoint.mockImplementation((cpNum: CheckpointNumber, options?: { blockNumber?: bigint }) => {
+      const atBlock = options?.blockNumber ?? this.l1BlockNumber;
+      const cpData = this.checkpoints.findLast(
+        cp => cp.checkpointNumber === cpNum && !cp.pruned && cp.l1BlockNumber <= atBlock,
+      );
+      if (!cpData) {
+        return Promise.reject(new Error(`Checkpoint ${cpNum} not found at L1 block ${atBlock}`));
+      }
+      return Promise.resolve({
+        archive: cpData.checkpoint.archive.root,
+        headerHash: Buffer32.ZERO,
+        blobCommitmentsHash: Buffer32.ZERO,
+        attestationsHash: cpData.attestationsHash,
+        payloadDigest: cpData.payloadDigest,
+        slotNumber: cpData.checkpoint.header.slotNumber,
+        feeHeader: { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, protocolFee: 0n, proverCost: 0n },
+      });
+    });
 
     mockRollup.getProposerAt.mockImplementation((timestamp: bigint) => {
       const slot = getSlotAtTimestamp(timestamp, this.config);
