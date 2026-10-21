@@ -50,7 +50,7 @@ export function injectCommands(program: Command, log: LogFn) {
       await sequencers({
         command: command,
         who,
-        recipient: options.recipient?.toString(),
+        recipient: options.recipient,
         mnemonic: options.mnemonic,
         nodeUrl: options.nodeUrl,
         l1RpcUrls: options.l1RpcUrls,

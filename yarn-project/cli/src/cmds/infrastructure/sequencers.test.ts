@@ -67,7 +67,7 @@ describe('sequencers remove', () => {
     await stopAnvil?.();
   });
 
-  const remove = (recipientAddress: string | undefined, nodeUrl = node.url) =>
+  const remove = (recipientAddress: EthAddress | undefined, nodeUrl = node.url) =>
     sequencers({
       command: 'remove',
       who: who.toString(),
@@ -80,7 +80,7 @@ describe('sequencers remove', () => {
     });
 
   it('initiates the withdrawal to the given recipient', async () => {
-    await remove(recipient.toString());
+    await remove(recipient);
 
     expect(await getLatestInitiateWithdrawArgs(l1RpcUrl, rollup)).toEqual({ attester: who, recipient });
   });

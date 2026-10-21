@@ -5,6 +5,7 @@ import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { createPublicClient, createWalletClient, fallback, getContract, http } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
@@ -13,7 +14,7 @@ export async function sequencers(opts: {
   command: 'list' | 'add' | 'remove' | 'who-next' | 'flush';
   who?: string;
   /** Address that receives the withdrawn stake. Required for `remove`. */
-  recipient?: string;
+  recipient?: EthAddress;
   mnemonic?: string;
   bn254SecretKey?: bigint;
   nodeUrl: string;
@@ -22,8 +23,9 @@ export async function sequencers(opts: {
   log: LogFn;
 }) {
   const { command, who: maybeWho, recipient, mnemonic, bn254SecretKey, nodeUrl, l1RpcUrls, chainId, log } = opts;
+  const missingRecipient = 'Missing --recipient: the address that receives the withdrawn stake';
   if (command === 'remove' && !recipient) {
-    throw new Error(`Missing --recipient: the address that receives the withdrawn stake`);
+    throw new Error(missingRecipient);
   }
   const client = createAztecNodeClient(nodeUrl);
   const { l1ContractAddresses } = await client.getNodeInfo();
@@ -114,8 +116,11 @@ export async function sequencers(opts: {
     if (!who || !writeableRollup) {
       throw new Error(`Missing sequencer address`);
     }
+    if (!recipient) {
+      throw new Error(missingRecipient);
+    }
     log(`Removing ${who} as sequencer, withdrawing its stake to ${recipient}`);
-    const hash = await writeableRollup.write.initiateWithdraw([who, recipient as `0x${string}`]);
+    const hash = await writeableRollup.write.initiateWithdraw([who, recipient.toString()]);
     await publicClient.waitForTransactionReceipt({ hash });
     log(`Removed in tx ${hash}`);
   } else if (command === 'who-next') {
