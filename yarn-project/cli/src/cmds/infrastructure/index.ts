@@ -1,7 +1,13 @@
 import type { LogFn } from '@aztec-labs/foundation/log';
 import type { Command } from 'commander';
 
-import { ETHEREUM_HOSTS, l1ChainIdOption, nodeOption, parseOptionalInteger } from '../../utils/commands.js';
+import {
+  ETHEREUM_HOSTS,
+  l1ChainIdOption,
+  nodeOption,
+  parseEthereumAddress,
+  parseOptionalInteger,
+} from '../../utils/commands.js';
 
 export function injectCommands(program: Command, log: LogFn) {
   program
@@ -19,6 +25,11 @@ export function injectCommands(program: Command, log: LogFn) {
     .command('sequencers')
     .argument('<command>', 'Command to run: list, add, remove, who-next')
     .argument('[who]', 'Who to add/remove')
+    .option(
+      '--recipient <address>',
+      'For remove (required): address that receives the withdrawn stake; it cannot be changed once set',
+      parseEthereumAddress,
+    )
     .description('Manages or queries registered sequencers on the L1 rollup contract.')
     .requiredOption<string[]>(
       '--l1-rpc-urls <string>',
@@ -39,6 +50,7 @@ export function injectCommands(program: Command, log: LogFn) {
       await sequencers({
         command: command,
         who,
+        recipient: options.recipient,
         mnemonic: options.mnemonic,
         nodeUrl: options.nodeUrl,
         l1RpcUrls: options.l1RpcUrls,

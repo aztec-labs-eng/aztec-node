@@ -1,6 +1,10 @@
-import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
+
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createServer } from 'node:http';
-import { encodeAbiParameters } from 'viem';
+import { decodeFunctionData, encodeAbiParameters } from 'viem';
+import { foundry } from 'viem/chains';
 
 /**
  * Starts a JSON-RPC server that reports `chainId` and, when `canonicalRollup` is given, answers every `eth_call` with
@@ -40,4 +44,23 @@ export async function serveL1Rpc(chainId: number, canonicalRollup?: EthAddress) 
     registryCalls,
     close: () => new Promise(resolve => server.close(resolve)),
   };
+}
+
+/**
+ * Returns the `(attester, recipient)` arguments of the `initiateWithdraw` call that the latest block on an anvil chain
+ * sent to `rollup`, failing if that block holds no such call.
+ */
+export async function getLatestInitiateWithdrawArgs(rpcUrl: string, rollup: EthAddress) {
+  const client = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: foundry.id });
+  const block = await client.getBlock({ includeTransactions: true });
+  const tx = block.transactions.find(({ to }) => to !== null && rollup.equals(EthAddress.fromString(to)));
+  if (!tx) {
+    throw new Error(`No transaction to ${rollup} in the latest block`);
+  }
+  const decoded = decodeFunctionData({ abi: RollupAbi, data: tx.input });
+  if (decoded.functionName !== 'initiateWithdraw') {
+    throw new Error(`Expected initiateWithdraw, got ${decoded.functionName}`);
+  }
+  const [attester, recipient] = decoded.args;
+  return { attester: EthAddress.fromString(attester), recipient: EthAddress.fromString(recipient) };
 }

@@ -254,23 +254,27 @@ export async function removeL1Validator({
   privateKey,
   mnemonic,
   validatorAddress,
+  recipientAddress,
   rollupAddress,
   log,
   debugLogger,
-}: RollupCommandArgs & LoggerArgs & { validatorAddress: EthAddress }) {
+}: RollupCommandArgs & LoggerArgs & { validatorAddress: EthAddress; recipientAddress: EthAddress }) {
   const dualLog = makeDualLog(log, debugLogger);
   const account = getAccount(privateKey, mnemonic);
   const chain = createEthereumChain(rpcUrls, chainId);
   const l1Client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const l1TxUtils = createL1TxUtils(l1Client, { logger: debugLogger });
 
-  dualLog(`Removing validator ${validatorAddress.toString()} from rollup ${rollupAddress.toString()}`);
+  dualLog(
+    `Removing validator ${validatorAddress.toString()} from rollup ${rollupAddress.toString()}, ` +
+      `withdrawing its stake to ${recipientAddress.toString()}`,
+  );
   const { receipt } = await l1TxUtils.sendAndMonitorTransaction({
     to: rollupAddress.toString(),
     data: encodeFunctionData({
       abi: RollupAbi,
       functionName: 'initiateWithdraw',
-      args: [validatorAddress.toString(), validatorAddress.toString()],
+      args: [validatorAddress.toString(), recipientAddress.toString()],
     }),
   });
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
