@@ -2,7 +2,7 @@
 displayed_sidebar: operatorsSidebar
 title: Exiting a sequencer
 description: Exit a sequencer position and withdraw its stake, either from the withdrawer or from the attester, including batched exits for many positions.
-references: ["l1-contracts/src/core/libraries/rollup/StakingLib.sol", "l1-contracts/src/core/libraries/rollup/AttesterExitExtLib.sol", "yarn-project/cli/src/cmds/l1/index.ts", "yarn-project/cli/src/cmds/l1/update_l1_validators.ts"]
+references: ["yarn-project/ethereum/src/contracts/rollup.ts", "yarn-project/cli/src/cmds/l1/index.ts", "yarn-project/cli/src/cmds/l1/update_l1_validators.ts"]
 ---
 
 ## Overview
