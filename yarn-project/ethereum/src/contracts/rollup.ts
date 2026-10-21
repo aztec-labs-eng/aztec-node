@@ -1420,8 +1420,9 @@ export class RollupContract {
     return Fr.fromString(await this.rollup.read.archive());
   }
 
-  async archiveAt(checkpointNumber: CheckpointNumber): Promise<Fr> {
-    return Fr.fromString(await this.rollup.read.archiveAt([BigInt(checkpointNumber)]));
+  async archiveAt(checkpointNumber: CheckpointNumber, options?: { blockNumber?: bigint }): Promise<Fr> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return Fr.fromString(await this.rollup.read.archiveAt([BigInt(checkpointNumber)], options));
   }
 
   getSequencerRewards(address: Hex | EthAddress): Promise<bigint> {

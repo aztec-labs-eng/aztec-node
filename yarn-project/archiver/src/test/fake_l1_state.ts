@@ -171,6 +171,8 @@ export class FakeL1State {
   // When set, `getMessageSentEvents` rejects for ranges the predicate matches, modelling a provider that cannot
   // serve them (a log-range limit, pruned history or an outage).
   private messageSentEventsFailure: ((fromBlock: bigint, toBlock: bigint) => boolean) | undefined;
+  // When set, `archiveAt` calls without a block tag are answered by a lagging L1 node whose pending tip is this.
+  private untaggedArchiveAtPendingTip: CheckpointNumber | undefined;
 
   // The L1 block number reported as "finalized" (defaults to the start block).
   // `undefined` simulates the startup window on a fresh devnet where
@@ -482,6 +484,15 @@ export class FakeL1State {
   }
 
   /**
+   * Makes `archiveAt` calls without a block tag answer as an L1 node lagging behind the head, whose pending tip is the
+   * given checkpoint: zero above it, as Rollup.archiveAt answers. Calls pinned to a block number keep seeing the current
+   * state. Pass undefined to clear.
+   */
+  setUntaggedArchiveAtPendingTip(pendingTip: CheckpointNumber | undefined): void {
+    this.untaggedArchiveAtPendingTip = pendingTip;
+  }
+
+  /**
    * Simulates a pruned checkpoint by marking all entries with this number as pruned.
    * The event will still be returned, but archiveAt() will return the previous checkpoint's archive
    * (or genesis if no previous checkpoint), causing a mismatch that the archiver will detect.
@@ -586,7 +597,13 @@ export class FakeL1State {
 
     mockRollup.getVersion.mockImplementation(() => Promise.resolve(this.version));
     mockRollup.getTargetCommitteeSize.mockImplementation(() => Promise.resolve(this.targetCommitteeSize));
-    mockRollup.archiveAt.mockImplementation((cpNum: CheckpointNumber) => Promise.resolve(this.getArchiveAt(cpNum)));
+    mockRollup.archiveAt.mockImplementation((cpNum: CheckpointNumber, options?: { blockNumber?: bigint }) => {
+      const laggingTip = options?.blockNumber === undefined ? this.untaggedArchiveAtPendingTip : undefined;
+      if (laggingTip !== undefined && cpNum > laggingTip) {
+        return Promise.resolve(Fr.ZERO);
+      }
+      return Promise.resolve(this.getArchiveAt(cpNum));
+    });
     mockRollup.status.mockImplementation((localCheckpointNum: CheckpointNumber) => {
       const status = this.getRollupStatus();
       return Promise.resolve({

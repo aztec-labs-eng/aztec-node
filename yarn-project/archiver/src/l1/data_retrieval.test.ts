@@ -197,6 +197,7 @@ describe('data_retrieval', () => {
         publicClient,
         10n,
         12n,
+        12n,
         mock<ArchiverInstrumentation>(),
       );
 
