@@ -279,6 +279,9 @@ class DeploymentRun<C extends Steps> {
         );
       }
     }
+    // A declared cycle never becomes ready, and inventory only notices it when the checks involved
+    // happen to consult each other — so reject it before touching the network.
+    topologicalLayers([...aliases], new Map(steps.map(([alias, step]) => [alias, step.dependsOn ?? []])));
   }
 
   /** Resolves every deterministic contract upfront, layer by layer in constructor-arg dependency order. */
@@ -565,7 +568,7 @@ class DeploymentRun<C extends Steps> {
       if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
         return true;
       }
-      await this.resolveDeferred(alias, step);
+      await this.resolveDeferred(alias, step, { inventory: true });
       return !(await this.isPublished(alias));
     });
   }
@@ -629,9 +632,16 @@ class DeploymentRun<C extends Steps> {
   }
 
   /** Resolves a deferred contract's address from its args, read against the current state. */
-  private async resolveDeferred(alias: string, step: ContractStep<C>): Promise<void> {
-    const args = await this.runRecorded(alias, `Deferred initializer args for contract "${alias}"`, ctx =>
-      step.deferredInitializerArgs!(ctx),
+  private async resolveDeferred(
+    alias: string,
+    step: ContractStep<C>,
+    { inventory }: { inventory: boolean },
+  ): Promise<void> {
+    const args = await this.runRecorded(
+      alias,
+      `Deferred initializer args for contract "${alias}"`,
+      { inventory },
+      ctx => step.deferredInitializerArgs!(ctx),
     );
     await this.resolveContract(alias, step, args);
   }
@@ -659,14 +669,31 @@ class DeploymentRun<C extends Steps> {
    * Runs a user callback against a ctx that records every contract alias it looks up, then requires
    * those to be declared in the step's `dependsOn` — an undeclared read is state nothing checked was
    * in place. The check runs even when the callback throws, so a callback that catches its own
-   * errors (the usual shape for a getter that reverts when unset) can't hide one.
+   * errors (the usual shape for a getter that reverts when unset) can't hide one — nor a
+   * {@link GateCycleError} from a step it consults. With `inventory`,
+   * the callback is part of `alias`'s inventory check, so the steps it consults are waited on by
+   * that check (see {@link memoizedCheck}); at execution time every check is already decided.
    */
-  private async runRecorded<T>(alias: string, description: string, run: (ctx: Ctx<C>) => T | Promise<T>): Promise<T> {
+  private async runRecorded<T>(
+    alias: string,
+    description: string,
+    { inventory }: { inventory: boolean },
+    run: (ctx: Ctx<C>) => T | Promise<T>,
+  ): Promise<T> {
     const references = new Set<string>();
+    const waiter = inventory ? alias : undefined;
+    let cycle: GateCycleError | undefined;
+    const surfaceCycle = (status: Promise<boolean>) =>
+      status.catch(error => {
+        if (error instanceof GateCycleError) {
+          cycle ??= error;
+        }
+        throw error;
+      });
     const ctx: Ctx<C> = {
       ...this.ctx,
-      done: id => this.done(id, alias),
-      ran: id => this.ran(id, alias),
+      done: id => surfaceCycle(this.done(id, waiter)),
+      ran: id => surfaceCycle(this.ran(id, waiter)),
       contract: reference => {
         references.add(reference);
         return this.resolver.contract(reference);
@@ -681,9 +708,12 @@ class DeploymentRun<C extends Steps> {
       result = await run(ctx);
     } catch (error) {
       this.assertReferencesDeclared(alias, description, references, error);
-      throw error;
+      throw cycle ?? error;
     }
     this.assertReferencesDeclared(alias, description, references);
+    if (cycle) {
+      throw cycle;
+    }
     return result;
   }
 
@@ -750,7 +780,9 @@ class DeploymentRun<C extends Steps> {
       if (!(await this.dependenciesReady(alias, { contractsOnly: true }))) {
         return false;
       }
-      return this.runRecorded(alias, `Idempotency gate for action "${alias}"`, ctx => step.done(ctx));
+      return this.runRecorded(alias, `Idempotency gate for action "${alias}"`, { inventory: true }, ctx =>
+        step.done(ctx),
+      );
     });
   }
 
@@ -852,7 +884,7 @@ class DeploymentRun<C extends Steps> {
           if (isDeferred(step)) {
             // Re-resolve with post-`dependsOn` state: the inventory attempt was skipped or ran
             // before this run's earlier layers landed.
-            await this.resolveDeferred(alias, step);
+            await this.resolveDeferred(alias, step, { inventory: false });
           }
           const classId = getOrThrow(this.classIds, alias, 'class id');
           const deployMethod = getOrThrow(this.deployMethods, alias, 'deploy method');
@@ -938,7 +970,7 @@ class DeploymentRun<C extends Steps> {
           send: async fee => {
             const interactions = await Promise.all(
               batch.map(alias =>
-                this.runRecorded(alias, `Call for action "${alias}"`, ctx =>
+                this.runRecorded(alias, `Call for action "${alias}"`, { inventory: false }, ctx =>
                   getOrThrow(this.actionSteps, alias, 'action').call(ctx),
                 ),
               ),

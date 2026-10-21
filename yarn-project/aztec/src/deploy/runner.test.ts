@@ -40,6 +40,14 @@ describe('runDeployment spec validation', () => {
     );
   });
 
+  it('rejects a dependsOn cycle', async () => {
+    const step = (dependency: string) =>
+      ({ kind: 'action', from: r => r.account('admin'), dependsOn: [dependency], ...neverCalled }) satisfies ActionStep;
+    await expect(runDeployment({ ...base, steps: { token, a: step('b'), b: step('a') } })).rejects.toThrow(
+      /Dependency cycle among: a, b/,
+    );
+  });
+
   // `ContractStep` is a union whose variants make these three specs unwritable in TypeScript. The
   // cast stands in for what still reaches the runtime check: a JS caller, or a spec assembled
   // dynamically (e.g. through `Object.fromEntries`) where the element types are erased.

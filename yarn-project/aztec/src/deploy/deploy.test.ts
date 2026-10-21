@@ -366,6 +366,29 @@ describeWithAnvil('runDeployment', () => {
       await runDeployment({ ...base, steps: { joined, check, left: branch, right: branch, early } });
       expect(units).toEqual(['publish joined']);
 
+      // Once inventory has decided, a step's execution-time callbacks may ask about the step itself.
+      const selfAware = {
+        kind: 'action',
+        from: r => r.account('admin'),
+        dependsOn: ['early'],
+        call: async ctx => {
+          expect(await ctx.ran('selfAware')).toBe(true);
+          return TokenContract.at(ctx.contract('early'), ctx.wallet).methods.mint_to_public(operator, 1n);
+        },
+        done: () => Promise.resolve(false),
+      } satisfies ActionStep;
+      const selfRef = {
+        kind: 'contract',
+        contract: TokenContract,
+        deployer: r => r.account('admin'),
+        mode: 'publish',
+        dependsOn: ['selfAware'],
+        deferredInitializerArgs: async ctx => [ctx.account('admin'), `Self${await ctx.ran('selfRef')}`, 'SLF', 18],
+      } satisfies ContractStep;
+      units.length = 0;
+      await runDeployment({ ...base, steps: { early, selfAware, selfRef } });
+      expect(units).toEqual(['action selfAware', 'publish selfRef']);
+
       // A real cycle is still reported, also when its two halves run in parallel branches.
       const waitsOn = (...others: string[]) =>
         ({
@@ -381,6 +404,21 @@ describeWithAnvil('runDeployment', () => {
       ).rejects.toThrow(/Cyclic dependency: "pong" and "ping" wait on each other/);
       await expect(
         runDeployment({ ...base, steps: { early, fork: waitsOn('p', 'q'), p: waitsOn('q'), q: waitsOn('p') } }),
+      ).rejects.toThrow(/Cyclic dependency/);
+      // ...and when the gates catch their own errors.
+      const swallowing = (other: string) =>
+        ({
+          ...waitsOn(other),
+          done: async ctx => {
+            try {
+              return await ctx.done(other);
+            } catch {
+              return false;
+            }
+          },
+        }) satisfies ActionStep;
+      await expect(
+        runDeployment({ ...base, steps: { early, ping: swallowing('pong'), pong: swallowing('ping') } }),
       ).rejects.toThrow(/Cyclic dependency/);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
