@@ -227,7 +227,9 @@ there's no value in starting later than the epoch boundary. The two kinds differ
 only in `toSlot` and in how the publishing service treats their candidate:
 
 - **Full** `EpochSession`s are opened by reconcile when the epoch is complete on L1 *and*
-  every archiver-reported checkpoint is present in the store. Their `toSlot` is
+  every archiver-reported checkpoint is present in the store. If the proven tip already covers
+  the epoch, reconcile also requires that L1 holds no full-epoch proof of it under our prover id
+  (see [Periodic tick](#periodic-tick)). Their `toSlot` is
   the epoch's last slot. The publishing service never auto-supersedes a `full`
   candidate on proven-tip subsumption — the L1 contract records a `(epoch, prover-id)`
   submission for every full-epoch proof, so even after another prover-node has
@@ -371,17 +373,33 @@ its own runs, no two sweeps can race. An epoch `E` is expired once the chain rea
 `E + proofSubmissionEpochs + 1` — the deadline beyond which an L1 submission for `E` would be rejected.
 Expiry only releases the chonk cache and reaps `E`'s provers.
 A monotonic high-water mark (`lastExpiredEpoch`) makes the sweep cheap: it only
-advances after a sweep completes and never revisits an epoch. It is seeded at `start()` from the last
-fully-proven epoch (`resolveLastFullyProvenEpoch`), so on a restart we never re-sweep epochs that already
-reached L1.
+advances after a sweep completes and never revisits an epoch. It is seeded at `start()` from the catch-up
+start epoch (`resolveCatchUpStartEpoch`), the same epoch the catch-up cursor resumes after: the last
+fully-proven epoch, lowered to the last epoch whose proof-submission window has closed. While the archiver
+reports no synced slot, that window is computed from the earliest possible current epoch, the last
+fully-proven one. A restart therefore revisits proven epochs that are still in their window, and the sweep
+reaps them once their window closes.
 
 ### Periodic tick
 
 `SessionManager.start()` arms a `RunningPromise` that fires
 `reconcile({ kind: 'tick' })` every `tickIntervalMs`. The tick picks up epochs that
 became complete by time alone (no fresh checkpoint event) and advances to the
-next unproven epoch once the previous one lands on L1. The tick is not gated by any per-epoch
-bookkeeping; two things keep it from re-proving a doomed epoch:
+next unproven epoch once the previous one lands on L1.
+
+The tick also revisits every epoch in the `CheckpointStore` that the proven tip already covers. A proof
+that lands while its epoch is still open (another prover's, an early-withdrawal proof, or our own
+`startProof`) moves the tip over the epoch, but L1 registers it as non-full. L1 still accepts and rewards
+a full-epoch proof from every prover until the submission window closes, and only a full-epoch proof
+raises the prover's activity score. So `openFullSessionIfReady` skips a covered epoch only once
+`getHasSubmittedFullEpoch` reports our own full-epoch proof of it, and the checkpoint catch-up registers a
+fully-proven epoch's checkpoints until then (a node with full-epoch proving disabled still skips them). A
+confirmed answer is reused for one L2 slot, then read again, and only while the tip covers the epoch: an L1
+reorg that rolls the tip back below it opens the epoch at once. Within a tick, the next unproven epoch is opened
+before any covered epoch, so the two do not compete for the last session slot in the same reconcile.
+
+Apart from that cached answer, the tick keeps no per-epoch bookkeeping; two things keep it from re-proving a
+doomed epoch:
 
 - `openFullSessionIfReady` refuses to build a session when any `CheckpointProver` in the set has
   **failed** (`isFailed()`). So a prover fault (possibly a prune) skips the epoch cheaply each tick —
@@ -391,8 +409,10 @@ bookkeeping; two things keep it from re-proving a doomed epoch:
   `fullSessions.has(epoch)` check skips it. It is replaced only when its canonical content changes (a
   re-add), so a deterministically-failing epoch is not re-proved every tick.
 
-Transient blockers (max-pending-jobs reached, archiver still indexing) create no session and no failed
-prover, so the next tick simply tries again.
+Transient blockers (max-pending-jobs reached, archiver still indexing, a failed L1 read of our full-epoch
+proof registration) create no session and no failed prover, so the next tick simply tries again. The
+checkpoint catch-up treats a failed read the other way: it registers the epoch's checkpoints rather than
+stalling, and reconcile checks again before proving.
 
 ## Walkthroughs
 
