@@ -62,10 +62,13 @@ registry. Verdaccio proxies npmjs for third-party packages and the foundation pi
 - checks the result with `npm ci` and `npm ls`.
 
 The resulting archive holds the manifest, the npm lock, and a hash of the inputs that decide the
-dependency tree. It is copied into the aztec-up test image, and on an image-cache hit the build
-reads it back out of that image. The cached Verdaccio seed and the cached lock share the same
-input hash, so a reused lock always comes with a seed that holds its tarballs. The test image's
-registry is offline and installs from that seed.
+lock: the Yarn lock, the root resolutions, the generator, the package rewrite rules, and the
+workspace manifest fields that npm copies into a lock entry (dependencies, `bin`, `engines`,
+`os`/`cpu`, install scripts, ...). It is copied into the aztec-up test image, whose cache key
+includes the same hash, and on an image-cache hit the build reads it back out of that image. The
+cached Verdaccio seed and the cached lock share the same input hash, so a reused lock always comes
+with a seed that holds its tarballs. The test image's registry is offline and installs from that
+seed.
 
 ### Release
 
@@ -73,8 +76,8 @@ registry is offline and installs from that seed.
 release preflight runs `yarn-project/scripts/aztec-up-release-lock.mjs` on the build archive. The
 script:
 
-- rejects an archive whose input hash differs from the current Yarn lock, generator, root
-  resolutions, workspace dependency fields, or package rewrite rules,
+- rejects an archive whose input hash differs from the current one, so a lock built before any of
+  those inputs changed is never released,
 - sets the release version on the root, on every co-published `@aztec-labs/*` package, on their
   tarball URLs, and on references to those packages in dependency fields,
 - leaves third-party versions, URLs, and integrity values untouched,

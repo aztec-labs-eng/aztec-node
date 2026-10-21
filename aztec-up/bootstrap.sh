@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
+# Hash of the inputs that decide the installer's dependency tree: the Yarn lock, the root resolutions
+# (which become the lock's overrides), the generator, the rules ci3/deploy_npm applies to the published
+# manifests, and the workspace manifest fields that npm copies into a lock entry (arborist's
+# pkgMetaKeys, plus the install scripts behind hasInstallScript). yarn.lock merges a workspace's
+# dependencies and devDependencies into one list, so it does not cover those fields. The registry
+# seed and the CI lock share this hash, so a cached lock is only reused with a seed holding its
+# tarballs.
+function deps_hash {
+  hash_str \
+    "$(cache_content_hash ^yarn-project/yarn.lock ^yarn-project/scripts/generate-aztec-up-package-lock.mjs ^yarn-project/scripts/aztec-up-workspaces.mjs ^ci3/release_prep_package_json ^ci3/deploy_npm)" \
+    "$(jq -c '.resolutions // {}' $root/yarn-project/package.json)" \
+    "$(jq -c '{name, private, dependencies, peerDependencies, peerDependenciesMeta, optionalDependencies,
+      bundleDependencies, bundledDependencies, acceptDependencies, bin, engines, os, cpu, license, funding,
+      installScripts: ((.scripts // {}) | {preinstall, install, postinstall})}' $root/yarn-project/*/package.json)"
+}
+
+# The test image carries the CI lock, so an image reused across a change to the lock's inputs would
+# hand release_preflight a lock that it rejects.
 hash=$(hash_str \
-  $(cache_content_hash ^aztec-up/ ^ci3/release_prep_package_json) \
-  $(../yarn-project/bootstrap.sh hash))
+  $(cache_content_hash ^aztec-up/) \
+  $(../yarn-project/bootstrap.sh hash) \
+  $(deps_hash))
 
 # Bare aliases ("nightly", "latest") resolve to this major version.
 DEFAULT_MAJOR_VERSION=${AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION:-5}
@@ -19,18 +38,6 @@ function versions {
 
 # Where release_preflight leaves the installer lock for release to upload.
 release_lock=release-lock/packages.tar.gz
-
-# Hash of the inputs that decide the installer's dependency tree. The root resolutions become the
-# lock's overrides. yarn.lock merges a workspace's dependencies and devDependencies into one list,
-# so moving a package between them does not change it; the workspace manifests' runtime fields and
-# private flag are hashed separately. The registry seed and the CI lock share this hash, so a cached
-# lock is only reused with a seed holding its tarballs.
-function deps_hash {
-  hash_str \
-    "$(cache_content_hash ^yarn-project/yarn.lock ^yarn-project/scripts/generate-aztec-up-package-lock.mjs ^yarn-project/scripts/aztec-up-workspaces.mjs ^ci3/release_prep_package_json)" \
-    "$(jq -c '.resolutions // {}' $root/yarn-project/package.json)" \
-    "$(jq -c '{name, private, dependencies, peerDependencies, optionalDependencies}' $root/yarn-project/*/package.json)"
-}
 
 # Cache key of the proxied-npmjs registry seed, which start_local_registry downloads and build uploads.
 function verdaccio_seed_key {
