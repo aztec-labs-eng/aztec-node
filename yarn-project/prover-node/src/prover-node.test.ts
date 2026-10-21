@@ -9,7 +9,7 @@ import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpo
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { InboxMessageRange, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { L1Metrics } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
@@ -62,8 +62,9 @@ describe('ProverNode', () => {
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
     l2BlockSource.getL2Tips.mockResolvedValue({} as L2Tips);
     // Registering a checkpoint reads the consumed messages as a compact leaf-count range; these tests
-    // exercise dispatch and pruning, not message content, so an empty range suffices.
-    l1ToL2MessageSource.getL1ToL2MessagesBetweenLeafCounts.mockResolvedValue([]);
+    // exercise dispatch and pruning, not message content, so an empty range ending at the zero hash every
+    // `makeCheckpoint` commits to by default suffices.
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(makeMessageRange([], Fr.ZERO));
     publisherFactory.create.mockResolvedValue(publisher);
 
     proverNode = new TestProverNode(
@@ -315,6 +316,36 @@ describe('ProverNode', () => {
     expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
+  });
+
+  it('refuses to register a checkpoint whose messages do not match its inbox rolling hash, leaving the cursor for retry', async () => {
+    // The message source still serves a pre-reorg message list of the right length: its end hash differs from the
+    // one the checkpoint committed to. Registering would freeze the stale list into the prover, so the pass fails
+    // and the cursor stays put for a later pass to read the recovered list.
+    setupNotFullyProven();
+    const checkpoint = makeCheckpoint(1, 1, 1);
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(makeMessageRange([Fr.random()], Fr.random()));
+
+    await expect(proverNode.handleBlockStreamEvent(mineCheckpoint(checkpoint))).rejects.toThrow(
+      /do not match its inbox rolling hash/,
+    );
+
+    expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)).toBeUndefined();
+    expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
+  });
+
+  it('registers a checkpoint with the messages whose end hash matches its inbox rolling hash', async () => {
+    setupNotFullyProven();
+    const inboxRollingHash = Fr.random();
+    const checkpoint = makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash);
+    const messages = [Fr.random(), Fr.random()];
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(makeMessageRange(messages, inboxRollingHash));
+
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(checkpoint));
+
+    expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)?.l1ToL2Messages).toEqual(messages);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
   it('leaves the tips store unadvanced when a handler propagates an error', async () => {
@@ -723,10 +754,11 @@ describe('ProverNode', () => {
     slot: number,
     blockNumber: number,
     archiveRoot: Fr = Fr.random(),
+    inboxRollingHash: Fr = Fr.ZERO,
   ): Checkpoint {
     return {
       number: CheckpointNumber(checkpointNumber),
-      header: { slotNumber: SlotNumber(slot), inboxRollingHash: Fr.ZERO },
+      header: { slotNumber: SlotNumber(slot), inboxRollingHash },
       archive: { root: archiveRoot },
       blocks: [
         {
@@ -739,6 +771,15 @@ describe('ProverNode', () => {
       ],
       hash: () => new Fr(checkpointNumber),
     } as unknown as Checkpoint;
+  }
+
+  /** A message range starting at position zero, holding `messages` and ending at `endRollingHash`. */
+  function makeMessageRange(messages: Fr[], endRollingHash: Fr): InboxMessageRange {
+    return {
+      messages,
+      start: { totalMessageCount: 0n, rollingHash: Fr.ZERO },
+      end: { totalMessageCount: BigInt(messages.length), rollingHash: endRollingHash },
+    };
   }
 
   function makePublishedCheckpoint(checkpoint: Checkpoint): PublishedCheckpoint {
