@@ -1932,7 +1932,8 @@ export class ProposalHandler {
    * Re-reads the rollup mana limit from L1 when a block proposal claims more checkpoint mana than the cached limit
    * allows. Re-execution caps the block at the mana left under the cached limit, so an honest block that uses headroom
    * governance has just added would otherwise lose txs and be rejected before the checkpoint-level check could
-   * re-read the limit.
+   * re-read the limit. A failed read rejects, so the block is not judged against a limit this node could not confirm:
+   * the proposal is refused as `unknown_error`, which is not slashable.
    */
   private async refreshManaLimitIfExceeded(
     priorBlocks: L2Block[],
@@ -2540,7 +2541,8 @@ export class ProposalHandler {
   /**
    * Validates the rebuilt checkpoint against its limits and returns the error, if any. The mana limit is a cached copy
    * of a value governance can raise on L1, and a rejection here is slashable, so a checkpoint that fails on mana alone
-   * is checked once more against a fresh L1 read before it is rejected. Any other failure is returned without one.
+   * is checked once more against a fresh L1 read before it is rejected. Any other failure is returned without one. A
+   * failed read rejects, and the error escapes as a local fault: no verdict is cached, recorded or reported.
    */
   private async validateRebuiltCheckpointLimits(checkpoint: Checkpoint): Promise<Error | undefined> {
     const opts = {

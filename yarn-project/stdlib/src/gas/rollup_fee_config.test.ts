@@ -134,12 +134,23 @@ describe('RollupFeeConfigTracker', () => {
     expect(await tracker.getFeeConfigAt(7n)).toEqual(expectedAt(7n, initialValues));
   });
 
-  it('keeps the last value when a refresh fails', async () => {
+  it('rejects a refresh that fails, keeping the last value', async () => {
     tracker = await RollupFeeConfigTracker.create(rollup);
     governanceUpdate(raisedValues);
     rollup.getManaLimit.mockRejectedValueOnce(new Error('rpc down'));
 
-    expect(await tracker.refresh()).toEqual(expectedAt(10n, initialValues));
+    // A caller about to reject on the cached limit must learn that the re-read failed, not get the stale value back.
+    await expect(tracker.refresh()).rejects.toThrow('rpc down');
     expect(tracker.getFeeConfig()).toEqual(expectedAt(10n, initialValues));
+  });
+
+  it('keeps polling after a refresh fails', async () => {
+    tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
+    governanceUpdate(raisedValues);
+    rollup.getManaLimit.mockRejectedValueOnce(new Error('rpc down')).mockRejectedValueOnce(new Error('rpc down'));
+    tracker.start();
+
+    await retryUntil(() => tracker!.getFeeConfig().manaLimit === raisedValues.manaLimit || undefined, 'poll', 5, 0.01);
+    expect(tracker.getFeeConfig()).toEqual(expectedAt(11n, raisedValues));
   });
 });

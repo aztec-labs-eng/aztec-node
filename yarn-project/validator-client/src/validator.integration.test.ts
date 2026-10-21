@@ -58,13 +58,22 @@ jest.setTimeout(60_000);
 /** A fee config provider whose cached values lag L1 until refreshed, as the tracker's do between polls. */
 class LaggingRollupFeeConfigProvider extends FixedRollupFeeConfigProvider {
   private onL1: Partial<RollupFeeConfig> | undefined;
+  private refreshError: Error | undefined;
 
   /** Changes the values on L1 without touching the cached ones; the next refresh picks them up. */
   public setFeeConfigOnL1(config: Partial<RollupFeeConfig>): void {
     this.onL1 = config;
   }
 
+  /** Makes every refresh fail with the given error, as an unreachable L1 RPC would. */
+  public failRefreshes(err: Error): void {
+    this.refreshError = err;
+  }
+
   public override refresh(): Promise<RollupFeeConfig> {
+    if (this.refreshError) {
+      return Promise.reject(this.refreshError);
+    }
     if (this.onL1) {
       this.setFeeConfig(this.onL1);
     }
@@ -779,6 +788,19 @@ describe('ValidatorClient Integration', () => {
           mockPeerId,
         );
         expect(isValid).toBe(false);
+      });
+
+      it('refuses a block it cannot re-check without recording a slashable offense', async () => {
+        const { blocks, manaAll } = await buildWithStaleLimit();
+        attestor.feeConfigProvider.setFeeConfigOnL1({ manaLimit: BigInt(manaAll) });
+        attestor.feeConfigProvider.failRefreshes(new Error('L1 RPC unreachable'));
+
+        const isValid = await attestor.validator.validateBlockProposal(
+          ValidatedBlockProposal(blocks[2].proposal),
+          mockPeerId,
+        );
+        expect(isValid).toBe(false);
+        expect(attestor.validator.getProposalHandler().hasInvalidProposals(slotNumber)).toBe(false);
       });
     });
 

@@ -1286,6 +1286,17 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toBeUndefined();
       }
 
+      it('escapes when re-reading the mana limit fails for a checkpoint over the cached limit', async () => {
+        const header = setupMatchingRebuild({}, { totalManaUsed: 250_000_000 });
+        feeConfigProvider.refresh.mockRejectedValue(new Error('L1 RPC unreachable'));
+
+        // The cached 200M limit may be stale, so the rejection must not become a slashable verdict.
+        await expectEscapesWithoutVerdict(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          'L1 RPC unreachable',
+        );
+      });
+
       it('escapes when the ancestry lookup fails', async () => {
         const header = setupMatchingRebuild();
         blockSource.getCheckpointsData.mockRejectedValue(new Error('checkpoint store unavailable'));
