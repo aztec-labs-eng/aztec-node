@@ -17,7 +17,7 @@ import type { AvmSimulator, PublicContractsDB, PublicProcessor } from '@aztec-la
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { FixedRollupFeeConfigProvider, Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   type FullNodeBlockBuilderConfig,
@@ -47,7 +47,7 @@ describe('CheckpointBuilder', () => {
   let lightweightCheckpointBuilder: MockProxy<LightweightCheckpointBuilder>;
   let fork: MockProxy<MerkleTreeWriteOperations>;
   let config: FullNodeBlockBuilderConfig;
-  let feeConfigProvider: FixedRollupFeeConfigProvider;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let contractDataSource: MockProxy<ContractDataSource>;
   let dateProvider: TestDateProvider;
   let telemetryClient: MockProxy<TelemetryClient>;
@@ -104,7 +104,7 @@ describe('CheckpointBuilder', () => {
       rollupVersion: 1,
       ...overrideConfig,
     };
-    feeConfigProvider = new FixedRollupFeeConfigProvider({ manaLimit: BigInt(rollupManaLimit) });
+    feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: BigInt(rollupManaLimit) });
 
     checkpointBuilder = new TestCheckpointBuilder(
       lightweightCheckpointBuilder as unknown as LightweightCheckpointBuilder,
@@ -1055,7 +1055,7 @@ describe('FullNodeCheckpointsBuilder', () => {
       mock<ContractDataSource>(),
       new TestDateProvider(),
       mock<AvmSimulator>(),
-      new FixedRollupFeeConfigProvider(),
+      new TestRollupFeeConfigProvider(),
       telemetryClient,
     );
   });

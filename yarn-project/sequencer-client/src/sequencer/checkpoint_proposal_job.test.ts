@@ -40,7 +40,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   InsufficientValidTxsError,
   type MerkleTreeWriteOperations,
@@ -95,7 +95,7 @@ describe('CheckpointProposalJob', () => {
   let epochCache: MockProxy<EpochCache>;
   let validatorClient: MockProxy<ValidatorClient>;
   let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
-  let feeConfigProvider: FixedRollupFeeConfigProvider;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let p2p: MockProxy<P2P>;
   let worldState: MockProxy<WorldStateSynchronizer>;
   let checkpointsBuilder: MockCheckpointsBuilder;
@@ -221,7 +221,7 @@ describe('CheckpointProposalJob', () => {
     });
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
-    feeConfigProvider = new FixedRollupFeeConfigProvider({ manaTarget: 10_000n });
+    feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue({
       slotNumber: globalVariables.slotNumber,
       timestamp: globalVariables.timestamp,

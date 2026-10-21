@@ -10,10 +10,10 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import {
-  FixedRollupFeeConfigProvider,
   Gas,
   GasFees,
   GasSettings,
+  TestRollupFeeConfigProvider,
   type TxAdmissionMinFeesProvider,
 } from '@aztec-labs/stdlib/gas';
 import type {
@@ -2277,7 +2277,7 @@ class TestLibP2PService extends LibP2PService {
       mockProofVerifier,
       mockWorldStateSynchronizer,
       nextBlockMinFeesProvider,
-      new FixedRollupFeeConfigProvider(),
+      new TestRollupFeeConfigProvider(),
       telemetry,
       logger,
     );

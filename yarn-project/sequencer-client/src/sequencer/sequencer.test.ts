@@ -41,7 +41,7 @@ import {
 import { Checkpoint, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type MerkleTreeWriteOperations,
   type SequencerConfig,
@@ -437,7 +437,7 @@ describe('sequencer', () => {
       epochCache,
       rollupContract,
       inboxContract,
-      new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
+      new TestRollupFeeConfigProvider({ manaTarget: 10_000n }),
       config,
     );
     sequencer.updateConfig(config);
@@ -472,7 +472,7 @@ describe('sequencer', () => {
         epochCache,
         rollupContract,
         inboxContract,
-        new FixedRollupFeeConfigProvider({ manaTarget: 10_000n }),
+        new TestRollupFeeConfigProvider({ manaTarget: 10_000n }),
         sequencerConfig,
       );
     };

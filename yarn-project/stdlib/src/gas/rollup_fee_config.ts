@@ -149,11 +149,11 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
  * A provider that never reads L1, for tests and for nodes that run without one. The default leaves the mana limit
  * effectively unbounded.
  */
-export class FixedRollupFeeConfigProvider implements RollupFeeConfigProvider {
+export class TestRollupFeeConfigProvider implements RollupFeeConfigProvider {
   private config: RollupFeeConfig;
 
   constructor(config: Partial<RollupFeeConfig> = {}) {
-    this.config = { ...DEFAULT_FIXED_ROLLUP_FEE_CONFIG, ...config };
+    this.config = { ...DEFAULT_TEST_ROLLUP_FEE_CONFIG, ...config };
   }
 
   /** Replaces some of the values, as a governance update would. */
@@ -174,7 +174,7 @@ export class FixedRollupFeeConfigProvider implements RollupFeeConfigProvider {
   }
 }
 
-const DEFAULT_FIXED_ROLLUP_FEE_CONFIG: RollupFeeConfig = {
+const DEFAULT_TEST_ROLLUP_FEE_CONFIG: RollupFeeConfig = {
   manaTarget: BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 2)),
   manaLimit: BigInt(Number.MAX_SAFE_INTEGER),
   provingCostPerManaInEth: 0n,

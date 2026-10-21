@@ -8,7 +8,7 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { ManualDateProvider } from '@aztec-labs/foundation/timer';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
-import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { CheckpointGlobalVariables, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -34,7 +34,7 @@ describe('NextBlockFeeCache', () => {
   let epochCache: MockProxy<EpochCacheInterface>;
   let dateProvider: ManualDateProvider;
   let cache: NextBlockFeeCache;
-  let feeConfigProvider: FixedRollupFeeConfigProvider;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
 
   /** Distinct fee per pricing call, so a re-price is visible in the value a reader gets back. */
   let priceCount: number;
@@ -90,7 +90,7 @@ describe('NextBlockFeeCache', () => {
       Promise.resolve(globalsFor(slotNumber, ++priceCount)),
     );
 
-    feeConfigProvider = new FixedRollupFeeConfigProvider();
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     cache = new NextBlockFeeCache({
       blockSource,
       globalVariableBuilder,

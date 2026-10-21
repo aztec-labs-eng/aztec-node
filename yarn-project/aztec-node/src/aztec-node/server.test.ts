@@ -44,7 +44,7 @@ import {
 import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { FixedRollupFeeConfigProvider, GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   L2LogsSource,
   MerkleTreeReadOperations,
@@ -154,7 +154,7 @@ describe('aztec node', () => {
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
   let nextBlockPredictor: NextBlockPredictor;
-  let feeConfigProvider: FixedRollupFeeConfigProvider;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let nodeConfig: AztecNodeConfig;
 
   const chainId = new Fr(12345);
@@ -297,7 +297,7 @@ describe('aztec node', () => {
       new MockDateProvider(),
     );
 
-    feeConfigProvider = new FixedRollupFeeConfigProvider();
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     nextBlockPredictor = NextBlockPredictor.create({
       blockSource: l2BlockSource,
       globalVariableBuilder: globalVariablesBuilder,
@@ -1543,7 +1543,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
-          feeConfigProvider: new FixedRollupFeeConfigProvider(),
+          feeConfigProvider: new TestRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1733,7 +1733,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
-          feeConfigProvider: new FixedRollupFeeConfigProvider(),
+          feeConfigProvider: new TestRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1804,7 +1804,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
-        feeConfigProvider: new FixedRollupFeeConfigProvider(),
+        feeConfigProvider: new TestRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1860,7 +1860,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
-        feeConfigProvider: new FixedRollupFeeConfigProvider(),
+        feeConfigProvider: new TestRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),

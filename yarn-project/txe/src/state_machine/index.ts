@@ -15,7 +15,7 @@ import {
 import { TxResolverService } from '@aztec-labs/pxe/simulator';
 import { CommitteeAttestationsAndSigners, L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
-import { FixedRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 
@@ -54,7 +54,7 @@ export class TXEStateMachine {
     const log = createLogger('txe_node');
     const globalVariableBuilder = new TXEGlobalVariablesBuilder();
     const epochCache = new MockEpochCache();
-    const feeConfigProvider = new FixedRollupFeeConfigProvider();
+    const feeConfigProvider = new TestRollupFeeConfigProvider();
     // Never started: TXE has no L1 to poll, and the predictor prices inline through the same path when asked.
     const nextBlockPredictor = NextBlockPredictor.create({
       blockSource: archiver,

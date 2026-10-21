@@ -6,7 +6,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
-import { FixedRollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
+import { TestRollupFeeConfigProvider } from '../gas/rollup_fee_config.js';
 import type { CoordinationSignatureContext } from '../p2p/signature_utils.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
@@ -15,11 +15,11 @@ import { buildCheckpointSimulationOverridesPlan, computePipelinedParentFeeHeader
 
 describe('computePipelinedParentFeeHeader', () => {
   let rollup: ReturnType<typeof mock<RollupContract>>;
-  let feeConfigProvider: FixedRollupFeeConfigProvider;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
 
   beforeEach(() => {
     rollup = mock<RollupContract>();
-    feeConfigProvider = new FixedRollupFeeConfigProvider({ manaTarget: 10_000n });
+    feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
   });
 
   // Use checkpoint 3 so the grandparent (checkpoint 1) is valid
@@ -191,7 +191,7 @@ describe('computePipelinedParentFeeHeader', () => {
 
 describe('buildCheckpointSimulationOverridesPlan', () => {
   let rollup: ReturnType<typeof mock<RollupContract>>;
-  const feeConfigProvider = new FixedRollupFeeConfigProvider({ manaTarget: 10_000n });
+  const feeConfigProvider = new TestRollupFeeConfigProvider({ manaTarget: 10_000n });
 
   const chainId = new Fr(12345);
   const signatureContext: CoordinationSignatureContext = {

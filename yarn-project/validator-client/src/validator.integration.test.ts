@@ -29,7 +29,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { FixedRollupFeeConfigProvider, Gas, GasFees, type RollupFeeConfig } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, type RollupFeeConfig, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import {
@@ -56,7 +56,7 @@ import { ValidatorClient } from './validator.js';
 jest.setTimeout(60_000);
 
 /** A fee config provider whose cached values lag L1 until refreshed, as the tracker's do between polls. */
-class LaggingRollupFeeConfigProvider extends FixedRollupFeeConfigProvider {
+class LaggingRollupFeeConfigProvider extends TestRollupFeeConfigProvider {
   private onL1: Partial<RollupFeeConfig> | undefined;
   private refreshError: Error | undefined;
 
