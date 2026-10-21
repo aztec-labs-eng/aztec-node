@@ -141,7 +141,7 @@ function validate-webapp-tutorial {
     cd "$TUTORIAL_DIR"
 
     # Backup package.json (the only tracked file we mutate). yarn.lock is
-    # gitignored and regenerated on each run, so we don't back it up.
+    # gitignored and reseeded on each run, so we don't back it up.
     cp package.json package.json.bak
 
     cleanup() {
@@ -155,11 +155,15 @@ function validate-webapp-tutorial {
 
     # Start from a fresh node_modules / lock so we don't reuse state from
     # a previous run that may have been interrupted mid-cleanup.
-    # An empty yarn.lock is required to mark this directory as a standalone
-    # yarn project; otherwise yarn 4 walks up to docs/ and refuses to install
+    # A yarn.lock is required to mark this directory as a standalone yarn
+    # project; otherwise yarn 4 walks up to docs/ and refuses to install
     # because webapp-tutorial isn't listed as a workspace there.
+    # Seed it with yarn-project's lockfile so the linked packages' npm deps
+    # resolve to the versions yarn-project already locks. Resolving them fresh
+    # can pick a release whose sibling packages are still inside the
+    # npmMinimalAgeGate window and fail the install.
     rm -rf node_modules .yarn .yarnrc.yml
-    : > yarn.lock
+    cp "$YP/yarn.lock" yarn.lock
 
     # Replace #include_aztec_version with link: paths to local workspace
     # packages. link: does not install workspace transitive deps, so add the
@@ -303,7 +307,7 @@ NODE
     # Fresh yarn setup for linking
     yarn config set nodeLinker node-modules 2>/dev/null || true
     # Yarn 4 auto-enables --immutable when CI is set; we intentionally start
-    # with an empty yarn.lock that this install populates, so disable that.
+    # from a seed yarn.lock that this install rewrites, so disable that.
     # Skip puppeteer's Chrome download: this step only type-checks and runs
     # `vite build`, never the e2e tests that need a browser. Set here rather
     # than in webapp-tutorial itself so users following the tutorial still
