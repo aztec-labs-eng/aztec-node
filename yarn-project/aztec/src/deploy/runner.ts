@@ -66,7 +66,7 @@ import type {
   Steps,
 } from './types.js';
 
-/** A step's idempotency gate (transitively) depends on itself. */
+/** A step's inventory check — an action's gate, or a deferred contract's args — (transitively) depends on itself. */
 class GateCycleError extends Error {
   constructor(message: string) {
     super(message);
@@ -173,6 +173,8 @@ class DeploymentRun<C extends Steps> {
   private readonly publishedCache = new Map<string, Promise<boolean>>();
   private readonly gateCache = new Map<string, Promise<boolean>>();
   private readonly gateInProgress = new Set<string>();
+  private readonly deferredCache = new Map<string, Promise<boolean>>();
+  private readonly deferredInProgress = new Set<string>();
   private readonly fundGateCache = new Map<string, Promise<boolean>>();
 
   // Populated by the resolve / inventory / plan phases.
@@ -310,27 +312,30 @@ class DeploymentRun<C extends Steps> {
       this.publishedThisRun.add(alias);
     }
 
-    // Deferred contracts: try to resolve now — on a re-run the state their args read is already
-    // on-chain, so the address derives and publication is checked like any other contract (which is
-    // what makes re-runs no-ops). When the args can't resolve yet, the contract publishes this run
-    // and re-resolves at execution time, after its `dependsOn` has run. Runs before the action
-    // gates, so `ran`/`done` on a deferred contract answer correctly inside them.
+    // The remaining checks consult each other (a deferred contract waits on the steps it declares, a
+    // gate on the contracts it reads, `ctx.done`/`ctx.ran` on any step), so each is evaluated on
+    // demand and memoized: whichever check reaches a step first decides it, and every later one
+    // reuses that answer. These loops only make sure every step is decided, in any order.
+    // Sequential on purpose: evaluating them concurrently would turn the cycle detection
+    // (gateInProgress, deferredInProgress) into a silent deadlock of promises awaiting each other.
+
+    // Deferred contracts. On a re-run the state their args read is already on-chain, so the address
+    // derives and publication is checked like any other contract (which is what makes re-runs
+    // no-ops); otherwise the contract publishes this run and re-resolves at execution time.
     for (const [alias, step] of this.contractSteps) {
-      if (isDeferred(step) && !(await this.tryResolveDeferred(alias, step))) {
+      if (isDeferred(step) && (await this.deferredPublishes(alias))) {
         this.publishedThisRun.add(alias);
       }
     }
 
-    // Fund gates: recipients whose public Fee Juice balance is below the step's threshold. Runs
-    // before the action gates so `ctx.done`/`ctx.ran` on a fund step answer correctly inside them.
+    // Fund gates: recipients whose public Fee Juice balance is below the step's threshold.
     for (const alias of this.fundSteps.keys()) {
       if (!(await this.fundGate(alias))) {
         this.fundsToRun.add(alias);
       }
     }
 
-    // Action gates. Sequential on purpose: evaluating them concurrently would turn the cyclic-gate
-    // detection (gateInProgress) into a silent deadlock of promises awaiting each other.
+    // Action gates.
     for (const alias of this.actionSteps.keys()) {
       if (!(await this.actionGate(alias))) {
         this.actionsToRun.add(alias);
@@ -551,17 +556,31 @@ class DeploymentRun<C extends Steps> {
   }
 
   /**
-   * Attempts to resolve a deferred contract from current on-chain state, and reports whether there
-   * is no work left for it this run — the args resolved AND the instance is already published.
-   * Attempted only once every step it declares is in place, actions included: its args read their
-   * effects, so resolving earlier would derive the address from state that does not exist yet.
+   * Whether a deferred contract publishes this run, decided once per run. It resolves from current
+   * on-chain state only once every step it declares is in place, actions included: its args read
+   * their effects, so resolving earlier would derive the address from state that does not exist
+   * yet. It has no work left when the args resolve AND the instance is already published. A deferred
+   * contract that (transitively) depends on itself throws {@link GateCycleError}.
    */
-  private async tryResolveDeferred(alias: string, step: ContractStep<C>): Promise<boolean> {
-    if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
-      return false;
+  private deferredPublishes(alias: string): Promise<boolean> {
+    if (this.deferredInProgress.has(alias)) {
+      return Promise.reject(new GateCycleError(`Cyclic dependency at deferred contract "${alias}".`));
     }
-    await this.resolveDeferred(alias, step);
-    return this.isPublished(alias);
+    const cached = this.deferredCache.get(alias);
+    if (cached) {
+      return cached;
+    }
+    this.deferredInProgress.add(alias);
+    const step = getOrThrow(this.contractSteps, alias, 'contract');
+    const pending = (async () => {
+      if (!(await this.dependenciesReady(alias, { contractsOnly: false }))) {
+        return true;
+      }
+      await this.resolveDeferred(alias, step);
+      return !(await this.isPublished(alias));
+    })().finally(() => this.deferredInProgress.delete(alias));
+    this.deferredCache.set(alias, pending);
+    return pending;
   }
 
   /** Resolves a deferred contract's address from its args, read against the current state. */
@@ -719,6 +738,11 @@ class DeploymentRun<C extends Steps> {
     if (step.mode === 'register') {
       return Promise.resolve(this.contractAddresses.has(id)); // registered in the PXE
     }
+    if (isDeferred(step)) {
+      // Its address only exists once it resolves; publication itself is read live, so a publish
+      // later in this run still shows.
+      return this.deferredPublishes(id).then(() => this.isPublished(id));
+    }
     return this.isPublished(id);
   }
 
@@ -732,23 +756,29 @@ class DeploymentRun<C extends Steps> {
       return !(await this.actionGate(id));
     }
     if (step.kind === 'fund') {
-      return this.fundsToRun.has(id);
+      return !(await this.fundGate(id));
     }
     if (step.mode === 'register') {
       return this.contractAddresses.has(id); // (re)registered this run
     }
-    return this.publishedThisRun.has(id);
+    return isDeferred(step) ? this.deferredPublishes(id) : this.publishedThisRun.has(id);
   }
 
   /**
    * Builds the execution graph over the steps that run and groups it into layers. Exactly one
-   * contract per class publishes it (the first in declaration order); every other same-class
-   * contract — deterministic or deferred — is ordered after it.
+   * contract per class publishes it; every other same-class contract — deterministic or deferred —
+   * is ordered after it. The publisher is the class's first contract in `dependsOn` order, so the
+   * ordering can't run against a dependency (a same-class contract declared earlier but depending on
+   * a later one would otherwise close a cycle).
    */
   private buildLayers(): string[][] {
+    const dependsOn = new Map(
+      this.execAliases.map(alias => [alias, getOrThrow(this.steps, alias, 'step').dependsOn ?? []]),
+    );
     const publisherByClass = new Map<string, string>();
-    for (const [alias, step] of this.contractSteps) {
-      if (step.mode !== 'publish') {
+    for (const alias of topologicalLayers(this.execAliases, dependsOn).flat()) {
+      const step = this.contractSteps.get(alias);
+      if (step?.mode !== 'publish') {
         continue;
       }
       const classId = getOrThrow(this.classIds, alias, 'class id').toString();
