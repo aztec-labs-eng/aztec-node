@@ -126,6 +126,36 @@ describe('RollupFeeConfigTracker', () => {
     expect(readsAtBlock(7n)).toBe(1);
   });
 
+  it('evicts the least recently used pinned read once it is full', async () => {
+    tracker = await RollupFeeConfigTracker.create(rollup, { pinnedReadsCapacity: 2 });
+    const readsAtBlock = (blockNumber: bigint) =>
+      rollup.getManaLimit.mock.calls.filter(([opts]) => opts?.blockNumber === blockNumber).length;
+
+    await tracker.getFeeConfigAt(1n);
+    await tracker.getFeeConfigAt(2n);
+    // Using block 1 again makes block 2 the least recently used, so block 3 pushes block 2 out.
+    await tracker.getFeeConfigAt(1n);
+    await tracker.getFeeConfigAt(3n);
+    await tracker.getFeeConfigAt(1n);
+    await tracker.getFeeConfigAt(2n);
+
+    expect(readsAtBlock(1n)).toBe(1);
+    expect(readsAtBlock(2n)).toBe(2);
+  });
+
+  it("asks for a fresh block number on refresh, and polls with the client's cached one", async () => {
+    tracker = await RollupFeeConfigTracker.create(rollup, { pollingIntervalMs: 10 });
+    client.getBlockNumber.mockClear();
+
+    await tracker.refresh();
+    expect(client.getBlockNumber.mock.calls).toEqual([[{ cacheTime: 0 }]]);
+
+    client.getBlockNumber.mockClear();
+    tracker.start();
+    await retryUntil(() => client.getBlockNumber.mock.calls.length > 0 || undefined, 'poll', 5, 0.01);
+    expect(client.getBlockNumber.mock.calls[0]).toEqual([]);
+  });
+
   it('retries a pinned read that failed', async () => {
     tracker = await RollupFeeConfigTracker.create(rollup);
     rollup.getManaLimit.mockRejectedValueOnce(new Error('rpc down'));

@@ -213,8 +213,9 @@ export async function createAztecNodeService(
   try {
     // Governance can change the rollup's fee settings (the mana target and limit among them) at any time, so every
     // component that needs them reads them from this tracker rather than from a copy taken at startup.
+    // Pinned readers ask about L1 blocks back to their sync points, so keep the reads for two epochs' worth of blocks.
     const feeConfigTracker = await RollupFeeConfigTracker.create(rollupContract, {
-      pollingIntervalMs: config.ethereumSlotDuration * 1000,
+      pinnedReadsCapacity: Math.ceil((2 * Number(epochDuration) * Number(slotDuration)) / config.ethereumSlotDuration),
       logger: log.createChild('rollup-fee-config'),
     });
     feeConfigTracker.start();
