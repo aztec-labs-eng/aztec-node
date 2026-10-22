@@ -243,11 +243,10 @@ and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole 
 ### Running tests against legacy contract artifacts
 
 To verify that contracts deployed from a previous release still work against the current stack, set
-`CONTRACT_ARTIFACTS_VERSION` to a published version of `@aztec-labs/noir-contracts.js` /
-`@aztec-labs/noir-test-contracts.js`:
+`CONTRACT_ARTIFACTS_VERSION` to a stable release with a committed tarball in `legacy-contracts/` (see its README):
 
 ```bash
-CONTRACT_ARTIFACTS_VERSION=4.1.3 yarn test:e2e src/automine/token/access_control.parallel.test.ts
+CONTRACT_ARTIFACTS_VERSION=6.0.0 yarn test:e2e src/automine/token/access_control.parallel.test.ts
 ```
 
 Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeScript wrapper classes
@@ -255,14 +254,14 @@ Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeSc
 so this exercises whether a deployed contract's ABI / bytecode / notes still work through the *new* client,
 not whether the legacy wrapper code still imports cleanly.
 
-The first run downloads the pinned packages into `.legacy-contracts/<version>/node_modules/` (cached across
+The first run unpacks `legacy-contracts/<version>.tar.xz` into `.legacy-contracts/<version>/` (cached across
 runs). A startup banner and a per-redirect line are printed to stderr so you can confirm the legacy
 artifacts were actually loaded:
 
 ```
-[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=4.1.3
-[legacy-contracts][jest] redirecting @aztec-labs/noir-contracts.js/artifacts/*.json -> .legacy-contracts/4.1.3/...
-[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/4.1.3/.../token_contract-Token.json
+[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=6.0.0
+[legacy-contracts][jest] redirecting noir-contracts.js/artifacts/*.json -> .legacy-contracts/6.0.0/...
+[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/6.0.0/.../token_contract-Token.json
 ```
 
 When `CONTRACT_ARTIFACTS_VERSION` is unset the test run is byte-identical to the default behaviour. The
