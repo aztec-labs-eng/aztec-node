@@ -119,7 +119,7 @@ export class CheckpointIngestor {
     let searchEndBlock: bigint = from;
     do {
       [searchStartBlock, searchEndBlock] = this.nextRange(searchEndBlock, to);
-      const calldataCheckpoints = await this.retrieveCalldata(searchStartBlock, searchEndBlock);
+      const calldataCheckpoints = await this.retrieveCalldata(searchStartBlock, searchEndBlock, to);
       if (calldataCheckpoints.length === 0) {
         continue;
       }
@@ -153,12 +153,14 @@ export class CheckpointIngestor {
   }
 
   /**
-   * Retrieves the calldata of the checkpoints published in an L1 block range, sorted by L1 block. Blobs are not
-   * fetched yet, since we may be able to just get that data out of the proposed chain.
+   * Retrieves the calldata of the checkpoints published in an L1 block range, sorted by L1 block, keeping those the
+   * rollup holds as of the given L1 block. Blobs are not fetched yet, since we may be able to just get that data out of
+   * the proposed chain.
    */
   private async retrieveCalldata(
     searchStartBlock: bigint,
     searchEndBlock: bigint,
+    l1BlockNumber: bigint,
   ): Promise<RetrievedCheckpointFromCalldata[]> {
     this.deps.log.trace(`Retrieving checkpoints from L1 block ${searchStartBlock} to ${searchEndBlock}`);
 
@@ -172,6 +174,7 @@ export class CheckpointIngestor {
           this.deps.debugClient,
           searchStartBlock, // TODO(palla/reorg): If the L2 reorg was due to an L1 reorg, we need to start search earlier
           searchEndBlock,
+          l1BlockNumber,
           this.deps.instrumentation,
           this.deps.log,
         ),

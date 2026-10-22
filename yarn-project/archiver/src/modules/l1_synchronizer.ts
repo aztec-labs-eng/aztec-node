@@ -706,7 +706,10 @@ export class ArchiverL1Synchronizer implements Traceable {
           { localPendingCheckpointNumber, localPendingArchiveRoot, archiveForLocalPendingCheckpointNumber },
         );
 
-        const tipAfterUnwind = await this.findLastCheckpointAlsoOnL1(localPendingCheckpointNumber);
+        const tipAfterUnwind = await this.findLastCheckpointAlsoOnL1(
+          localPendingCheckpointNumber,
+          currentL1BlockNumber,
+        );
         const checkpointsToRemove = localPendingCheckpointNumber - tipAfterUnwind;
         await this.updater.removeCheckpointsAfter(CheckpointNumber(tipAfterUnwind));
         if (checkpointsToRemove > 0) {
@@ -725,18 +728,28 @@ export class ArchiverL1Synchronizer implements Traceable {
   }
 
   /**
-   * Walks down from the given local checkpoint to the latest one whose archive matches the rollup's, stopping early at
-   * a checkpoint missing locally.
+   * Walks down from the given local checkpoint to the latest one whose archive matches the rollup's as of the given L1
+   * block, stopping early at a checkpoint missing locally. Throws instead of walking below the local finalized
+   * checkpoint, since L1 cannot drop a finalized checkpoint and such a view means the L1 node answered inconsistently.
    */
-  private async findLastCheckpointAlsoOnL1(from: CheckpointNumber): Promise<CheckpointNumber> {
+  private async findLastCheckpointAlsoOnL1(from: CheckpointNumber, l1BlockNumber: bigint): Promise<CheckpointNumber> {
+    const finalizedCheckpointNumber = await this.stores.blocks.getFinalizedCheckpointNumber();
     let tipAfterUnwind = from;
     while (true) {
+      if (tipAfterUnwind < finalizedCheckpointNumber) {
+        throw new Error(
+          `L1 view at block ${l1BlockNumber} disagrees with local finalized checkpoint ${finalizedCheckpointNumber}: ` +
+            `no local checkpoint between ${finalizedCheckpointNumber} and ${from} matches the rollup archive`,
+        );
+      }
       const candidateCheckpoint = await this.stores.blocks.getCheckpointData(tipAfterUnwind);
       if (candidateCheckpoint === undefined) {
         break;
       }
 
-      const archiveAtContract = await this.rollup.archiveAt(candidateCheckpoint.checkpointNumber);
+      const archiveAtContract = await this.rollup.archiveAt(candidateCheckpoint.checkpointNumber, {
+        blockNumber: l1BlockNumber,
+      });
       this.log.trace(
         `Checking local checkpoint ${candidateCheckpoint.checkpointNumber} with archive ${candidateCheckpoint.archive.root}`,
         {

@@ -181,6 +181,7 @@ export async function retrievedToPublishedCheckpoint({
  * @param debugClient - The viem debug client to use for trace/debug RPC methods (optional).
  * @param searchStartBlock - The block number to use for starting the search.
  * @param searchEndBlock - The highest block number that we should search up to.
+ * @param l1BlockNumber - The L1 block the rollup is read at to check that each checkpoint is still on the chain.
  * @param instrumentation - The archiver instrumentation instance.
  * @param logger - The logger instance.
  * @returns An array of calldata-only checkpoints.
@@ -191,6 +192,7 @@ export async function retrieveCheckpointCalldataFromRollup(
   debugClient: ViemPublicDebugClient,
   searchStartBlock: bigint,
   searchEndBlock: bigint,
+  l1BlockNumber: bigint,
   instrumentation: ArchiverInstrumentation,
   logger: Logger = createLogger('archiver'),
 ): Promise<RetrievedCheckpointFromCalldata[]> {
@@ -227,6 +229,7 @@ export async function retrieveCheckpointCalldataFromRollup(
       debugClient,
       checkpointProposedLogs,
       rollupConstants,
+      l1BlockNumber,
       instrumentation,
       logger,
     );
@@ -248,6 +251,7 @@ type RetrievedCheckpointWithLog = { log: CheckpointProposedLog; checkpoint: Retr
  * @param debugClient - The viem debug client to use for trace/debug RPC methods (optional).
  * @param logs - CheckpointProposed logs.
  * @param rollupConstants - The rollup constants (chainId, version).
+ * @param l1BlockNumber - The L1 block the rollup is read at to check that each checkpoint is still on the chain.
  * @param instrumentation - The archiver instrumentation instance.
  * @param logger - The logger instance.
  * @returns The calldata-only checkpoints, each with the log that announced it, in completion order.
@@ -258,6 +262,7 @@ async function processCheckpointProposedLogs(
   debugClient: ViemPublicDebugClient,
   logs: CheckpointProposedLog[],
   { chainId, version }: { chainId: Fr; version: Fr },
+  l1BlockNumber: bigint,
   instrumentation: ArchiverInstrumentation,
   logger: Logger,
 ): Promise<RetrievedCheckpointWithLog[]> {
@@ -280,7 +285,7 @@ async function processCheckpointProposedLogs(
     // canonical: the L1 prune is lazy (it runs on the next propose or an explicit prune() call), and until then
     // archiveAt keeps returning the refused checkpoint's archive. Proposers send prune() from their cannot-build
     // fallback even when their own sync is stuck, so the refused checkpoint is eventually dropped here.
-    const archiveFromChain = await rollup.archiveAt(checkpointNumber);
+    const archiveFromChain = await rollup.archiveAt(checkpointNumber, { blockNumber: l1BlockNumber });
     const blobHashes = log.args.versionedBlobHashes;
 
     if (archive.equals(archiveFromChain)) {

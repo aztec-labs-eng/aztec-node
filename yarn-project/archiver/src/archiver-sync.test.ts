@@ -1419,6 +1419,71 @@ describe('Archiver Sync', () => {
       expect(await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 })).toEqual([]);
     }, 10_000);
 
+    describe('reads pinned to the round L1 block', () => {
+      // Syncs CP1..CP4 with CP3 proven and finalized, then has L1 drop CP4.
+      const syncFourCheckpointsThenPruneFourth = async () => {
+        await fake.addCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 70n,
+          messagesL1BlockNumber: 50n,
+          numL1ToL2Messages: 0,
+        });
+        await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 75n, numL1ToL2Messages: 0 });
+        await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 80n, numL1ToL2Messages: 0 });
+        await fake.addCheckpoint(CheckpointNumber(4), { l1BlockNumber: 85n, numL1ToL2Messages: 0 });
+        fake.markCheckpointAsProven(CheckpointNumber(3));
+        fake.setL1BlockNumber(90n);
+        fake.setFinalizedL1BlockNumber(90n);
+        await archiver.syncImmediate();
+        await expectTips({ checkpointed: 4, proven: 3, finalized: 3 });
+
+        fake.markCheckpointAsPruned(CheckpointNumber(4));
+        fake.setL1BlockNumber(95n);
+      };
+
+      const expectTips = async (expected: { checkpointed: number; proven: number; finalized: number }) => {
+        const tips = await archiver.getL2Tips();
+        expect({
+          checkpointed: tips.checkpointed.checkpoint.number,
+          proven: tips.proven.checkpoint.number,
+          finalized: tips.finalized.checkpoint.number,
+        }).toEqual(expected);
+      };
+
+      it('unwinds to the last checkpoint L1 holds at the pinned block when untagged reads lag behind it', async () => {
+        await syncFourCheckpointsThenPruneFourth();
+        fake.setUntaggedArchiveAtPendingTip(CheckpointNumber(1));
+
+        await archiver.syncImmediate();
+
+        await expectTips({ checkpointed: 3, proven: 3, finalized: 3 });
+      });
+
+      it('refuses to unwind below the finalized checkpoint when the pinned L1 view disagrees with it', async () => {
+        await syncFourCheckpointsThenPruneFourth();
+        // No checkpoint matches, including the finalized one: a view no honest L1 node can serve.
+        rollupContract.archiveAt.mockResolvedValue(Fr.ZERO);
+
+        await expect(archiver.syncImmediate()).rejects.toThrow(/finalized checkpoint 3/);
+
+        await expectTips({ checkpointed: 4, proven: 3, finalized: 3 });
+        expect(await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 10 })).toHaveLength(4);
+      });
+
+      it('ingests a checkpoint canonical at the pinned block when untagged reads lag behind it', async () => {
+        await fake.addCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 70n,
+          messagesL1BlockNumber: 50n,
+          numL1ToL2Messages: 0,
+        });
+        fake.setUntaggedArchiveAtPendingTip(CheckpointNumber(0));
+        fake.setL1BlockNumber(90n);
+
+        await archiver.syncImmediate();
+
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      });
+    });
+
     it('does not fetch checkpoint logs while L1 pending tip is still the local one', async () => {
       await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 70n,
