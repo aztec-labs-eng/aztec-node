@@ -586,7 +586,7 @@ function check_compat_artifacts_tracked {
     ver=${tag#v}
     # Include only versions >= compat_min_version (sort -V puts smaller first).
     [ "$(printf '%s\n%s' "$compat_min_version" "$ver" | sort -V | head -1)" = "$compat_min_version" ] || continue
-    [ -f "yarn-project/end-to-end/legacy-contracts/$ver.tar.gz" ] || missing+=("$ver")
+    [ -f "yarn-project/end-to-end/legacy-contracts/$ver.tar.xz" ] || missing+=("$ver")
   done < <(git tag -l "v${compat_major}.*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V)
 
   if [ ${#missing[@]} -gt 0 ]; then

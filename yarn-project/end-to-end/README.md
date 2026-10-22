@@ -254,7 +254,7 @@ Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeSc
 so this exercises whether a deployed contract's ABI / bytecode / notes still work through the *new* client,
 not whether the legacy wrapper code still imports cleanly.
 
-The first run unpacks `legacy-contracts/<version>.tar.gz` into `.legacy-contracts/<version>/` (cached across
+The first run unpacks `legacy-contracts/<version>.tar.xz` into `.legacy-contracts/<version>/` (cached across
 runs). A startup banner and a per-redirect line are printed to stderr so you can confirm the legacy
 artifacts were actually loaded:
 

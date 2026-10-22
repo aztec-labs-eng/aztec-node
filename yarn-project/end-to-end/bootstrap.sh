@@ -322,14 +322,14 @@ function compat_per_version_test_cmds {
 }
 
 # Backwards-compat testing: rerun the artifact-consuming tests against each prior stable release's
-# contract artifacts, committed as legacy-contracts/<version>.tar.gz (see legacy-contracts/README.md).
+# contract artifacts, committed as legacy-contracts/<version>.tar.xz (see legacy-contracts/README.md).
 # Full CI only: each stable release tested here increases e2e running time by around 5 minutes.
 function compat_test_cmds {
   [ "${CI_FULL:-0}" -eq 1 ] || return 0
   local version tarball
-  for tarball in legacy-contracts/*.tar.gz; do
+  for tarball in legacy-contracts/*.tar.xz; do
     [ -e "$tarball" ] || continue
-    version=$(basename "$tarball" .tar.gz)
+    version=$(basename "$tarball" .tar.xz)
     compat_per_version_test_cmds "$version"
   done
 }

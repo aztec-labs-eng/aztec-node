@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds <version>.tar.gz in this directory from the @aztec-labs packages published on npm, enabling the
+# Builds <version>.tar.xz in this directory from the @aztec-labs packages published on npm, enabling the
 # backwards-compat sweep for that version once committed.
 # Usage: ./add_version.sh <version>   e.g. ./add_version.sh 6.0.1
 set -euo pipefail
@@ -11,7 +11,7 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 out_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-out="$out_dir/$version.tar.gz"
+out="$out_dir/$version.tar.xz"
 
 # The deterministic flags below are GNU tar's; macOS ships BSD tar (brew install gnu-tar).
 tar_bin=tar
@@ -35,17 +35,18 @@ done
 find "$version" -type f ! -name '*.json' -delete
 
 # Deterministic output: regenerating from the same npm packages yields a byte-identical file. --mode keeps the
-# directory permissions from following the caller's umask.
+# directory permissions from following the caller's umask, and --threads=1 keeps the xz stream layout from following
+# the xz version's threading default.
 $tar_bin --sort=name --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX' --mtime='2000-01-01 00:00:00Z' \
-    -cf - "$version" | gzip -n -9 > "$version.tar.gz"
+    -cf - "$version" | xz -9 --threads=1 > "$version.tar.xz"
 
 if [ -f "$out" ]; then
-  if cmp -s "$version.tar.gz" "$out"; then
+  if cmp -s "$version.tar.xz" "$out"; then
     echo "$out already exists and is byte-identical. Nothing to do."
     exit 0
   fi
   echo "ERROR: $out exists but differs from the freshly built tarball." >&2
   exit 1
 fi
-mv "$version.tar.gz" "$out"
+mv "$version.tar.xz" "$out"
 echo "Created $out. Commit it to enable the compat sweep for $version."
