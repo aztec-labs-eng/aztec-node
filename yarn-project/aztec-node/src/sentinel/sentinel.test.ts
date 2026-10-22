@@ -35,6 +35,7 @@ import {
 import type {
   ValidatorStats,
   ValidatorStatusHistory,
+  ValidatorStatusInSlot,
   ValidatorsEpochPerformance,
   ValidatorsStats,
 } from '@aztec-labs/stdlib/validators';
@@ -770,6 +771,58 @@ describe('sentinel', () => {
     });
   });
 
+  describe('computeStats default window cache', () => {
+    let validator: EthAddress;
+
+    beforeEach(async () => {
+      validator = EthAddress.random();
+      await sentinel.doUpdateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      sentinel.setLastProcessedSlot(SlotNumber(5));
+    });
+
+    it('serves repeated and concurrent calls from a single history scan', async () => {
+      const scans = jest.spyOn(store, 'getHistories');
+
+      const [first, second] = await Promise.all([sentinel.computeStats(), sentinel.computeStats()]);
+      const third = await sentinel.computeStats();
+
+      expect(second).toEqual(first);
+      expect(third).toEqual(first);
+      expect(first.stats[validator.toString()].totalSlots).toBe(1);
+      expect(scans).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes history written after the previous call', async () => {
+      await sentinel.computeStats();
+
+      await sentinel.doUpdateValidators(SlotNumber(2), { [validator.toString()]: 'attestation-missed' });
+      const result = await sentinel.computeStats();
+
+      expect(result.stats[validator.toString()].totalSlots).toBe(2);
+      expect(result.stats[validator.toString()].missedAttestations.count).toBe(1);
+    });
+
+    it('moves the window when a new slot is processed', async () => {
+      await sentinel.computeStats();
+
+      sentinel.setLastProcessedSlot(SlotNumber(20));
+      const result = await sentinel.computeStats();
+
+      expect(result.lastProcessedSlot).toEqual(SlotNumber(20));
+      // Slot 1 is now outside the 10-slot window ending at slot 20.
+      expect(result.stats[validator.toString()].totalSlots).toBe(0);
+    });
+
+    it('retries after a failed computation', async () => {
+      jest.spyOn(store, 'getHistories').mockRejectedValueOnce(new Error('store unavailable'));
+
+      await expect(sentinel.computeStats()).rejects.toThrow('store unavailable');
+      const result = await sentinel.computeStats();
+
+      expect(result.stats[validator.toString()].totalSlots).toBe(1);
+    });
+  });
+
   describe('slot range validation', () => {
     let validator: EthAddress;
 
@@ -1414,8 +1467,12 @@ class TestSentinel extends Sentinel {
     return super.handleEpochEnd(epoch);
   }
 
-  public override computeStats(opts: { fromSlot?: SlotNumber; toSlot?: SlotNumber }) {
+  public override computeStats(opts?: { fromSlot?: SlotNumber; toSlot?: SlotNumber }) {
     return super.computeStats(opts);
+  }
+
+  public doUpdateValidators(slot: SlotNumber, stats: Record<`0x${string}`, ValidatorStatusInSlot | undefined>) {
+    return super.updateValidators(slot, stats);
   }
 
   public override handleEpochPerformance(epoch: EpochNumber, performance: ValidatorsEpochPerformance) {
