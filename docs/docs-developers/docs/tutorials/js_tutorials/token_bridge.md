@@ -63,7 +63,7 @@ Third, map your own contracts' imports in a `remappings.txt` at the project root
 Finally, add the Aztec packages:
 
 ```bash
-yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/accounts@#include_version_without_prefix @aztec-labs/stdlib@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec/viem@2.38.2 tsx
+yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/accounts@#include_version_without_prefix @aztec-labs/stdlib@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec-labs/ethereum@#include_version_without_prefix @aztec-labs/foundation@#include_version_without_prefix @aztec/viem@2.38.2 tsx
 ```
 
 :::tip Packages published in the last 24 hours
