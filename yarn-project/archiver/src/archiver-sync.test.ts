@@ -2217,6 +2217,77 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
     }, 15_000);
+
+    describe('L1 reorg republishes the latest checkpoint with different attestations', () => {
+      let signers: Secp256k1Signer[];
+
+      // Checkpoint 2 lands at L1 block 105, which becomes the sync point. The republication lands either at that
+      // block, which no forward scan reads again, or past it, where the forward scan of the next pass reads it.
+      const placements: [string, bigint][] = [
+        ['at the sync point', 105n],
+        ['above the sync point', 115n],
+      ];
+
+      beforeEach(async () => {
+        fake.setTargetCommitteeSize(3);
+        signers = times(3, Secp256k1Signer.random);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(
+          makeCommitteeLookup({ committee: signers.map(signer => signer.address), seed: 0n }),
+        );
+        await fake.addCheckpoint(CheckpointNumber(1), { l1BlockNumber: 101n, signers });
+        await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 105n, signers });
+        await syncTo(110n);
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      });
+
+      const syncTo = async (head: bigint) => {
+        fake.setL1BlockNumber(head);
+        await archiver.syncImmediate();
+      };
+
+      /** Syncs past the republication, checks the outcome, then checks it again one L1 block range later. */
+      const syncAndExpectStable = async (expectOutcome: () => Promise<void>) => {
+        await syncTo(120n);
+        await syncTo(130n);
+        await expectOutcome();
+        await syncTo(140n);
+        await expectOutcome();
+      };
+
+      it.each(placements)('stores the republished attestations when republished %s', async (_, l1BlockNumber) => {
+        await fake.repostCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber,
+          signers,
+          spareAttestationsBitmapBit: true,
+          reorged: true,
+        });
+
+        await syncAndExpectStable(async () => {
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+          const stored = await archiver.getCheckpoint({ number: CheckpointNumber(2) });
+          expect(computeAttestationsHash(stored!.verbatimAttestations)).toEqual(
+            fake.getPostedAttestationsHash(CheckpointNumber(2)).toString(),
+          );
+          expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+        });
+      });
+
+      it.each(placements)(
+        'flags the republished checkpoint when its attestations are invalid and republished %s',
+        async (_, l1BlockNumber) => {
+          await fake.repostCheckpoint(CheckpointNumber(2), {
+            l1BlockNumber,
+            signers: times(3, Secp256k1Signer.random),
+            reorged: true,
+          });
+
+          await syncAndExpectStable(async () => {
+            expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+            expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+          });
+        },
+      );
+    });
   });
 
   describe('checkpoint ingestion recovery', () => {
