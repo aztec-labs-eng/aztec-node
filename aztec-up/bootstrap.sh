@@ -9,7 +9,7 @@ hash=$(hash_str \
   $(../yarn-project/bootstrap.sh hash))
 
 # Bare aliases ("nightly", "latest") resolve to this major version.
-DEFAULT_MAJOR_VERSION=${AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION:-5}
+DEFAULT_MAJOR_VERSION=${AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION:-6}
 
 # Tool versions baked into the install artifacts (uploaded to S3 on release).
 # The installer reads exactly these keys: noir (noirup), foundry (foundryup),
