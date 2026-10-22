@@ -116,6 +116,20 @@ describe('sqlite-opfs store management', () => {
     }
   });
 
+  it('opens a store whose pool a cut-short first open left without free slots', async () => {
+    const name = 'mech_short_pool';
+    const root = await navigator.storage.getDirectory();
+    const pool = await root.getDirectoryHandle(storePoolDirectory(name), { create: true });
+    const opaque = await pool.getDirectoryHandle('.opaque', { create: true });
+    await opaque.getFileHandle('cut-short', { create: true });
+
+    const store = await openByName(name);
+    await store.openSingleton<string>('payload').set('data');
+    expect(await store.openSingleton<string>('payload').getAsync()).toEqual('data');
+    await store.close();
+    await deleteStore(name);
+  });
+
   it('fails clearly when Web Locks are unavailable', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(navigator, 'locks');
     Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
