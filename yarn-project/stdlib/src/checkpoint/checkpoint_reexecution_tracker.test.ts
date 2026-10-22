@@ -1,4 +1,4 @@
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { CheckpointReexecutionTracker } from './checkpoint_reexecution_tracker.js';
@@ -64,6 +64,44 @@ describe('CheckpointReexecutionTracker', () => {
     expect(tracker.getOutcomeForSlot(SlotNumber(20))).toBe('invalid');
     expect(tracker.getOutcomeForSlot(SlotNumber(30))).toBe('unvalidated');
     expect(tracker.getOutcomeForSlot(SlotNumber(99))).toBeUndefined();
+  });
+
+  it('returns the full record for a slot, including the parent archive root and payload hash', () => {
+    const slot = SlotNumber(42);
+    const archive = Fr.random();
+    const lastArchive = Fr.random();
+    const payloadHash = CheckpointProposalHash(Fr.random().toString());
+    tracker.recordOutcome(slot, archive, 'valid', CheckpointNumber(7), { lastArchiveRoot: lastArchive, payloadHash });
+
+    expect(tracker.getRecordForSlot(slot)).toEqual({
+      outcome: 'valid',
+      checkpointNumber: CheckpointNumber(7),
+      archiveRoot: archive.toString(),
+      lastArchiveRoot: lastArchive.toString(),
+      payloadHash,
+    });
+    expect(tracker.getRecordForSlot(SlotNumber(43))).toBeUndefined();
+  });
+
+  it('returns a record without parent archive root when none was recorded', () => {
+    const slot = SlotNumber(42);
+    const archive = Fr.random();
+    tracker.recordOutcome(slot, archive, 'unvalidated');
+
+    expect(tracker.getRecordForSlot(slot)).toEqual({
+      outcome: 'unvalidated',
+      checkpointNumber: undefined,
+      archiveRoot: archive.toString(),
+      lastArchiveRoot: undefined,
+    });
+  });
+
+  it('returns no record for a slot that only has tx-collection or equivocation data', () => {
+    tracker.recordTxsCollected(SlotNumber(1), 0, true);
+    tracker.recordEquivocation(SlotNumber(2));
+
+    expect(tracker.getRecordForSlot(SlotNumber(1))).toBeUndefined();
+    expect(tracker.getRecordForSlot(SlotNumber(2))).toBeUndefined();
   });
 
   it('records and queries proposal equivocation by slot', () => {

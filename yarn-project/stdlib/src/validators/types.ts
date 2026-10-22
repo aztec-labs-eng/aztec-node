@@ -6,13 +6,19 @@ export type ValidatorStatusType = 'proposer' | 'attestation';
 /**
  * Per-slot status for a validator.
  *
- * Proposer statuses (six-case taxonomy):
+ * Proposer statuses (six-case taxonomy, with case 5 refined into 5a and 5b):
  * - `blocks-missed`           — no block proposals seen for the slot (case 1).
  * - `checkpoint-missed`       — block proposals seen but no checkpoint proposal (case 2).
  * - `checkpoint-unvalidated`  — checkpoint proposal seen but local re-execution couldn't
  *                               validate (missing txs, timeouts, etc.) (case 3).
  * - `checkpoint-invalid`      — checkpoint proposal re-executed and rejected as invalid (case 4).
- * - `checkpoint-valid`        — checkpoint proposal re-executed locally as valid (case 5).
+ * - `checkpoint-valid`        — checkpoint proposal re-executed locally as valid, but it did not reach L1 and
+ *                               could not be refined into 5a or 5b (e.g. below quorum, equivocation) (case 5).
+ * - `checkpoint-orphaned`     — valid checkpoint proposal that could not land because the parent it built on never
+ *                               landed on L1, or because an earlier slot landed its checkpoint number after it reached
+ *                               quorum (case 5b).
+ * - `checkpoint-unpublished`  — valid checkpoint proposal with its parent on L1 and a quorum of attestations,
+ *                               which the proposer still failed to land on L1 (case 5a).
  * - `checkpoint-mined`        — checkpoint published on L1 (case 6).
  *
  * Attestor statuses:
@@ -22,6 +28,8 @@ export type ValidatorStatusType = 'proposer' | 'attestation';
  */
 export type ValidatorStatusInSlot =
   | 'checkpoint-mined'
+  | 'checkpoint-unpublished'
+  | 'checkpoint-orphaned'
   | 'checkpoint-valid'
   | 'checkpoint-invalid'
   | 'checkpoint-unvalidated'

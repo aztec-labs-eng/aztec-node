@@ -77,7 +77,7 @@ import {
   PrivateKernelExecutionProver,
   type PrivateKernelExecutionProverConfig,
 } from './private_kernel/private_kernel_execution_prover.js';
-import { PrivateKernelOracle } from './private_kernel/private_kernel_oracle.js';
+import { PrivateKernelInputsProvider } from './private_kernel/private_kernel_inputs_provider.js';
 import { AddressStore } from './storage/address_store/address_store.js';
 import { AnchorBlockStore } from './storage/anchor_block_store/anchor_block_store.js';
 import { CapsuleStore } from './storage/capsule_store/capsule_store.js';
@@ -643,7 +643,7 @@ export class PXE {
     anchorBlockHeader: BlockHeader,
     config: PrivateKernelExecutionProverConfig,
   ): Promise<PrivateKernelExecutionProofOutput<PrivateKernelTailCircuitPublicInputs>> {
-    const kernelOracle = new PrivateKernelOracle(
+    const kernelInputsProvider = new PrivateKernelInputsProvider(
       this.contractStore,
       this.contractClassService,
       this.keyStore,
@@ -651,7 +651,7 @@ export class PXE {
       anchorBlockHeader,
     );
     const kernelTraceProver = new PrivateKernelExecutionProver(
-      kernelOracle,
+      kernelInputsProvider,
       proofCreator,
       !this.proverEnabled,
       this.log.getBindings(),

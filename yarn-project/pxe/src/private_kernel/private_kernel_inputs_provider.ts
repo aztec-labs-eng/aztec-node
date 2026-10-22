@@ -32,7 +32,7 @@ import type { ContractStore } from '../storage/contract_store/contract_store.js'
 /**
  * Provides functionality needed by the private kernel for interacting with our state trees.
  */
-export class PrivateKernelOracle {
+export class PrivateKernelInputsProvider {
   private readonly anchoredContractData: AnchoredContractData;
 
   constructor(

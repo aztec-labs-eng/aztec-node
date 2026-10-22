@@ -23,7 +23,6 @@ BRANCH_PAIRS = [
 ]
 
 DEPLOY_WORKFLOWS = [
-    'deploy-staging.yml',
     'deploy-network.yml',
     'deploy-next-net.yml',
 ]

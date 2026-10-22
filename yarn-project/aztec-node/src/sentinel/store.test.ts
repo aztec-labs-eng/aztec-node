@@ -27,9 +27,11 @@ describe('sentinel-store', () => {
 
   it('inserts new validators with all statuses', async () => {
     const slot = SlotNumber(1);
-    const validators: `0x${string}`[] = times(8, () => EthAddress.random().toString());
+    const validators: `0x${string}`[] = times(10, () => EthAddress.random().toString());
     const statuses: ValidatorStatusInSlot[] = [
       'checkpoint-mined',
+      'checkpoint-unpublished',
+      'checkpoint-orphaned',
       'checkpoint-valid',
       'checkpoint-invalid',
       'checkpoint-unvalidated',
