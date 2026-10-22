@@ -13,8 +13,14 @@ import {
 } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { EmptyL1RollupConstants, getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import type {
+  EpochProverManager,
+  ITxProvider,
+  WorldStateSyncStatus,
+  WorldStateSynchronizer,
+  WorldStateSynchronizerStatus,
+} from '@aztec-labs/stdlib/interfaces/server';
 import type { InboxMessageRange, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { BlockHeader, GlobalVariables } from '@aztec-labs/stdlib/tx';
 import { L1Metrics } from '@aztec-labs/telemetry-client';
@@ -64,6 +70,8 @@ describe('ProverNode', () => {
     publishingService = mock<ProofPublishingService>();
 
     prover.getProverId.mockReturnValue(EthAddress.ZERO);
+    // World state keeps all history unless a test prunes it.
+    mockOldestHistoricBlock(0);
     l2BlockSource.getGenesisBlockHash.mockReturnValue('0x00' as any);
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
     l2BlockSource.getL2Tips.mockResolvedValue({} as L2Tips);
@@ -372,7 +380,9 @@ describe('ProverNode', () => {
       Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
     );
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(true);
+    sessionManager.readOwnFullEpochProof.mockImplementation((epoch, length) =>
+      Promise.resolve(epoch === EpochNumber(1) && length === 1),
+    );
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -391,7 +401,10 @@ describe('ProverNode', () => {
     // registration must not stall the catch-up; reconcile checks again before proving.
     setupRegistrationSuccess();
     setupEpochOneFullyProven();
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(registration);
+    // Only the epoch's real checkpoint count gets this answer; any other count reads as registered and would skip.
+    sessionManager.readOwnFullEpochProof.mockImplementation((epoch, length) =>
+      Promise.resolve(epoch === EpochNumber(1) && length === 1 ? registration : true),
+    );
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -410,6 +423,52 @@ describe('ProverNode', () => {
 
     expect(proverNode.getCheckpointStore().listAll().length).toBe(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
+  });
+
+  it('skips a fully-proven epoch whose world-state history before it has been pruned', async () => {
+    // Checkpoints 1-3 hold blocks 1-3 at slots 1-3, one epoch each. The catch-up resumes after checkpoint 2, and
+    // registering checkpoint 3 reads the snapshot of block 2, which a small history retention has already pruned.
+    setupRegistrationSuccess();
+    mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
+    mockOldestHistoricBlock(3);
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+
+    expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+  });
+
+  it('skips epoch 0 when a snapshot after genesis has been pruned, and catches up past it', async () => {
+    // Four-slot epochs. Epoch 0 holds checkpoints 1 and 2 (blocks 1 and 2, slots 1 and 2). Checkpoint 1 needs only
+    // the genesis snapshot, but checkpoint 2 needs the snapshot of block 1, which is pruned. Checkpoint 3 (block 3,
+    // slot 4) is in the next, unproven epoch and must still be registered. The catch-up walks from checkpoint 1.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
+    setupRegistrationSuccess();
+    mockChain({ provenBlock: 2, blockSlots: [0, 1, 2, 4] });
+    mockOldestHistoricBlock(2);
+    const snapshot = worldState.getSnapshot(BlockNumber(0));
+    worldState.getSnapshot.mockImplementation(block => {
+      if (block > 0 && block < 2) {
+        throw new Error(`Snapshot ${block} has been pruned`);
+      }
+      return snapshot;
+    });
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    mineCheckpoint(makeCheckpoint(1, 1, 1));
+    mineCheckpoint(makeCheckpoint(2, 2, 2));
+    const event = mineCheckpoint(makeCheckpoint(3, 4, 3));
+
+    await proverNode.handleBlockStreamEvent(event);
+
+    expect(
+      proverNode
+        .getCheckpointStore()
+        .listAll()
+        .map(p => p.checkpoint.number),
+    ).toEqual([CheckpointNumber(3)]);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('content-addresses the prover by the checkpoint archive root', async () => {
@@ -755,7 +814,7 @@ describe('ProverNode', () => {
         expected: 3,
         why: 'assumes the earliest epoch when no slot is synced',
       },
-      { lastFullyProven: 5, syncedSlot: 1, expected: undefined, why: 'starts from scratch when no window has closed' },
+      { lastFullyProven: 0, syncedSlot: 1, expected: undefined, why: 'starts from scratch when no window has closed' },
       {
         lastFullyProven: undefined,
         syncedSlot: 6,
@@ -771,6 +830,39 @@ describe('ProverNode', () => {
       );
       expect(result).toEqual(expected === undefined ? undefined : EpochNumber(expected));
     });
+  });
+
+  it('seedCatchUp resumes before a fully-proven epoch that is still in its proof window', async () => {
+    // epochDuration=1, proofSubmissionEpochs=1. Checkpoints 3, 4 and 5 sit at slots 3, 4 and 5. The proven tip is
+    // block 5, the last block of epoch 5, and the chain is at slot 6, so only epochs up to 4 can no longer be proven.
+    // The catch-up must revisit checkpoint 5 rather than resume after it.
+    const checkpointSlots = [3, 4, 5].map(n => ({ checkpointNumber: CheckpointNumber(n), slot: SlotNumber(n) }));
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
+    l2BlockSource.getBlockData.mockImplementation(query =>
+      Promise.resolve(
+        'number' in query && query.number === 5
+          ? mock<BlockData>({
+              header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(5) }) }),
+            })
+          : undefined,
+      ),
+    );
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(6));
+    l2BlockSource.getCheckpointsData.mockImplementation(query => {
+      if (!('fromSlot' in query) || !query.reverse) {
+        return Promise.resolve([]);
+      }
+      const atOrBefore = checkpointSlots.filter(c => c.slot <= query.fromSlot).reverse();
+      return Promise.resolve(
+        atOrBefore.slice(0, query.limit).map(c => mock<CheckpointData>({ checkpointNumber: c.checkpointNumber })),
+      );
+    });
+
+    await proverNode.callSeedCatchUp();
+
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(4));
+    expect(proverNode.getLastExpiredEpoch()).toEqual(EpochNumber(4));
   });
 
   it('computeStartingCheckpoint seeds from the last checkpoint before an empty start epoch', async () => {
@@ -821,14 +913,34 @@ describe('ProverNode', () => {
    * `isEpochFullyProven(1)` holds. Blocks 0 and 1 have empty headers at slot 1, which registration reads as zero state.
    */
   function setupEpochOneFullyProven() {
-    const blockData = mock<BlockData>({
-      header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }) }),
+    mockChain({ provenBlock: 1, blockSlots: [1, 1] });
+  }
+
+  /**
+   * Mocks the proven tip at `provenBlock` and the archiver's block headers: block N exists at slot `blockSlots[N]`, with
+   * an empty header that registration reads as zero state. Every epoch counts as complete.
+   */
+  function mockChain({ provenBlock, blockSlots }: { provenBlock: number; blockSlots: number[] }) {
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(provenBlock));
+    l2BlockSource.getBlockData.mockImplementation(query => {
+      const slot = 'number' in query ? blockSlots[query.number] : undefined;
+      return Promise.resolve(
+        slot === undefined
+          ? undefined
+          : mock<BlockData>({
+              header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(slot) }) }),
+            }),
+      );
     });
-    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
-    l2BlockSource.getBlockData.mockImplementation(query =>
-      Promise.resolve('number' in query && query.number <= 1 ? blockData : undefined),
-    );
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
+  }
+
+  function mockOldestHistoricBlock(block: number) {
+    worldState.status.mockResolvedValue(
+      mock<WorldStateSynchronizerStatus>({
+        syncSummary: mock<WorldStateSyncStatus>({ oldestHistoricBlockNumber: BlockNumber(block) }),
+      }),
+    );
   }
 
   /** Bypass `isEpochFullyProven` so checkpoint events register normally. */
@@ -934,7 +1046,22 @@ describe('ProverNode', () => {
         makeMaybePublished(found ?? (belowWindow ? makeCheckpoint(number, number, number) : undefined)),
       );
     });
-    l2BlockSource.getCheckpointsData.mockImplementation((query: any) => {
+    l2BlockSource.getCheckpointsData.mockImplementation(async (query: any) => {
+      if ('epoch' in query) {
+        // Follow the constants the test has mocked, so the epoch split matches the rest of the node.
+        const constants = await l2BlockSource.getL1Constants();
+        return Promise.resolve(
+          [...mined.values()]
+            .filter(cp => getEpochAtSlot(cp.header.slotNumber, constants) === query.epoch)
+            .map(cp =>
+              mock<CheckpointData>({
+                checkpointNumber: cp.number,
+                header: cp.header,
+                startBlock: BlockNumber(cp.blocks[0].number),
+              }),
+            ),
+        );
+      }
       if (!('from' in query)) {
         return Promise.resolve([]);
       }
@@ -987,6 +1114,10 @@ class TestProverNode extends ProverNode {
 
   public callResolveCatchUpStartEpoch(lastFullyProvenEpoch: EpochNumber | undefined) {
     return this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
+  }
+
+  public callSeedCatchUp() {
+    return this.seedCatchUp();
   }
 
   public callComputeStartingCheckpoint(startEpoch: EpochNumber | undefined) {
