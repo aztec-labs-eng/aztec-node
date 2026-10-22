@@ -129,19 +129,19 @@ The `initialize` factory calls the inherited `create()` method, which sets up an
 
 ### Connecting a test account
 
-The local network ships with pre-deployed test accounts. These are Schnorr-signature accounts that are already registered and funded, so you can use them immediately without deploying a new account contract. The inherited `createSchnorrAccount` handles account creation, contract registration with PXE, and persistence in the wallet database. You select one by index (0, 1, 2, etc.).
+The local network ships with test accounts that are funded at genesis. They are initializerless Schnorr accounts, so you can use them immediately without deploying an account contract. The inherited `createSchnorrInitializerlessAccount` registers the account with PXE and persists it in the wallet database. You select one by index (0, 1, 2, etc.).
 
 ```typescript title="connect-test-account" showLineNumbers 
 /**
  * Connects one of the pre-deployed test accounts available on the local network.
- * Uses the inherited createSchnorrAccount which handles account creation,
- * contract registration, and WalletDB persistence.
+ * The local network funds its test accounts at genesis as initializerless Schnorr accounts, so they need
+ * no deployment tx. createSchnorrInitializerlessAccount registers the account and persists it in WalletDB.
  */
 async connectTestAccount(index: number) {
   const testAccounts = await getInitialTestAccountsData();
   const accountData = testAccounts[index];
 
-  const accountManager = await this.createSchnorrAccount(
+  const accountManager = await this.createSchnorrInitializerlessAccount(
     accountData.secret,
     accountData.salt,
     accountData.signingKey,
@@ -263,14 +263,14 @@ export class EmbeddedWallet extends BaseEmbeddedWallet {
 
   /**
    * Connects one of the pre-deployed test accounts available on the local network.
-   * Uses the inherited createSchnorrAccount which handles account creation,
-   * contract registration, and WalletDB persistence.
+   * The local network funds its test accounts at genesis as initializerless Schnorr accounts, so they need
+   * no deployment tx. createSchnorrInitializerlessAccount registers the account and persists it in WalletDB.
    */
   async connectTestAccount(index: number) {
     const testAccounts = await getInitialTestAccountsData();
     const accountData = testAccounts[index];
 
-    const accountManager = await this.createSchnorrAccount(
+    const accountManager = await this.createSchnorrInitializerlessAccount(
       accountData.secret,
       accountData.salt,
       accountData.signingKey,

@@ -127,7 +127,9 @@ and paste the below into the file.
 AZTEC_NODE_URL=http://localhost:8080
 ```
 
-This tells the app where to find the Aztec node. For local development, this points to the default local network port. When using the wallet extension, it manages the node connection.
+This tells the scripts where to find the Aztec node. For local development, this points to the default local network port. When using the wallet extension, it manages the node connection.
+
+In v6.0.0 the browser app does not read this file: its Vite config does not pass `AZTEC_NODE_URL` through, so the app always connects to `http://localhost:8080`. To use another node in the browser, change the default in `src/config.ts`.
 
 ## Compiling the contract
 
@@ -137,7 +139,7 @@ If you haven't already compiled the contract from the [previous section](./01-th
 yarn prep
 ```
 
-This produces `src/artifacts/PodRacing.ts` and `src/artifacts/PodRacing.json`. The webapp imports the typed contract class from `PodRacing.ts`.
+This produces `src/artifacts/PodRacing.ts` and `src/artifacts/pod_racing_contract-PodRacing.json`. The webapp imports the typed contract class from `PodRacing.ts`.
 
 ## Next steps
 
