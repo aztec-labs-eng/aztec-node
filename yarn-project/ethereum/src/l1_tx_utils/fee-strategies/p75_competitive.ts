@@ -3,6 +3,7 @@ import { formatGwei } from 'viem';
 
 import type { ViemClient } from '../../types.js';
 import { calculatePercentile } from '../../utils.js';
+import { defaultL1TxUtilsConfig } from '../config.js';
 import { WEI_CONST } from '../constants.js';
 import {
   HISTORICAL_BLOCK_COUNT,
@@ -21,7 +22,7 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
   id: 'p75_pending_txs_and_history_all_txs',
 
   async execute(client: ViemClient, context: PriorityFeeStrategyContext): Promise<PriorityFeeStrategyResult> {
-    const { isBlobTx, logger } = context;
+    const { gasConfig, isBlobTx, logger } = context;
 
     // Fire all RPC calls in parallel
     const [latestBlockResult, blobBaseFeeResult, networkEstimateResult, pendingBlockResult, feeHistoryResult] =
@@ -130,9 +131,16 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
       }
     }
 
-    // Sanity check: cap competitive fee at 100x network estimate to avoid using unrealistic fees
-    const maxReasonableFee = networkEstimate * 100n;
-    if (competitiveFee > maxReasonableFee && networkEstimate > 0n) {
+    // Floor only the cap input so zero or tiny RPC estimates cannot disable or collapse the sanity cap.
+    const minimumEstimateForCap = BigInt(
+      Math.trunc(
+        (gasConfig.minimumPriorityFeePerGasForCap ?? defaultL1TxUtilsConfig.minimumPriorityFeePerGasForCap) *
+          Number(WEI_CONST),
+      ),
+    );
+    const estimateForCap = networkEstimate > minimumEstimateForCap ? networkEstimate : minimumEstimateForCap;
+    const maxReasonableFee = estimateForCap * 100n;
+    if (competitiveFee > maxReasonableFee) {
       logger?.debug('Competitive fee exceeds sanity cap, using capped value', {
         competitiveFee: formatGwei(competitiveFee),
         networkEstimate: formatGwei(networkEstimate),
@@ -140,16 +148,6 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
       });
       competitiveFee = maxReasonableFee;
       debugInfo.cappedToGwei = formatGwei(maxReasonableFee);
-    } else if (networkEstimateResult.status === 'fulfilled' && networkEstimate === 0n && competitiveFee > 0n) {
-      logger?.warn(
-        'L1 RPC returned a zero priority fee estimate, disabling the competitive fee sanity cap. ' +
-          'You may be overpaying L1 transaction fees. Review your L1 RPC gas price oracle settings; ' +
-          'if using Reth, consider setting --gpo.ignoreprice=2 to exclude zero- and one-wei tips.',
-        {
-          networkEstimateGwei: formatGwei(networkEstimate),
-          competitiveFeeGwei: formatGwei(competitiveFee),
-        },
-      );
     }
 
     // Log final decision
