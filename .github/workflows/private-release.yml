@@ -26,12 +26,13 @@ concurrency:
 
 jobs:
   # Orchestrates the amd64 + arm64 EC2 jobs and assembles the multi-arch docker manifest;
-  # see ci.sh::release. Runs no tests — the tag was cut from a commit that passed CI.
+  # see ci.sh::release. Nothing is published until both arches build and the full test suite
+  # passes on amd64.
   release:
     runs-on: ubuntu-latest
     environment: release-private
     # Nothing a private build produces may reach the build cache: it is served over plain HTTP with
-    # no credentials. The build itself gets this from ci3/source_release_target; this covers the
+    # no credentials. The build instances get this from ci3/source_release_target; this covers the
     # runner's own cache write in ci3_success.sh.
     env:
       NO_CACHE_UPLOAD: 1
@@ -76,8 +77,9 @@ jobs:
           DOCKER_USERNAME: ${{ vars.INTERNAL_DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.INTERNAL_DOCKER_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
-          # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
-          # neither of which a release runs; kept so the build log names the ref.
+          # yarn-project's test_cmds (release-line compatibility tests) and the test runner (history,
+          # timing metadata), and ci.sh::release clears it for its test stage; kept so the build log
+          # names the ref.
           TARGET_BRANCH: ${{ github.ref_name }}
           # Groups this workflow's CI dashboard entries under the GitHub run id (stable across re-runs).
           RUN_ID: ${{ github.run_id }}
