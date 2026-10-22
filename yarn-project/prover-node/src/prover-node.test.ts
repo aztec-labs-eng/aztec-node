@@ -11,7 +11,7 @@ import {
   type L2BlockStreamEvent,
   type L2Tips,
 } from '@aztec-labs/stdlib/block';
-import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { Checkpoint, CheckpointData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
@@ -336,7 +336,7 @@ describe('ProverNode', () => {
       Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
     );
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
-    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(true);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -346,12 +346,16 @@ describe('ProverNode', () => {
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
-  it('registers a fully-proven epoch while our full-epoch proof of it is not on L1', async () => {
+  it.each([
+    { registration: false, why: 'is not on L1' },
+    { registration: undefined, why: 'cannot be read from L1' },
+  ])('registers a fully-proven epoch while our full-epoch proof of it $why', async ({ registration }) => {
     // The proof that moved the tip over epoch 1 may be another prover's, or one that landed while the
-    // epoch was open. L1 still rewards our full-epoch proof, so the epoch's checkpoints must be proven.
+    // epoch was open. L1 still rewards our full-epoch proof, so the epoch's checkpoints must be proven. An unread
+    // registration must not stall the catch-up; reconcile checks again before proving.
     setupRegistrationSuccess();
     setupEpochOneFullyProven();
-    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(registration);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -364,7 +368,7 @@ describe('ProverNode', () => {
     // checkpoints would be wasted even though our full-epoch proof of it is not on L1.
     proverNode = createProverNode({ proverNodeDisableFullEpochProving: true });
     setupEpochOneFullyProven();
-    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(false);
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -733,6 +737,25 @@ describe('ProverNode', () => {
     });
   });
 
+  it('computeStartingCheckpoint seeds from the last checkpoint before an empty start epoch', async () => {
+    // epochDuration=1: checkpoints sit at slots 2 and 3; the start epoch 5 holds none.
+    const checkpointSlots = [
+      { checkpointNumber: CheckpointNumber(1), slot: SlotNumber(2) },
+      { checkpointNumber: CheckpointNumber(2), slot: SlotNumber(3) },
+    ];
+    l2BlockSource.getCheckpointsData.mockImplementation(query => {
+      if (!('fromSlot' in query) || !query.reverse) {
+        return Promise.resolve([]);
+      }
+      const atOrBefore = checkpointSlots.filter(c => c.slot <= query.fromSlot).reverse();
+      return Promise.resolve(
+        atOrBefore.slice(0, query.limit).map(c => mock<CheckpointData>({ checkpointNumber: c.checkpointNumber })),
+      );
+    });
+
+    expect(await proverNode.callComputeStartingCheckpoint(EpochNumber(5))).toEqual(CheckpointNumber(2));
+  });
+
   // ---------------- helpers ----------------
 
   function createProverNode(config: ConstructorParameters<typeof TestProverNode>[10]): TestProverNode {
@@ -904,6 +927,10 @@ class TestProverNode extends ProverNode {
 
   public callResolveCatchUpStartEpoch(lastFullyProvenEpoch: EpochNumber | undefined) {
     return this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
+  }
+
+  public callComputeStartingCheckpoint(startEpoch: EpochNumber | undefined) {
+    return this.computeStartingCheckpoint(startEpoch);
   }
 
   /** Drives the expiry sweep directly, as the periodic ticker does in production. */
