@@ -27,3 +27,15 @@ export interface AvmSimulator {
   /** Release any resources held by the underlying implementation. */
   destroy?(): Promise<void>;
 }
+
+/**
+ * The process backing an {@link AvmSimulator} died on every attempt to run a simulation, so the simulation produced no
+ * verdict about its input. The deaths may be independent environmental kills (the OOM killer, a container restart) of
+ * different processes, so this is not evidence that the input is at fault: each caller decides what it means.
+ */
+export class AvmProcessDiedError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'AvmProcessDiedError';
+  }
+}

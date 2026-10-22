@@ -66,6 +66,7 @@ export class ValidatorMetrics {
           'block_number_already_exists',
           'txs_not_available',
           'timeout',
+          'simulator_failure',
           'unknown_error',
         ],
         [Attributes.IS_COMMITTEE_MEMBER]: [true, false],

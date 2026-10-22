@@ -26,6 +26,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider, Timer, execWithSignal } from '@aztec-labs/foundation/timer';
 import { isErrorClass } from '@aztec-labs/foundation/types';
 import type { P2P, PeerId } from '@aztec-labs/p2p';
+import { AvmProcessDiedError } from '@aztec-labs/simulator/server';
 import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
@@ -98,6 +99,8 @@ export type BlockProposalValidationFailureReason =
   | 'failed_txs'
   | 'initial_state_mismatch'
   | 'timeout'
+  // This node's AVM simulator process died while re-executing, so re-execution reached no verdict on the block.
+  | 'simulator_failure'
   | 'block_proposal_beyond_checkpoint'
   | 'checkpoint_proposal_equivocation'
   | 'unknown_error';
@@ -418,6 +421,7 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
   ['txs_not_available']: false,
   ['initial_state_mismatch']: false,
   ['timeout']: false,
+  ['simulator_failure']: false,
   ['block_proposal_beyond_checkpoint']: false,
   // Equivocation has its own offense path (markProposalEquivocation), so it is not a slashable invalid-block reason.
   ['checkpoint_proposal_equivocation']: false,
@@ -1430,6 +1434,8 @@ export class ProposalHandler {
       return 'failed_txs';
     } else if (err instanceof ReExTimeoutError) {
       return 'timeout';
+    } else if (isErrorClass(err, AvmProcessDiedError)) {
+      return 'simulator_failure';
     } else {
       return 'unknown_error';
     }

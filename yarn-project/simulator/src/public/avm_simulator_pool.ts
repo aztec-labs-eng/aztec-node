@@ -5,7 +5,7 @@ import { AbortError, isRetryableError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 
-import type { AvmContractsDBContext, AvmSimulator } from './avm_simulator.js';
+import { type AvmContractsDBContext, AvmProcessDiedError, type AvmSimulator } from './avm_simulator.js';
 import { CdbIpcServer } from './cdb_ipc_server.js';
 
 export interface AvmSimulatorPoolOptions {
@@ -90,8 +90,10 @@ const CANCEL_KILL_GRACE_MS = 5_000;
  * either produces a result, fails on its own merits, or runs until the caller's deadline aborts it.
  * Environmental trouble is absorbed here — spawn failures retry indefinitely on a backoff ladder (bounded
  * only by the caller's abort signal), and a simulation whose process dies is re-issued on the respawned
- * process. The one deliberate exception: an input that kills the process twice is treated as a failing
- * transaction, so a simulator-crashing tx gets evicted instead of burning a process per block forever.
+ * process. The one deliberate exception: a simulation whose process dies again on the re-issue fails with
+ * {@link AvmProcessDiedError}. The two deaths may be independent kills of two different processes, so the pool does
+ * not blame the input: the caller decides whether to treat it as a failing tx (so a simulator-crashing tx gets evicted
+ * instead of burning a process per block forever) or as this node's own failure.
  */
 export class AvmSimulatorPool implements AvmSimulator {
   private slots: AvmProcessHandle[] = [];
@@ -174,10 +176,10 @@ export class AvmSimulatorPool implements AvmSimulator {
   }
 
   /**
-   * Run a call on a pooled service. A call that fails because its process died is re-issued on the
-   * respawned process; a second death for the same input is attributed to the input and surfaces as an
-   * ordinary error (the pre-IPC equivalent — a native crash — took down the whole node, so a failed tx
-   * is strictly gentler). Non-process failures surface as-is: they are the simulation's own verdict.
+   * Run a call on a pooled service. A call that fails because its process died is re-issued once, on whichever
+   * process the pool hands out next; a second death surfaces as {@link AvmProcessDiedError}, without the retry flag
+   * so nothing re-issues it again, and the caller decides what it means for the input. Non-process failures surface
+   * as-is: they are the simulation's own verdict.
    */
   private async runOnPool<T>(fn: (simulator: AvmProcessHandle) => Promise<T>, signal?: AbortSignal): Promise<T> {
     for (let attempt = 0; ; attempt++) {
@@ -190,10 +192,9 @@ export class AvmSimulatorPool implements AvmSimulator {
         }
         if (attempt > 0) {
           const message = err instanceof Error ? err.message : String(err);
-          throw new Error(
-            `AVM simulator process died twice running this simulation; attributing the failure to the input: ${message}`,
-            { cause: err },
-          );
+          throw new AvmProcessDiedError(`AVM simulator process died twice running this simulation: ${message}`, {
+            cause: err,
+          });
         }
         this.log.warn(`AVM process died during simulation; re-issuing once on the respawned process`, { err });
       } finally {
