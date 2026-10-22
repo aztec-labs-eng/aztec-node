@@ -224,9 +224,12 @@ export default defineConfig(({ mode }) => {
         // - 2026-07-02: bumped to 5000 after merging from public to private repo resulted in 4800+k for some reason.
         // - 2026-07-04: bumped from 5000 => 5300 after bb changes on merge-train/barretenberg grew
         //   assets/barretenberg-*.js to 5079.12 KB and assets/barretenberg-threads-*.js to 5116.65 KB.
+        // - 2026-10-22: bumped from 5350 => 5550 after building bb's wasm with exception handling (wasi-sdk 34,
+        //   https://github.com/AztecProtocol/aztec-packages/pull/25669) grew assets/barretenberg-*.js to 5433.92 KB
+        //   and assets/barretenberg-threads-*.js to 5438.53 KB.
         {
           pattern: /.*/,
-          maxSizeKB: 5350,
+          maxSizeKB: 5550,
           description: 'Detect if json artifacts or bb.js wasm get out of control',
         },
       ]),
