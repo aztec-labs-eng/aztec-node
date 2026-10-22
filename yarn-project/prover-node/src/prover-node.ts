@@ -97,8 +97,8 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
   private blockStream: EventDrivenL2BlockStream | undefined;
   /**
    * Highest epoch whose proof-submission window has passed. Monotonic high-water mark.
-   * Seeded from the catch-up start epoch at start(); advanced on every block-stream
-   * event by comparing the archiver's latest synced L2 slot against each epoch's
+   * Seeded from the catch-up start epoch at start(); advanced by the periodic expiry tick,
+   * which compares the archiver's latest synced L2 slot against each epoch's
    * submission deadline. Protected so tests can verify the start() seeding.
    */
   protected lastExpiredEpoch: EpochNumber | undefined;
@@ -448,6 +448,9 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
    * - Past its proof-submission window: skip. L1 no longer accepts a proof of it.
    * - Not fully proven yet: register.
    * - Fully proven, on a node with full-epoch proving disabled: skip. That node never proves a full epoch.
+   * - Fully proven, but world state no longer holds the state before one of its checkpoints, because a small
+   *   `WS_HISTORY_RETENTION` pruned it once the epoch was finalized: skip. Registering would fail and stall the
+   *   catch-up of every later checkpoint.
    * - Fully proven otherwise: register, unless L1 already holds our own full-epoch proof of it. The proof that moved
    *   the tip may be another prover's, or may have landed before the epoch ended, and L1 still rewards ours. If L1
    *   cannot be read, register anyway; the session manager checks again before proving.
@@ -463,6 +466,21 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       return true;
     }
     const checkpoints = await this.l2BlockSource.getCheckpointsData({ epoch });
+    // Registering each checkpoint reads the snapshot of the block before it. Block 0 is the genesis snapshot, which is
+    // never pruned; every other snapshot the epoch needs must still be in world state.
+    const requiredSnapshots = checkpoints.map(c => c.startBlock - 1).filter(block => block > 0);
+    if (requiredSnapshots.length > 0) {
+      const oldestRequiredSnapshot = Math.min(...requiredSnapshots);
+      const { oldestHistoricBlockNumber } = (await this.worldState.status()).syncSummary;
+      if (oldestRequiredSnapshot < oldestHistoricBlockNumber) {
+        this.log.warn(`Not proving fully-proven epoch ${epoch}: world-state history it needs has been pruned`, {
+          epoch,
+          oldestRequiredSnapshot,
+          oldestHistoricBlockNumber,
+        });
+        return true;
+      }
+    }
     return (await this.sessionManager?.readOwnFullEpochProof(epoch, checkpoints.length)) === true;
   }
 
@@ -569,10 +587,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     // Now that the store + manager exist, arm the live-state observable gauges.
     this.jobMetrics.observeState(this.checkpointStore, this.sessionManager);
 
-    const { lastFullyProvenEpoch } = await this.resolveLastFullyProvenEpoch();
-    const catchUpStartEpoch = await this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
-    this.lastExpiredEpoch = catchUpStartEpoch;
-    this.lastProcessedCheckpoint = await this.computeStartingCheckpoint(catchUpStartEpoch);
+    await this.seedCatchUp();
     this.blockStream = new EventDrivenL2BlockStream(this.l2BlockSource, this.tipsStore, this, this.log, {
       pollIntervalMS: this.config.proverNodePollingIntervalMs,
       tipsOnly: true,
@@ -796,6 +811,17 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       return getEpochAtSlot(nextHeader.getSlot(), l1Constants) > provenEpoch;
     }
     return this.l2BlockSource.isEpochComplete(provenEpoch);
+  }
+
+  /**
+   * Seeds the catch-up cursor and the expiry high-water mark on start, from the catch-up start epoch. Protected for
+   * direct unit-test access.
+   */
+  protected async seedCatchUp(): Promise<void> {
+    const { lastFullyProvenEpoch } = await this.resolveLastFullyProvenEpoch();
+    const catchUpStartEpoch = await this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
+    this.lastExpiredEpoch = catchUpStartEpoch;
+    this.lastProcessedCheckpoint = await this.computeStartingCheckpoint(catchUpStartEpoch);
   }
 
   /**
