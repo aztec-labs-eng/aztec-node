@@ -391,12 +391,24 @@ The tick also revisits every epoch in the `CheckpointStore` that the proven tip 
 that lands while its epoch is still open (another prover's, an early-withdrawal proof, or our own
 `startProof`) moves the tip over the epoch, but L1 registers it as non-full. L1 still accepts and rewards
 a full-epoch proof from every prover until the submission window closes, and only a full-epoch proof
-raises the prover's activity score. So `openFullSessionIfReady` skips a covered epoch only once
-`getHasSubmittedFullEpoch` reports our own full-epoch proof of it, and the checkpoint catch-up registers a
-fully-proven epoch's checkpoints until then (a node with full-epoch proving disabled still skips them). A
-confirmed answer is reused for one L2 slot, then read again, and only while the tip covers the epoch: an L1
-reorg that rolls the tip back below it opens the epoch at once. Within a tick, the next unproven epoch is opened
-before any covered epoch, so the two do not compete for the last session slot in the same reconcile.
+raises the prover's activity score. So `openFullSessionIfReady` skips a covered epoch only while
+`RollupContract.getHasSubmittedFullEpochProof` reports our own full-epoch proof of it, or while that read
+fails (retried after one slot). The checkpoint catch-up registers a fully-proven epoch's checkpoints until
+our full-epoch proof is on L1 (a node with full-epoch proving disabled still skips them). It also skips a
+fully-proven epoch when world state has pruned a snapshot that registering its checkpoints needs, which a small
+`WS_HISTORY_RETENTION` can do once the epoch is finalized: registering it would fail and stall the catch-up.
+
+Only the tick opens a new session for a covered epoch, and it tries the next unproven epoch first. While
+that epoch is complete but has no session, for example because its checkpoints are still being registered
+during a restart catch-up, the tick keeps one session slot free for it, unless one of its checkpoint provers
+has failed, which blocks it until a prune or re-add replaces that prover. A checkpoint event for a covered
+epoch leaves it to the next tick. A retained session whose checkpoints change after a prune is still replaced
+straight away by reconcile, as for any other epoch. A covered session that is already running can still hold
+the last slot when the next epoch completes later, as the previous epoch's session does in normal operation.
+
+A registered or unread answer is reused for one L2 slot, then read again. The answer only matters while the
+tip covers the epoch: if an L1 reorg rolls the tip back below a stored epoch with no retained session, the
+epoch is proven like any other unproven epoch.
 
 Apart from that cached answer, the tick keeps no per-epoch bookkeeping; two things keep it from re-proving a
 doomed epoch:
@@ -410,7 +422,8 @@ doomed epoch:
   re-add), so a deterministically-failing epoch is not re-proved every tick.
 
 Transient blockers (max-pending-jobs reached, archiver still indexing, a failed L1 read of our full-epoch
-proof registration) create no session and no failed prover, so the next tick simply tries again. The
+proof registration) create no session and no failed prover, so a later tick tries again. A failed read is
+retried after one L2 slot, so an L1 outage costs at most one slow read per slot for each covered epoch. The
 checkpoint catch-up treats a failed read the other way: it registers the epoch's checkpoints rather than
 stalling, and reconcile checks again before proving.
 
