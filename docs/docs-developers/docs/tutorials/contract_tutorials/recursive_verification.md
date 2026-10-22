@@ -609,7 +609,7 @@ const sponsoredPaymentMethod = new SponsoredFeePaymentMethod(
 
 In production, you would use real [fee payment methods](../../aztec-js/how_to_pay_fees.md) (native tokens, ERC20, etc.).
 
-#### What Happens During `increment().send()`
+#### What happens during `increment().send()`
 
 This single line triggers a complex flow:
 
