@@ -281,12 +281,30 @@ function compile_all_projects {
   get_projects | compile_project
 }
 
+# Yarn patches only take effect inside this workspace and the Docker images built from it:
+#  - Published packages never carry a patch: the patch files are in no package tarball. Depending
+#    on where the patch: range is declared, the published manifests either name the upstream
+#    version or carry the patch: range itself.
+#  - aztec-up installs the published packages with npm, which has no patch: protocol: it installs
+#    the upstream code, or refuses a published patch: range outright. No other consumer gets the
+#    patch either.
+# Ship a fix by publishing a fixed version of the dependency instead. Yarn's builtin compat patches
+# are exempt: they are PnP shims, inert under nodeLinker: node-modules.
+function check_no_patches {
+  if grep -E '^  resolution: ".*@patch:' yarn.lock | grep -v 'optional!builtin<compat/'; then
+    echo_stderr "ERROR: yarn.lock resolves the packages above through a Yarn patch, which npm installs never apply."
+    exit 1
+  fi
+}
+
 function compile_all {
   set -euo pipefail
   local hash=$(hash)
   if cache_download yarn-project-$hash.tar.gz; then
     return
   fi
+
+  check_no_patches
 
   # Ensure the pinned version sqlite3mc-wasm upstream artifacts are present before any package builds.
   ./sqlite3mc-wasm/scripts/vendor.sh ensure
@@ -371,7 +389,7 @@ function warm_solc_cache {
 }
 
 export -f compile_project format lint get_projects compile_all hash warm_solc_cache \
-  compute_package_dep_hashes compute_dep_hashes hash_deps_base
+  compute_package_dep_hashes compute_dep_hashes hash_deps_base check_no_patches
 
 function build {
   echo_header "yarn-project build"
