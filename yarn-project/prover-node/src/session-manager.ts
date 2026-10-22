@@ -1,5 +1,6 @@
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { LruMap } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
@@ -96,11 +97,12 @@ export class SessionManager {
    */
   private readonly reconcileQueue = new SerialQueue();
   /**
-   * Stored epochs whose full-epoch proof under our prover id L1 has confirmed, with the confirmed checkpoint count and
-   * when it was read. A covered epoch with no session is then re-read once per L2 slot rather than on every tick, which
-   * still notices an L1 reorg that drops the registration. Entries leave with the epoch's checkpoints.
+   * Epochs whose full-epoch proof under our prover id L1 has confirmed, with the confirmed checkpoint count and when
+   * it was read. A covered epoch with no session is then re-read once per L2 slot rather than on every tick, which
+   * still notices an L1 reorg that drops the registration. Only the few epochs still in their proof window are looked
+   * up, so the small bound never evicts a useful entry.
    */
-  private readonly ownFullEpochProofs: Map<EpochNumber, { length: number; confirmedAtMs: number }> = new Map();
+  private readonly ownFullEpochProofs = new LruMap<EpochNumber, { length: number; confirmedAtMs: number }>(16);
   /** Cached L1 constants, populated on first read. */
   private cachedL1Constants: L1RollupConstants | undefined;
   /** Test-only hooks applied to every session this manager constructs. */
@@ -229,6 +231,32 @@ export class SessionManager {
     return created.getId();
   }
 
+  /**
+   * Whether L1 registered this prover's proof of the epoch's `length` checkpoints as a full-epoch proof, or undefined
+   * if L1 could not be read. Callers decide what an unread registration means for them.
+   */
+  public async readOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean | undefined> {
+    const cached = this.ownFullEpochProofs.get(epoch);
+    const { slotDuration } = await this.getL1Constants();
+    if (cached?.length === length && this.deps.dateProvider.now() - cached.confirmedAtMs < slotDuration * 1000) {
+      return true;
+    }
+    try {
+      const registered = await this.deps.rollupContract.getHasSubmittedFullEpochProof(
+        epoch,
+        length,
+        this.deps.proverId,
+      );
+      if (registered) {
+        this.ownFullEpochProofs.set(epoch, { length, confirmedAtMs: this.deps.dateProvider.now() });
+      }
+      return registered;
+    } catch (err) {
+      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}`, { epoch, err });
+      return undefined;
+    }
+  }
+
   /** Stops the tick, drains the reconcile queue, and cancels every live session. */
   public async stop(): Promise<void> {
     await this.epochTicker?.stop();
@@ -249,7 +277,6 @@ export class SessionManager {
     this.log.debug(`Reconciling`, { trigger });
 
     this.recreateInvalidSessions();
-    this.forgetFullEpochProofsOutsideStore();
 
     if (!this.deps.config.disableFullEpochProving) {
       const implicatedEpochs = await this.epochsForTrigger(trigger);
@@ -355,9 +382,10 @@ export class SessionManager {
     // The proven tip can cover an epoch for which this prover holds no full-epoch proof: a proof landed while the
     // epoch was still open, which L1 registers as non-full. L1 still accepts and rewards our full-epoch proof until
     // the submission window closes, so the tip alone does not make the epoch done.
+    // A failed L1 read skips the epoch until a later tick retries; the reconcile still opens the other epochs.
     if (
       (await this.isProvenChainEncompassing(canonical)) &&
-      (await this.hasOwnFullEpochProof(epoch, canonical.length))
+      (await this.readOwnFullEpochProof(epoch, canonical.length)) !== false
     ) {
       this.log.debug(`Skipping full-session open for epoch ${epoch}: our full-epoch proof is already on L1`, { epoch });
       return;
@@ -543,18 +571,6 @@ export class SessionManager {
     return getEpochAtSlot(header.getSlot(), await this.getL1Constants());
   }
 
-  private forgetFullEpochProofsOutsideStore(): void {
-    if (this.ownFullEpochProofs.size === 0) {
-      return;
-    }
-    const stored = new Set(this.storedEpochs());
-    for (const epoch of Array.from(this.ownFullEpochProofs.keys())) {
-      if (!stored.has(epoch)) {
-        this.ownFullEpochProofs.delete(epoch);
-      }
-    }
-  }
-
   /** Distinct epochs with checkpoints in the store, ascending. The store drops an epoch once its window closes. */
   private storedEpochs(): EpochNumber[] {
     return Array.from(new Set(this.deps.checkpointStore.list().map(p => p.epochNumber)));
@@ -615,35 +631,6 @@ export class SessionManager {
     const lastCheckpoint = canonical[canonical.length - 1].checkpoint;
     const lastBlock = lastCheckpoint.blocks[lastCheckpoint.blocks.length - 1].number;
     return provenBlock >= lastBlock;
-  }
-
-  /**
-   * Whether L1 registered this prover's proof of the epoch as a full-epoch proof. A failed read counts as registered:
-   * the epoch is skipped until a later tick retries, and the reconcile still opens the other implicated epochs.
-   */
-  private async hasOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean> {
-    const cached = this.ownFullEpochProofs.get(epoch);
-    const { slotDuration } = await this.getL1Constants();
-    if (cached?.length === length && this.deps.dateProvider.now() - cached.confirmedAtMs < slotDuration * 1000) {
-      return true;
-    }
-    try {
-      const registered = await this.deps.rollupContract.getHasSubmittedFullEpochProof(
-        epoch,
-        length,
-        this.deps.proverId,
-      );
-      if (registered) {
-        this.ownFullEpochProofs.set(epoch, { length, confirmedAtMs: this.deps.dateProvider.now() });
-      }
-      return registered;
-    } catch (err) {
-      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}; retrying later`, {
-        epoch,
-        err,
-      });
-      return true;
-    }
   }
 
   private async getL1Constants(): Promise<L1RollupConstants> {
