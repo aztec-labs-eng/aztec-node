@@ -7,6 +7,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
 import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
 import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import { openTmpStore } from '@aztec-labs/kv-store/sqlite-opfs';
 import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
 import { type CompleteFeeOptionsConfig, type FeeOptions } from '@aztec-labs/wallet-sdk/base-wallet';
 import { EmbeddedWallet as BaseEmbeddedWallet } from '@aztec-labs/wallets/embedded';
@@ -61,6 +62,9 @@ export class EmbeddedWallet extends BaseEmbeddedWallet {
     const wallet = await EmbeddedWallet.create<EmbeddedWallet>(nodeUrl, {
       ephemeral: true,
       pxeConfig: { proverEnabled: !isLocal },
+      // In the browser, createPXE opens one persistent store per chain and rollup and ignores `ephemeral`, so a
+      // second wallet on the same page (the two-player view) would collide with the first. Give each its own.
+      pxeOptions: { store: await openTmpStore(true) },
     });
 
     // Register SponsoredFPC so we can pay fees

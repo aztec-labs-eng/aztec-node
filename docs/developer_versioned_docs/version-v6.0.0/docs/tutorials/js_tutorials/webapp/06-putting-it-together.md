@@ -200,6 +200,32 @@ yarn dev
 
 Open `http://localhost:5173`.
 
+:::warning Known issues in v6.0.0
+Two bugs in the v6.0.0 example break the local (split-screen) mode:
+
+- **`yarn dev` can't start the in-browser PXE.** "Connect Account #1" fails with "SQLite worker crashed", because Vite's dependency pre-bundling breaks the path to the store's SQLite worker. Use a production build instead, and open `http://localhost:4173`:
+
+  ```bash
+  yarn build
+  yarn preview
+  ```
+
+- **"Connect Account #2" fails** with `SQLite-OPFS pool ... is already in use by another store instance`, because both in-page wallets open the same PXE store. Give each wallet its own in-memory store in `src/embedded-wallet.ts`:
+
+  ```typescript
+  import { openTmpStore } from "@aztec-labs/kv-store/sqlite-opfs";
+
+  // in EmbeddedWallet.initialize, add pxeOptions to the create() options:
+  const wallet = await EmbeddedWallet.create<EmbeddedWallet>(nodeUrl, {
+    ephemeral: true,
+    pxeConfig: { proverEnabled: !isLocal },
+    pxeOptions: { store: await openTmpStore(true) },
+  });
+  ```
+
+With both changes, the full game below runs as described.
+:::
+
 ### Playing a game (local, split-screen)
 
 When you select "Local" network, the app renders a two-player split-screen on a single page. Both players are side by side:
@@ -214,7 +240,7 @@ When you select "Local" network, the app renders a two-player split-screen on a 
 
 ### With browser extension wallet
 
-1. Build and install the tutorial wallet extension (see [`test-extension/README.md`](https://github.com/aztec-labs-eng/aztec-node/tree/v6.0.0/docs/examples/webapp-tutorial/test-extension) for build and install instructions)
+1. Build and install the tutorial wallet extension (see [`test-extension/README.md`](https://github.com/aztec-labs-eng/aztec-node/tree/v6.0.0/docs/examples/webapp-tutorial/test-extension) for build and install instructions). In v6.0.0, first apply the one-line fix described in [Testing the wallet extension](../wallet-extension/07-testing.md#building-the-extension)
 2. Run `yarn dev`
 3. Select "Browser Wallet" → connect via the wallet extension → verify emojis match
 4. Play the same flow as above (share the contract address with your opponent)
