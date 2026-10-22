@@ -34,8 +34,9 @@ for p in noir-contracts.js noir-test-contracts.js accounts; do
 done
 find "$version" -type f ! -name '*.json' -delete
 
-# Deterministic output: regenerating from the same npm packages yields a byte-identical file.
-$tar_bin --sort=name --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00:00Z' \
+# Deterministic output: regenerating from the same npm packages yields a byte-identical file. --mode keeps the
+# directory permissions from following the caller's umask.
+$tar_bin --sort=name --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX' --mtime='2000-01-01 00:00:00Z' \
     -cf - "$version" | gzip -n -9 > "$version.tar.gz"
 
 if [ -f "$out" ]; then
