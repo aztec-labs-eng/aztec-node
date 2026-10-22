@@ -13,11 +13,6 @@ import { type BlobArchiveApiConfig, blobArchiveApiConfigMappings } from '../arch
  */
 export interface BlobClientConfig extends BlobArchiveApiConfig {
   /**
-   * List of URLs for L1 RPC Execution clients
-   */
-  l1RpcUrls?: string[];
-
-  /**
    * List of URLs of the Ethereum consensus nodes that services will connect to (comma separated)
    */
   l1ConsensusHostUrls?: string[];
@@ -57,9 +52,6 @@ export interface BlobClientConfig extends BlobArchiveApiConfig {
    */
   blobHealthcheckUploadIntervalMinutes?: number;
 
-  /** Timeout for HTTP requests to the L1 RPC node in ms. */
-  l1HttpTimeoutMS?: number;
-
   /** Whether to prefer filestores over consensus clients when fetching blobs. Default: false (consensus first). */
   blobPreferFilestores?: boolean;
 
@@ -68,11 +60,6 @@ export interface BlobClientConfig extends BlobArchiveApiConfig {
 }
 
 export const blobClientConfigMapping: ConfigMappingsType<BlobClientConfig> = {
-  l1RpcUrls: {
-    env: 'ETHEREUM_HOSTS',
-    description: 'List of URLs for L1 RPC Execution clients',
-    parseEnv: (val: string) => val.split(',').map(url => url.trim()),
-  },
   l1ConsensusHostUrls: {
     env: 'L1_CONSENSUS_HOST_URLS',
     description: 'List of URLs of the Ethereum consensus nodes that services will connect to (comma separated)',
@@ -116,11 +103,6 @@ export const blobClientConfigMapping: ConfigMappingsType<BlobClientConfig> = {
   blobHealthcheckUploadIntervalMinutes: {
     env: 'BLOB_HEALTHCHECK_UPLOAD_INTERVAL_MINUTES',
     description: 'Interval in minutes for uploading healthcheck file to file store (default: 60 = 1 hour)',
-    ...optionalNumberConfigHelper(),
-  },
-  l1HttpTimeoutMS: {
-    env: 'ETHEREUM_HTTP_TIMEOUT_MS',
-    description: 'Timeout for HTTP requests to the L1 RPC node in ms.',
     ...optionalNumberConfigHelper(),
   },
   blobPreferFilestores: {

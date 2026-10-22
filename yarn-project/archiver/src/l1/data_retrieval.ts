@@ -65,8 +65,6 @@ export type RetrievedCheckpoint = RetrievedCheckpointBase & {
 export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   /** Versioned blob hashes from the checkpoint proposed event. */
   blobHashes: Buffer[];
-  /** Parent beacon block root from the L1 block, used for blob fetching. */
-  parentBeaconBlockRoot: string | undefined;
 };
 
 /** A calldata-only checkpoint with its attestations decoded for its epoch committee. */
@@ -300,12 +298,12 @@ async function processCheckpointProposedLogs(
         checkpointNumber,
         expectedHashes,
       );
-      const { timestamp, parentBeaconBlockRoot } = await getL1Block(publicClient, log.l1BlockNumber);
+      const { timestamp } = await getL1Block(publicClient, log.l1BlockNumber);
       const l1 = new L1PublishedData(log.l1BlockNumber, timestamp, log.l1BlockHash.toString());
 
       retrievedCheckpoints.push({
         log,
-        checkpoint: { ...checkpoint, l1, chainId, version, blobHashes, parentBeaconBlockRoot },
+        checkpoint: { ...checkpoint, l1, chainId, version, blobHashes },
       });
 
       logger.trace(`Retrieved checkpoint calldata ${checkpointNumber} from L1 tx ${log.l1TransactionHash}`, {
@@ -325,12 +323,9 @@ async function processCheckpointProposedLogs(
   return retrievedCheckpoints;
 }
 
-export async function getL1Block(
-  publicClient: ViemPublicClient,
-  blockNumber: bigint,
-): Promise<{ timestamp: bigint; parentBeaconBlockRoot: string | undefined }> {
+export async function getL1Block(publicClient: ViemPublicClient, blockNumber: bigint): Promise<{ timestamp: bigint }> {
   const block = await publicClient.getBlock({ blockNumber, includeTransactions: false });
-  return { timestamp: block.timestamp, parentBeaconBlockRoot: block.parentBeaconBlockRoot };
+  return { timestamp: block.timestamp };
 }
 
 export async function getCheckpointBlobDataFromBlobs(
@@ -340,12 +335,10 @@ export async function getCheckpointBlobDataFromBlobs(
   checkpointNumber: CheckpointNumber,
   logger: Logger,
   isHistoricalSync: boolean,
-  parentBeaconBlockRoot?: string,
-  l1BlockTimestamp?: bigint,
+  l1BlockTimestamp: bigint,
 ): Promise<CheckpointBlobData> {
   const blobBodies = await blobClient.getBlobSidecar(blockHash, blobHashes, {
     isHistoricalSync,
-    parentBeaconBlockRoot,
     l1BlockTimestamp,
   });
   if (blobBodies.length === 0) {
