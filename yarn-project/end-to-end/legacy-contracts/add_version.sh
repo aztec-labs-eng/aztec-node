@@ -19,6 +19,7 @@ if ! tar --version 2>/dev/null | grep -q GNU; then
   tar_bin=gtar
   command -v gtar >/dev/null || { echo "ERROR: GNU tar required (brew install gnu-tar)." >&2; exit 1; }
 fi
+command -v xz >/dev/null || { echo "ERROR: xz required (brew install xz)." >&2; exit 1; }
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
