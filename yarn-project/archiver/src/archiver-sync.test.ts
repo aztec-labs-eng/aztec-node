@@ -968,12 +968,134 @@ describe('Archiver Sync', () => {
       );
       expect(descendantOfInvalidSpy).toHaveBeenCalledTimes(1);
 
-      // The rejected entries should persist in the store, keyed by their own archive roots.
-      const rejectedBad = await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root);
-      const rejectedValid = await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(validCp3.archive.root);
+      // The rejected entries should persist in the store, keyed by their checkpoint numbers.
+      const rejectedBad = await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root);
+      const rejectedValid = await archiverStore.blocks.getRejectedCheckpoint(validCp3.number, validCp3.archive.root);
       expect(rejectedBad).toBeDefined();
       expect(rejectedValid).toBeDefined();
     }, 15_000);
+
+    describe('rejected checkpoints claiming an archive root already in the chain', () => {
+      let signers: Secp256k1Signer[];
+      let badSigners: Secp256k1Signer[];
+      let cp1: Checkpoint;
+
+      beforeEach(async () => {
+        fake.setTargetCommitteeSize(3);
+        signers = times(3, Secp256k1Signer.random);
+        badSigners = times(3, Secp256k1Signer.random);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(
+          makeCommitteeLookup({ committee: signers.map(s => s.address), seed: 0n }),
+        );
+
+        ({ checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 70n,
+          messagesL1BlockNumber: 50n,
+          numL1ToL2Messages: 3,
+          signers,
+        }));
+        fake.setL1BlockNumber(72n);
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      });
+
+      it('rejects a new checkpoint whose archive root equals the local tip', async () => {
+        await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 80n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+          claimedArchive: cp1.archive,
+        });
+        fake.setL1BlockNumber(82n);
+        await archiver.syncImmediate();
+
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+        expect(await archiverStore.blocks.getRejectedCheckpoint(CheckpointNumber(2), cp1.archive.root)).toBeDefined();
+      }, 15_000);
+
+      it('syncs valid checkpoints built on the accepted checkpoint, before and after a prune', async () => {
+        await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 80n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+          claimedArchive: cp1.archive,
+        });
+        await fake.addCheckpoint(CheckpointNumber(3), {
+          l1BlockNumber: 90n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+        });
+        fake.setL1BlockNumber(92n);
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+
+        // The invalid checkpoints are removed and valid ones are built on CP1.
+        fake.markCheckpointAsPruned(CheckpointNumber(2));
+        fake.markCheckpointAsPruned(CheckpointNumber(3));
+        await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 100n,
+          numL1ToL2Messages: 0,
+          signers,
+          previousArchive: cp1.archive,
+        });
+        await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 101n, numL1ToL2Messages: 0, signers });
+        await fake.addCheckpoint(CheckpointNumber(4), { l1BlockNumber: 102n, numL1ToL2Messages: 0, signers });
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(4));
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+
+        // The pending chain is pruned back to the proven CP1 and a new valid checkpoint is built on it.
+        fake.markCheckpointAsProven(CheckpointNumber(1));
+        for (const n of [2, 3, 4]) {
+          fake.markCheckpointAsPruned(CheckpointNumber(n));
+        }
+        await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 120n,
+          numL1ToL2Messages: 0,
+          signers,
+          previousArchive: cp1.archive,
+        });
+        fake.setL1BlockNumber(130n);
+        await archiver.syncImmediate();
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      }, 30_000);
+
+      it('skips descendants of each rejected checkpoint when several claim the same archive root', async () => {
+        await fake.addCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 80n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+          claimedArchive: cp1.archive,
+        });
+        await fake.addCheckpoint(CheckpointNumber(3), {
+          l1BlockNumber: 82n,
+          numL1ToL2Messages: 0,
+          signers: badSigners,
+          claimedArchive: cp1.archive,
+        });
+        fake.setL1BlockNumber(85n);
+        await archiver.syncImmediate();
+
+        // Only CP3 is removed, and a checkpoint with valid attestations is built on the invalid CP2.
+        fake.markCheckpointAsPruned(CheckpointNumber(3));
+        const { checkpoint: validCp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
+          l1BlockNumber: 90n,
+          numL1ToL2Messages: 0,
+          signers,
+          previousArchive: cp1.archive,
+        });
+        fake.setL1BlockNumber(92n);
+        await archiver.syncImmediate();
+
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect(await archiverStore.blocks.getRejectedCheckpoint(validCp3.number, validCp3.archive.root)).toEqual(
+          expect.objectContaining({ reason: 'descends-from-invalid-attestations' }),
+        );
+      }, 15_000);
+    });
 
     it('rejects a checkpoint with invalid attestations even when its blob data is malformed', async () => {
       // The archiver fetched and decoded checkpoint blobs before validating committee attestations.
@@ -1034,7 +1156,7 @@ describe('Archiver Sync', () => {
           }),
         }),
       );
-      const rejected = await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root);
+      const rejected = await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root);
       expect(rejected).toBeDefined();
 
       // Repeated polling over the same L1 state stays stable. Without the fix, the malformed CP2 blob
@@ -1222,7 +1344,7 @@ describe('Archiver Sync', () => {
         const [storedCp2] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
         expect(storedCp2.checkpoint.archive.root).toEqual(cp2.archive.root);
         expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
-        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toBeUndefined();
+        expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toBeUndefined();
       }
 
       it('syncs past the re-posted checkpoint when reading the whole sequence in one pass', async () => {
@@ -1234,7 +1356,7 @@ describe('Archiver Sync', () => {
         fake.setL1BlockNumber(80n);
         await archiver.syncImmediate();
         expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
-        expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toBeDefined();
+        expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toBeDefined();
 
         await repostAndExtend();
         await expectSyncedToCheckpoint4();
@@ -1987,7 +2109,7 @@ describe('Archiver Sync', () => {
       fake.setL1BlockNumber(82n);
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root)).toBeDefined();
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root)).toBeDefined();
       expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
 
       // L1 reorg: bad CP2 disappears and a valid CP2 lands at L1 block 75, behind the sync point.
@@ -2043,8 +2165,8 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
       expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(100n);
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(oldBadCp3.archive.root)).toBeDefined();
-      const rejectedCp2 = await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root);
+      expect(await archiverStore.blocks.getRejectedCheckpoint(oldBadCp3.number, oldBadCp3.archive.root)).toBeDefined();
+      const rejectedCp2 = await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root);
       expect(rejectedCp2).toBeDefined();
       const validationStatus = await archiver.getPendingChainValidationStatus();
       expect(validationStatus).toEqual(
@@ -2069,13 +2191,13 @@ describe('Archiver Sync', () => {
       fake.setL1BlockNumber(103n);
       await archiver.syncImmediate();
       expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp1);
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp3.archive.root)).toBeUndefined();
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp3.number, badCp3.archive.root)).toBeUndefined();
 
       fake.setL1BlockNumber(104n);
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root)).toEqual(rejectedCp2);
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp3.archive.root)).toEqual(
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root)).toEqual(rejectedCp2);
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp3.number, badCp3.archive.root)).toEqual(
         expect.objectContaining({
           checkpointNumber: CheckpointNumber(3),
           archiveRoot: badCp3.archive.root,
@@ -2195,14 +2317,14 @@ describe('Archiver Sync', () => {
       });
 
       // Fail screening of CP3 once, after CP2 has already been recorded as rejected in the same batch.
-      const getRejected = archiverStore.blocks.getRejectedCheckpointByArchiveRoot.bind(archiverStore.blocks);
+      const getRejected = archiverStore.blocks.getRejectedCheckpoint.bind(archiverStore.blocks);
       let failCp3Screening = true;
-      jest.spyOn(archiverStore.blocks, 'getRejectedCheckpointByArchiveRoot').mockImplementation(archiveRoot => {
+      jest.spyOn(archiverStore.blocks, 'getRejectedCheckpoint').mockImplementation((checkpointNumber, archiveRoot) => {
         if (failCp3Screening && archiveRoot.equals(badCp2.archive.root)) {
           failCp3Screening = false;
           return Promise.reject(new Error('Transient store failure'));
         }
-        return getRejected(archiveRoot);
+        return getRejected(checkpointNumber, archiveRoot);
       });
 
       fake.setL1BlockNumber(87n);
@@ -2397,7 +2519,7 @@ describe('Archiver Sync', () => {
       );
       expect(invalidSpy).toHaveBeenCalledTimes(1);
       expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toEqual(
+      expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toEqual(
         expect.objectContaining({ checkpointNumber: CheckpointNumber(2), reason: 'invalid-attestations' }),
       );
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
@@ -2436,7 +2558,7 @@ describe('Archiver Sync', () => {
       assert(!status.valid);
       expect(status.checkpoint.checkpointNumber).toEqual(CheckpointNumber(2));
       expect(status.checkpoint.archive).toEqual(badCp2.archive.root);
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp3.archive.root)).toEqual(
+      expect(await archiverStore.blocks.getRejectedCheckpoint(cp3.number, cp3.archive.root)).toEqual(
         expect.objectContaining({ reason: 'descends-from-invalid-attestations' }),
       );
     }, 15_000);
@@ -2545,7 +2667,7 @@ describe('Archiver Sync', () => {
       expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toEqual(
         expect.objectContaining({ checkpointNumber: CheckpointNumber(2) }),
       );
-      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(cp2.archive.root)).toEqual(
+      expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toEqual(
         expect.objectContaining({ reason: 'invalid-attestations' }),
       );
     }, 15_000);

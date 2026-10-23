@@ -59,6 +59,7 @@ import { getCoordinationSignatureTypedData, orderAttestations, trimAttestations 
 import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import type { L2BlockBuiltStats } from '@aztec-labs/stdlib/stats';
 import type { ProposerTimetable, SubslotSelection } from '@aztec-labs/stdlib/timetable';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type FailedTx, Tx } from '@aztec-labs/stdlib/tx';
 import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
 import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
@@ -1201,6 +1202,17 @@ export class CheckpointProposalJob implements Traceable {
           reason: err instanceof Error ? err.message : String(err),
         });
         return undefined;
+      }
+
+      if (this.config.claimParentArchiveRoot) {
+        this.log.warn(`Claiming the parent's archive root for checkpoint ${this.checkpointNumber} (testing only)`, {
+          checkpointNumber: this.checkpointNumber,
+          slot: this.targetSlot,
+        });
+        checkpoint.archive = new AppendOnlyTreeSnapshot(
+          checkpoint.header.lastArchiveRoot,
+          checkpoint.archive.nextAvailableLeafIndex,
+        );
       }
 
       // Create the checkpoint proposal and broadcast it
