@@ -9,7 +9,7 @@ import {
   ULTRA_KECCAK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { isRetryableError } from '@aztec-labs/foundation/error';
+import { isRetryableError, isSystemError } from '@aztec-labs/foundation/error';
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { createLogger } from '@aztec-labs/foundation/log';
 import {
@@ -39,11 +39,7 @@ import {
 } from '@aztec-labs/noir-protocol-circuits-types/server';
 import { ServerCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-circuits-types/types';
-import {
-  NativeACVMSimulator,
-  type ProtocolCircuitResult,
-  wrapSystemErrorAsRetryable,
-} from '@aztec-labs/simulator/server';
+import { NativeACVMSimulator, type ProtocolCircuitResult } from '@aztec-labs/simulator/server';
 import type { AvmCircuitInputs, AvmCircuitPublicInputs } from '@aztec-labs/stdlib/avm';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 import {
@@ -424,7 +420,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     } catch (error) {
       // A crashed or unspawnable noir-execute, or an OS error reading its witness, is retryable; a circuit that cannot
       // be solved for these inputs, or a witness that does not decode, is not.
-      const retry = isRetryableError(wrapSystemErrorAsRetryable(error));
+      const retry = isRetryableError(error) || isSystemError(error);
       throw new ProvingError(`Failed to generate witness for ${circuitType}: ${error}`, error, retry);
     }
 

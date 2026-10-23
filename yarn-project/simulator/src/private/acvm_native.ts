@@ -2,7 +2,7 @@ import { type ForeignCallHandler, decompressWitness } from '@aztec-foundation/no
 import { abiDecode } from '@aztec-foundation/noir-noirc_abi';
 import type { InputMap } from '@aztec-foundation/noir-types';
 
-import { RetryableError } from '@aztec-labs/foundation/error';
+import { RetryableError, isSystemError } from '@aztec-labs/foundation/error';
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -48,12 +48,12 @@ const PROVER_FILE = 'Prover.json';
 const WITNESS_NAME = 'output-witness';
 
 /**
- * Wraps a Node system error (one carrying `syscall`, such as ENOSPC or EMFILE) in a {@link RetryableError}, since the
- * machine failed rather than the circuit. Any other error, such as a malformed return value, is returned untouched.
+ * Wraps a Node system error in a {@link RetryableError}, since the machine failed rather than the circuit. Any other
+ * error, such as a malformed return value, is returned untouched.
  */
-export function wrapSystemErrorAsRetryable(err: unknown): unknown {
-  if (typeof err === 'object' && err !== null && 'syscall' in err && !('retry' in err)) {
-    const message = 'message' in err ? String(err.message) : `${String(err.syscall)} failed`;
+function wrapSystemErrorAsRetryable(err: unknown): unknown {
+  if (isSystemError(err) && !('retry' in err)) {
+    const message = 'message' in err ? String(err.message) : `${err.syscall} failed`;
     return new RetryableError(message, { cause: err });
   }
   return err;
