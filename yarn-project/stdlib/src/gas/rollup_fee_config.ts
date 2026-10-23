@@ -67,8 +67,8 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
 
   /**
    * One pass of the polling loop: reads the config at L1's latest block. It takes the client's cached block number and
-   * skips blocks it has already read, so a pass within the cache window costs no new reads. A failed read only logs:
-   * the last value stays until a later pass succeeds.
+   * skips blocks it has already read, so a pass within the cache window costs no new reads, and a lagging RPC node
+   * cannot move the value back. A failed read only logs: the last value stays until a later pass succeeds.
    */
   private async poll(): Promise<void> {
     try {
@@ -76,7 +76,7 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
       if (l1BlockNumber <= this.latest.l1BlockNumber) {
         return;
       }
-      this.offer(await readRollupFeeConfig(this.rollup, l1BlockNumber));
+      this.update(await readRollupFeeConfig(this.rollup, l1BlockNumber));
     } catch (err) {
       this.log.warn(`Failed to refresh rollup fee config from L1, keeping the last value`, {
         err,
@@ -85,11 +85,7 @@ export class RollupFeeConfigTracker implements RollupFeeConfigProvider {
     }
   }
 
-  /** Takes the read as the latest value unless it is older: a lagging RPC node must not move the value back. */
-  private offer(config: RollupFeeConfig): void {
-    if (config.l1BlockNumber <= this.latest.l1BlockNumber) {
-      return;
-    }
+  private update(config: RollupFeeConfig): void {
     const previous = this.latest;
     this.latest = config;
     if (

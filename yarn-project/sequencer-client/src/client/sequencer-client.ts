@@ -149,7 +149,7 @@ export class SequencerClient {
 
     const globalsBuilder = deps.globalVariableBuilder;
 
-    const { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, log);
+    const { maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, log);
 
     const l1Constants = {
       l1GenesisTime,
@@ -174,7 +174,7 @@ export class SequencerClient {
       rollupContract,
       inboxContract,
       feeConfigProvider,
-      { ...config, maxL2BlockGas, maxDABlockGas, maxTxsPerBlock },
+      { ...config, maxDABlockGas, maxTxsPerBlock },
       telemetryClient,
       log,
       deps.checkpointProposalJobTestHooks,
@@ -267,9 +267,7 @@ export class SequencerClient {
 function capPerBlockLimits(
   config: SequencerClientConfig,
   log: ReturnType<typeof createLogger>,
-): { maxL2BlockGas: number | undefined; maxDABlockGas: number | undefined; maxTxsPerBlock: number | undefined } {
-  const maxL2BlockGas = config.maxL2BlockGas;
-
+): { maxDABlockGas: number | undefined; maxTxsPerBlock: number | undefined } {
   let maxDABlockGas = config.maxDABlockGas;
   if (maxDABlockGas !== undefined && maxDABlockGas > MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT) {
     log.warn(
@@ -290,5 +288,5 @@ function capPerBlockLimits(
     maxTxsPerBlock = config.maxTxsPerCheckpoint;
   }
 
-  return { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock };
+  return { maxDABlockGas, maxTxsPerBlock };
 }
