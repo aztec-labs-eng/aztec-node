@@ -190,9 +190,7 @@ describe('ProofPublishingService', () => {
     expect(await shortOutcome).toEqual('superseded');
     expect(await longOutcome).toEqual('published');
     expect(publishers).toHaveLength(1);
-    expect(publishers[0].submitEpochProof).toHaveBeenCalledWith(
-      expect.objectContaining({ toCheckpoint: CheckpointNumber(2) }),
-    );
+    expect(publishers[0].submitEpochProof.mock.calls[0][0].toCheckpoint).toEqual(CheckpointNumber(2));
   });
 
   // ---------------- withdraw ----------------
@@ -444,6 +442,96 @@ describe('ProofPublishingService', () => {
     expect(publishers).toHaveLength(1);
     expect(publishers[0].analyzeEpochProofSubmission).toHaveBeenCalledTimes(1);
     expect(publishers[0].submitEpochProof).not.toHaveBeenCalled();
+  });
+
+  describe('pending proof replacement', () => {
+    it('publishes a pending full proof before a later epoch partial even after the proven tip advances', async () => {
+      startService();
+      const first = installGatedPublisher();
+      const full = service.submit(
+        makeCandidate({ kind: 'full', toCheckpoint: CheckpointNumber(4), endBlock: BlockNumber(8) }),
+      );
+      await first.submitCalled.promise;
+      const [current, options] = publishers[0].submitEpochProof.mock.calls[0];
+
+      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(8));
+      service.onChainProven(BlockNumber(8));
+      const partial = service.submit(
+        makeCandidate({
+          kind: 'partial',
+          epoch: EpochNumber(2),
+          fromCheckpoint: CheckpointNumber(5),
+          toCheckpoint: CheckpointNumber(6),
+          startBlock: BlockNumber(9),
+          endBlock: BlockNumber(12),
+        }),
+      );
+
+      try {
+        expect(await options!.getReplacement!(current)).toBeUndefined();
+        expect(publishers).toHaveLength(1);
+      } finally {
+        first.gate.resolve('published');
+      }
+      expect(await full).toEqual('published');
+      expect(await partial).toEqual('published');
+      expect(publishers).toHaveLength(2);
+    });
+
+    it('offers the longest ready proof for the same epoch and reports it as published', async () => {
+      startService();
+      const first = installGatedPublisher();
+      const partial = makeCandidate({ kind: 'partial', toCheckpoint: CheckpointNumber(2), endBlock: BlockNumber(2) });
+      const original = service.submit(partial);
+      await first.submitCalled.promise;
+      const [current, options] = publishers[0].submitEpochProof.mock.calls[0];
+      const middle = service.submit(
+        makeCandidate({ kind: 'partial', toCheckpoint: CheckpointNumber(3), endBlock: BlockNumber(3) }),
+      );
+      const longest = service.submit(makeCandidate({ toCheckpoint: CheckpointNumber(4), endBlock: BlockNumber(4) }));
+      const next = await options!.getReplacement!(current);
+      expect(next?.toCheckpoint).toEqual(CheckpointNumber(4));
+      options!.onMined!(next!);
+      first.gate.resolve('published');
+
+      expect(await original).toEqual('superseded');
+      expect(await longest).toEqual('published');
+      expect(await middle).toEqual('superseded');
+    });
+
+    it('keeps a longer proof queued if the original proof wins the mining race', async () => {
+      startService();
+      const first = installGatedPublisher();
+      const original = service.submit(makeCandidate({ kind: 'partial', toCheckpoint: CheckpointNumber(2) }));
+      await first.submitCalled.promise;
+      const [current, options] = publishers[0].submitEpochProof.mock.calls[0];
+      const longer = service.submit(makeCandidate({ toCheckpoint: CheckpointNumber(4) }));
+      expect((await options!.getReplacement!(current))?.toCheckpoint).toEqual(CheckpointNumber(4));
+      options!.onMined!(current);
+      first.gate.resolve('published');
+
+      expect(await original).toEqual('published');
+      expect(await longer).toEqual('published');
+      expect(publishers[1].submitEpochProof.mock.calls[0][0].toCheckpoint).toEqual(CheckpointNumber(4));
+    });
+
+    it('does not offer a different epoch or a shorter proof as a replacement', async () => {
+      startService();
+      const first = installGatedPublisher();
+      const original = service.submit(makeCandidate({ kind: 'partial', toCheckpoint: CheckpointNumber(2) }));
+      await first.submitCalled.promise;
+      const [current, options] = publishers[0].submitEpochProof.mock.calls[0];
+      const otherEpoch = service.submit(makeCandidate({ epoch: EpochNumber(2), toCheckpoint: CheckpointNumber(4) }));
+      const shorterCandidate = makeCandidate({ toCheckpoint: CheckpointNumber(1) });
+      const shorter = service.submit(shorterCandidate);
+      expect(await options!.getReplacement!(current)).toBeUndefined();
+      service.withdraw(shorterCandidate.id);
+      first.gate.resolve('published');
+
+      expect(await original).toEqual('published');
+      expect(await otherEpoch).toEqual('published');
+      expect(await shorter).toEqual('withdrawn');
+    });
   });
 
   // ---------------- serialisation ----------------

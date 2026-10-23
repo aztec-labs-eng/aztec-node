@@ -11,7 +11,7 @@ import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 
 import type { ProverNodeJobMetrics } from './metrics.js';
-import type { ProverNodePublisher } from './prover-node-publisher.js';
+import type { EpochProofSubmission, ProverNodePublisher } from './prover-node-publisher.js';
 import type { ProverPublisherFactory } from './prover-publisher-factory.js';
 
 /** A single proof candidate offered to the publishing service by an `EpochSession`. */
@@ -36,8 +36,7 @@ export type PublishCandidate = {
    * Wall-clock time after which the candidate is no longer worth publishing — typically
    * the L1 proof-submission window deadline. If the candidate is still queued at this
    * time it resolves as `'expired'`. If it's already in flight, the publish runs to
-   * completion (the L1 tx may still mine; the deadline only governs whether the service
-   * will start a publish). `undefined` disables the per-candidate timer.
+   * completion (the publisher enforces the same deadline on L1 monitoring). `undefined` disables the per-candidate timer.
    */
   deadline: Date | undefined;
   /** Everything `ProverNodePublisher.submitEpochProof` needs. */
@@ -62,7 +61,7 @@ export type PublishOutcome = 'published' | 'already-submitted' | 'superseded' | 
 /** Subset of `ProverPublisherFactory` the service uses — single async `create()` call. */
 export type PublisherFactoryLike = Pick<ProverPublisherFactory, 'create'>;
 
-/** Subset of `ProverNodePublisher` the service drives — one publish per fresh publisher. */
+/** Subset of `ProverNodePublisher` the service drives, including replacements during one publish. */
 export type PublisherLike = Pick<ProverNodePublisher, 'submitEpochProof' | 'analyzeEpochProofSubmission'>;
 
 /** Config for the publishing service. */
@@ -106,8 +105,8 @@ const PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS = 12_000;
  * Construction-time invariants:
  * - Every publish runs against a freshly-created `ProverNodePublisher` from the factory.
  * - Only one publish is ever in flight (`SerialQueue` drain) — no defensive locks.
- * - Once an L1 publish starts, it runs to completion. `withdraw` is a queue-only
- *   operation: it removes a candidate that has not yet started publishing. An in-flight
+ * - A pending partial proof can be replaced by a longer ready proof for the same epoch.
+ *   `withdraw` removes only candidates that have not been offered to the active publisher. An in-flight
  *   candidate is left alone and its outcome (`'published'` / `'failed'`) is reported as
  *   usual — the originating session has already moved to a terminal state via `cancel()`
  *   and ignores the late outcome.
@@ -130,8 +129,8 @@ export class ProofPublishingService {
    * drain work to settle deterministically (no sleeps).
    */
   protected readonly drainQueue = new SerialQueue();
-  /** Tracks the candidate currently being published. Set while drain is awaiting the L1 publish. */
-  private inFlight: { id: string } | undefined;
+  /** Tracks candidates offered to the active publisher while drain awaits the L1 publish. */
+  private inFlight: { ids: Set<string> } | undefined;
   private stopped = false;
   /** Candidates for which the lack of an affordable publisher has already been logged. */
   private readonly unaffordableCandidates = new Set<string>();
@@ -183,7 +182,7 @@ export class ProofPublishingService {
    * is unknown.
    */
   public withdraw(candidateId: string): void {
-    if (this.inFlight?.id === candidateId) {
+    if (this.inFlight?.ids.has(candidateId)) {
       this.log.debug(`Withdraw for in-flight candidate ${candidateId} ignored; publish will run to completion`, {
         candidateId,
       });
@@ -362,7 +361,7 @@ export class ProofPublishingService {
       return;
     }
 
-    this.inFlight = { id: winner.id };
+    this.inFlight = { ids: new Set([winner.id]) };
     this.log.info(`Publishing candidate ${winner.id}`, {
       candidateId: winner.id,
       epoch: winner.epoch,
@@ -372,29 +371,38 @@ export class ProofPublishingService {
       toCheckpoint: winner.toCheckpoint,
     });
 
-    const outcome = await this.runPublish(winner, publisher);
+    let minedWinner = winner;
+    const outcome = await this.runPublish(winner, publisher, candidate => {
+      minedWinner = candidate;
+    });
     this.inFlight = undefined;
-    this.resolveCandidate(bucket, winner.id, outcome);
+    if (minedWinner.id !== winner.id) {
+      this.resolveCandidate(bucket, winner.id, 'superseded');
+    }
+    this.resolveCandidate(bucket, minedWinner.id, outcome);
+    if (outcome === 'published') {
+      for (const queued of Array.from(bucket.candidates.values())) {
+        if (
+          queued.kind === 'partial' &&
+          queued.fromCheckpoint === minedWinner.fromCheckpoint &&
+          queued.toCheckpoint <= minedWinner.toCheckpoint
+        ) {
+          this.resolveCandidate(bucket, queued.id, 'superseded');
+        }
+      }
+    }
 
     if (bucket.candidates.size === 0) {
       this.epochs.delete(epoch);
     }
   }
 
-  private async runPublish(candidate: PublishCandidate, publisher: PublisherLike): Promise<PublishOutcome> {
-    const submitArgs = {
-      epochNumber: candidate.epoch,
-      kind: candidate.kind,
-      fromCheckpoint: candidate.fromCheckpoint,
-      toCheckpoint: candidate.toCheckpoint,
-      publicInputs: candidate.publicInputs,
-      proof: candidate.proof,
-      batchedBlobInputs: candidate.batchedBlobInputs,
-      attestations: candidate.attestations,
-      headers: candidate.headers,
-      // Stop the L1 tx retrying past the candidate's submission-window deadline.
-      deadline: candidate.deadline,
-    };
+  private async runPublish(
+    candidate: PublishCandidate,
+    publisher: PublisherLike,
+    onMined: (candidate: PublishCandidate) => void,
+  ): Promise<PublishOutcome> {
+    const submitArgs = this.getSubmissionArgs(candidate);
 
     if (this.deps.config.skipSubmitProof) {
       try {
@@ -413,7 +421,38 @@ export class ProofPublishingService {
     }
 
     try {
-      return await publisher.submitEpochProof(submitArgs);
+      const offered = new Map<CheckpointNumber, PublishCandidate>([[submitArgs.toCheckpoint, candidate]]);
+      return await publisher.submitEpochProof(submitArgs, {
+        getReplacement: async current => {
+          if (this.stopped || current.kind === 'full') {
+            return undefined;
+          }
+          const proven = await this.readProvenBlockNumber();
+          const now = this.deps.dateProvider.now();
+          const ready = Array.from(this.epochs.get(candidate.epoch)?.candidates.values() ?? []).filter(
+            next =>
+              next.fromCheckpoint === current.fromCheckpoint &&
+              next.toCheckpoint > current.toCheckpoint &&
+              next.startBlock - 1 <= proven &&
+              (next.kind === 'full' || next.endBlock > proven) &&
+              (!next.deadline || next.deadline.getTime() > now),
+          );
+          if (!ready.length) {
+            return undefined;
+          }
+          const next = ready.reduce((best, proof) => (proof.toCheckpoint > best.toCheckpoint ? proof : best));
+          this.inFlight?.ids.add(next.id);
+          const args = this.getSubmissionArgs(next);
+          offered.set(args.toCheckpoint, next);
+          return args;
+        },
+        onMined: submission => {
+          const mined = offered.get(submission.toCheckpoint);
+          if (mined) {
+            onMined(mined);
+          }
+        },
+      });
     } catch (err) {
       this.log.error(`Error publishing candidate ${candidate.id}`, err, {
         candidateId: candidate.id,
@@ -421,6 +460,22 @@ export class ProofPublishingService {
       });
       return 'failed';
     }
+  }
+
+  private getSubmissionArgs(candidate: PublishCandidate): EpochProofSubmission {
+    return {
+      epochNumber: candidate.epoch,
+      kind: candidate.kind,
+      fromCheckpoint: candidate.fromCheckpoint,
+      toCheckpoint: candidate.toCheckpoint,
+      publicInputs: candidate.publicInputs,
+      proof: candidate.proof,
+      batchedBlobInputs: candidate.batchedBlobInputs,
+      attestations: candidate.attestations,
+      headers: candidate.headers,
+      // Stop the L1 tx retrying past the candidate's submission-window deadline.
+      deadline: candidate.deadline,
+    };
   }
 
   private resolveCandidate(bucket: EpochBucket, id: string, outcome: PublishOutcome): void {
@@ -460,7 +515,7 @@ export class ProofPublishingService {
    * armed in `scheduleExpiry`.
    */
   protected handleExpiry(candidateId: string): void {
-    if (this.inFlight?.id === candidateId) {
+    if (this.inFlight?.ids.has(candidateId)) {
       this.log.debug(`Expiry for in-flight candidate ${candidateId} ignored; publish will run to completion`, {
         candidateId,
       });
