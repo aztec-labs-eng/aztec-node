@@ -72,17 +72,14 @@ describe('automine/effects/tx_effect_oracle', () => {
     expect(actualHash).toEqual(expectedHash.toBigInt());
   });
 
-  // Contract artifacts from prior releases (CONTRACT_ARTIFACTS_VERSION) predate `get_tx_effect_hashes`.
-  const itWithCurrentArtifacts = process.env.CONTRACT_ARTIFACTS_VERSION ? it.skip : it;
-
-  itWithCurrentArtifacts('batched tx effects in Noir exactly match tx effects in TS', async () => {
+  it('batched tx effects in Noir exactly match tx effects in TS', async () => {
     const nodeEffect = await aztecNode.getTxEffect(deployTxHash);
     expect(nodeEffect).toBeDefined();
 
     // The deploy tx hash is requested twice so both batch slots resolve to the same effect.
     const expectedHash = await hashTxEffect(nodeEffect!.data);
     const { result: actualHashes } = await contract.methods
-      .get_tx_effect_hashes([deployTxHash.hash, deployTxHash.hash])
+      .get_tx_effects_hashes([deployTxHash.hash, deployTxHash.hash])
       .simulate({ from: defaultAccountAddress });
 
     expect(actualHashes).toEqual([expectedHash.toBigInt(), expectedHash.toBigInt()]);

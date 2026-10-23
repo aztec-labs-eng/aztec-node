@@ -18,7 +18,7 @@ unconstrained fn tx_effects_agree_across_oracles_and_carry_their_block() {
         env.execute_utility(TxEffectOracleTest::at(contract_address).get_tx_effect_hash(second_tx_hash)),
     ];
 
-    let batch = env.execute_utility(TxEffectOracleTest::at(contract_address).get_tx_effect_hashes([
+    let batch = env.execute_utility(TxEffectOracleTest::at(contract_address).get_tx_effects_hashes([
         first_tx_hash,
         second_tx_hash,
     ]));
