@@ -6,6 +6,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { getAddressFromPrivateKey } from '@aztec-labs/ethereum/account';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
@@ -195,7 +196,7 @@ describe('e2e_multi_validator_node', () => {
         attester: EthAddress.fromString(account.address),
         withdrawer: EthAddress.fromString(account.address),
         privateKey: pk,
-        bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
       };
     });
 

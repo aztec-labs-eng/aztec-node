@@ -5,13 +5,13 @@ import { NewGovernanceProposerPayloadAbi } from '@aztec-foundation/l1-artifacts/
 import { NewGovernanceProposerPayloadBytecode } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 
 import { CheatCodes, EthCheatCodes } from '@aztec-labs/aztec/testing';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
-import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { SequencerClient, SequencerEvents } from '@aztec-labs/sequencer-client';
@@ -79,7 +79,10 @@ describe('single-node/sequencer/escape_hatch_vote_only', () => {
       numberOfAccounts: 1,
       anvilAccounts: 10,
       aztecTargetCommitteeSize: COMMITTEE_SIZE,
-      initialValidators: validators.map(v => ({ ...v, bn254SecretKey: new SecretValue(Fr.random().toBigInt()) })),
+      initialValidators: validators.map(v => ({
+        ...v,
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
+      })),
       validatorPrivateKeys: new SecretValue(validators.map(v => v.privateKey)),
       governanceProposerRoundSize: ROUND_SIZE,
       governanceProposerQuorum: QUORUM_SIZE,

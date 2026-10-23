@@ -1,3 +1,5 @@
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+
 import { computeBn254RegistrationDigestForPrivateKey } from './hash_to_point.js';
 
 /**
@@ -51,4 +53,34 @@ export function estimateBlsKeyProofOfPossessionGas(model: ProofOfPossessionGasMo
 /** Lowest gas estimate any key can have: one attempt that reaches the square root and succeeds. */
 export function minimumProofOfPossessionGas(model: ProofOfPossessionGasModel) {
   return estimateProofOfPossessionGas(model, 1, 1);
+}
+
+/** The `proofOfPossessionGasLimit` a newly deployed GSE starts with. */
+export const DEFAULT_GSE_PROOF_OF_POSSESSION_GAS_LIMIT = 250_000;
+
+/**
+ * Returns a random BN254 BLS private key whose proof of possession verifies within `gasLimit`. About 1 in 28.6k
+ * uniformly random keys needs more than the default 250k: the GSE then rejects the deposit, and the entry queue flush
+ * refunds it and drops the validator without reverting, so a deployment that stakes such a key comes up one attester
+ * short.
+ * @param gasLimit - The GSE's `proofOfPossessionGasLimit` the key must fit.
+ * @param randomKey - Source of candidate keys.
+ */
+export function randomStakeableBn254SecretKey(
+  gasLimit = DEFAULT_GSE_PROOF_OF_POSSESSION_GAS_LIMIT,
+  randomKey: () => bigint = () => Fr.random().toBigInt(),
+): bigint {
+  const model = AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL;
+  if (!(gasLimit >= minimumProofOfPossessionGas(model))) {
+    throw new Error(`No BN254 key verifies its proof of possession within ${gasLimit} gas`);
+  }
+  while (true) {
+    const key = randomKey();
+    if (key <= 0n || key >= Fr.MODULUS) {
+      continue;
+    }
+    if (estimateBlsKeyProofOfPossessionGas(model, `0x${key.toString(16)}`) <= gasLimit) {
+      return key;
+    }
+  }
 }
