@@ -2,6 +2,7 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import {
+  BaseError,
   type Chain,
   type FallbackTransport,
   type HDAccount,
@@ -43,11 +44,81 @@ export class L1RpcError extends Error {
   }
 }
 
+/**
+ * Error thrown by a single L1 RPC URL that answered null to a call where null is never a valid answer. It carries no
+ * error code, so viem's fallback moves on to the next URL and its retry layer treats it as transient.
+ */
+export class L1RpcNullResultError extends BaseError {
+  constructor(method: string) {
+    super(`L1 RPC returned null for ${method}`, { name: 'L1RpcNullResultError' });
+  }
+}
+
+const NEVER_NULL_METHODS = new Set([
+  'eth_blockNumber',
+  'eth_chainId',
+  'eth_gasPrice',
+  'eth_blobBaseFee',
+  'eth_maxPriorityFeePerGas',
+  'eth_getBalance',
+  'eth_getTransactionCount',
+  'eth_getCode',
+  'eth_getStorageAt',
+  'eth_call',
+  'eth_estimateGas',
+  'eth_feeHistory',
+  'eth_getLogs',
+  'eth_simulateV1',
+  'eth_sendRawTransaction',
+  'web3_clientVersion',
+  'trace_transaction',
+]);
+
+// A pending block, a block by number or hash, a transaction or a receipt can legitimately be null, and callers rely
+// on viem's not-found errors for those. A custom JS tracer can also return null, so only the call tracer is covered.
+function isNullNeverValid(method: string, params: unknown): boolean {
+  if (NEVER_NULL_METHODS.has(method)) {
+    return true;
+  }
+  const args: unknown[] = Array.isArray(params) ? params : [];
+  switch (method) {
+    case 'eth_getBlockByNumber':
+      return args[0] === 'latest' || args[0] === 'finalized' || args[0] === 'safe';
+    case 'debug_traceTransaction':
+      return (args[1] as { tracer?: unknown } | undefined)?.tracer === 'callTracer';
+    default:
+      return false;
+  }
+}
+
+/**
+ * Wraps the transport for a single L1 RPC URL so that a null result for a call where null is never a valid answer
+ * throws {@link L1RpcNullResultError}. Inside a viem `fallback`, that makes the fallback try the next URL instead of
+ * handing the null back to the caller. The inner transport's `config` and `value` are kept as they are.
+ */
+export function failOverOnNullResult(transport: HttpTransport): HttpTransport {
+  return params => {
+    const inner = transport(params);
+    const request = (async (args, options) => {
+      const result = await inner.request(args, options);
+      if (result == null && isNullNeverValid(args.method, args.params)) {
+        throw new L1RpcNullResultError(args.method);
+      }
+      return result;
+    }) as typeof inner.request;
+    return { ...inner, request };
+  };
+}
+
 /** Creates a viem fallback HTTP transport for the given L1 RPC URLs. */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number }) {
   // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
   return wrapL1RpcTransport(
-    fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout, maxResponseBodySize: false }))),
+    fallback(
+      rpcUrls.map(url =>
+        failOverOnNullResult(http(url, { batch: false, timeout: opts?.timeout, maxResponseBodySize: false })),
+      ),
+    ),
   );
 }
 
