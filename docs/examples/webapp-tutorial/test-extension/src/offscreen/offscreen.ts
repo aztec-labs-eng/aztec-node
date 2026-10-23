@@ -517,7 +517,7 @@ async function handleWalletMethod(method: string, args: any[]): Promise<any> {
   const result = await walletObj[method](...parsedArgs);
 
   // Serialize to JSON-safe format before returning through Chrome messaging
-  // Methods like registerContract return nothing, and jsonStringify(undefined) is not parseable JSON.
+  // Methods like registerContract return nothing, and JSON.parse rejects what jsonStringify returns for undefined.
   const jsonSafe = result === undefined ? undefined : JSON.parse(jsonStringify(result));
   log.debug('[offscreen] Wallet method completed:', method);
   return jsonSafe;
