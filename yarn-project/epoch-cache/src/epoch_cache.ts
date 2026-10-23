@@ -1,5 +1,3 @@
-import { createEthereumChain } from '@aztec-labs/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { RollupContract, isEpochNotStableError } from '@aztec-labs/ethereum/contracts';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
@@ -18,7 +16,7 @@ import {
   getTimestampForSlot,
   getTimestampRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
-import { createPublicClient, encodeAbiParameters, keccak256 } from 'viem';
+import { encodeAbiParameters, keccak256 } from 'viem';
 
 import {
   type CommitteeLookup,
@@ -134,26 +132,9 @@ export class EpochCache implements EpochCacheInterface {
     });
   }
 
-  static async create(
-    rollupOrAddress: EthAddress | RollupContract,
-    config?: EpochCacheConfig,
-    deps: { dateProvider?: DateProvider } = {},
-  ) {
+  /** Creates an epoch cache for the given rollup, reading the L1 constants it needs from the rollup contract. */
+  static async create(rollup: RollupContract, config?: EpochCacheConfig, deps: { dateProvider?: DateProvider } = {}) {
     config = config ?? getEpochCacheConfigEnvVars();
-
-    // Load the rollup contract if we were given an address
-    let rollup: RollupContract;
-    if ('address' in rollupOrAddress) {
-      rollup = rollupOrAddress;
-    } else {
-      const chain = createEthereumChain(config.l1RpcUrls, config.l1ChainId);
-      const publicClient = createPublicClient({
-        chain: chain.chainInfo,
-        transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
-        pollingInterval: config.viemPollingIntervalMS,
-      });
-      rollup = new RollupContract(publicClient, rollupOrAddress.toString());
-    }
 
     const [
       l1StartBlock,

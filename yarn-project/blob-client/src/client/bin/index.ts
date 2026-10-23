@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import { createPublicClient } from 'viem';
 
 import { getBlobClientConfigFromEnv } from '../config.js';
 import { createBlobClient } from '../factory.js';
@@ -19,7 +21,11 @@ async function main() {
     logger.info(`Filtering by blob hashes ${blobHashes.map(bufferToHex).join(', ')}`);
   }
 
-  const blobClient = createBlobClient(getBlobClientConfigFromEnv());
+  const config = getBlobClientConfigFromEnv();
+  const l1Client = config.l1RpcUrls?.length
+    ? createPublicClient({ transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }) })
+    : undefined;
+  const blobClient = createBlobClient(config, { l1Client });
   const blobs = await blobClient.getBlobSidecar(blockHash, blobHashes);
   logger.info(`Got ${blobs.length} blobs`);
   for (const blob of blobs) {
