@@ -467,18 +467,6 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['checkpoint_already_published']: false,
 };
 
-/**
- * Slashable checkpoint-proposal rejections that accuse the proposer but not the attesters of its signed payload.
- *
- * last_block_archive_mismatch is decided by blocks of the slot the payload does not commit to, which this node stored
- * before the proposal arrived. An honest attester that had not stored them yet found the same payload valid, so the
- * verdict says nothing about the attesters. A checkpoint whose covered blocks are themselves invalid is reported with
- * that content reason instead, which does accuse them.
- */
-const PROPOSER_ONLY_CHECKPOINT_PROPOSAL_REASONS: ReadonlySet<CheckpointProposalValidationFailureReason> = new Set([
-  'last_block_archive_mismatch',
-]);
-
 /** Whether a block-proposal validation result is a rejection for a slashable reason. */
 function isSlashableBlockProposalResult(
   result: BlockProposalValidationResult,
@@ -493,11 +481,15 @@ function isSlashableCheckpointProposalResult(
   return !result.isValid && SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason];
 }
 
-/** Whether a checkpoint-proposal validation result is evidence against the attesters of the proposal's payload. */
+/**
+ * Whether a checkpoint-proposal rejection is evidence against the attesters of its payload, not only its proposer.
+ * last_block_archive_mismatch is not: this node already holds later blocks of the slot, and an attester that had not
+ * received them yet would rightly find the same payload valid.
+ */
 function accusesCheckpointAttesters(
   result: CheckpointProposalValidationResult,
 ): result is CheckpointProposalValidationFailureResult {
-  return isSlashableCheckpointProposalResult(result) && !PROPOSER_ONLY_CHECKPOINT_PROPOSAL_REASONS.has(result.reason);
+  return isSlashableCheckpointProposalResult(result) && result.reason !== 'last_block_archive_mismatch';
 }
 
 /**
@@ -2406,7 +2398,7 @@ export class ProposalHandler {
     const coveredBlocks = blocks.slice(0, lastBlockIndex + 1);
     const laterBlockNumbers = blocks.slice(lastBlockIndex + 1).map(b => b.number);
     if (laterBlockNumbers.length > 0) {
-      this.log.warn(`Last block archive mismatch for checkpoint proposal`, {
+      this.log.debug(`Checkpoint proposal leaves later blocks of its slot out`, {
         ...proposalInfo,
         lastBlockNumber: lastBlock.number,
         laterBlockNumbers,
