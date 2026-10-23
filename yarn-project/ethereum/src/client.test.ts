@@ -1,16 +1,20 @@
 import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import { type Server, createServer } from 'node:http';
-import { createPublicClient } from 'viem';
+import { BlockNotFoundError, TransactionReceiptNotFoundError, createPublicClient } from 'viem';
 import { foundry, sepolia } from 'viem/chains';
 
 import {
   L1RpcError,
+  L1RpcNullResultError,
   createExtendedL1Client,
   getL1RpcErrorCode,
   getL1RpcHttpStatus,
+  getRpcUrlsFromClient,
   isL1RpcHttpStatus,
   makeL1HttpTransport,
 } from './client.js';
+import { type RecordingRpcServer, startRecordingRpcServer } from './test/recording_rpc_server.js';
 
 describe('createExtendedL1Client polling', () => {
   const privateKey = `0x${'01'.repeat(32)}`;
@@ -92,5 +96,111 @@ describe('makeL1HttpTransport', () => {
     expect(error).toBeInstanceOf(L1RpcError);
     expect(getL1RpcErrorCode(error)).toBe(-32005);
     expect(getL1RpcHttpStatus(error)).toBeUndefined();
+  });
+});
+
+describe('makeL1HttpTransport with an RPC that answers null', () => {
+  const block = { number: '0x10', hash: `0x${'11'.repeat(32)}`, timestamp: '0x1', transactions: [] };
+  const answers = new Map<string, unknown>([
+    ['eth_getBlockByNumber', block],
+    ['eth_getTransactionCount', '0x5'],
+    ['eth_call', '0x01'],
+    ['debug_traceTransaction', { type: 'CALL' }],
+  ]);
+
+  let servers: RecordingRpcServer[] = [];
+
+  afterEach(async () => {
+    await Promise.all(servers.map(server => server.close()));
+    servers = [];
+  });
+
+  const startServers = async (opts: { secondAnswersNull?: boolean } = {}) => {
+    const nullServer = await startRecordingRpcServer({ answer: () => null });
+    const otherServer = await startRecordingRpcServer({
+      answer: method => (opts.secondAnswersNull ? null : answers.get(method)),
+    });
+    servers.push(nullServer, otherServer);
+    const client = createPublicClient({
+      chain: foundry,
+      transport: makeL1HttpTransport([nullServer.url, otherServer.url]),
+    });
+    return { client, nullServer, otherServer };
+  };
+
+  type Client = Awaited<ReturnType<typeof startServers>>['client'];
+  const txHash = `0x${'22'.repeat(32)}` as const;
+
+  it('fails over to the next URL when the latest block is null', async () => {
+    const { client, otherServer } = await startServers();
+
+    const latest = await client.getBlock();
+
+    expect(latest.number).toBe(16n);
+    expect(otherServer.methods).toEqual(['eth_getBlockByNumber']);
+  });
+
+  it.each<[string, (client: Client) => Promise<unknown>, unknown]>([
+    ['the finalized block', client => client.getBlock({ blockTag: 'finalized' }).then(b => b.number), 16n],
+    ['getTransactionCount', client => client.getTransactionCount({ address: `0x${'33'.repeat(20)}` }), 5],
+    ['eth_call', client => client.call({ to: `0x${'33'.repeat(20)}`, data: '0x' }).then(r => r.data), '0x01'],
+    [
+      'debug_traceTransaction with the call tracer',
+      client =>
+        client.request({ method: 'debug_traceTransaction', params: [txHash, { tracer: 'callTracer' }] } as never),
+      { type: 'CALL' },
+    ],
+  ])('fails over to the next URL when %s returns null', async (_name, call, expected) => {
+    const { client, otherServer } = await startServers();
+
+    await expect(call(client)).resolves.toEqual(expected);
+    expect(otherServer.methods).toHaveLength(1);
+  });
+
+  it.each<[string, (client: Client) => Promise<unknown>, new (...args: any[]) => Error]>([
+    ['a block by number', client => client.getBlock({ blockNumber: 16n }), BlockNotFoundError],
+    ['the pending block', client => client.getBlock({ blockTag: 'pending' }), BlockNotFoundError],
+    [
+      'a transaction receipt',
+      client => client.getTransactionReceipt({ hash: txHash }),
+      TransactionReceiptNotFoundError,
+    ],
+  ])('does not fail over when %s is null', async (_name, call, notFoundError) => {
+    const { client, otherServer } = await startServers();
+
+    await expect(call(client)).rejects.toThrow(notFoundError);
+    expect(otherServer.methods).toEqual([]);
+  });
+
+  it('does not fail over when a custom tracer returns null', async () => {
+    const { client, otherServer } = await startServers();
+
+    const trace = await client.request({
+      method: 'debug_traceTransaction',
+      params: [txHash, { tracer: '{ result: function() { return null; } }' }],
+    } as never);
+
+    expect(trace).toBeNull();
+    expect(otherServer.methods).toEqual([]);
+  });
+
+  it('rejects with an L1RpcError after retrying when every URL returns null', async () => {
+    const { client, nullServer, otherServer } = await startServers({ secondAnswersNull: true });
+
+    const error = await client.getBlock().catch(err => err);
+
+    expect(error).toBeInstanceOf(L1RpcError);
+    expect(getErrorCause(error, L1RpcNullResultError)).toBeDefined();
+    expect(nullServer.methods.length).toBeGreaterThan(1);
+    expect(otherServer.methods.length).toBeGreaterThan(1);
+    for (const err of [error, getErrorCause(error, L1RpcNullResultError)]) {
+      expect(err.message).not.toContain('127.0.0.1');
+    }
+  });
+
+  it('keeps every URL visible to getRpcUrlsFromClient', async () => {
+    const { client, nullServer, otherServer } = await startServers();
+
+    expect(getRpcUrlsFromClient(client)).toEqual([nullServer.url, otherServer.url]);
   });
 });
