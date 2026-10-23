@@ -195,9 +195,11 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       validator: new MinGasLimitsValidator<Tx>(bindings),
       severity: PeerErrorSeverity.MidToleranceError,
     },
+    // Mild because the network limits come from this node's own read of the rollup's live mana limit, which can
+    // briefly lag a governance raise that the relaying peer has already seen.
     maxGasLimitsValidator: {
       validator: new MaxGasLimitsValidator<Tx>({ ...gasLimitOpts, bindings }),
-      severity: PeerErrorSeverity.MidToleranceError,
+      severity: PeerErrorSeverity.HighToleranceError,
     },
     // The max-fee comparisons and the fee-payer balance check are separate entries because their failures mean
     // different things. A tx below our admission fee is only invalid against a fee this node resolved: a peer
