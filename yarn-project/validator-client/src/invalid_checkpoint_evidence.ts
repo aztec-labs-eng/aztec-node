@@ -5,10 +5,11 @@ import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 /**
  * A block proposal this node rejected, with the facts needed to decide whether that rejection is bound to a
- * checkpoint's signed payload. `headerMismatch`: the proposer's block header did not match re-execution, and the
- * checkpoint's blockHeadersHash commits to the header, so a header this node rejected that sits in the committed
- * sequence is proven invalid. `archiveMismatch`: the proposer's claimed resulting archive did not match
- * re-execution; it only binds to a checkpoint when it equals the checkpoint's signed archive.
+ * checkpoint's signed payload. `headerMismatch`: the block was rejected for a reason that follows from its signed
+ * header and parent alone, and the checkpoint's blockHeadersHash commits to the header, so a header this node rejected
+ * that sits in the committed sequence is proven invalid. `archiveMismatch`: the re-executed header matched but the
+ * proposer's claimed resulting archive did not; it only binds to a checkpoint when it equals the checkpoint's signed
+ * archive.
  */
 export type InvalidBlockVerdict = {
   blockHeader: BlockHeader;

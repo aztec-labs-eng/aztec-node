@@ -124,11 +124,10 @@ export type BlockProposalValidationFailureResult = {
   reason: BlockProposalValidationFailureReason;
   blockNumber?: BlockNumber;
   reexecutionResult?: ReexecuteTransactionsResult;
-  // The mismatch shape of a state_mismatch, whose header binding cannot be decided from the reason alone:
-  // headerMismatch binds by header membership; archiveMismatch binds only when the block is the committed sequence's
-  // last and its wrong archive is the signed one. Every other header-committing reason is bound by
-  // HEADER_BOUND_BLOCK_REASONS without a per-result flag. See recordVerdictIfBound and
-  // checkpointCommitsToRejectedBlock.
+  // Set only for an archive-only state_mismatch (the re-executed header matched, the claimed archive did not), which
+  // binds only when the block is the committed sequence's last and its wrong archive is the signed one. Every other
+  // header-committing reason is bound by HEADER_BOUND_BLOCK_REASONS without a per-result flag. See recordVerdictIfBound
+  // and checkpointCommitsToRejectedBlock.
   headerBoundVerdict?: { headerMismatch: boolean; archiveMismatch: boolean };
 };
 
@@ -449,8 +448,9 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
  * rejected, and then commit the same header at its true index in a valid checkpoint. That covers the invalid_proposal
  * slot checks (which check applies is chosen by the index) and checkpoint_over_msg_cap (the index picks the
  * checkpoint's starting message count). global_variables_mismatch stays: it needs the header's slot to equal its
- * parent's, which no index makes valid. state_mismatch carries a per-result headerBoundVerdict instead of appearing
- * here, since it can also bind by the sequence's last block. See recordVerdictIfBound.
+ * parent's, which no index makes valid. state_mismatch is not listed: a re-executed header mismatch depends on the
+ * proposal's tx list, which the checkpoint does not sign; only its archive-only form binds, through a per-result
+ * headerBoundVerdict. See recordVerdictIfBound.
  */
 const HEADER_BOUND_BLOCK_REASONS: ReadonlySet<BlockProposalValidationFailureReason> = new Set([
   'parent_block_wrong_slot',
@@ -753,9 +753,10 @@ export class ProposalHandler {
    * Records a per-block verdict for a rejection that invalidates the block's signed header, so a checkpoint whose
    * committed sequence contains that header can later be bound to it. Called once per proposal on the final result -
    * after the parent-pruned demotion, which turns the reason non-slashable, so a demoted rejection records nothing.
-   * The shape comes from the result's own headerBoundVerdict (state_mismatch) or, for the other header-committing
-   * reasons, from HEADER_BOUND_BLOCK_REASONS. A slashable reason that is neither (invalid_proposal,
-   * checkpoint_over_msg_cap, or an embedded-tx-body reason) records nothing.
+   * The shape comes from the result's own headerBoundVerdict (an archive-only state_mismatch) or, for the other
+   * header-committing reasons, from HEADER_BOUND_BLOCK_REASONS. A slashable reason that is neither (invalid_proposal,
+   * checkpoint_over_msg_cap, a state_mismatch whose re-executed header differs, or an embedded-tx-body reason) records
+   * nothing.
    */
   private recordVerdictIfBound(proposal: BlockProposal, result: BlockProposalValidationResult): void {
     if (result.isValid || !SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[result.reason]) {
@@ -1206,11 +1207,19 @@ export class ProposalHandler {
       this.log.error(`Error reexecuting txs while processing block proposal`, error, proposalInfo);
       const reason = await this.classifyReexecutionFailure(error, proposal, streamingMetadata, proposalInfo);
       const failure: BlockProposalValidationFailureResult = { isValid: false, blockNumber, reason, reexecutionResult };
-      // A non-demoted state mismatch carries its exact shape (header and/or archive mismatch). The caller records on
-      // the final result, so a local-view demotion (inbox_prefix_*, not slashable) or a parent-pruned demotion leaves
-      // no attester evidence.
-      if (error instanceof ReExStateMismatchError && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason]) {
-        failure.headerBoundVerdict = { headerMismatch: error.headerMismatch, archiveMismatch: error.archiveMismatch };
+      // Only an archive-only mismatch is evidence against a committing checkpoint. Re-execution runs the proposal's own
+      // tx list, which the checkpoint does not sign, so a header mismatch shows only that those txs do not produce the
+      // header: the same header may be valid for the txs honest attesters received. With the header matching, the
+      // resulting archive follows from the header and its parent alone, so a wrong one is wrong for every node. The
+      // caller records on the final result, so a local-view demotion (inbox_prefix_*, not slashable) or a parent-pruned
+      // demotion leaves no attester evidence.
+      if (
+        error instanceof ReExStateMismatchError &&
+        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason] &&
+        !error.headerMismatch &&
+        error.archiveMismatch
+      ) {
+        failure.headerBoundVerdict = { headerMismatch: false, archiveMismatch: true };
       }
       return failure;
     }

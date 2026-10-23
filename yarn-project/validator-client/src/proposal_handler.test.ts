@@ -2309,7 +2309,7 @@ describe('ProposalHandler checkpoint validation', () => {
         if (moveLocalPrefix) {
           mockLocalView(new Fr(0xdead));
         }
-        throw thrownError ?? new ReExStateMismatchError(blockArchive, Fr.random(), true, false);
+        throw thrownError ?? new ReExStateMismatchError(blockArchive, Fr.random(), false, true);
       });
       const blockResult = await handler.handleBlockProposal(blockProposal, mock<PeerId>(), true);
 
@@ -2325,12 +2325,30 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
     });
 
-    it('slashes the committing checkpoint attesters when the block mismatch is a genuine proposer offense', async () => {
+    it('slashes the committing checkpoint attesters when the block claims a wrong archive for its header', async () => {
       const { blockResult, checkpoint, handler } = await rejectBlockThenValidateCommittingCheckpoint(false);
 
       expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
       expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([checkpoint.getPayloadHash()]);
     });
+
+    it.each([
+      ['header only', false],
+      ['header and archive', true],
+    ])(
+      'does not slash the committing checkpoint attesters when the re-executed %s mismatched',
+      async (_name, archiveMismatch) => {
+        // Re-execution runs the block proposal's own tx list, which the checkpoint does not sign: the same header may
+        // be valid for the txs the honest attesters received, so a header mismatch is not evidence against them.
+        const { blockResult, handler } = await rejectBlockThenValidateCommittingCheckpoint(
+          false,
+          new ReExStateMismatchError(Fr.random(), Fr.random(), true, archiveMismatch),
+        );
+
+        expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+      },
+    );
 
     it('does not slash the committing checkpoint attesters when the block was rejected for failed txs', async () => {
       // failed_txs is a tx-body defect outside the signed header and the checkpoint's signed payload, so a node that
