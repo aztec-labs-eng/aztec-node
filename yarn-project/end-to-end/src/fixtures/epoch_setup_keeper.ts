@@ -8,8 +8,10 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { getContract } from 'viem';
 
+const POLLS_PER_L1_SLOT = 4;
+
 /**
- * Calls `setupEpoch()` on the rollup early in every epoch that is not set up yet, checking once per L1 slot.
+ * Calls `setupEpoch()` on the rollup early in every epoch that is not set up yet, checking several times per L1 slot.
  *
  * The epoch cache serves an epoch's committee only once the randao it samples is checkpointed on L1, so an epoch with
  * no proposal costs the next epoch its first slot, and with two-slot epochs the loss can repeat for several epochs.
@@ -28,7 +30,15 @@ export class EpochSetupKeeper {
     ethereumSlotDuration: number,
     private readonly logger: Logger,
   ) {
-    this.runningPromise = new RunningPromise(() => this.setUpCurrentEpoch(), logger, ethereumSlotDuration * 1000);
+    // With two-slot epochs of two L1 slots per L2 slot, the next epoch's first-slot proposer looks up its committee from
+    // this epoch's second L1 slot until the start of its last one. A poll that runs just before the epoch's first block
+    // is mined sees the old epoch, so polling once per L1 slot can land the setup in the epoch's third or fourth block,
+    // potentially too late for that proposer.
+    this.runningPromise = new RunningPromise(
+      () => this.setUpCurrentEpoch(),
+      logger,
+      (ethereumSlotDuration * 1000) / POLLS_PER_L1_SLOT,
+    );
   }
 
   public async start(): Promise<this> {
@@ -51,9 +61,9 @@ export class EpochSetupKeeper {
       const client = this.ethCheatCodes.publicClient;
       const rollup = getContract({ address: this.rollup.address, abi: RollupAbi, client });
       const hash = await rollup.write.setupEpoch({ account: this.sender.toString() });
-      await client.waitForTransactionReceipt({ hash });
+      const receipt = await client.waitForTransactionReceipt({ hash });
       this.lastEpochSetUp = epoch;
-      this.logger.verbose(`Set up epoch ${epoch} on L1`, { epoch });
+      this.logger.verbose(`Set up epoch ${epoch} on L1`, { epoch, l1BlockNumber: receipt.blockNumber });
     } catch (err) {
       this.logger.warn(`Failed to set up epoch ${epoch} on L1`, { epoch, err });
     }
