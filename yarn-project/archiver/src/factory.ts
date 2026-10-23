@@ -1,11 +1,13 @@
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { type L1HttpTransport, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { L1RpcGraderConfig } from '@aztec-labs/ethereum/l1-reader';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { merge } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { createStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { protocolContractNames } from '@aztec-labs/protocol-contracts';
@@ -71,7 +73,6 @@ export async function createArchiver(
   }
 
   const publicClient = deps.l1Client;
-  const debugClient = createDebugClient(config, publicClient);
 
   // Create L1 contract instances
   const rollup = new RollupContract(publicClient, config.rollupAddress);
@@ -134,6 +135,8 @@ export async function createArchiver(
   const telemetry = deps.telemetry ?? getTelemetryClient();
   const instrumentation = await ArchiverInstrumentation.new(telemetry, () => archiverStore.db.estimateSize());
 
+  const { debugClient, debugClientGrader } = createDebugClient(config, publicClient);
+
   // Create the event emitter that will be shared by archiver and synchronizer
   const events = new EventEmitter() as ArchiverEmitter;
 
@@ -180,28 +183,43 @@ export async function createArchiver(
     l2FrontierCache,
     deps.feeConfigProvider,
     deps.dateProvider ?? new DateProvider(),
+    undefined, // checkpointProposalPresence (use default)
+    undefined, // log (use default)
+    debugClientGrader,
   );
 
-  await archiver.start(opts.blockUntilSync);
+  try {
+    await archiver.start(opts.blockUntilSync);
+  } catch (err) {
+    await debugClientGrader?.stop();
+    throw err;
+  }
   return archiver;
 }
 
 /**
  * Returns the client the archiver traces L1 txs with. When debug RPC URLs are configured it builds a client over
- * them, since the regular RPCs may not serve debug or trace calls; otherwise it reuses the shared public client.
+ * them, since the regular RPCs may not serve debug or trace calls; otherwise it reuses the shared public client. A
+ * client built over two or more debug URLs grades them, and the archiver stops that grader when it stops.
  */
 function createDebugClient(
-  config: Pick<ArchiverConfig, 'l1DebugRpcUrls' | 'l1HttpTimeoutMS' | 'viemPollingIntervalMS'>,
+  config: Pick<ArchiverConfig, 'l1DebugRpcUrls' | 'l1ChainId' | 'l1HttpTimeoutMS' | 'viemPollingIntervalMS'> &
+    L1RpcGraderConfig,
   publicClient: ViemPublicClient,
-): ViemPublicDebugClient {
+): { debugClient: ViemPublicDebugClient; debugClientGrader: L1HttpTransport['grader'] } {
   if (config.l1DebugRpcUrls.length === 0) {
-    return publicClient as ViemPublicDebugClient;
+    return { debugClient: publicClient as ViemPublicDebugClient, debugClientGrader: undefined };
   }
-  return createPublicClient({
+  const transport = makeL1HttpTransport(config.l1DebugRpcUrls, {
+    timeout: config.l1HttpTimeoutMS,
+    grader: { config, chainId: config.l1ChainId, logger: createLogger('archiver:l1-debug-rpc-grader') },
+  });
+  const debugClient = createPublicClient({
     chain: publicClient.chain,
-    transport: makeL1HttpTransport(config.l1DebugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
+    transport,
     pollingInterval: config.viemPollingIntervalMS,
   }) as ViemPublicDebugClient;
+  return { debugClient, debugClientGrader: transport.grader };
 }
 
 /** Registers protocol contracts in the archiver store. Idempotent — skips contracts that already exist (e.g. on node restart). */
