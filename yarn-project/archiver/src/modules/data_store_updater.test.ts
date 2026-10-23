@@ -24,6 +24,8 @@ import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts'
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { CheckpointValidationError } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -163,7 +165,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
   beforeEach(async () => {
     store = createArchiverDataStores(await openTmpStore('data_store_updater_test'), GENESIS_BLOCK_HEADER_HASH);
-    updater = new ArchiverDataStoreUpdater(store);
+    updater = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider());
 
     // Create contract class log from sample fixture data
     contractClassLog = ContractClassLog.fromBuffer(getSampleContractClassPublishedEventPayload());
@@ -808,6 +810,46 @@ describe('ArchiverDataStoreUpdater', () => {
     });
   });
 
+  describe('rollup mana limit', () => {
+    let feeConfigProvider: TestRollupFeeConfigProvider;
+    let manaUpdater: ArchiverDataStoreUpdater;
+
+    /** An L1 checkpoint whose blocks' mana adds up to `totalManaUsed`. */
+    const makeCheckpointUsingMana = async (totalManaUsed: number) => {
+      const block = await L2Block.random(BlockNumber(1), {
+        checkpointNumber: CheckpointNumber(1),
+        slotNumber: SlotNumber(100),
+        totalManaUsed: new Fr(totalManaUsed),
+      });
+      return makePublishedCheckpoint(makeCheckpoint([block]), 10);
+    };
+
+    beforeEach(() => {
+      // The limit the node read at startup.
+      feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: 1_000n });
+      manaUpdater = new ArchiverDataStoreUpdater(store, feeConfigProvider);
+    });
+
+    it('ingests a checkpoint over the startup limit once the provider has the raised limit', async () => {
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+
+      await manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+
+    it('rejects a checkpoint over the current limit, and ingests it on a later pass once the limit is raised', async () => {
+      const checkpoint = await makeCheckpointUsingMana(1_500);
+
+      await expect(manaUpdater.addCheckpoints([checkpoint])).rejects.toThrow(CheckpointValidationError);
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
+
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+      await manaUpdater.addCheckpoints([checkpoint]);
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+  });
+
   describe('repeated tx hashes', () => {
     it('accepts an L1 checkpoint that replaces a local proposed block and includes the same tx', async () => {
       const blockOpts = {
@@ -892,7 +934,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('does not refresh the cache when the writer transaction aborts', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const tipsBefore = await l2FrontierCache.getL2Tips();
 
@@ -915,7 +957,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('serves tips and the proposed checkpoint from the same instant while a promotion commits', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),

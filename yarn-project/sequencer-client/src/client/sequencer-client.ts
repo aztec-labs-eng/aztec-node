@@ -12,6 +12,7 @@ import type { KeystoreManager } from '@aztec-labs/node-keystore';
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import type { L2BlockSink, L2BlockSource, ProposedCheckpointSink } from '@aztec-labs/stdlib/block';
+import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { ValidatorClientFullConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { L1Metrics, type TelemetryClient } from '@aztec-labs/telemetry-client';
@@ -58,6 +59,8 @@ export class SequencerClient {
       worldStateSynchronizer: WorldStateSynchronizer;
       slasherClient: SlasherClientInterface | undefined;
       checkpointsBuilder: FullNodeCheckpointsBuilder;
+      /** Live rollup fee settings, for the mana limit checkpoints are built and validated against. */
+      feeConfigProvider: RollupFeeConfigProvider;
       l2BlockSource: L2BlockSource & L2BlockSink & ProposedCheckpointSink;
       l1ToL2MessageSource: L1ToL2MessageSource;
       telemetry: TelemetryClient;
@@ -82,6 +85,7 @@ export class SequencerClient {
       worldStateSynchronizer,
       slasherClient,
       checkpointsBuilder,
+      feeConfigProvider,
       l2BlockSource,
       l1ToL2MessageSource,
       telemetry: telemetryClient,
@@ -105,10 +109,9 @@ export class SequencerClient {
     });
     const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
     const inboxContract = new InboxContract(publicClient, config.inboxAddress);
-    const [l1GenesisTime, slotDuration, rollupManaLimit] = await Promise.all([
+    const [l1GenesisTime, slotDuration] = await Promise.all([
       rollupContract.getL1GenesisTime(),
       rollupContract.getSlotDuration(),
-      rollupContract.getManaLimit().then(Number),
     ] as const);
 
     const governanceProposerContract = new GovernanceProposerContract(
@@ -146,13 +149,12 @@ export class SequencerClient {
 
     const globalsBuilder = deps.globalVariableBuilder;
 
-    const { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, rollupManaLimit, log);
+    const { maxDABlockGas, maxTxsPerBlock } = capPerBlockLimits(config, log);
 
     const l1Constants = {
       l1GenesisTime,
       slotDuration: Number(slotDuration),
       ethereumSlotDuration,
-      rollupManaLimit,
       epochDuration: config.aztecEpochDuration,
     };
 
@@ -171,7 +173,8 @@ export class SequencerClient {
       epochCache,
       rollupContract,
       inboxContract,
-      { ...config, maxL2BlockGas, maxDABlockGas, maxTxsPerBlock },
+      feeConfigProvider,
+      { ...config, maxDABlockGas, maxTxsPerBlock },
       telemetryClient,
       log,
       deps.checkpointProposalJobTestHooks,
@@ -263,15 +266,8 @@ export class SequencerClient {
  */
 function capPerBlockLimits(
   config: SequencerClientConfig,
-  rollupManaLimit: number,
   log: ReturnType<typeof createLogger>,
-): { maxL2BlockGas: number | undefined; maxDABlockGas: number | undefined; maxTxsPerBlock: number | undefined } {
-  let maxL2BlockGas = config.maxL2BlockGas;
-  if (maxL2BlockGas !== undefined && maxL2BlockGas > rollupManaLimit) {
-    log.warn(`Provided MAX_L2_BLOCK_GAS ${maxL2BlockGas} exceeds rollup mana limit ${rollupManaLimit} (capping)`);
-    maxL2BlockGas = rollupManaLimit;
-  }
-
+): { maxDABlockGas: number | undefined; maxTxsPerBlock: number | undefined } {
   let maxDABlockGas = config.maxDABlockGas;
   if (maxDABlockGas !== undefined && maxDABlockGas > MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT) {
     log.warn(
@@ -292,5 +288,5 @@ function capPerBlockLimits(
     maxTxsPerBlock = config.maxTxsPerCheckpoint;
   }
 
-  return { maxL2BlockGas, maxDABlockGas, maxTxsPerBlock };
+  return { maxDABlockGas, maxTxsPerBlock };
 }

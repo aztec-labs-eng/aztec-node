@@ -26,7 +26,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { L1PublishedData, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import { GasFees, ManaUsageEstimate, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { L2LogsSource, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -231,6 +231,8 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollupContract: rollup,
       feeProvider,
       nextBlockPredictor,
+      // The fee config only sets the node's tx gas limits here; the test provider leaves them unbounded.
+      feeConfigProvider: new TestRollupFeeConfigProvider(),
       epochCache,
       packageVersion: getPackageVersion(),
       peerProofVerifier: new TestCircuitVerifier(),
@@ -308,7 +310,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       epochDuration,
       proofSubmissionEpochs,
       targetCommitteeSize,
-      rollupManaLimit,
       lagInEpochsForValidatorSet,
       lagInEpochsForRandao,
     ] = await Promise.all([
@@ -316,7 +317,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollup.getEpochDuration(),
       rollup.getProofSubmissionEpochs(),
       rollup.getTargetCommitteeSize(),
-      rollup.getManaLimit(),
       rollup.getLagInEpochsForValidatorSet(),
       rollup.getLagInEpochsForRandao(),
     ]);
@@ -330,7 +330,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
         ethereumSlotDuration,
         proofSubmissionEpochs: Number(proofSubmissionEpochs),
         targetCommitteeSize: Number(targetCommitteeSize),
-        rollupManaLimit: Number(rollupManaLimit),
         lagInEpochsForValidatorSet: Number(lagInEpochsForValidatorSet),
         lagInEpochsForRandao: Number(lagInEpochsForRandao),
       },

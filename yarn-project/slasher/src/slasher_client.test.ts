@@ -147,7 +147,6 @@ describe('SlasherClient', () => {
       ethereumSlotDuration: 12,
       proofSubmissionEpochs: 8,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     });
 
     // Create mocks for L1 contracts

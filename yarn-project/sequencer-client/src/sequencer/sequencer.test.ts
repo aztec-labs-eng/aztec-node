@@ -6,7 +6,7 @@ import {
   makeProposerLookup,
   makeUnstableCommittee,
 } from '@aztec-labs/epoch-cache/test';
-import type { InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import {
   BlockNumber,
@@ -15,6 +15,7 @@ import {
   IndexWithinCheckpoint,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { omit, times, timesParallel } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -41,7 +42,7 @@ import {
 import { Checkpoint, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type MerkleTreeWriteOperations,
   type SequencerConfig,
@@ -85,6 +86,7 @@ describe('sequencer', () => {
   let publisherFactory: MockProxy<SequencerPublisherFactory>;
 
   let rollupContract: MockProxy<RollupContract>;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let inboxContract: MockProxy<InboxContract>;
 
   let dateProvider: TestDateProvider;
@@ -97,10 +99,7 @@ describe('sequencer', () => {
 
   let block: L2Block;
   let globalVariables: GlobalVariables;
-  let l1Constants: Pick<
-    L1RollupConstants,
-    'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'rollupManaLimit' | 'epochDuration'
-  >;
+  let l1Constants: Pick<L1RollupConstants, 'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'epochDuration'>;
 
   let sequencer: TestSequencer;
   let config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
@@ -216,7 +215,6 @@ describe('sequencer', () => {
       slotDuration,
       ethereumSlotDuration,
       epochDuration,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     epochCache = mockDeep<EpochCache>();
@@ -375,7 +373,7 @@ describe('sequencer', () => {
     l2BlockSource.getL2Frontier.mockImplementation(async () => ({
       tips: await l2BlockSource.getL2Tips(),
       proposedCheckpoint: await l2BlockSource.getProposedCheckpointData(),
-      l1SyncPoint: undefined,
+      l1SyncPoint: { blockNumber: 1n, blockHash: Buffer32.random() },
       latestBlockHeader: undefined,
       checkpointedCheckpoint: undefined,
       pendingChainValidationStatus: await l2BlockSource.getPendingChainValidationStatus(),
@@ -427,6 +425,7 @@ describe('sequencer', () => {
       // One block sub-slot is below the streaming-Inbox catch-up floor; this fixture is not a production profile.
       allowUnsafeInboxCatchupCapacity: true,
     };
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     sequencer = new TestSequencer(
       publisherFactory,
       validatorClient,
@@ -442,6 +441,7 @@ describe('sequencer', () => {
       epochCache,
       rollupContract,
       inboxContract,
+      feeConfigProvider,
       config,
     );
     sequencer.updateConfig(config);
@@ -476,6 +476,7 @@ describe('sequencer', () => {
         epochCache,
         rollupContract,
         inboxContract,
+        new TestRollupFeeConfigProvider(),
         sequencerConfig,
       );
     };
@@ -1777,7 +1778,8 @@ describe('sequencer', () => {
       expect(p2p.prepareForSlot).toHaveBeenCalledWith(SlotNumber(7));
     });
 
-    it('skips L1 check when proposed checkpoint exists', async () => {
+    /** Sets up a node that builds checkpoint 2 on top of a proposed (not yet checkpointed) checkpoint 1. */
+    async function setupOnProposedCheckpoint() {
       await setupSingleTxBlock();
 
       // Override to non-genesis state so checkSync doesn't take the genesis path.
@@ -1831,12 +1833,49 @@ describe('sequencer', () => {
         feeAssetPriceModifier: 0n,
         inboxMsgTotal: 0n,
       });
+    }
+
+    it('skips L1 check when proposed checkpoint exists', async () => {
+      await setupOnProposedCheckpoint();
 
       await sequencer.work();
 
       const simulationOverridesPlan = publisher.canProposeAt.mock.calls.at(-1)?.[2];
       expect(simulationOverridesPlan?.chainTipsOverride?.pending).toEqual(CheckpointNumber(1));
       // The archive root is passed directly as the first arg to canProposeAt (not inside the plan).
+    });
+
+    it("derives the proposed parent's fee header at the archiver's L1 sync point", async () => {
+      await setupOnProposedCheckpoint();
+      const syncPointBlock = 42n;
+      const frontierWithSyncPoint = l2BlockSource.getL2Frontier.getMockImplementation()!;
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({
+        ...(await frontierWithSyncPoint()),
+        l1SyncPoint: { blockNumber: syncPointBlock, blockHash: Buffer32.random() },
+      }));
+      const grandparentFeeHeader = {
+        manaUsed: 0n,
+        excessMana: 1500n,
+        ethPerFeeAsset: 1n,
+        protocolFee: 0n,
+        proverCost: 0n,
+      };
+      rollupContract.getCheckpoint.mockImplementation((_checkpoint, opts) =>
+        opts?.blockNumber === syncPointBlock
+          ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+          : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+      );
+      // Governance raised the target after the sync point: L1's latest state has 2000, the sync point 1000.
+      rollupContract.getManaTarget.mockImplementation(opts =>
+        Promise.resolve(opts?.blockNumber === syncPointBlock ? 1000n : 2000n),
+      );
+
+      await sequencer.work();
+
+      const plan = publisher.canProposeAt.mock.calls.at(-1)?.[2];
+      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(grandparentFeeHeader, 0n, 0n, 1000n),
+      );
     });
 
     it('skips proposal when checkpoint exceeds pipeline depth', async () => {
@@ -2095,6 +2134,24 @@ describe('sequencer', () => {
       expect(result?.checkpointNumber).toEqual(CheckpointNumber(3));
       expect(result?.checkpointedCheckpointNumber).toEqual(CheckpointNumber(2));
     });
+
+    it('waits for the archiver to have an L1 sync point, and reports its block once it does', async () => {
+      setupSyncedToBlock({
+        blockNumber: BlockNumber(3),
+        blockSlot: SlotNumber(3),
+        blockCheckpointNumber: CheckpointNumber(3),
+        checkpointedCheckpointNumber: CheckpointNumber(3),
+        proposedCheckpoint: undefined,
+      });
+      const frontier = l2BlockSource.getL2Frontier.getMockImplementation()!;
+
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({ ...(await frontier()), l1SyncPoint: undefined }));
+      expect(await sequencer.checkSyncForTest({ ts: 1000n, slot: SlotNumber(2) })).toBeUndefined();
+
+      const l1SyncPoint = { blockNumber: 42n, blockHash: Buffer32.random() };
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({ ...(await frontier()), l1SyncPoint }));
+      expect((await sequencer.checkSyncForTest({ ts: 1000n, slot: SlotNumber(2) }))?.l1BlockNumber).toEqual(42n);
+    });
   });
 
   describe('view-based proposer lookup', () => {
@@ -2118,7 +2175,6 @@ describe('sequencer', () => {
       ethereumSlotDuration,
       proofSubmissionEpochs: 2,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     beforeEach(() => {

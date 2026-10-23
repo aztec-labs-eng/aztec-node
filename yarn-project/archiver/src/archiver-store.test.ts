@@ -22,6 +22,7 @@ import {
   type L2PruneUncheckpointedEvent,
 } from '@aztec-labs/stdlib/block';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { makeStateReference } from '@aztec-labs/stdlib/testing';
@@ -88,7 +89,6 @@ describe('Archiver Store', () => {
       ethereumSlotDuration: 12,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       genesisArchiveRoot,
     };
 
@@ -135,6 +135,7 @@ describe('Archiver Store', () => {
       initialHeader,
       initialBlockHash,
       l2FrontierCache,
+      new TestRollupFeeConfigProvider(),
       new DateProvider(),
     );
   });

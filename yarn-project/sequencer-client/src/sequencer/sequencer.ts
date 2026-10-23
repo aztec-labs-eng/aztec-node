@@ -35,6 +35,7 @@ import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   MIN_PER_BLOCK_ALLOCATION_MULTIPLIER,
   MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER,
+  type RollupFeeConfigProvider,
   computeNetworkTxGasLimits,
 } from '@aztec-labs/stdlib/gas';
 import {
@@ -162,6 +163,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     protected epochCache: EpochCache,
     protected rollupContract: RollupContract,
     protected inboxContract: InboxContract,
+    protected feeConfigProvider: RollupFeeConfigProvider,
     config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>,
     protected telemetry: TelemetryClient = getTelemetryClient(),
     protected log = createLogger('sequencer'),
@@ -325,7 +327,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // the node simply builds smaller blocks and such txs stay in the pool for other proposers. Warn only.
     const networkLimit = computeNetworkTxGasLimits({
       maxBlocksPerCheckpoint,
-      manaCheckpointBudget: this.l1Constants.rollupManaLimit,
+      manaCheckpointBudget: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
     });
     if (config.maxDABlockGas !== undefined && config.maxDABlockGas < networkLimit.daGas) {
       this.log.warn(
@@ -765,6 +767,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       invalidateToPendingCheckpointNumber: invalidateCheckpoint?.forcePendingCheckpointNumber,
       checkpointedCheckpointNumber: syncedTo.checkpointedCheckpointNumber,
       rollup: this.rollupContract,
+      l1BlockNumber: syncedTo.l1BlockNumber,
       signatureContext: this.signatureContext,
       log: this.log,
     });
@@ -857,6 +860,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedTo.blockNumber,
       syncedTo.checkpointedCheckpointNumber,
+      syncedTo.l1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -873,6 +877,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     checkpointNumber: CheckpointNumber,
     syncedToBlockNumber: BlockNumber,
     checkpointedCheckpointNumber: CheckpointNumber,
+    syncedL1BlockNumber: bigint,
     proposer: EthAddress | undefined,
     publisher: SequencerPublisher,
     attestorAddress: EthAddress,
@@ -885,6 +890,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedToBlockNumber,
       checkpointedCheckpointNumber,
+      syncedL1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -899,6 +905,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.checkpointsBuilder,
       this.l2BlockSource,
       this.l1Constants,
+      this.feeConfigProvider,
       this.signatureContext,
       this.config,
       this.timetable,
@@ -1010,7 +1017,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     ] as const);
 
     const [worldState, frontier, p2p, l1ToL2MessageSourceTips] = syncedBlocks;
-    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus } = frontier;
+    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus, l1SyncPoint } = frontier;
+    if (l1SyncPoint === undefined) {
+      this.log.debug(`Cannot propose block at next L2 slot ${slot}: the archiver has no L1 sync point yet`, { slot });
+      return undefined;
+    }
     const l2Tips = { proposed: frontier.tips.proposed, checkpointed: frontier.tips.checkpointed };
 
     const result =
@@ -1097,6 +1108,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       proposedCheckpointData,
       syncedL2Slot,
       pendingChainValidationStatus,
+      l1BlockNumber: l1SyncPoint.blockNumber,
     };
   }
 
@@ -1560,4 +1572,6 @@ type SequencerSyncCheckResult = {
   proposedCheckpointData?: ProposedCheckpointData;
   syncedL2Slot: SlotNumber;
   pendingChainValidationStatus: ValidateCheckpointResult;
+  /** L1 block of the archiver sync point the frontier above was read at. */
+  l1BlockNumber: bigint;
 };

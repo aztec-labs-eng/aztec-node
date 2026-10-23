@@ -43,6 +43,7 @@ import {
   CheckpointReexecutionTracker,
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { SlasherConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
@@ -160,8 +161,10 @@ describe('ValidatorClient', () => {
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
     });
+    checkpointsBuilder.getFeeConfigProvider.mockReturnValue(
+      new TestRollupFeeConfigProvider({ manaLimit: 200_000_000n }),
+    );
     worldState = mock<WorldStateSynchronizer>();
     epochCache = mock<EpochCache>();
 

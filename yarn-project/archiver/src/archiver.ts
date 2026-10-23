@@ -39,6 +39,7 @@ import {
   getTimestampForSlot,
   getTimestampRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
+import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { InboxMessagePrefixRef, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import type { BlockHeader, TxEffectMembershipWitness, TxHash } from '@aztec-labs/stdlib/tx';
@@ -90,6 +91,8 @@ type PruneAbandonedBlocksRequest = {
 export type ArchiverDeps = {
   telemetry?: TelemetryClient;
   blobClient: BlobClientInterface;
+  /** Live rollup fee settings, for the mana limit checkpoints synced from L1 are checked against. */
+  feeConfigProvider: RollupFeeConfigProvider;
   epochCache?: EpochCache;
   dateProvider?: DateProvider;
 };
@@ -200,6 +203,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     initialHeader: BlockHeader,
     initialBlockHash: BlockHash,
     l2FrontierCache: L2FrontierCache,
+    feeConfigProvider: RollupFeeConfigProvider,
     private readonly dateProvider: DateProvider,
     private checkpointProposalPresence: CheckpointProposalPresence = noCheckpointProposalPresence,
     private readonly log: Logger = createLogger('archiver'),
@@ -217,9 +221,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
       blockDuration: this.config.blockDuration,
       checkpointProposalSyncGrace: this.config.checkpointProposalSyncGrace,
     });
-    this.updater = new ArchiverDataStoreUpdater(this.dataStores, this.l2FrontierCache, {
-      rollupManaLimit: l1Constants.rollupManaLimit,
-    });
+    this.updater = new ArchiverDataStoreUpdater(this.dataStores, feeConfigProvider, this.l2FrontierCache);
 
     // The resolver reads its witness data from this archiver and pins its lazy Outbox-root fetches
     // to the archiver's synced L1 block. No method on `this` is invoked during construction.

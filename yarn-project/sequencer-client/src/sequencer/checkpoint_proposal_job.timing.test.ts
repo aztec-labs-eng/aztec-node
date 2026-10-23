@@ -13,7 +13,7 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { BlockData, L2Block, L2BlockSink, L2BlockSource, ProposedCheckpointSink } from '@aztec-labs/stdlib/block';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   BlockBuilderOptions,
   MerkleTreeWriteOperations,
@@ -325,6 +325,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointNumber,
       BlockNumber.ZERO,
       CheckpointNumber(checkpointNumber - 1),
+      1n, // syncedL1BlockNumber
       proposer,
       publisher,
       attestorAddress,
@@ -339,6 +340,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
+      new TestRollupFeeConfigProvider(),
       signatureContext,
       config,
       timetable,
@@ -366,7 +368,6 @@ describe('CheckpointProposalJob Timing Tests', () => {
       epochDuration: 16,
       proofSubmissionEpochs: 4,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     // Initialize test state

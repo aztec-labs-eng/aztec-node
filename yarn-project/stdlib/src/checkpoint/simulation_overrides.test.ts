@@ -46,6 +46,7 @@ describe('computePipelinedParentFeeHeader', () => {
       checkpointNumber: CheckpointNumber(1),
       proposedCheckpointData: pendingData,
       rollup,
+      l1BlockNumber: 1n,
       log: createLogger('test'),
     });
     expect(result).toBeUndefined();
@@ -65,6 +66,7 @@ describe('computePipelinedParentFeeHeader', () => {
       checkpointNumber: pipelinedCheckpointNumber,
       proposedCheckpointData: pendingData,
       rollup,
+      l1BlockNumber: 1n,
       log: createLogger('test'),
     });
 
@@ -79,6 +81,36 @@ describe('computePipelinedParentFeeHeader', () => {
     expect(result).toEqual(expected);
   });
 
+  it('reads the grandparent and the mana target at the L1 block the caller simulates at', async () => {
+    const simulatedL1Block = 7n;
+    rollup.getCheckpoint.mockImplementation((_checkpoint, opts) =>
+      opts?.blockNumber === simulatedL1Block
+        ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+        : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+    );
+    // Governance raised the target after the simulated block: the latest state has 2000, the simulated block 1000.
+    rollup.getManaTarget.mockImplementation(opts =>
+      Promise.resolve(opts?.blockNumber === simulatedL1Block ? 1_000n : 2_000n),
+    );
+
+    const result = await computePipelinedParentFeeHeader({
+      checkpointNumber: pipelinedCheckpointNumber,
+      proposedCheckpointData: pendingData,
+      rollup,
+      l1BlockNumber: simulatedL1Block,
+      log: createLogger('test'),
+    });
+
+    expect(result).toEqual(
+      RollupContract.computeChildFeeHeader(
+        grandparentFeeHeader,
+        pendingData.totalManaUsed,
+        pendingData.feeAssetPriceModifier,
+        1_000n,
+      ),
+    );
+  });
+
   it('throws when grandparent checkpoint is not found', async () => {
     mockRollup({ grandparentCheckpoint: undefined });
 
@@ -87,6 +119,7 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/Grandparent checkpoint or feeHeader missing/);
@@ -100,6 +133,7 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/Grandparent checkpoint or feeHeader missing/);
@@ -113,6 +147,7 @@ describe('computePipelinedParentFeeHeader', () => {
         checkpointNumber: pipelinedCheckpointNumber,
         proposedCheckpointData: pendingData,
         rollup,
+        l1BlockNumber: 1n,
         log: createLogger('test'),
       }),
     ).rejects.toThrow(/rpc error/);
@@ -166,6 +201,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       checkpointNumber: checkpointNumberUnderTest,
       checkpointedCheckpointNumber: CheckpointNumber(4),
       rollup,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });
@@ -183,6 +219,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       proposedCheckpointData: proposedData,
       checkpointedCheckpointNumber: CheckpointNumber(0),
       rollup,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });
@@ -208,6 +245,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         proposedCheckpointData: proposedData,
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
+        l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
       }),
@@ -224,6 +262,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
         invalidateToPendingCheckpointNumber: CheckpointNumber(0),
         checkpointedCheckpointNumber: CheckpointNumber(0),
         rollup,
+        l1BlockNumber: 1n,
         signatureContext,
         log: createLogger('test'),
       }),
@@ -236,6 +275,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
       invalidateToPendingCheckpointNumber: CheckpointNumber(0),
       checkpointedCheckpointNumber: CheckpointNumber(2),
       rollup,
+      l1BlockNumber: 1n,
       signatureContext,
       log: createLogger('test'),
     });

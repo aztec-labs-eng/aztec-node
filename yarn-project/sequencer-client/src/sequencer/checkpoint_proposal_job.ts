@@ -39,7 +39,7 @@ import {
   validateCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
 import { computeQuorum, getLastL1SlotTimestampForL2Slot, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
-import { Gas } from '@aztec-labs/stdlib/gas';
+import { Gas, type RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   InsufficientValidTxsError,
@@ -181,6 +181,8 @@ export class CheckpointProposalJob implements Traceable {
     private readonly checkpointNumber: CheckpointNumber,
     private readonly syncedToBlockNumber: BlockNumber,
     private readonly checkpointedCheckpointNumber: CheckpointNumber,
+    /** L1 block of the archiver sync point the sequencer checked before starting this job. */
+    private readonly syncedL1BlockNumber: bigint,
     // TODO(palla/mbps): Can we remove the proposer in favor of attestorAddress? Need to check fisherman-node flows.
     private readonly proposer: EthAddress | undefined,
     private readonly publisher: SequencerPublisher,
@@ -196,6 +198,7 @@ export class CheckpointProposalJob implements Traceable {
     private readonly checkpointsBuilder: FullNodeCheckpointsBuilder,
     private readonly blockSink: L2BlockSink & ProposedCheckpointSink,
     private readonly l1Constants: SequencerRollupConstants,
+    private readonly feeConfigProvider: RollupFeeConfigProvider,
     private readonly signatureContext: CoordinationSignatureContext,
     protected config: ResolvedSequencerConfig,
     protected timetable: ProposerTimetable,
@@ -953,12 +956,17 @@ export class CheckpointProposalJob implements Traceable {
       // pending/archive/fee-header to "as if the proposed parent had landed", so both the
       // mana-min-fee simulation (in the globals builder) and the pre-gossip
       // validateCheckpointHeaderAndInbox preflight see the chain tip the eventual L1 send will see.
+      // The fee simulation and the pipelined parent's fee header are read at one L1 block, so the quote does not mix
+      // two L1 snapshots (governance can change the mana target in between). It is the L1 block of the archiver sync
+      // point the sequencer checked was up to date before starting this job, the state the rest of the job builds on.
+      const feeL1BlockNumber = this.syncedL1BlockNumber;
       const simulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
         checkpointNumber: this.checkpointNumber,
         proposedCheckpointData: this.proposedCheckpointData,
         invalidateToPendingCheckpointNumber: this.invalidateCheckpoint?.forcePendingCheckpointNumber,
         checkpointedCheckpointNumber: this.checkpointedCheckpointNumber,
         rollup: this.publisher.rollupContract,
+        l1BlockNumber: feeL1BlockNumber,
         signatureContext: this.signatureContext,
         log: this.log,
       });
@@ -968,6 +976,7 @@ export class CheckpointProposalJob implements Traceable {
         feeRecipient,
         this.targetSlot,
         simulationOverridesPlan,
+        { blockNumber: feeL1BlockNumber },
       );
 
       // Collect the out hashes of all the checkpoints before this one in the same epoch.
@@ -1103,7 +1112,7 @@ export class CheckpointProposalJob implements Traceable {
       // Otherwise, checkpoint-level budgets were already enforced by the redistribution logic.
       try {
         validateCheckpoint(checkpoint, {
-          rollupManaLimit: this.l1Constants.rollupManaLimit,
+          rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
           maxL2BlockGas: this.config.maxL2BlockGas,
           maxDABlockGas: this.config.maxDABlockGas,
           maxTxsPerBlock: this.config.maxTxsPerBlock,

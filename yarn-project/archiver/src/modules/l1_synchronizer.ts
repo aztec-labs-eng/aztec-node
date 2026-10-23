@@ -16,6 +16,7 @@ import { isDefined } from '@aztec-labs/foundation/types';
 import { type ArchiverEmitter, type L2Block, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
 import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getEpochAtSlot, getSlotAtNextL1Block } from '@aztec-labs/stdlib/epoch-helpers';
+import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec-labs/telemetry-client';
 
 import type { RejectedCheckpoint } from '../store/block_store.js';
@@ -88,12 +89,11 @@ export class ArchiverL1Synchronizer implements Traceable {
     },
     private readonly events: ArchiverEmitter,
     tracer: Tracer,
+    feeConfigProvider: RollupFeeConfigProvider,
     private readonly l2FrontierCache?: L2FrontierCache,
     private readonly log: Logger = createLogger('archiver:l1-sync'),
   ) {
-    this.updater = new ArchiverDataStoreUpdater(this.stores, l2FrontierCache, {
-      rollupManaLimit: l1Constants.rollupManaLimit,
-    });
+    this.updater = new ArchiverDataStoreUpdater(this.stores, feeConfigProvider, l2FrontierCache);
     this.messageSynchronizer = new InboxMessageSynchronizer(
       publicClient,
       inbox,

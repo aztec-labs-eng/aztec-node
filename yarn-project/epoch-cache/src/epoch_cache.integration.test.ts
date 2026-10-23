@@ -90,7 +90,6 @@ describeAcrossL1Forks('EpochCache integration', () => {
         ethereumSlotDuration: DefaultL1ContractsConfig.ethereumSlotDuration,
         proofSubmissionEpochs: await rollup.getProofSubmissionEpochs(),
         targetCommitteeSize: await rollup.getTargetCommitteeSize(),
-        rollupManaLimit: Number(await rollup.getManaLimit()),
         lagInEpochsForValidatorSet: await rollup.getLagInEpochsForValidatorSet(),
         lagInEpochsForRandao: await rollup.getLagInEpochsForRandao(),
       },

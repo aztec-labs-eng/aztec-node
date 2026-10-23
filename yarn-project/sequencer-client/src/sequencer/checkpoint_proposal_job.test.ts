@@ -1,6 +1,6 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
-import type { InboxContract } from '@aztec-labs/ethereum/contracts';
+import { type InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   BlockNumber,
@@ -40,7 +40,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   InsufficientValidTxsError,
   type MerkleTreeWriteOperations,
@@ -95,6 +95,7 @@ describe('CheckpointProposalJob', () => {
   let epochCache: MockProxy<EpochCache>;
   let validatorClient: MockProxy<ValidatorClient>;
   let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let p2p: MockProxy<P2P>;
   let worldState: MockProxy<WorldStateSynchronizer>;
   let checkpointsBuilder: MockCheckpointsBuilder;
@@ -178,7 +179,6 @@ describe('CheckpointProposalJob', () => {
       epochDuration: 16,
       proofSubmissionEpochs: 4,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     // ManualDateProvider freezes time (it does not track real wall-clock progression), so timing-sensitive
@@ -222,6 +222,7 @@ describe('CheckpointProposalJob', () => {
     });
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue({
       slotNumber: globalVariables.slotNumber,
       timestamp: globalVariables.timestamp,
@@ -820,6 +821,7 @@ describe('CheckpointProposalJob', () => {
     targetEpoch?: EpochNumber;
     proposedCheckpointData?: ProposedCheckpointData;
     testHooks?: CheckpointProposalJobTestHooks;
+    syncedL1BlockNumber?: bigint;
   }): TestCheckpointProposalJob {
     const setStateFn = jest.fn();
     const eventEmitter = new EventEmitter() as TypedEventEmitter<SequencerEvents>;
@@ -830,6 +832,7 @@ describe('CheckpointProposalJob', () => {
       checkpointNumber,
       lastBlockNumber,
       CheckpointNumber(checkpointNumber - 1),
+      overrides?.syncedL1BlockNumber ?? 1n,
       proposer,
       publisher,
       attestorAddress,
@@ -844,6 +847,7 @@ describe('CheckpointProposalJob', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
+      feeConfigProvider,
       signatureContext,
       config,
       timetable,
@@ -883,12 +887,14 @@ describe('CheckpointProposalJob', () => {
     /** Creates a pipelined job for checkpoint 2, builds one block, and returns the job ready for executeAndAwait. */
     async function createPipelinedJobWithBlock(
       proposedCheckpointData?: ProposedCheckpointData,
+      opts: { syncedL1BlockNumber?: bigint } = {},
     ): Promise<TestCheckpointProposalJob> {
       checkpointNumber = CheckpointNumber(2);
 
       const pipelinedJob = createCheckpointProposalJob({
         targetSlot: SlotNumber(newSlotNumber + 1),
         proposedCheckpointData,
+        syncedL1BlockNumber: opts.syncedL1BlockNumber,
       });
       pipelinedJob.setTimetable(makeSingleBlockTimetable());
       dateProvider.setTime(pipelinedJob.getTimetable().getBuildFrameStart(SlotNumber(newSlotNumber + 1)) * 1000);
@@ -958,6 +964,45 @@ describe('CheckpointProposalJob', () => {
       expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
       expect(publisher.sendRequestsAt).toHaveBeenCalled();
       expect(mismatchEvents).toHaveLength(0);
+    });
+
+    it("derives the parent's fee header and the fee at the archiver's L1 sync point", async () => {
+      const syncPointBlock = 77n;
+      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent, { syncedL1BlockNumber: syncPointBlock });
+      mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
+      const grandparentFeeHeader = {
+        manaUsed: 0n,
+        excessMana: 15_000n,
+        ethPerFeeAsset: 1n,
+        protocolFee: 0n,
+        proverCost: 0n,
+      };
+      jest
+        .spyOn(publisher.rollupContract, 'getCheckpoint')
+        .mockImplementation((_checkpoint, opts) =>
+          opts?.blockNumber === syncPointBlock
+            ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+            : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+        );
+      // L1's head has moved past the sync point; the job must not price against it.
+      jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(syncPointBlock + 2n);
+      // Governance raised the target after the sync point: L1's latest state has 20000, the sync point 10000.
+      jest
+        .spyOn(publisher.rollupContract, 'getManaTarget')
+        .mockImplementation(opts => Promise.resolve(opts?.blockNumber === syncPointBlock ? 10_000n : 20_000n));
+
+      await pipelinedJob.executeAndAwait();
+
+      const [, , , plan, options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
+      expect(options).toEqual({ blockNumber: syncPointBlock });
+      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(
+          grandparentFeeHeader,
+          proposedParent.totalManaUsed,
+          proposedParent.feeAssetPriceModifier,
+          10_000n,
+        ),
+      );
     });
 
     // The build pins the proven tip on the standing assumption that the epoch proof lands by the target slot; the

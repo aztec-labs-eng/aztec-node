@@ -40,6 +40,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, ProposedCheckpointInput } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
@@ -138,6 +139,7 @@ describe('Archiver Sync', () => {
       l1Constants,
       events,
       instrumentation.tracer,
+      new TestRollupFeeConfigProvider(),
       l2FrontierCache,
       syncLogger,
     );
@@ -158,6 +160,7 @@ describe('Archiver Sync', () => {
       initialHeader,
       initialBlockHash,
       l2FrontierCache,
+      new TestRollupFeeConfigProvider(),
       dateProvider,
     );
 
@@ -180,7 +183,6 @@ describe('Archiver Sync', () => {
       ethereumSlotDuration: DefaultL1ContractsConfig.ethereumSlotDuration,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       genesisArchiveRoot: GENESIS_ROOT,
     };
 

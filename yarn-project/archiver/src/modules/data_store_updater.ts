@@ -18,6 +18,7 @@ import {
   computeContractAddressFromInstance,
   computeContractClassId,
 } from '@aztec-labs/stdlib/contract';
+import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import type { InboxMessagePosition, InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
@@ -71,8 +72,8 @@ export class ArchiverDataStoreUpdater {
 
   constructor(
     private stores: ArchiverDataStores,
+    private readonly feeConfigProvider: RollupFeeConfigProvider,
     private l2FrontierCache?: L2FrontierCache,
-    private opts: { rollupManaLimit?: number } = {},
   ) {}
 
   /**
@@ -204,7 +205,9 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: PublishedCheckpoint,
     evictProposedFrom?: CheckpointNumber,
   ): Promise<ReconcileCheckpointsResult> {
-    const validateOpts = { rollupManaLimit: this.opts?.rollupManaLimit };
+    // Checked against the live mana limit, which may trail L1 by a poll; a checkpoint over a stale limit fails this
+    // pass and the sync retries it.
+    const validateOpts = { rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit) };
     for (const checkpoint of checkpoints) {
       validateCheckpoint(checkpoint.checkpoint, validateOpts);
     }

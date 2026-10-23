@@ -66,7 +66,6 @@ describe('CheckpointVoter HA Integration', () => {
     slotDuration: 24,
     ethereumSlotDuration: DefaultL1ContractsConfig.ethereumSlotDuration,
     epochDuration: DefaultL1ContractsConfig.aztecEpochDuration,
-    rollupManaLimit: Number.MAX_SAFE_INTEGER,
   };
 
   /**

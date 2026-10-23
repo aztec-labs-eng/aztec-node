@@ -59,6 +59,7 @@ import { SequencerPublisher, SequencerPublisherMetrics } from '@aztec-labs/seque
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CommitteeAttestationsAndSigners, L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
 import * as fs from 'fs';
@@ -622,7 +623,8 @@ describe('single-node/sync/synching', () => {
           const initialBlockHash = await initialHeader.hash();
           const archiver = await createArchiver(
             opts.config!,
-            { blobClient, dateProvider: opts.dateProvider! },
+            // The checkpoints synced here stay far below the rollup's mana limit, so a test provider is enough.
+            { blobClient, dateProvider: opts.dateProvider!, feeConfigProvider: new TestRollupFeeConfigProvider() },
             { blockUntilSync: true },
             initialHeader,
             initialBlockHash,

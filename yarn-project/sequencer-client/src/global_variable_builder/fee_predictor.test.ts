@@ -382,4 +382,16 @@ describeAcrossL1Forks('FeePredictor', () => {
 
     expect(state.protocolFeeMarginBps).toBe(1000n);
   }, 60_000);
+
+  it('reads the mana target and limit at the pinned snapshot block', async () => {
+    const initialTarget = await rollup.getManaTarget();
+    const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+    await rollupCheatCodes.setManaTarget(initialTarget + initialTarget / 2n);
+
+    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const state = await predictor.computeState(pinnedBlock);
+
+    expect(state.manaTarget).toBe(initialTarget);
+    expect(state.manaLimit).toBe(initialTarget * 2n);
+  }, 60_000);
 });

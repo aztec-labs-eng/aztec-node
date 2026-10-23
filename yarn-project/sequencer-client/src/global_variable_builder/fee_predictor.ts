@@ -55,13 +55,13 @@ export class FeePredictor {
     // Pin all non-constant queries to this L1 block number for a consistent snapshot.
     const opts = { blockNumber };
 
-    // Cached constants don't need pinning
+    // Governance can change the fee settings, so they are pinned to the snapshot block too. The epoch duration has no
+    // setter, so its memoized value needs no pinning.
     const [manaTarget, manaLimit, provingCostPerManaEth, epochDuration, protocolFeeMarginBps] = await Promise.all([
-      this.rollupContract.getManaTarget(),
-      this.rollupContract.getManaLimit(),
-      this.rollupContract.getProvingCostPerMana(),
+      this.rollupContract.getManaTarget(opts),
+      this.rollupContract.getManaLimit(opts),
+      this.rollupContract.getProvingCostPerMana(opts),
       this.rollupContract.getEpochDuration(),
-      // Not a cached constant: governance can change the margin, so pin it to the snapshot block.
       this.rollupContract.getProtocolFeeMargin(opts),
     ]);
 

@@ -17,7 +17,7 @@ import type { AvmSimulator, PublicContractsDB, PublicProcessor } from '@aztec-la
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   type FullNodeBlockBuilderConfig,
@@ -47,6 +47,7 @@ describe('CheckpointBuilder', () => {
   let lightweightCheckpointBuilder: MockProxy<LightweightCheckpointBuilder>;
   let fork: MockProxy<MerkleTreeWriteOperations>;
   let config: FullNodeBlockBuilderConfig;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let contractDataSource: MockProxy<ContractDataSource>;
   let dateProvider: TestDateProvider;
   let telemetryClient: MockProxy<TelemetryClient>;
@@ -92,20 +93,24 @@ describe('CheckpointBuilder', () => {
     } as unknown as L2Block;
   }
 
-  function setupBuilder(overrideConfig?: Partial<FullNodeBlockBuilderConfig>) {
+  function setupBuilder({
+    rollupManaLimit = 200_000_000,
+    ...overrideConfig
+  }: Partial<FullNodeBlockBuilderConfig> & { rollupManaLimit?: number } = {}) {
     config = {
       l1GenesisTime: 0n,
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
       ...overrideConfig,
     };
+    feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: BigInt(rollupManaLimit) });
 
     checkpointBuilder = new TestCheckpointBuilder(
       lightweightCheckpointBuilder as unknown as LightweightCheckpointBuilder,
       fork,
       config,
+      feeConfigProvider,
       contractDataSource,
       dateProvider,
       telemetryClient,
@@ -319,6 +324,22 @@ describe('CheckpointBuilder', () => {
 
       // Remaining mana = 1_000_000 - 600_000 = 400_000. Per-block = 800_000. Capped to 400_000.
       expect(capped.maxBlockGas!.l2Gas).toBe(400_000);
+    });
+
+    it('caps L2 gas by the mana limit in force when the block is built', () => {
+      setupBuilder({ rollupManaLimit: 1_000_000 });
+      lightweightCheckpointBuilder.getBlocks.mockReturnValue([
+        createMockBlock({ manaUsed: 600_000, txBlobFields: [10], blockBlobFieldCount: 20 }),
+      ]);
+
+      // Governance raises the limit after the builder was created.
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000_000n });
+      const capped = (checkpointBuilder as TestCheckpointBuilder).testCapLimits(
+        validatorOpts({ maxBlockGas: new Gas(Infinity, 1_800_000) }),
+      );
+
+      // Remaining mana = 2_000_000 - 600_000 = 1_400_000, not the 400_000 left under the old limit.
+      expect(capped.maxBlockGas!.l2Gas).toBe(1_400_000);
     });
 
     it('uses per-block L2 gas limit when tighter than remaining mana', () => {
@@ -939,6 +960,7 @@ describe('CheckpointBuilder', () => {
         lightweight,
         realFork,
         config,
+        feeConfigProvider,
         contractDataSource,
         dateProvider,
         telemetryClient,
@@ -1028,11 +1050,12 @@ describe('FullNodeCheckpointsBuilder', () => {
     telemetryClient.getTracer.mockReturnValue(mock());
 
     builder = new FullNodeCheckpointsBuilder(
-      { l1GenesisTime: 0n, slotDuration: 24, l1ChainId: 1, rollupVersion: 1, rollupManaLimit: 200_000_000 },
+      { l1GenesisTime: 0n, slotDuration: 24, l1ChainId: 1, rollupVersion: 1 },
       worldState,
       mock<ContractDataSource>(),
       new TestDateProvider(),
       mock<AvmSimulator>(),
+      new TestRollupFeeConfigProvider(),
       telemetryClient,
     );
   });

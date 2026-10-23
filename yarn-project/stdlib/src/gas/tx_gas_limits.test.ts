@@ -82,18 +82,18 @@ describe('getNetworkTxGasLimits', () => {
     l1GenesisTime: 0n,
     slotDuration: 72,
     ethereumSlotDuration: 12,
-    rollupManaLimit: 10_000_000,
   };
+  const manaLimit = 10_000_000;
 
   it('derives the limit from config + L1 constants using the network-minimum multipliers', () => {
-    const gas = getNetworkTxGasLimits({ blockDurationMs: 6000 }, l1Constants);
+    const gas = getNetworkTxGasLimits({ blockDurationMs: 6000 }, l1Constants, { manaLimit: BigInt(manaLimit) });
     const maxBlocksPerCheckpoint = buildProposerTimetable(
       { blockDurationMs: 6000 },
       l1Constants,
     ).getMaxBlocksPerCheckpoint();
     const expected = computeNetworkTxGasLimits({
       maxBlocksPerCheckpoint,
-      manaCheckpointBudget: l1Constants.rollupManaLimit,
+      manaCheckpointBudget: manaLimit,
     });
     expect(gas.daGas).toBe(expected.daGas);
     expect(gas.l2Gas).toBe(expected.l2Gas);

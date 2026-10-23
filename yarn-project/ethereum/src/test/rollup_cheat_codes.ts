@@ -407,6 +407,26 @@ export class RollupCheatCodes {
   }
 
   /**
+   * Raises the mana target, which also raises the mana limit (twice the target). Throws if the on-chain tx reverts,
+   * e.g. because L1 only lets the target go up.
+   * @param manaTarget - The new mana target
+   */
+  public async setManaTarget(manaTarget: bigint) {
+    await this.asOwner(async (account, rollup) => {
+      const hash = await rollup.write.updateManaTarget([manaTarget], {
+        account,
+        chain: this.client.chain,
+        gasLimit: 1000000n,
+      });
+      const receipt = await this.client.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') {
+        throw new Error(`updateManaTarget(${manaTarget}) reverted on L1 (tx ${hash})`);
+      }
+      this.logger.warn(`Updated mana target to ${manaTarget}`);
+    });
+  }
+
+  /**
    * Sets the protocol fee margin (in basis points). Throws if the on-chain tx reverts
    * (e.g. rate-limit cooldown or step cap) instead of silently succeeding.
    * @param bps - The new protocol fee margin in basis points

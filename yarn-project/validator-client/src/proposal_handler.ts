@@ -2517,10 +2517,11 @@ export class ProposalHandler {
       return { isValid: false, reason: 'out_hash_mismatch', checkpointNumber };
     }
 
-    // Final round of validations on the checkpoint, just in case.
+    // Final round of validations on the checkpoint, just in case. The mana limit is the tracker's live value, which can
+    // trail a governance increase on L1 by a polling interval.
     try {
       validateCheckpoint(computedCheckpoint, {
-        rollupManaLimit: this.checkpointsBuilder.getConfig().rollupManaLimit,
+        rollupManaLimit: Number(this.checkpointsBuilder.getFeeConfigProvider().getFeeConfig().manaLimit),
         maxDABlockGas: this.config.validateMaxDABlockGas,
         maxL2BlockGas: this.config.validateMaxL2BlockGas,
         maxTxsPerBlock: this.config.validateMaxTxsPerBlock,

@@ -76,7 +76,6 @@ describe('p2p client integration batch txs', () => {
       ethereumSlotDuration: 12,
       proofSubmissionEpochs: 2,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     });
 
     txPool.hasTxs.mockResolvedValue([]);

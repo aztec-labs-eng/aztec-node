@@ -9,6 +9,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { FunctionsOf } from '@aztec-labs/foundation/types';
 import type { ArchiverEmitter, BlockHash, L2Block } from '@aztec-labs/stdlib/block';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { mock } from 'jest-mock-extended';
@@ -117,6 +118,7 @@ export class NoopL1Archiver extends Archiver {
       initialHeader,
       initialBlockHash,
       l2FrontierCache,
+      new TestRollupFeeConfigProvider(),
       dateProvider,
     );
   }
