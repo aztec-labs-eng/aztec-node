@@ -94,6 +94,11 @@ type AddCheckpointOptions = {
    * hashes just as the real call does, since those hashes cover neither the signers nor the bundle signature.
    */
   decoyBundleSigner?: Secp256k1Signer;
+  /**
+   * Overrides the archive root the proposer claims for this checkpoint. L1 stores it as given, so later checkpoints
+   * chain on it, while the checkpoint's blocks keep their real archive.
+   */
+  claimedArchive?: AppendOnlyTreeSnapshot;
 };
 
 /** Result from adding a checkpoint. */
@@ -274,6 +279,9 @@ export class FakeL1State {
           { ...options, numL1ToL2Messages },
           BigInt(this.messages.length + numL1ToL2Messages),
         );
+    if (options.claimedArchive) {
+      checkpoint.archive = options.claimedArchive;
+    }
 
     // Store the messages internally so they match the checkpoint's inHash
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
@@ -294,7 +302,8 @@ export class FakeL1State {
       checkpointNumber,
       checkpoint,
       l1BlockNumber,
-      tx,
+      // The tx hash defaults to the archive root, which a claimed archive may share with another checkpoint.
+      tx: options.claimedArchive ? { ...tx, hash: `0x${l1BlockNumber.toString(16).padStart(64, '0')}` } : tx,
       blobHashes,
       blobs,
       signers,
@@ -305,7 +314,7 @@ export class FakeL1State {
     });
 
     // Update last archive for auto-chaining
-    this.lastArchive = lastArchive ?? checkpoint.blocks.at(-1)!.archive;
+    this.lastArchive = options.claimedArchive ?? lastArchive ?? checkpoint.blocks.at(-1)!.archive;
 
     // Auto-update pending checkpoint number
     this.updatePendingCheckpointNumber();
