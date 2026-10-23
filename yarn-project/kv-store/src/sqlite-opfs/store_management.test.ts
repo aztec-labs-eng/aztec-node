@@ -144,6 +144,7 @@ describe('sqlite-opfs store management', () => {
     });
     await store.close();
 
+    // @dependency ./cut_commit_test_worker.ts
     const worker = new Worker(new URL('./cut_commit_test_worker.js', import.meta.url), { type: 'module' });
     const hanging = new Promise(resolve => (worker.onmessage = resolve));
     worker.postMessage({ directory: storePoolDirectory(name), dbPath: `/${name}`, hangAfter: entries - 500 });
