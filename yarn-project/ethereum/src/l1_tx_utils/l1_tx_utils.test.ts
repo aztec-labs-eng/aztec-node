@@ -25,6 +25,7 @@ import {
   encodeErrorResult,
   encodeFunctionData,
   http,
+  toHex,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -235,6 +236,173 @@ describeAcrossL1Forks('L1TxUtils', () => {
       expect(state.nonce).toBe(expectedNonce);
       expect((await l1Client.getTransaction({ hash: txHash })).nonce).toBe(expectedNonce);
     }, 30_000);
+
+    describe('tracking sent txs by their own hash', () => {
+      const makeBlobInputs = () => ({
+        blobs: [new Uint8Array(131072).fill(1)],
+        kzg: Blob.getViemKzgInstance(),
+        maxFeePerBlobGas: 10n * WEI_CONST,
+      });
+      const txKinds = [
+        ['regular', () => undefined],
+        ['blob', makeBlobInputs],
+      ] as const;
+
+      it.each(txKinds)(
+        'tracks the hash of a %s tx when the RPC returns a different one',
+        async (_, blobInputs) => {
+          const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+          const anvilHashes: Hex[] = [];
+          using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
+            anvilHashes.push(await originalSendRawTransaction(args));
+            return toHex(randomBytes(32));
+          });
+
+          const { txHash, state } = await gasUtils.sendTransaction(request, undefined, blobInputs());
+
+          expect(anvilHashes).toHaveLength(1);
+          expect(txHash).toEqual(anvilHashes[0]);
+          expect(state.txHashes).toEqual(anvilHashes);
+          await expect(gasUtils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
+        },
+        30_000,
+      );
+
+      it('tracks the hash of a tx when the RPC returns null', async () => {
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        const anvilHashes: Hex[] = [];
+        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
+          anvilHashes.push(await originalSendRawTransaction(args));
+          return null as unknown as Hex;
+        });
+
+        const { txHash, state } = await gasUtils.sendTransaction(request);
+
+        expect(txHash).toEqual(anvilHashes[0]);
+        expect(state.txHashes).toEqual(anvilHashes);
+      }, 30_000);
+
+      it.each(txKinds)(
+        'treats a %s tx the node already knows as sent',
+        async (_, blobInputs) => {
+          // Mining stays off until both copies are sent, so the node still holds the tx in its pool when it gets the copy.
+          await cheatCodes.setIntervalMining(0);
+          await cheatCodes.setAutomine(false);
+          const expectedNonce = await l1Client.getTransactionCount({
+            blockTag: 'pending',
+            address: l1Client.account.address,
+          });
+
+          // The node accepts the tx but the reply is lost, so the tx is sent again and the node rejects the copy.
+          const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+          const anvilHashes: Hex[] = [];
+          using _sendSpy = jest
+            .spyOn(l1Client, 'sendRawTransaction')
+            .mockImplementationOnce(async args => {
+              anvilHashes.push(await originalSendRawTransaction(args));
+              return originalSendRawTransaction(args);
+            })
+            .mockImplementation(originalSendRawTransaction);
+
+          const { txHash, state } = await gasUtils.sendTransaction(request, undefined, blobInputs());
+
+          expect(txHash).toEqual(anvilHashes[0]);
+          expect(state).toMatchObject({ nonce: expectedNonce, txHashes: [txHash], status: TxUtilsState.SENT });
+          expect(gasUtils.txs.at(-1)).toBe(state);
+
+          // A node that reports a stale pending nonce does not make the next send reuse the one just sent.
+          const originalGetTransactionCount = l1Client.getTransactionCount.bind(l1Client);
+          using _countSpy = jest
+            .spyOn(l1Client, 'getTransactionCount')
+            .mockImplementationOnce(() => Promise.resolve(expectedNonce))
+            .mockImplementation(originalGetTransactionCount);
+          const { state: nextState } = await gasUtils.sendTransaction(request);
+          expect(nextState.nonce).toBe(expectedNonce + 1);
+
+          await cheatCodes.evmMine();
+          await expect(gasUtils.monitorTransaction(state)).resolves.toMatchObject({
+            transactionHash: txHash,
+            status: 'success',
+          });
+        },
+        30_000,
+      );
+
+      it('rejects a send the node reports as nonce too low', async () => {
+        // The tx is mined before it is sent again, so the copy reuses a nonce the chain has moved past.
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        using _sendSpy = jest
+          .spyOn(l1Client, 'sendRawTransaction')
+          .mockImplementationOnce(async args => {
+            await originalSendRawTransaction(args);
+            await cheatCodes.evmMine();
+            return originalSendRawTransaction(args);
+          })
+          .mockImplementation(originalSendRawTransaction);
+
+        const err = await gasUtils.sendTransaction(request).catch(err => err);
+        expect(getErrorCause(err, RpcRequestError)?.details).toMatch(/nonce too low/i);
+      }, 30_000);
+
+      it('tracks the hash of a speed-up tx when the RPC returns a different one', async () => {
+        await cheatCodes.setAutomine(false);
+        await cheatCodes.setIntervalMining(0);
+        await cheatCodes.setBlockInterval(12);
+        gasUtils.updateConfig({ maxSpeedUpAttempts: 1 });
+
+        const { state } = await gasUtils.sendTransaction(request);
+
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        const anvilHashes: Hex[] = [];
+        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
+          anvilHashes.push(await originalSendRawTransaction(args));
+          return toHex(randomBytes(32));
+        });
+
+        const monitorPromise = gasUtils.monitorTransaction(state);
+        await cheatCodes.mineEmptyBlock();
+        await retryUntil(() => state.txHashes.length > 1, 'waiting for speed-up', 20, 0.05);
+        await cheatCodes.evmMine();
+
+        const receipt = await monitorPromise;
+        expect(state.txHashes.slice(1)).toEqual(anvilHashes);
+        expect(receipt.transactionHash).toEqual(anvilHashes[0]);
+      }, 30_000);
+
+      it('treats a cancellation tx the node already knows as sent', async () => {
+        await cheatCodes.setIntervalMining(0);
+        await cheatCodes.setAutomine(false);
+        await cheatCodes.setBlockInterval(1);
+
+        const { state } = await gasUtils.sendTransaction(request);
+
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        const anvilHashes: Hex[] = [];
+        using _sendSpy = jest
+          .spyOn(l1Client, 'sendRawTransaction')
+          .mockImplementationOnce(async args => {
+            anvilHashes.push(await originalSendRawTransaction(args));
+            return originalSendRawTransaction(args);
+          })
+          .mockImplementation(originalSendRawTransaction);
+
+        const testState: L1TxState = { ...state, txConfigOverrides: { ...state.txConfigOverrides, txTimeoutMs: 100 } };
+        const monitorPromise = gasUtils.monitorTransaction(testState).catch(err => err);
+        await cheatCodes.mineEmptyBlock();
+        await expect(monitorPromise).resolves.toBeInstanceOf(TimeoutError);
+
+        await retryUntil(
+          () => [TxUtilsState.CANCELLED, TxUtilsState.NOT_MINED].includes(testState.status),
+          'waiting for cancellation',
+          10,
+          0.05,
+        );
+        expect(testState.status).toBe(TxUtilsState.CANCELLED);
+        expect(testState.cancelTxHashes).toEqual(anvilHashes);
+        const pendingBlock = await l1Client.getBlock({ blockTag: 'pending' });
+        expect(pendingBlock.transactions).toEqual(anvilHashes);
+      }, 30_000);
+    });
 
     it('concurrent sendTransaction calls use sequential nonces (A-810 nonce race fix)', async () => {
       // Fire two sends concurrently on the same L1TxUtils. Without the mutex, both could read
