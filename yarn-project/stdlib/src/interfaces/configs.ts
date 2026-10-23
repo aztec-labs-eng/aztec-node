@@ -107,6 +107,8 @@ export interface SequencerConfig {
    * attestations within the same slot (for testing only)
    */
   republishAfterFakeAttestation?: boolean;
+  /** Publish the checkpoint claiming its parent's archive root as its own (for testing only) */
+  claimParentArchiveRoot?: boolean;
   /** Whether to run in fisherman mode: builds blocks on every slot for validation without publishing */
   fishermanMode?: boolean;
   /** Shuffle attestation ordering to create invalid ordering (for testing only) */
@@ -191,6 +193,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     injectUnrecoverableSignatureAttestation: z.boolean().optional(),
     injectYParityAttestation: z.boolean().optional(),
     republishAfterFakeAttestation: z.boolean().optional(),
+    claimParentArchiveRoot: z.boolean().optional(),
     fishermanMode: z.boolean().optional(),
     shuffleAttestationOrdering: z.boolean().optional(),
     blockDurationMs: z.number().positive().optional(),
