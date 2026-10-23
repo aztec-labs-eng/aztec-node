@@ -418,8 +418,8 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       // Read and decompress the witness for bb.js
       witness = ungzip(await fs.readFile(outputWitnessFile));
     } catch (error) {
-      // A crashed or unspawnable noir-execute, or an OS error reading its witness, is retryable; a circuit that cannot
-      // be solved for these inputs, or a witness that does not decode, is not.
+      // An OOM-killed or unspawnable noir-execute, or an OS error reading its witness, is retryable; a circuit that
+      // cannot be solved for these inputs, or a witness that does not decode, is not.
       const retry = isRetryableError(error) || isSystemError(error);
       throw new ProvingError(`Failed to generate witness for ${circuitType}: ${error}`, error, retry);
     }

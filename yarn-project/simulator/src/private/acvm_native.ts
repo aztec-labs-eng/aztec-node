@@ -221,8 +221,12 @@ export class NativeACVMSimulator implements CircuitSimulator {
         }
         const stderr = Buffer.concat(errChunks, errLen).toString('utf-8');
         this.logger.error(`From noir-execute: ${stderr}`, { code, signal });
-        if (signal) {
+        // SIGKILL is what the OOM killer sends, so retry it. Other signals are either a crash (SIGSEGV, SIGABRT) that may
+        // recur on the same inputs, or a shutdown that reaches the agent too, which then reports its own failure.
+        if (signal === 'SIGKILL') {
           reject(new RetryableError(`noir-execute was killed by ${signal}: ${stderr}`));
+        } else if (signal) {
+          reject(new Error(`noir-execute was killed by ${signal}: ${stderr}`));
         } else {
           reject(new Error(`Failed to generate witness: ${stderr}`));
         }

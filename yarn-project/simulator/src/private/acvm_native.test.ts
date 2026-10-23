@@ -114,11 +114,18 @@ describe('NativeACVMSimulator', () => {
       throw new Error('Expected the execution to fail');
     }
 
-    it('retries a child killed by a signal', async () => {
+    it('retries a child killed by SIGKILL', async () => {
       const err = await executeWith(await makeNoirExecute('kill -9 $$'));
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toContain('SIGKILL');
       expect(isRetryableError(err)).toBe(true);
+    });
+
+    it.each(['TERM', 'SEGV', 'ABRT'])('does not retry a child killed by SIG%s', async signal => {
+      const err = await executeWith(await makeNoirExecute(`kill -${signal} $$`));
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain(`SIG${signal}`);
+      expect(isRetryableError(err)).toBe(false);
     });
 
     it('retries a binary that cannot be spawned', async () => {
