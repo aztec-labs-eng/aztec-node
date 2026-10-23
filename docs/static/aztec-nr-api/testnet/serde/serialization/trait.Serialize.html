@@ -45,6 +45,7 @@
 <li><a href="#impl-Serialize-for-AztecAddress">AztecAddress</a></li>
 <li><a href="#impl-Serialize-for-BlockConstantData">BlockConstantData</a></li>
 <li><a href="#impl-Serialize-for-BlockHeader">BlockHeader</a></li>
+<li><a href="#impl-Serialize-for-BlockReference">BlockReference</a></li>
 <li><a href="#impl-Serialize-for-BoundedVec<T, M>">BoundedVec<T, M></a></li>
 <li><a href="#impl-Serialize-for-CallContext">CallContext</a></li>
 <li><a href="#impl-Serialize-for-CheckpointConstantData">CheckpointConstantData</a></li>
@@ -56,6 +57,7 @@
 <li><a href="#impl-Serialize-for-ContractInstance">ContractInstance</a></li>
 <li><a href="#impl-Serialize-for-Counted<T>">Counted<T></a></li>
 <li><a href="#impl-Serialize-for-DiscoveredHandshake">DiscoveredHandshake</a></li>
+<li><a href="#impl-Serialize-for-EcdsaPublicKeyNote">EcdsaPublicKeyNote</a></li>
 <li><a href="#impl-Serialize-for-EmbeddedCurvePoint">EmbeddedCurvePoint</a></li>
 <li><a href="#impl-Serialize-for-EmbeddedCurveScalar">EmbeddedCurveScalar</a></li>
 <li><a href="#impl-Serialize-for-Empty">Empty</a></li>
@@ -64,6 +66,7 @@
 <li><a href="#impl-Serialize-for-EventSelector">EventSelector</a></li>
 <li><a href="#impl-Serialize-for-Fact">Fact</a></li>
 <li><a href="#impl-Serialize-for-FactCollection">FactCollection</a></li>
+<li><a href="#impl-Serialize-for-FactScope">FactScope</a></li>
 <li><a href="#impl-Serialize-for-Fancier">Fancier</a></li>
 <li><a href="#impl-Serialize-for-FeeRecipient">FeeRecipient</a></li>
 <li><a href="#impl-Serialize-for-Field">Field</a></li>
@@ -79,6 +82,7 @@
 <li><a href="#impl-Serialize-for-HandshakePage">HandshakePage</a></li>
 <li><a href="#impl-Serialize-for-HasArray">HasArray</a></li>
 <li><a href="#impl-Serialize-for-HasArrayWithGenerics<T, N>">HasArrayWithGenerics<T, N></a></li>
+<li><a href="#impl-Serialize-for-HasOption">HasOption</a></li>
 <li><a href="#impl-Serialize-for-HintedNote<Note>">HintedNote<Note></a></li>
 <li><a href="#impl-Serialize-for-IvpkM">IvpkM</a></li>
 <li><a href="#impl-Serialize-for-KeyValidationRequest">KeyValidationRequest</a></li>
@@ -97,7 +101,6 @@
 <li><a href="#impl-Serialize-for-OffchainMessageWithTx">OffchainMessageWithTx</a></li>
 <li><a href="#impl-Serialize-for-OnchainDeliveryMode">OnchainDeliveryMode</a></li>
 <li><a href="#impl-Serialize-for-Option<T>">Option<T></a></li>
-<li><a href="#impl-Serialize-for-OriginBlock">OriginBlock</a></li>
 <li><a href="#impl-Serialize-for-OriginBlockState">OriginBlockState</a></li>
 <li><a href="#impl-Serialize-for-PartialAddress">PartialAddress</a></li>
 <li><a href="#impl-Serialize-for-PartialStateReference">PartialStateReference</a></li>
@@ -277,6 +280,8 @@ fail with an arguments hash mismatch error message.</p>
 
 <h3 id="impl-Serialize-for-BlockHeader"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../protocol_types/abis/block_header/struct.BlockHeader.html" class="struct">BlockHeader</a></code></h3>
 
+<h3 id="impl-Serialize-for-BlockReference"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/oracle/block_reference/struct.BlockReference.html" class="struct">BlockReference</a></code></h3>
+
 <h3 id="impl-Serialize-for-BoundedVec<T, M>"><code class="code-header">impl&lt;let M: <a href="../../std/primitive.u32.html" class="primitive">u32</a>, T&gt; <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../std/collections/bounded_vec/struct.BoundedVec.html" class="struct">BoundedVec</a>&lt;T, M&gt;
 <div class="where-clause">where
     T: <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a></div></code></h3>
@@ -305,9 +310,11 @@ fail with an arguments hash mismatch error message.</p>
 
 <h3 id="impl-Serialize-for-DiscoveredHandshake"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/messages/delivery/handshake/struct.DiscoveredHandshake.html" class="struct">DiscoveredHandshake</a></code></h3>
 
-<h3 id="impl-Serialize-for-EmbeddedCurvePoint"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../std/embedded_curve_ops/struct.EmbeddedCurvePoint.html" class="struct">EmbeddedCurvePoint</a></code></h3>
+<h3 id="impl-Serialize-for-EcdsaPublicKeyNote"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../ecdsa_public_key_note/struct.EcdsaPublicKeyNote.html" class="struct">EcdsaPublicKeyNote</a></code></h3>
 
-<h3 id="impl-Serialize-for-EmbeddedCurveScalar"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../std/embedded_curve_ops/struct.EmbeddedCurveScalar.html" class="struct">EmbeddedCurveScalar</a></code></h3>
+<h3 id="impl-Serialize-for-EmbeddedCurvePoint"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../protocol_types/point/struct.EmbeddedCurvePoint.html" class="struct">EmbeddedCurvePoint</a></code></h3>
+
+<h3 id="impl-Serialize-for-EmbeddedCurveScalar"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../protocol_types/scalar/struct.Scalar.html" class="struct">EmbeddedCurveScalar</a></code></h3>
 
 <h3 id="impl-Serialize-for-Empty"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for Empty</code></h3>
 
@@ -320,6 +327,8 @@ fail with an arguments hash mismatch error message.</p>
 <h3 id="impl-Serialize-for-Fact"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/facts/struct.Fact.html" class="struct">Fact</a></code></h3>
 
 <h3 id="impl-Serialize-for-FactCollection"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/facts/struct.FactCollection.html" class="struct">FactCollection</a></code></h3>
+
+<h3 id="impl-Serialize-for-FactScope"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/facts/struct.FactScope.html" class="struct">FactScope</a></code></h3>
 
 <h3 id="impl-Serialize-for-Fancier"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for Fancier</code></h3>
 
@@ -352,6 +361,8 @@ fail with an arguments hash mismatch error message.</p>
 <h3 id="impl-Serialize-for-HasArrayWithGenerics<T, N>"><code class="code-header">impl&lt;let N: <a href="../../std/primitive.u32.html" class="primitive">u32</a>, T&gt; <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for HasArrayWithGenerics&lt;T, N&gt;
 <div class="where-clause">where
     T: <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a></div></code></h3>
+
+<h3 id="impl-Serialize-for-HasOption"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for HasOption</code></h3>
 
 <h3 id="impl-Serialize-for-HintedNote<Note>"><code class="code-header">impl&lt;Note&gt; <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/note/struct.HintedNote.html" class="struct">HintedNote</a>&lt;Note&gt;
 <div class="where-clause">where
@@ -392,8 +403,6 @@ fail with an arguments hash mismatch error message.</p>
 <h3 id="impl-Serialize-for-Option<T>"><code class="code-header">impl&lt;T&gt; <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../std/option/struct.Option.html" class="struct">Option</a>&lt;T&gt;
 <div class="where-clause">where
     T: <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a></div></code></h3>
-
-<h3 id="impl-Serialize-for-OriginBlock"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/facts/struct.OriginBlock.html" class="struct">OriginBlock</a></code></h3>
 
 <h3 id="impl-Serialize-for-OriginBlockState"><code class="code-header">impl <a href="../../serde/serialization/trait.Serialize.html" class="trait">Serialize</a> for <a href="../../noir_aztec/facts/struct.OriginBlockState.html" class="struct">OriginBlockState</a></code></h3>
 

@@ -1,6 +1,6 @@
 # @aztec/pxe
 
-Version: 6.0.0-rc.1
+Version: 6.0.0
 
 ## Quick Import Reference
 
@@ -168,14 +168,14 @@ Uniquely identifies a single fact collection, isolated by scope; all its facts s
 
 **Constructor**
 ```typescript
-new FactCollectionKey(contractAddress: AztecAddress, scope: AztecAddress, factCollectionTypeId: Fr, factCollectionId: Fr)
+new FactCollectionKey(contractAddress: AztecAddress, scope: FactScope, factCollectionTypeId: Fr, factCollectionId: Fr)
 ```
 
 **Properties**
 - `readonly contractAddress: AztecAddress`
 - `readonly factCollectionId: Fr`
 - `readonly factCollectionTypeId: Fr`
-- `readonly scope: AztecAddress`
+- `readonly scope: FactScope`
 
 **Methods**
 - `factCollectionTypeKey() => FactCollectionTypeKey` - The key grouping this collection with the other collections of its type within the same contract and scope.
@@ -189,13 +189,13 @@ Identifies all fact collections of one type within a contract, for one scope.
 
 **Constructor**
 ```typescript
-new FactCollectionTypeKey(contractAddress: AztecAddress, scope: AztecAddress, factCollectionTypeId: Fr)
+new FactCollectionTypeKey(contractAddress: AztecAddress, scope: FactScope, factCollectionTypeId: Fr)
 ```
 
 **Properties**
 - `readonly contractAddress: AztecAddress`
 - `readonly factCollectionTypeId: Fr`
-- `readonly scope: AztecAddress`
+- `readonly scope: FactScope`
 
 **Methods**
 - `static from(fields: FieldsOf<FactCollectionTypeKey>) => FactCollectionTypeKey`
@@ -203,7 +203,7 @@ new FactCollectionTypeKey(contractAddress: AztecAddress, scope: AztecAddress, fa
 
 ### FactService
 
-Wraps a FactStore with scope-based access control. Each method asserts scope validity before delegating to FactStore, gating which accounts a contract may record facts under or read facts from.
+Wraps a FactStore with scope-based access control. Each method asserts scope validity before delegating to FactStore, gating which accounts a contract may record facts under or read facts from. The public scope belongs to no account, so it is always allowed.
 
 **Constructor**
 ```typescript
@@ -214,7 +214,7 @@ new FactService(factStore: FactStore, allowedScopes: AztecAddress[])
 - `deleteFactCollection(factCollectionKey: FactCollectionKey, changeSetId: string) => Promise<void>`
 - `getFactCollection(factCollectionKey: FactCollectionKey, tips: TipBlockNumbers, changeSetId: string) => Promise<FactCollectionWithOriginState | undefined>`
 - `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, tips: TipBlockNumbers, changeSetId: string) => Promise<FactCollectionWithOriginState[]>`
-- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, changeSetId: string) => Promise<void>`
+- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: BlockReference | undefined, changeSetId: string) => Promise<void>`
 
 ### FactStore
 
@@ -240,7 +240,7 @@ new FactStore(store: AztecAsyncKVStore)
 - `flushChangeSet(changeSet: FactStoreChangeSet, db: FactStoreDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
 - `getFactCollection(factCollectionKey: FactCollectionKey, changeSetId: string) => Promise<FactCollection | undefined>` - Returns the fact collection for the (scope-qualified) key, or undefined if it has no facts.
 - `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, changeSetId: string) => Promise<FactCollection[]>` - Returns every fact collection of the given type for the queried scope, each holding its facts.
-- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, changeSetId: string) => Promise<void>` - Records a fact in a collection. The collection is created implicitly on the first fact recorded for its key: recording into an existing collection just adds to it. If `originBlock === undefined`, the fact is non-retractable: it survives reorgs. A defined origin block makes the fact retractable: on a prune below its block, it will be deleted. Idempotent: re-recording an identical fact (same collection, fact type, payload, and origin block) is a no-op. The same payload tied to a different origin block is a distinct fact.
+- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: BlockReference | undefined, changeSetId: string) => Promise<void>` - Records a fact in a collection. The collection is created implicitly on the first fact recorded for its key: recording into an existing collection just adds to it. If `originBlock === undefined`, the fact is non-retractable: it survives reorgs. A defined origin block makes the fact retractable: on a prune below its block, it will be deleted. Idempotent: re-recording an identical fact (same collection, fact type, payload, and origin block) is a no-op. The same payload tied to a different origin block is a distinct fact.
 - `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
 - `withChangeSet<R>(changeSetId: string, fn: (changeSet: FactStoreChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
 - `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: FactStoreChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
@@ -342,7 +342,8 @@ Private eXecution Environment (PXE) is a library used by wallets to simulate pri
 - `registerContractClass(artifact: ContractArtifact) => Promise<void>` - Registers a contract class in the PXE without registering any associated contract instance with it.
 - `registerTaggingSecretSource(source: TaggingSecretSource) => Promise<void>` - Registers a source from which this PXE derives the tagging secrets it scans for to discover incoming private logs. See TaggingSecretSource for the meaning of each variant. Does nothing if the source is already registered. After a new source is added we clear the cache tracking which contracts have finished syncing, so every contract re-syncs against the new source's logs (whose notes/events could belong to any contract). Already-discovered notes/events are not discarded.
 - `removeTaggingSecretSource(source: RegisteredTaggingSecretSource) => Promise<void>` - Removes a previously registered tagging secret source, identified by its registered form (see getTaggingSecretSources). Does nothing if it was not registered.
-- `simulateTx(txRequest: TxExecutionRequest, __namedParameters: SimulateTxOpts) => Promise<TxSimulationResult>` - Simulates a transaction based on the provided preauthenticated execution request. This will run a local simulation of private execution (and optionally of public as well), run the kernel circuits to ensure adherence to protocol rules (without generating a proof), and return the simulation results . Note that this is used with `ContractFunctionInteraction::simulateTx` to bypass certain checks. In that case, the transaction returned is only potentially ready to be sent to the network for execution.
+- `simulateAndProveTx(simulationTxRequest: TxExecutionRequest, __namedParameters: SimulateAndProveTxOpts) => Promise<TxProvingResult>` - Combination of `simulateTx` and `proveTx`: a simulation is executed, its results inspected to produce a provable transaction, followed by witness generation and proof. The entire sequence runs as a single atomic PXE operation, with no private state sync between simulation and witness generation, resulting in them running over identical environments (e.g. the note store, tagging indices, etc.). The simulation result is passed to a `prepareProve` callback, which then returns the input to the equivalent `proveTx` call. Due to the atomic nature of this function, `prepareProve` must NOT call any PXE function, as that would result in a deadlock.
+- `simulateTx(txRequest: TxExecutionRequest, opts: SimulateTxOpts) => Promise<TxSimulationResult>` - Simulates a transaction based on the provided preauthenticated execution request. This will run a local simulation of private execution (and optionally of public as well), run the kernel circuits to ensure adherence to protocol rules (without generating a proof), and return the simulation results . Note that this is used with `ContractFunctionInteraction::simulateTx` to bypass certain checks. In that case, the transaction returned is only potentially ready to be sent to the network for execution.
 - `stop() => Promise<void>` - Stops the PXE's operation queue and closes the backing store.
 - `sync() => Promise<void>` - Triggers a sync of PXE state with the node, regardless of the `autoSync` config flag. Use this to batch syncs across composite flows when `autoSync` is disabled (e.g. one sync per simulate+send instead of one per inner PXE call). Serialized through the queue.
 
@@ -556,6 +557,18 @@ function enrichSimulationError(err: SimulationError, contractStore: ContractStor
 ```
 Adds contract and function names to a simulation error, if they can be found in the PXE database
 
+### factScopeFromFields
+```typescript
+function factScopeFromFields(kind: number, account: Fr) => FactScope
+```
+Deserializes a FactScope, rejecting malformed values.
+
+### factScopeToFields
+```typescript
+function factScopeToFields(scope: FactScope) => Fr[]
+```
+Serializes a FactScope to its Noir `[kind, account]` field layout.
+
 ### getCliPXEOptions
 ```typescript
 function getCliPXEOptions() => CliPXEOptions & KernelProverConfig & { dataDirectory?: string; dataStoreMapSizeKb: number } & Partial<Pick<L1ContractAddresses, "rollupAddress">> & { l1ChainId: number; rollupVersion: number } & Pick<L1ContractAddresses, "rollupAddress"> & BlockSynchronizerConfig & ContractSyncConfig
@@ -634,6 +647,12 @@ type AuthorizeUtilityCall = (request: UtilityCallAuthorizationRequest) => Promis
 ```
 Hook called when a utility function attempts a cross-contract call. Returns a response indicating whether the call is authorized and an optional denial reason.
 
+### BlockReference
+```typescript
+type BlockReference = unknown
+```
+A block, identified by its number and hash.
+
 ### CONTRACT_LOG_KIND
 ```typescript
 type CONTRACT_LOG_KIND = "aztecnr" | "user"
@@ -692,6 +711,12 @@ type FactCollectionWithOriginState = unknown
 ```
 A fact collection whose facts carry origin-block state.
 
+### FactScope
+```typescript
+type FactScope = { account: AztecAddress; type: "account" } | { type: "public" }
+```
+The scope a fact collection belongs to. - `account`: only executions where `account` is in scope can access the collection. - `public`: shared by all accounts, so any execution of the owning contract can access the collection.
+
 ### FactWithOriginState
 ```typescript
 type FactWithOriginState = unknown
@@ -712,19 +737,13 @@ A filter used to fetch notes.
 
 ### ORACLE_VERSION_MAJOR
 ```typescript
-type ORACLE_VERSION_MAJOR = 31
+type ORACLE_VERSION_MAJOR = 33
 ```
 
 ### ORACLE_VERSION_MINOR
 ```typescript
 type ORACLE_VERSION_MINOR = 0
 ```
-
-### OriginBlock
-```typescript
-type OriginBlock = unknown
-```
-The block a retractable fact originates from.
 
 ### PXEConfig
 ```typescript
@@ -795,9 +814,15 @@ Hook returning the TaggingSecretStrategy for an outgoing message.
 
 ### RetractableFactOrigin
 ```typescript
-type RetractableFactOrigin = OriginBlock & { blockState: OriginBlockState }
+type RetractableFactOrigin = BlockReference & { blockState: OriginBlockState }
 ```
 A retractable fact's origin block annotated with that block's current chain state.
+
+### SimulateAndProveTxOpts
+```typescript
+type SimulateAndProveTxOpts = SimulateTxOpts & { prepareProve: (simulationResult: TxSimulationResult) => Promise<{ proveOpts: ProveTxOpts; proveTxRequest: TxExecutionRequest }> }
+```
+Options for PXE.simulateAndProveTx.
 
 ### SimulateTxOpts
 ```typescript

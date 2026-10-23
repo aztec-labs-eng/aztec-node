@@ -1,6 +1,6 @@
 # @aztec/stdlib
 
-Version: 6.0.0-rc.1
+Version: 6.0.0
 
 ## Quick Import Reference
 
@@ -839,6 +839,7 @@ new GasFees(feePerDaGas: number | bigint, feePerL2Gas: number | bigint)
 - `static fromPlainObject(obj: any) => GasFees` - Creates a GasFees instance from a plain object without Zod validation. This method is optimized for performance and skips validation, making it suitable for deserializing trusted data (e.g., from C++ via MessagePack).
 - `get(dimension: "da" | "l2") => bigint`
 - `isEmpty() => boolean`
+- `static min(a: GasFees, b: GasFees) => GasFees` - The lower of the two fees on each dimension independently.
 - `mul(scalar: number | bigint) => GasFees`
 - `static random() => GasFees`
 - `toBuffer() => Buffer`
@@ -1973,6 +1974,7 @@ new Tx(txHash: TxHash, data: PrivateKernelTailCircuitPublicInputs, chonkProof: C
 - `generateP2PMessageIdentifier() => Promise<BaseBuffer32>`
 - `getCalldataMap() => Map<string, Fr[]>`
 - `getContractClassLogs() => ContractClassLog[]`
+- `getDeliveredPublicCalldataCount() => number` - Returns the number of calldata fields the public calls receive. Calldata shared by several calls counts once per call, and a call with no matching calldata entry counts as receiving none.
 - `getGasSettings() => GasSettings`
 - `getNonRevertiblePublicCallRequestsWithCalldata() => PublicCallRequestWithCalldata[]`
 - `getPrivateTxEffectsSizeInFields() => number` - Returns the number of fields this tx's effects will occupy in the blob, based on its private side effects only. Accurate for txs without public calls. For txs with public calls, the actual size will be larger due to public execution outputs.
@@ -1982,7 +1984,7 @@ new Tx(txHash: TxHash, data: PrivateKernelTailCircuitPublicInputs, chonkProof: C
 - `getSplitContractClassLogs(revertible: boolean) => ContractClassLog[]` - Gets either revertible or non revertible contract class logs emitted by this tx.
 - `getStats() => TxStats` - Returns stats about this tx.
 - `getTeardownPublicCallRequestWithCalldata() => PublicCallRequestWithCalldata | undefined`
-- `getTotalPublicCalldataCount() => number`
+- `getTotalPublicCalldataCount() => number` - Returns the number of calldata fields across the supplied calldata entries, whichever calls use them.
 - `getTxHash() => TxHash` - Return transaction hash.
 - `hasPublicCalls() => boolean`
 - `numberOfPublicCalls() => number`
@@ -2552,6 +2554,7 @@ Interface for classes that can receive and store L2 blocks.
 
 **Methods**
 - `addBlock(block: L2Block, inboxPrefixRef: InboxMessagePrefixRef) => Promise<void>` - Adds a proposed block to the store, validating its Inbox consumption against the sink's own canonical messages in the same transaction as the writes: the block's signed prefix reference must equal the sink's rolling hash at the block header's L1-to-L2 leaf count, the parent block must be present, consumption must not rewind, and the consumed count range must be available whole. Every producer of proposed blocks (the checkpoint proposer, automine and a validator's re-execution) carries the reference it built or validated against, which is what stops a block built on messages an L1 reorg has since replaced from entering the chain.
+- `pruneAbandonedProposedBlocks(afterBlockNumber: BlockNumber, firstBlockHash: BlockHash) => Promise<BlockNumber[]>` - Prunes the proposed blocks of a checkpoint its proposer abandoned before enclosing them in a proposed checkpoint, instead of leaving them on the local chain until the orphan prune notices that no checkpoint ever came. Removes every block after `afterBlockNumber`, the block the abandoned checkpoint built on, and notifies subscribers exactly as an orphan prune does. Prunes nothing when the range no longer holds the caller's blocks: when the block after `afterBlockNumber` is not `firstBlockHash`, or when a proposed or L1 checkpoint already covers it. Also prunes nothing when a checkpoint proposal for the block's slot has been received, since another proposer may still be proposing these blocks.
 
 ### L2BlockSource
 
@@ -2654,6 +2657,13 @@ Provides the current chain tips. Implemented by world-state, l2-tips-store, and 
 **Methods**
 - `getL2Tips() => Promise<L2Tips>`
 
+### NextBlockMinFeesProvider
+
+Provides the mana min fee the next block this node would build is going to charge. Distinct from BlockMinFeesProvider, which answers the L1-anchored price after the on-chain pending checkpoint and therefore cannot see the fee a locally proposed in-progress checkpoint already froze.
+
+**Methods**
+- `getNextBlockMinFees() => Promise<GasFees | undefined>` - The fee the next block will charge, or undefined when the node cannot resolve it right now. For callers that must not act on a stand-in price, such as evicting transactions the next block could not include.
+
 ### NodeInfo
 
 Provides basic information about the running node.
@@ -2754,6 +2764,17 @@ Extends: `BasicType<"tuple">`
 **Properties**
 - `fields: AbiValue[]`
 - `kind: "tuple"`
+
+### TxAdmissionMinFeesProvider
+
+Provides the mana min fees a transaction is held to on its way into this node, over gossip or into the pool.
+
+Extends: `NextBlockMinFeesProvider`
+
+**Methods**
+- `getAdmissionMinFees() => Promise<GasFees>` - The fee a transaction must be able to pay to enter this node, over gossip or into the pending pool. The next-block fee when it resolves, otherwise the L1-forward fee, so admission never runs without a floor: a zero `maxFeesPerGas` has a zero fee limit, which a fee payer with no balance also covers.
+- `getL1ForwardMinFees() => Promise<GasFees>` - The L1-anchored fee projected after the on-chain pending checkpoint, as BlockMinFeesProvider reports.
+- `getNextBlockMinFees() => Promise<GasFees | undefined>` - The fee the next block will charge, or undefined when the node cannot resolve it right now. For callers that must not act on a stand-in price, such as evicting transactions the next block could not include.
 
 ### TxReceiptInterface
 
@@ -2931,7 +2952,7 @@ Computes the congestion multiplier from excess mana. The protocol fee margin sca
 ```typescript
 function computeContractAddressFromInstance(instance: ContractInstancePreimage | { originalContractClassId: Fr; saltedInitializationHash: Fr } & Pick<ContractInstance, "publicKeys">) => Promise<AztecAddress>
 ```
-Returns the deployment address for a given contract instance. ``` salted_initialization_hash = poseidon2(DOM_SEP__SALTED_INITIALIZATION_HASH, [salt, initialization_hash, deployer, immutables_hash]) partial_address = poseidon2(DOM_SEP__PARTIAL_ADDRESS, [contract_class_id, salted_initialization_hash]) address = ((poseidon2(DOM_SEP__CONTRACT_ADDRESS_V2, [public_keys_hash, partial_address]) * G) + ivpk_m).x <- the x-coordinate of the address point ```
+Returns the deployment address for a given contract instance. ``` salted_initialization_hash = poseidon2(DOM_SEP__SALTED_INITIALIZATION_HASH, [salt, initialization_hash, deployer, immutables_hash]) partial_address = poseidon2(DOM_SEP__PARTIAL_ADDRESS, [contract_class_id, salted_initialization_hash]) address = ((poseidon2(DOM_SEP__CONTRACT_ADDRESS_V3, [public_keys_hash, partial_address]) * G) + ivpk_m).x <- the x-coordinate of the address point ```
 
 ### computeContractClassId
 ```typescript
@@ -3562,6 +3583,11 @@ function isPublicKeysStruct(abiType: AbiType) => boolean
 ```
 Returns whether the ABI type is a PublicKeys struct from Aztec.nr.
 
+### isReceiverLocalStateDrift
+```typescript
+function isReceiverLocalStateDrift(reasons: string[]) => boolean
+```
+
 ### isWrappedFieldStruct
 ```typescript
 function isWrappedFieldStruct(abiType: AbiType) => boolean
@@ -3831,6 +3857,12 @@ type AnyTx = Tx | ProcessedTx
 type AppTaggingSecretKind = { CONSTRAINED: "constrained"; UNCONSTRAINED: "unconstrained" }
 ```
 
+### ArchiveBlockParameter
+```typescript
+type ArchiveBlockParameter = unknown
+```
+Selector naming a block by its archive tree root: the root after the block's own hash was appended.
+
 ### ArchiverEmitter
 ```typescript
 type ArchiverEmitter = TypedEventEmitter<{ checkpointEquivocationDetected: (args: CheckpointEquivocationDetectedEvent) => void; descendentOfInvalidAttestationsCheckpointDetected: (args: DescendentOfInvalidAttestationsCheckpointEvent) => void; ... }>
@@ -3897,7 +3929,7 @@ type BrilligFunctionId = number
 ```typescript
 type CheckpointEquivocationDetectedEvent = unknown
 ```
-Emitted when a local proposed checkpoint is found to disagree with the L1-confirmed checkpoint at the same slot. The slot proposer signed both — equivocation.
+Emitted when a local proposed checkpoint is found to disagree with the L1-confirmed checkpoint at the same slot, and both were signed by the same proposer — equivocation.
 
 ### CheckpointGlobalVariables
 ```typescript
