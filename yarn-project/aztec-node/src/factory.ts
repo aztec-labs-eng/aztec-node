@@ -9,6 +9,7 @@ import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -170,52 +171,60 @@ export async function createAztecNodeService(
 
   // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through it,
   // rather than building its own from the L1 RPC URLs.
-  const publicClient = createPublicClient({
+  const l1Transport = makeL1HttpTransport(config.l1RpcUrls, {
+    timeout: config.l1HttpTimeoutMS,
+    grader: { config, chainId: config.l1ChainId, logger: log.createChild('l1-rpc-grader') },
+  });
+  const publicClient: ViemPublicClient = createPublicClient({
     chain: ethereumChain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
+    transport: l1Transport,
     pollingInterval: config.viemPollingIntervalMS,
   });
 
-  const l1ContractsAddresses = await RegistryContract.collectAddresses(
-    publicClient,
-    config.registryAddress,
-    config.rollupVersion ?? 'canonical',
-  );
-
-  Object.assign(config, l1ContractsAddresses);
-
-  const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
-  // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
-  // bucket ring before accepting it, so every node needs one, validator or not.
-  const inboxContract = new InboxContract(publicClient, config.inboxAddress);
-  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
-    rollupContract.getL1GenesisTime(),
-    rollupContract.getSlotDuration(),
-    rollupContract.getEpochDuration(),
-    rollupContract.getVersion(),
-  ] as const);
-
-  config.rollupVersion ??= Number(rollupVersionFromRollup);
-
-  if (config.rollupVersion !== Number(rollupVersionFromRollup)) {
-    log.warn(
-      `Registry looked up and returned a rollup with version (${config.rollupVersion}), but this does not match with version detected from the rollup directly: (${rollupVersionFromRollup}).`,
-    );
-  }
-
-  const blobClient = await createBlobClientWithFileStores(config, {
-    l1Client: publicClient,
-    logger: log.createChild('blob-client'),
-  });
-
-  // attempt snapshot sync if possible
-  await trySnapshotSync(config, publicClient, log, options.genesis);
-
-  const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
-
-  // Track started resources so we can clean up on partial failure during node creation.
+  // Track started resources so we can clean up on partial failure during node creation. The L1 RPC grader is the
+  // first of them, since everything below reads from L1 through the client it grades.
   const started: { stop?(): Promise<void> | void }[] = [];
+  if (l1Transport.grader) {
+    started.push(l1Transport.grader);
+  }
   try {
+    const l1ContractsAddresses = await RegistryContract.collectAddresses(
+      publicClient,
+      config.registryAddress,
+      config.rollupVersion ?? 'canonical',
+    );
+
+    Object.assign(config, l1ContractsAddresses);
+
+    const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+    // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
+    // bucket ring before accepting it, so every node needs one, validator or not.
+    const inboxContract = new InboxContract(publicClient, config.inboxAddress);
+    const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
+      rollupContract.getL1GenesisTime(),
+      rollupContract.getSlotDuration(),
+      rollupContract.getEpochDuration(),
+      rollupContract.getVersion(),
+    ] as const);
+
+    config.rollupVersion ??= Number(rollupVersionFromRollup);
+
+    if (config.rollupVersion !== Number(rollupVersionFromRollup)) {
+      log.warn(
+        `Registry looked up and returned a rollup with version (${config.rollupVersion}), but this does not match with version detected from the rollup directly: (${rollupVersionFromRollup}).`,
+      );
+    }
+
+    const blobClient = await createBlobClientWithFileStores(config, {
+      l1Client: publicClient,
+      logger: log.createChild('blob-client'),
+    });
+
+    // attempt snapshot sync if possible
+    await trySnapshotSync(config, publicClient, log, options.genesis);
+
+    const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
+
     // Governance can change the rollup's fee settings (the mana target and limit among them) at any time, so every
     // component that needs them reads them from this tracker rather than from a copy taken at startup.
     const feeConfigTracker = await RollupFeeConfigTracker.create(rollupContract, {
@@ -694,6 +703,7 @@ export async function createAztecNodeService(
       slasherClient,
       validatorsSentinel,
       stopStartedWatchers,
+      l1RpcGrader: l1Transport.grader,
       l1ChainId: ethereumChain.chainInfo.id,
       version: config.rollupVersion,
       globalVariableBuilder,

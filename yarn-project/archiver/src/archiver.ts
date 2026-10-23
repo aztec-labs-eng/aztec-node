@@ -169,6 +169,8 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
    * @param l2FrontierCache - In-memory cache for L2 chain tips.
    * @param dateProvider - Provider for current date/time, used for wall-clock orphan-block pruning.
    * @param log - A logger.
+   * @param debugClientGrader - Grader of the debug client's RPC URLs, when the archiver built that client. Stopped and
+   * resumed with the archiver.
    */
   constructor(
     private readonly publicClient: ViemPublicClient,
@@ -209,6 +211,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     private readonly dateProvider: DateProvider,
     private checkpointProposalPresence: CheckpointProposalPresence = noCheckpointProposalPresence,
     private readonly log: Logger = createLogger('archiver'),
+    private readonly debugClientGrader?: { start(): void; stop(): Promise<void> },
   ) {
     super(dataStores, l1Constants, initialHeader, initialBlockHash, l1Constants.genesisArchiveRoot);
 
@@ -708,6 +711,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     }
     this.log.info(`Restarting archiver`);
     this.runningPromise.start();
+    this.debugClientGrader?.start();
   }
 
   /**
@@ -723,6 +727,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     for (const item of this.inboundQueue.splice(0, this.inboundQueue.length)) {
       item.reject(new Error(`Archiver stopped before processing the queued ${item.type} request`));
     }
+    await this.debugClientGrader?.stop();
 
     this.log.info('Stopped.');
     return Promise.resolve();

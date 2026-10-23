@@ -1,5 +1,6 @@
 import {
   type ConfigMappingsType,
+  booleanConfigHelper,
   getConfigFromMappings,
   numberConfigHelper,
   optionalNumberConfigHelper,
@@ -19,7 +20,70 @@ export type L1ReaderConfig = {
   viemPollingIntervalMS: number;
   /** Timeout for HTTP requests to the L1 RPC node in ms. */
   l1HttpTimeoutMS?: number;
-} & L1ContractAddresses;
+} & L1RpcGraderConfig &
+  L1ContractAddresses;
+
+/**
+ * Settings of the grader that probes each L1 RPC URL and stops sending requests to the ones that lag behind or do not
+ * answer. It only runs in the node, and only when two or more URLs are configured.
+ */
+export type L1RpcGraderConfig = {
+  /** Interval in ms between rounds in which the grader asks every L1 RPC URL for its latest block number. */
+  l1RpcGraderIntervalMS: number;
+  /** Timeout in ms of each probe the grader sends. */
+  l1RpcGraderProbeTimeoutMS: number;
+  /** Blocks an L1 RPC URL may trail the highest block reported by any URL before its sample counts as lagging. */
+  l1RpcGraderMaxBlocksBehind: number;
+  /** Bad samples within the window that demote an L1 RPC URL, and consecutive good samples that restore it. */
+  l1RpcGraderThreshold: number;
+  /** Number of recent samples per L1 RPC URL the grader considers when demoting it. */
+  l1RpcGraderWindow: number;
+  /** Keep demoted L1 RPC URLs as a last resort after the healthy ones, instead of not using them at all. */
+  l1RpcGraderKeepDemoted: boolean;
+};
+
+export const l1RpcGraderConfigMappings: ConfigMappingsType<L1RpcGraderConfig> = {
+  l1RpcGraderIntervalMS: {
+    env: 'ETHEREUM_HOSTS_GRADER_INTERVAL_MS',
+    description:
+      'Interval in ms between rounds in which the node asks every L1 RPC URL for its latest block number, to stop ' +
+      'using the ones that lag behind or do not answer. Only used when two or more ETHEREUM_HOSTS are set.',
+    ...numberConfigHelper(4_000),
+  },
+  l1RpcGraderProbeTimeoutMS: {
+    env: 'ETHEREUM_HOSTS_GRADER_PROBE_TIMEOUT_MS',
+    description: 'Timeout in ms of each probe the L1 RPC grader sends. A probe that times out counts as unreachable.',
+    ...numberConfigHelper(1_000),
+  },
+  l1RpcGraderMaxBlocksBehind: {
+    env: 'ETHEREUM_HOSTS_GRADER_MAX_BLOCKS_BEHIND',
+    description:
+      'How many blocks an L1 RPC URL may trail the highest block reported by any URL before its sample counts as ' +
+      'lagging.',
+    ...numberConfigHelper(2),
+  },
+  l1RpcGraderThreshold: {
+    env: 'ETHEREUM_HOSTS_GRADER_THRESHOLD',
+    description:
+      'Number of bad samples (lagging or unreachable) within the window that demote an L1 RPC URL, and of ' +
+      'consecutive good samples that restore it.',
+    ...numberConfigHelper(3),
+  },
+  l1RpcGraderWindow: {
+    env: 'ETHEREUM_HOSTS_GRADER_WINDOW',
+    description:
+      'Number of recent samples per L1 RPC URL the grader looks at when deciding whether to demote it. A window ' +
+      'larger than ETHEREUM_HOSTS_GRADER_THRESHOLD also demotes a URL that alternates between good and bad answers, ' +
+      'such as a load balancer in front of one healthy and one stale node.',
+    ...numberConfigHelper(5),
+  },
+  l1RpcGraderKeepDemoted: {
+    env: 'ETHEREUM_HOSTS_GRADER_KEEP_DEMOTED',
+    description:
+      'Keep demoted L1 RPC URLs as a last resort, tried after the healthy ones, instead of not using them at all.',
+    ...booleanConfigHelper(false),
+  },
+};
 
 export const l1ReaderConfigMappings: ConfigMappingsType<L1ReaderConfig> = {
   l1ChainId: {
@@ -49,6 +113,7 @@ export const l1ReaderConfigMappings: ConfigMappingsType<L1ReaderConfig> = {
     description: 'Timeout for HTTP requests to the L1 RPC node in ms.',
     ...optionalNumberConfigHelper(),
   },
+  ...l1RpcGraderConfigMappings,
   ...l1ContractAddressesMapping,
 };
 

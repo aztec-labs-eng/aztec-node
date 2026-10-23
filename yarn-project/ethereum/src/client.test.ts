@@ -1,7 +1,9 @@
 import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { type Server, createServer } from 'node:http';
-import { BlockNotFoundError, TransactionReceiptNotFoundError, createPublicClient } from 'viem';
+import { BlockNotFoundError, TransactionReceiptNotFoundError, createPublicClient, toHex } from 'viem';
 import { foundry, sepolia } from 'viem/chains';
 
 import {
@@ -14,6 +16,8 @@ import {
   isL1RpcHttpStatus,
   makeL1HttpTransport,
 } from './client.js';
+import type { L1RpcGraderConfig } from './l1_reader.js';
+import type { L1RpcGrader } from './l1_rpc_grader.js';
 import { type RecordingRpcServer, startRecordingRpcServer } from './test/recording_rpc_server.js';
 
 describe('createExtendedL1Client polling', () => {
@@ -202,5 +206,175 @@ describe('makeL1HttpTransport with an RPC that answers null', () => {
     const { client, nullServer, otherServer } = await startServers();
 
     expect(getRpcUrlsFromClient(client)).toEqual([nullServer.url, otherServer.url]);
+  });
+});
+
+describe('makeL1HttpTransport with a grader', () => {
+  const graderConfig: L1RpcGraderConfig = {
+    l1RpcGraderIntervalMS: 60_000,
+    l1RpcGraderProbeTimeoutMS: 1_000,
+    l1RpcGraderMaxBlocksBehind: 2,
+    l1RpcGraderThreshold: 1,
+    l1RpcGraderWindow: 1,
+    l1RpcGraderKeepDemoted: false,
+  };
+  const address = `0x${'33'.repeat(20)}` as const;
+
+  let servers: RecordingRpcServer[] = [];
+  let graders: L1RpcGrader[] = [];
+
+  afterEach(async () => {
+    await Promise.all(graders.map(grader => grader.stop()));
+    await Promise.all(servers.map(server => server.close()));
+    servers = [];
+    graders = [];
+  });
+
+  /** An L1 node at `height` that answers eth_getBalance with `balance`, or fails it when undefined. */
+  type FakeNode = { height: bigint; balance?: bigint; onBalance?: () => Promise<void> };
+
+  const startServer = async (node: FakeNode) => {
+    const server = await startRecordingRpcServer({
+      answer: async method => {
+        switch (method) {
+          case 'eth_chainId':
+            return toHex(foundry.id);
+          case 'eth_blockNumber':
+            return toHex(node.height);
+          case 'eth_getBalance':
+            await node.onBalance?.();
+            if (node.balance === undefined) {
+              throw new Error('balance not available');
+            }
+            return toHex(node.balance);
+          default:
+            throw new Error(`unexpected method ${method}`);
+        }
+      },
+    });
+    servers.push(server);
+    return server;
+  };
+
+  const makeClient = async (urls: string[], config: Partial<L1RpcGraderConfig> = {}) => {
+    const transport = makeL1HttpTransport(urls, {
+      grader: { config: { ...graderConfig, ...config }, chainId: foundry.id },
+    });
+    const client = createPublicClient({ chain: foundry, transport });
+    if (transport.grader) {
+      graders.push(transport.grader);
+      // Drive the grader by hand from here on, rather than on its interval.
+      await transport.grader.stop();
+    }
+    return { client, grader: transport.grader };
+  };
+
+  const balanceRequests = (server: RecordingRpcServer) => server.methods.filter(m => m === 'eth_getBalance').length;
+
+  it('does not start a grader for a single URL', async () => {
+    const server = await startServer({ height: 100n, balance: 1n });
+    const { grader } = await makeClient([server.url]);
+
+    expect(grader).toBeUndefined();
+    await sleep(50);
+    expect(server.methods).toEqual([]);
+  });
+
+  it('does not start a grader unless asked to', async () => {
+    const lagging = await startServer({ height: 10n, balance: 1n });
+    const healthy = await startServer({ height: 100n, balance: 2n });
+    const transport = makeL1HttpTransport([lagging.url, healthy.url]);
+
+    expect(transport.grader).toBeUndefined();
+    await sleep(50);
+    expect([...lagging.methods, ...healthy.methods]).toEqual([]);
+  });
+
+  it('sends requests to the configured first URL before any probe', async () => {
+    const first = await startServer({ height: 10n, balance: 1n });
+    const second = await startServer({ height: 100n, balance: 2n });
+    const { client } = await makeClient([first.url, second.url]);
+
+    await expect(client.getBalance({ address })).resolves.toBe(1n);
+  });
+
+  it('does not send requests to a lagging URL', async () => {
+    const lagging = await startServer({ height: 10n, balance: 1n });
+    const healthy = await startServer({ height: 100n });
+    const { client, grader } = await makeClient([lagging.url, healthy.url]);
+    await grader!.probeAll();
+
+    await expect(client.getBalance({ address })).rejects.toThrow(L1RpcError);
+    expect(balanceRequests(healthy)).toBeGreaterThan(0);
+    expect(balanceRequests(lagging)).toBe(0);
+    expect(getRpcUrlsFromClient(client)).toEqual([lagging.url, healthy.url]);
+  });
+
+  it('tries a lagging URL after the healthy ones when asked to keep it', async () => {
+    const lagging = await startServer({ height: 10n, balance: 1n });
+    const healthy = await startServer({ height: 100n });
+    const { client, grader } = await makeClient([lagging.url, healthy.url], { l1RpcGraderKeepDemoted: true });
+    await grader!.probeAll();
+
+    // The healthy URL fails the request, so the lagging URL answering it shows it was tried after the healthy one.
+    await expect(client.getBalance({ address })).resolves.toBe(1n);
+    expect(balanceRequests(healthy)).toBe(1);
+    expect(balanceRequests(lagging)).toBe(1);
+  });
+
+  it('sends requests to a URL again once it catches up', async () => {
+    const node = { height: 10n, balance: 1n };
+    const recovering = await startServer(node);
+    const healthy = await startServer({ height: 100n, balance: 2n });
+    const { client, grader } = await makeClient([recovering.url, healthy.url]);
+    await grader!.probeAll();
+    await expect(client.getBalance({ address })).resolves.toBe(2n);
+
+    node.height = 100n;
+    await grader!.probeAll();
+    await expect(client.getBalance({ address })).resolves.toBe(1n);
+  });
+
+  it('fails requests with an L1RpcError when every URL is on the wrong chain', async () => {
+    const first = await startServer({ height: 100n, balance: 1n });
+    const second = await startServer({ height: 100n, balance: 2n });
+    const transport = makeL1HttpTransport([first.url, second.url], {
+      grader: { config: graderConfig, chainId: foundry.id + 1 },
+    });
+    const client = createPublicClient({ chain: foundry, transport });
+    graders.push(transport.grader!);
+    await transport.grader!.stop();
+    await transport.grader!.probeAll();
+
+    await expect(client.getBalance({ address })).rejects.toThrow(
+      new L1RpcError(`No configured L1 RPC URL is on the expected chain (${foundry.id + 1})`),
+    );
+    expect(balanceRequests(first) + balanceRequests(second)).toBe(0);
+  });
+
+  it('keeps the order a request started with when the order changes mid-request', async () => {
+    const reached = promiseWithResolvers<void>();
+    const release = promiseWithResolvers<void>();
+    const first: FakeNode = {
+      height: 100n,
+      onBalance: () => {
+        reached.resolve();
+        return release.promise;
+      },
+    };
+    const firstServer = await startServer(first);
+    const secondServer = await startServer({ height: 100n, balance: 2n });
+    const { client, grader } = await makeClient([firstServer.url, secondServer.url], { l1RpcGraderKeepDemoted: true });
+
+    const balance = client.getBalance({ address });
+    await reached.promise;
+    // The first URL falls behind while the request waits on it, so the order flips to [second, first].
+    first.height = 10n;
+    await grader!.probeAll();
+    release.resolve();
+
+    await expect(balance).resolves.toBe(2n);
+    expect(balanceRequests(firstServer)).toBe(1);
+    expect(balanceRequests(secondServer)).toBe(1);
   });
 });

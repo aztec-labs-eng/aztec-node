@@ -1,5 +1,7 @@
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { l1RpcGraderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { getDefaultConfig } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import type { ProofUri, ProvingJob, ProvingJobSettledResult } from '@aztec-labs/stdlib/interfaces/server';
@@ -36,6 +38,7 @@ describe('ProvingBrokerPersistedDatabase', () => {
       l1ChainId: 42,
       viemPollingIntervalMS: 100,
       rollupVersion: 42,
+      ...getDefaultConfig(l1RpcGraderConfigMappings),
       ...randomL1ContractAddresses(),
     };
     db = await KVBrokerDatabase.new(config);
@@ -363,6 +366,7 @@ describe('ProvingBrokerPersistedDatabase', () => {
         l1ChainId: 42,
         viemPollingIntervalMS: 100,
         rollupVersion: 42,
+        ...getDefaultConfig(l1RpcGraderConfigMappings),
         ...randomL1ContractAddresses(),
       };
       db = await KVBrokerDatabase.new(config);

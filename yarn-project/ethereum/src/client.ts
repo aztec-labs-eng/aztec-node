@@ -14,13 +14,18 @@ import {
   createPublicClient,
   createWalletClient,
   fallback,
+  hexToBigInt,
+  hexToNumber,
   http,
+  isHex,
   publicActions,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { createEthereumChain, isAnvilTestChain } from './chain.js';
+import type { L1RpcGraderConfig } from './l1_reader.js';
+import { L1RpcGrader } from './l1_rpc_grader.js';
 import type { ExtendedViemWalletClient, ViemPublicClient } from './types.js';
 
 type Config = {
@@ -110,16 +115,89 @@ export function failOverOnNullResult(transport: HttpTransport): HttpTransport {
   };
 }
 
-/** Creates a viem fallback HTTP transport for the given L1 RPC URLs. */
-export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number }) {
-  // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
-  return wrapL1RpcTransport(
-    fallback(
-      rpcUrls.map(url =>
-        failOverOnNullResult(http(url, { batch: false, timeout: opts?.timeout, maxResponseBodySize: false })),
-      ),
-    ),
+/** A fallback HTTP transport over L1 RPC URLs, with the grader that orders them when one runs. */
+export type L1HttpTransport = FallbackTransport<HttpTransport[]> & {
+  /** Present only when the transport was asked to grade its URLs and has two or more. Stop it to stop probing. */
+  readonly grader?: L1RpcGrader;
+};
+
+/** Options for {@link makeL1HttpTransport}. */
+export type L1HttpTransportOptions = {
+  /** Timeout for each HTTP request in ms. */
+  timeout?: number;
+  /**
+   * Runs an {@link L1RpcGrader} over the URLs, so that requests skip the ones that lag behind or do not answer. Only
+   * long-lived node clients should ask for one, since it probes every URL on an interval until stopped.
+   */
+  grader?: { config: L1RpcGraderConfig; chainId: number; logger?: Logger };
+};
+
+/**
+ * Creates a viem fallback HTTP transport for the given L1 RPC URLs. With the `grader` option and two or more URLs, it
+ * also starts a grader, and each request then tries the URLs the grader currently considers eligible, in its order.
+ */
+export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOptions): L1HttpTransport {
+  const transports = rpcUrls.map(url => makeL1UrlTransport(url, opts?.timeout));
+  const configured = fallback(transports);
+  if (!opts?.grader || transports.length < 2) {
+    return wrapL1RpcTransport(configured);
+  }
+
+  const { config, chainId, logger } = opts.grader;
+  const probeTransports = transports.map(transport =>
+    transport({ retryCount: 0, timeout: config.l1RpcGraderProbeTimeoutMS }),
   );
+  const probeHex = async (index: number, method: 'eth_blockNumber' | 'eth_chainId') => {
+    const result = await probeTransports[index].request({ method });
+    if (!isHex(result)) {
+      throw new Error(`L1 RPC returned a non-hex result for ${method}`);
+    }
+    return result;
+  };
+
+  // A request keeps the fallback instance that was current when it started, for all of its attempts and retries.
+  // Looking up the URL for each attempt instead could try a URL twice, or skip one, when the order changes mid-request.
+  // The grader leaves no URL only when every one of them is on the wrong chain.
+  let current: FallbackTransport<HttpTransport[]> | undefined = configured;
+  const grader = new L1RpcGrader(
+    rpcUrls,
+    {
+      getBlockNumber: async index => hexToBigInt(await probeHex(index, 'eth_blockNumber')),
+      getChainId: async index => hexToNumber(await probeHex(index, 'eth_chainId')),
+    },
+    {
+      config,
+      chainId,
+      logger,
+      onOrderChange: order =>
+        (current = order.length > 0 ? fallback(order.map(index => transports[index])) : undefined),
+    },
+  );
+  grader.start();
+
+  const graded: FallbackTransport<HttpTransport[]> = params => {
+    // The configured fallback provides the transport's config and value, so the client still lists every URL.
+    const base = configured(params);
+    let instance = { source: configured, transport: base };
+    const request: typeof base.request = (args, options) => {
+      if (current === undefined) {
+        return Promise.reject(new L1RpcError(`No configured L1 RPC URL is on the expected chain (${chainId})`));
+      }
+      if (instance.source !== current) {
+        instance = { source: current, transport: current(params) };
+      }
+      return instance.transport.request(args, options);
+    };
+    return { ...base, request };
+  };
+
+  return Object.assign(wrapL1RpcTransport(graded), { grader });
+}
+
+/** Creates the transport for a single L1 RPC URL, as used inside the fallback and by the grader's probes. */
+function makeL1UrlTransport(url: string, timeout: number | undefined): HttpTransport {
+  // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
+  return failOverOnNullResult(http(url, { batch: false, timeout, maxResponseBodySize: false }));
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */
