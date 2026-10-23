@@ -381,7 +381,11 @@ export class ProverNodePublisher {
     try {
       const { receipt, state } = await this.l1TxUtils.sendAndMonitorTransaction(
         { to: this.proofSubmissionTarget, data },
-        { ...(gasLimit !== undefined && { gasLimit }), txTimeoutAt: args.deadline },
+        {
+          ...(gasLimit !== undefined && { gasLimit }),
+          // Proofs remain valid until the submission deadline, beyond the generic relative timeout.
+          ...(args.deadline ? { txTimeoutAt: args.deadline, txTimeoutMs: 0, cancelTxOnTimeout: true } : {}),
+        },
       );
       if (receipt.status !== 'success') {
         const errorMsg = await this.l1TxUtils.tryGetErrorFromRevertedTx(
