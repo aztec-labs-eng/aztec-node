@@ -33,6 +33,7 @@ import { foundry } from 'viem/chains';
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
 import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
+import { type RecordingRpcServer, RpcErrorAnswer, startRecordingRpcServer } from '../test/recording_rpc_server.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
@@ -248,6 +249,48 @@ describeAcrossL1Forks('L1TxUtils', () => {
         ['blob', makeBlobInputs],
       ] as const;
 
+      let proxies: RecordingRpcServer[] = [];
+      let proxiedUtils: TestL1TxUtils[] = [];
+
+      afterEach(async () => {
+        for (const utils of proxiedUtils) {
+          utils.interrupt();
+          await utils.waitMonitoringStopped(1);
+        }
+        await Promise.all(proxies.map(proxy => proxy.close()));
+        proxies = [];
+        proxiedUtils = [];
+      });
+
+      /** Starts a proxy to anvil that answers eth_sendRawTransaction with `onSend` and forwards everything else. */
+      const startProxy = async (onSend: (forward: () => Promise<unknown>) => unknown) => {
+        const proxy = await startRecordingRpcServer({
+          forwardTo: rpcUrl,
+          answer: (method, forward) => (method === 'eth_sendRawTransaction' ? onSend(forward) : forward()),
+        });
+        proxies.push(proxy);
+        return proxy;
+      };
+
+      /** Creates an L1TxUtils for the same account whose client sends every request through the given URLs. */
+      const makeProxiedL1TxUtils = (urls: string[]) => {
+        const client = createExtendedL1Client(urls, MNEMONIC, foundry);
+        const utils = new TestL1TxUtils(
+          client,
+          EthAddress.fromString(client.account.address),
+          createViemSigner(client),
+          logger,
+          dateProvider,
+          config,
+          undefined,
+          undefined,
+          metrics,
+          Blob.getViemKzgInstance(),
+        );
+        proxiedUtils.push(utils);
+        return utils;
+      };
+
       it.each(txKinds)(
         'tracks the hash of a %s tx when the RPC returns a different one',
         async (_, blobInputs) => {
@@ -268,18 +311,51 @@ describeAcrossL1Forks('L1TxUtils', () => {
         30_000,
       );
 
-      it('tracks the hash of a tx when the RPC returns null', async () => {
-        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
-        const anvilHashes: Hex[] = [];
-        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
-          anvilHashes.push(await originalSendRawTransaction(args));
-          return null as unknown as Hex;
+      it('treats a tx as sent when every node answers null to it', async () => {
+        // The first node takes the tx without confirming it, and the second does not answer either.
+        const forwarding = await startProxy(async forward => {
+          await forward().catch(() => undefined);
+          return null;
+        });
+        const silent = await startProxy(() => null);
+        const utils = makeProxiedL1TxUtils([forwarding.url, silent.url]);
+        const expectedNonce = await l1Client.getTransactionCount({
+          blockTag: 'pending',
+          address: l1Client.account.address,
         });
 
-        const { txHash, state } = await gasUtils.sendTransaction(request);
+        const { txHash, state } = await utils.sendTransaction(request);
 
-        expect(txHash).toEqual(anvilHashes[0]);
-        expect(state.txHashes).toEqual(anvilHashes);
+        expect(state).toMatchObject({ nonce: expectedNonce, txHashes: [txHash], status: TxUtilsState.SENT });
+        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: expectedNonce });
+
+        // A node that reports a stale pending nonce does not make the next send reuse the one just sent.
+        const originalGetTransactionCount = utils.client.getTransactionCount.bind(utils.client);
+        using _countSpy = jest
+          .spyOn(utils.client, 'getTransactionCount')
+          .mockImplementationOnce(() => Promise.resolve(expectedNonce))
+          .mockImplementation(originalGetTransactionCount);
+        const { state: nextState } = await utils.sendTransaction(request);
+        expect(nextState.nonce).toBe(expectedNonce + 1);
+
+        await expect(utils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
+      }, 30_000);
+
+      it('treats a tx as sent when the first node already knows it and the next one fails it', async () => {
+        const knowing = await startProxy(async forward => {
+          await forward();
+          throw new RpcErrorAnswer(-32000, 'already known');
+        });
+        const failing = await startProxy(() => {
+          throw new RpcErrorAnswer(-32601, 'method not found');
+        });
+        const utils = makeProxiedL1TxUtils([knowing.url, failing.url]);
+
+        const { txHash, state } = await utils.sendTransaction(request);
+
+        expect(failing.methods).not.toContain('eth_sendRawTransaction');
+        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: state.nonce });
+        await expect(utils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
       }, 30_000);
 
       it.each(txKinds)(
