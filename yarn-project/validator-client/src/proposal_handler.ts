@@ -70,6 +70,7 @@ import {
   checkInboxEndpoint,
 } from './checkpoint_endpoint_check.js';
 import { warnCommitteeNotStable } from './committee_not_stable.js';
+import { type InvalidBlockVerdict, checkpointCommitsToRejectedBlock } from './invalid_checkpoint_evidence.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
   type StreamingBlockCheckReason,
@@ -123,6 +124,11 @@ export type BlockProposalValidationFailureResult = {
   reason: BlockProposalValidationFailureReason;
   blockNumber?: BlockNumber;
   reexecutionResult?: ReexecuteTransactionsResult;
+  // Set only for an archive-only state_mismatch (the re-executed header matched, the claimed archive did not), which
+  // binds only when the block is the committed sequence's last and its wrong archive is the signed one. Every other
+  // header-committing reason is bound by HEADER_BOUND_BLOCK_REASONS without a per-result flag. See recordVerdictIfBound
+  // and checkpointCommitsToRejectedBlock.
+  headerBoundVerdict?: { headerMismatch: boolean; archiveMismatch: boolean };
 };
 
 export type BlockProposalValidationResult = BlockProposalValidationSuccessResult | BlockProposalValidationFailureResult;
@@ -430,6 +436,29 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
   ['unknown_error']: false,
 };
 
+/**
+ * Slashable block-proposal rejections that always invalidate the block the signed header commits to, so a checkpoint
+ * whose committed sequence contains that header is bound to it by header membership. Only rejections that follow from
+ * the signed header and its parent are listed: the embedded-tx-body reasons (invalid_embedded_txs, failed_txs,
+ * duplicate_txs) are excluded because those tx bodies sit outside both the header and the checkpoint's signed payload,
+ * so a node that rejects for one of them cannot prove the checkpoint invalid to its honest signers.
+ *
+ * Rejections that depend on the proposal's indexWithinCheckpoint are excluded too: the index is signed in the block
+ * proposal but not committed to by the checkpoint, so a proposer can re-sign a valid header under a wrong index, get it
+ * rejected, and then commit the same header at its true index in a valid checkpoint. That covers the invalid_proposal
+ * slot checks (which check applies is chosen by the index) and checkpoint_over_msg_cap (the index picks the
+ * checkpoint's starting message count). global_variables_mismatch stays: it needs the header's slot to equal its
+ * parent's, which no index makes valid. state_mismatch is not listed: a re-executed header mismatch depends on the
+ * proposal's tx list, which the checkpoint does not sign; only its archive-only form binds, through a per-result
+ * headerBoundVerdict. See recordVerdictIfBound.
+ */
+const HEADER_BOUND_BLOCK_REASONS: ReadonlySet<BlockProposalValidationFailureReason> = new Set([
+  'parent_block_wrong_slot',
+  'global_variables_mismatch',
+  'consumption_moves_backwards',
+  'bundle_over_block_cap',
+]);
+
 /** Checkpoint-proposal validation failures that constitute a slashable invalid-checkpoint offense. */
 export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   CheckpointProposalValidationFailureReason,
@@ -548,6 +577,13 @@ export class ProposalHandler {
    * slot evicted).
    */
   private readonly invalidCheckpointProposalHashesBySlot = new Map<SlotNumber, Set<CheckpointProposalHash>>();
+
+  /**
+   * Per-proposal verdicts for block proposals this node rejected for a payload-committing reason, per slot. Read when
+   * a checkpoint bails at last_block_not_found, to decide whether it commits to one of those rejected blocks (see
+   * checkpointCommitsToRejectedBlock). Bounded like invalidCheckpointProposalHashesBySlot (oldest slot evicted).
+   */
+  private readonly invalidBlockVerdictsBySlot = new Map<SlotNumber, InvalidBlockVerdict[]>();
 
   constructor(
     private checkpointsBuilder: FullNodeCheckpointsBuilder,
@@ -689,6 +725,84 @@ export class ProposalHandler {
   /** Signed-payload hashes of invalid checkpoint proposals observed at the slot (InvalidProposalSlotSource). */
   public getInvalidCheckpointProposalHashes(slotNumber: SlotNumber): CheckpointProposalHash[] {
     return [...(this.invalidCheckpointProposalHashesBySlot.get(slotNumber) ?? [])];
+  }
+
+  /**
+   * Records a per-block verdict for a block proposal this node rejected for a reason that invalidates the block's
+   * signed header on its own (a header mismatch), or whose re-executed header matched but whose claimed resulting
+   * archive did not (an archive-only mismatch), so a checkpoint that commits to the block can later be bound to it.
+   * Bounded like the other per-slot stores (oldest slot evicted).
+   */
+  private recordInvalidBlockVerdict(slotNumber: SlotNumber, verdict: InvalidBlockVerdict): void {
+    let verdicts = this.invalidBlockVerdictsBySlot.get(slotNumber);
+    if (!verdicts) {
+      verdicts = [];
+      this.invalidBlockVerdictsBySlot.set(slotNumber, verdicts);
+      while (this.invalidBlockVerdictsBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
+        const oldest = this.invalidBlockVerdictsBySlot.keys().next().value;
+        if (oldest === undefined) {
+          break;
+        }
+        this.invalidBlockVerdictsBySlot.delete(oldest);
+      }
+    }
+    verdicts.push(verdict);
+  }
+
+  /**
+   * Records a per-block verdict for a rejection that invalidates the block's signed header, so a checkpoint whose
+   * committed sequence contains that header can later be bound to it. Called once per proposal on the final result -
+   * after the parent-pruned demotion, which turns the reason non-slashable, so a demoted rejection records nothing.
+   * The shape comes from the result's own headerBoundVerdict (an archive-only state_mismatch) or, for the other
+   * header-committing reasons, from HEADER_BOUND_BLOCK_REASONS. A slashable reason that is neither (invalid_proposal,
+   * checkpoint_over_msg_cap, a state_mismatch whose re-executed header differs, or an embedded-tx-body reason) records
+   * nothing.
+   */
+  private recordVerdictIfBound(proposal: BlockProposal, result: BlockProposalValidationResult): void {
+    if (result.isValid || !SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[result.reason]) {
+      return;
+    }
+    const shape =
+      result.headerBoundVerdict ??
+      (HEADER_BOUND_BLOCK_REASONS.has(result.reason) ? { headerMismatch: true, archiveMismatch: false } : undefined);
+    if (!shape) {
+      return;
+    }
+    this.recordInvalidBlockVerdict(proposal.slotNumber, {
+      blockHeader: proposal.blockHeader,
+      archiveRoot: proposal.archive,
+      ...shape,
+    });
+  }
+
+  /**
+   * When a checkpoint could not be validated because the block carrying its signed archive is not local
+   * (last_block_not_found), it may still commit to a block this node rejected. Records the invalid-checkpoint
+   * payload hash (so the watcher slashes its attesters) only when the rejection is provably bound to the signed
+   * payload; see checkpointCommitsToRejectedBlock. Missing evidence is never guilt, so an unbound or
+   * unreconstructable case records nothing.
+   */
+  private async recordInvalidCheckpointIfBoundToRejectedBlock(
+    proposal: CheckpointProposalCore,
+    proposalInfo: LogData,
+  ): Promise<void> {
+    const verdicts = this.invalidBlockVerdictsBySlot.get(proposal.slotNumber);
+    if (!verdicts || verdicts.length === 0 || !this.p2pClient) {
+      return;
+    }
+    const { blockProposals } = await this.p2pClient.getProposalsForSlot(proposal.slotNumber);
+    // A rejected block the checkpoint's signed payload names directly: its header is in the committed sequence, or
+    // its wrong archive is the signed archive. A rejection the payload does not commit to records nothing, so a few
+    // lazy attesters go unpunished for a corruption only a full rebuild could catch - and honest nodes cannot
+    // validate that checkpoint either, while the bad block's proposer is still slashed on the block path.
+    if (await checkpointCommitsToRejectedBlock(proposal, blockProposals, verdicts)) {
+      this.log.warn(`Checkpoint commits to a block this node rejected; recording invalid-checkpoint evidence`, {
+        ...proposalInfo,
+        slot: proposal.slotNumber,
+      });
+      this.markInvalidProposalSlot(proposal.slotNumber);
+      this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
+    }
   }
 
   /**
@@ -931,9 +1045,14 @@ export class ProposalHandler {
       proposalInfo,
     );
     // A genesis parent cannot be pruned.
-    return parentBlock !== 'genesis' && isSlashableBlockProposalResult(result)
-      ? await this.checkParentStillLocal(proposal, result, proposalInfo)
-      : result;
+    const finalResult =
+      parentBlock !== 'genesis' && isSlashableBlockProposalResult(result)
+        ? await this.checkParentStillLocal(proposal, result, proposalInfo)
+        : result;
+    // Record the checkpoint-attester verdict only on the final classification: checkParentStillLocal may demote a
+    // slashable rejection to the non-slashable parent_block_pruned_during_validation, which then records nothing.
+    this.recordVerdictIfBound(proposal, finalResult);
+    return finalResult;
   }
 
   /**
@@ -1087,7 +1206,22 @@ export class ProposalHandler {
     } catch (error) {
       this.log.error(`Error reexecuting txs while processing block proposal`, error, proposalInfo);
       const reason = await this.classifyReexecutionFailure(error, proposal, streamingMetadata, proposalInfo);
-      return { isValid: false, blockNumber, reason, reexecutionResult };
+      const failure: BlockProposalValidationFailureResult = { isValid: false, blockNumber, reason, reexecutionResult };
+      // Only an archive-only mismatch is evidence against a committing checkpoint. Re-execution runs the proposal's own
+      // tx list, which the checkpoint does not sign, so a header mismatch shows only that those txs do not produce the
+      // header: the same header may be valid for the txs honest attesters received. With the header matching, the
+      // resulting archive follows from the header and its parent alone, so a wrong one is wrong for every node. The
+      // caller records on the final result, so a local-view demotion (inbox_prefix_*, not slashable) or a parent-pruned
+      // demotion leaves no attester evidence.
+      if (
+        error instanceof ReExStateMismatchError &&
+        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason] &&
+        !error.headerMismatch &&
+        error.archiveMismatch
+      ) {
+        failure.headerBoundVerdict = { headerMismatch: false, archiveMismatch: true };
+      }
+      return failure;
     }
 
     // If we succeeded, push this block into the archiver (unless disabled), carrying the proposal's signed Inbox
@@ -1939,7 +2073,7 @@ export class ProposalHandler {
         actualHeader: proposal.blockHeader.toInspect(),
       });
       this.metrics?.recordFailedReexecution(proposal);
-      throw new ReExStateMismatchError(proposal.archive, block.archive.root);
+      throw new ReExStateMismatchError(proposal.archive, block.archive.root, !headerMatches, !archiveMatches);
     }
 
     const reexecutionTimeMs = timer.ms();
@@ -2387,6 +2521,7 @@ export class ProposalHandler {
     } catch (err) {
       if (err instanceof TimeoutError) {
         this.log.warn(`Timed out waiting for block with archive matching checkpoint proposal`, proposalInfo);
+        await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal, proposalInfo);
         return { isValid: false, reason: 'last_block_not_found' };
       }
       this.log.error(`Error fetching last block for checkpoint proposal`, err, proposalInfo);

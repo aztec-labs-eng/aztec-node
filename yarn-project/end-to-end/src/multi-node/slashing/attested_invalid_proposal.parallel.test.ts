@@ -176,11 +176,13 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
   async function createInvalidProposalSlashingScenario({
     badProposerConfig = {},
     corruptBlockProposal = true,
+    badBlockIndexWithinCheckpoint = BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
     expectBadProposerOffense = true,
     expectedBadProposerOffenseType = OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
   }: {
     badProposerConfig?: Partial<Parameters<MultiNodeTestContext['createValidatorNodeAt']>[1]>;
     corruptBlockProposal?: boolean;
+    badBlockIndexWithinCheckpoint?: number;
     expectBadProposerOffense?: boolean;
     expectedBadProposerOffenseType?: OffenseType;
   } = {}) {
@@ -191,7 +193,7 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
 
     const badProposerNode = await test.createValidatorNodeAt(0, {
       dontStartSequencer: true,
-      ...(corruptBlockProposal ? { invalidBlockProposalIndexWithinCheckpoint: BAD_BLOCK_INDEX_WITHIN_CHECKPOINT } : {}),
+      ...(corruptBlockProposal ? { invalidBlockProposalIndexWithinCheckpoint: badBlockIndexWithinCheckpoint } : {}),
       ...badProposerConfig,
     });
 
@@ -273,13 +275,11 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
         const proposedBlocks = [...blocksByNumber.values()].sort(
           (a, b) => a.indexWithinCheckpoint - b.indexWithinCheckpoint,
         );
-        const badBlock = proposedBlocks.find(
-          block => block.indexWithinCheckpoint === BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
-        );
+        const badBlock = proposedBlocks.find(block => block.indexWithinCheckpoint === badBlockIndexWithinCheckpoint);
 
         test.logger.warn('Waiting for bad proposer block-proposed events for invalid checkpoint', {
           targetSlot,
-          badBlockIndexWithinCheckpoint: BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
+          badBlockIndexWithinCheckpoint,
           proposedBlocks,
           badBlock,
         });
@@ -291,11 +291,11 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
       1,
     );
     const badBlock = badCheckpointBlockHashes.find(
-      block => block.indexWithinCheckpoint === BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
+      block => block.indexWithinCheckpoint === badBlockIndexWithinCheckpoint,
     );
     test.logger.warn('Captured invalid checkpoint blocks from bad proposer block-proposed events', {
       targetSlot,
-      badBlockIndexWithinCheckpoint: BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
+      badBlockIndexWithinCheckpoint,
       badBlock,
       badCheckpointBlockHashes,
     });
@@ -322,7 +322,7 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
     const initialOffenses = await honestValidatorNode.getSlashOffenses('all');
     test.logger.warn('Observed state after invalid checkpoint proposal scenario', {
       targetSlot,
-      invalidBlockIndexWithinCheckpoint: BAD_BLOCK_INDEX_WITHIN_CHECKPOINT,
+      invalidBlockIndexWithinCheckpoint: badBlockIndexWithinCheckpoint,
       lazyNodeAttestationCount: lazyAttestations.length,
       lazyNodeAttesters: lazyAttestations.map(attestation => attestation.getSender()?.toString()),
       honestNodeAttestationCount: honestAttestations.length,
@@ -401,10 +401,26 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
     });
   });
 
-  // Runs createInvalidProposalSlashingScenario with broadcastEquivocatedProposals=true so the bad
-  // proposer equivocates. Asserts lazy attester is initially slashed; then broadcasts a delayed
-  // equivocated proposal and verifies the attestation offense is cleared and a DUPLICATE_PROPOSAL
-  // offense replaces it on the honest node.
+  // Corrupts the claimed archive of the checkpoint's last block, which the checkpoint then signs as its own archive
+  // (broadcastInvalidCheckpointProposalOnly keeps the two aligned). The honest node rejects that block with an
+  // archive-only state_mismatch and so never finds a block carrying the checkpoint's archive: checkpoint validation
+  // times out with last_block_not_found. Asserts the lazy attester is still slashed, because the checkpoint's signed
+  // payload commits to the rejected block, and the bad proposer is slashed for the invalid block proposal.
+  it('slashes a lazy attester for a checkpoint that commits to a rejected last block', async () => {
+    await createInvalidProposalSlashingScenario({
+      badProposerConfig: {
+        broadcastInvalidCheckpointProposalOnly: true,
+      },
+      badBlockIndexWithinCheckpoint: BLOCKS_PER_CHECKPOINT - 1,
+    });
+  });
+
+  // Runs createInvalidProposalSlashingScenario with broadcastInvalidCheckpointProposalOnly=true so the
+  // checkpoint the lazy attester signs is itself invalid (no block is corrupted), and
+  // broadcastEquivocatedProposals=true so the bad proposer equivocates. Asserts the lazy attester is
+  // initially slashed; then broadcasts a delayed equivocated proposal and verifies the attestation offense
+  // is cleared and a DUPLICATE_PROPOSAL offense replaces it, while the proposer keeps a
+  // BROADCASTED_INVALID_CHECKPOINT_PROPOSAL offense for the invalid checkpoint it signed.
   it('slashes a lazy attester for an invalid checkpoint and clears it on delayed equivocation', async () => {
     const {
       rollup,
@@ -417,7 +433,10 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
     } = await createInvalidProposalSlashingScenario({
       badProposerConfig: {
         broadcastEquivocatedProposals: true,
+        broadcastInvalidCheckpointProposalOnly: true,
       },
+      corruptBlockProposal: false,
+      expectBadProposerOffense: false,
     });
 
     await retryUntil(
@@ -533,7 +552,12 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
       ),
     ).toBeUndefined();
     expect(
-      findSlashOffense(offensesAfterClear, badProposer, OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL, targetSlot),
+      findSlashOffense(
+        offensesAfterClear,
+        badProposer,
+        OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+        targetSlot,
+      ),
     ).toBeDefined();
     expect(findSlashOffense(offensesAfterClear, badProposer, OffenseType.DUPLICATE_PROPOSAL, targetSlot)).toBeDefined();
   });
