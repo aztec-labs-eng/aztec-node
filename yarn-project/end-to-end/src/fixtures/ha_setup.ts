@@ -1,6 +1,6 @@
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Pool } from 'pg';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -153,7 +153,7 @@ export function createInitialValidatorsFromPrivateKeys(attesterPrivateKeys: `0x$
       attester: EthAddress.fromString(account.address),
       withdrawer: EthAddress.fromString(account.address),
       privateKey: pk,
-      bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+      bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
     };
   });
 }

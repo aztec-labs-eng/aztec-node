@@ -1,3 +1,4 @@
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
@@ -70,7 +71,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
       initialValidators: validatorAddresses.map(attester => ({
         attester,
         withdrawer: attester,
-        bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
       })),
     });
 

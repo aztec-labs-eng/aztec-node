@@ -5,6 +5,7 @@ import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { GSEContract, RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
@@ -237,7 +238,7 @@ export class P2PNetworkTest {
       validators.push({
         attester: EthAddress.fromString(attester.address),
         withdrawer: EthAddress.fromString(attester.address),
-        bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
       });
 
       this.logger.info(`Adding attester ${attester.address} as validator`);

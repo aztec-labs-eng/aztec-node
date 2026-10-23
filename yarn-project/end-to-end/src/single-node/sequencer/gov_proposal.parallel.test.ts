@@ -7,6 +7,7 @@ import { waitForTx } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { CheatCodes } from '@aztec-labs/aztec/testing';
 import { HttpBlobClient } from '@aztec-labs/blob-client/client';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
@@ -77,7 +78,10 @@ describe('single-node/sequencer/gov_proposal', () => {
       numberOfAccounts: 1,
       anvilAccounts: 100,
       aztecTargetCommitteeSize: COMMITTEE_SIZE,
-      initialValidators: validators.map(v => ({ ...v, bn254SecretKey: new SecretValue(Fr.random().toBigInt()) })),
+      initialValidators: validators.map(v => ({
+        ...v,
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
+      })),
       validatorPrivateKeys: new SecretValue(validators.map(v => v.privateKey)), // sequencer runs with all validator keys
       governanceProposerRoundSize: ROUND_SIZE,
       governanceProposerQuorum: QUORUM_SIZE,

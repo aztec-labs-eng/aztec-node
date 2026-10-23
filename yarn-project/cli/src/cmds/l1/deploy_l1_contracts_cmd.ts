@@ -1,6 +1,6 @@
 import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { Fr } from '@aztec-labs/aztec.js/fields';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { type Operator, deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -53,7 +53,7 @@ export async function deployL1ContractsCmd(
   const initialValidatorOperators: Operator[] = initialValidators.map(a => ({
     attester: a,
     withdrawer: a,
-    bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+    bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
   }));
 
   debugLogger.info('Deploying L1 contracts via Forge...');

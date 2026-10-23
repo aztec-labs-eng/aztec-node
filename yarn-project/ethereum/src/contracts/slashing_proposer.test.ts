@@ -16,6 +16,7 @@ import { type Hex, type TypedDataDefinition, encodeFunctionData, hashTypedData }
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
+import { randomStakeableBn254SecretKey } from '../bn254/index.js';
 import { createExtendedL1Client } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsArgs, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
@@ -79,7 +80,7 @@ describeAcrossL1Forks('SlashingProposer', () => {
       initialValidators: validatorsAddresses.map(attester => ({
         attester,
         withdrawer: attester,
-        bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
       })),
     };
 

@@ -2,9 +2,9 @@ import { SlasherAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
 import type { EpochCacheInterface, ProposerLookup, UnstableCommittee } from '@aztec-labs/epoch-cache';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { CommitteeNotStableError, RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
@@ -66,7 +66,12 @@ export function buildMockGossipValidators(count: number): RegisteredValidator[] 
   return times(count, i => {
     const privateKey = bufferToHex(getPrivateKeyFromIndex(i + 3)!);
     const attester = EthAddress.fromString(privateKeyToAccount(privateKey).address);
-    return { attester, withdrawer: attester, privateKey, bn254SecretKey: new SecretValue(Fr.random().toBigInt()) };
+    return {
+      attester,
+      withdrawer: attester,
+      privateKey,
+      bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
+    };
   });
 }
 
