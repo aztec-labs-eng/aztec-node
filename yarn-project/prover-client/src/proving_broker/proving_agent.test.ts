@@ -116,7 +116,7 @@ describe('ProvingAgent', () => {
     expect(jobSource.reportProvingJobSuccess).toHaveBeenCalledWith(job.id, 'output-uri', { allowList });
   });
 
-  it('reports errors to the job source', async () => {
+  it('retries an error that does not state whether it can be retried', async () => {
     const { job, time, inputs } = makeBaseParityJob();
     jest.spyOn(prover, 'getInboxParityProof').mockRejectedValueOnce(new Error('test error'));
 
@@ -125,7 +125,37 @@ describe('ProvingAgent', () => {
     agent.start();
 
     await jest.advanceTimersByTimeAsync(agentPollIntervalMs);
-    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, expect.stringContaining('test error'), false, {
+    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, expect.stringContaining('test error'), true, {
+      allowList,
+    });
+  });
+
+  it('does not retry an error marked as permanent', async () => {
+    const { job, time, inputs } = makeBaseParityJob();
+    const err = new ProvingError('test error', undefined, false);
+    jest.spyOn(prover, 'getInboxParityProof').mockRejectedValueOnce(err);
+
+    jobSource.getProvingJob.mockResolvedValueOnce({ job, time });
+    proofDB.getProofInput.mockResolvedValueOnce(inputs);
+    agent.start();
+
+    await jest.advanceTimersByTimeAsync(agentPollIntervalMs);
+    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, expect.stringContaining(err.message), false, {
+      allowList,
+    });
+  });
+
+  it.each([true, false])('keeps the retry flag of a plain error that carries retry=%s', async retry => {
+    const { job, time, inputs } = makeBaseParityJob();
+    const err = Object.assign(new Error('test error'), { retry });
+    jest.spyOn(prover, 'getInboxParityProof').mockRejectedValueOnce(err);
+
+    jobSource.getProvingJob.mockResolvedValueOnce({ job, time });
+    proofDB.getProofInput.mockResolvedValueOnce(inputs);
+    agent.start();
+
+    await jest.advanceTimersByTimeAsync(agentPollIntervalMs);
+    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, expect.stringContaining(err.message), retry, {
       allowList,
     });
   });
@@ -278,7 +308,7 @@ describe('ProvingAgent', () => {
     agent.start();
 
     await jest.advanceTimersByTimeAsync(agentPollIntervalMs);
-    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job1.job.id, expect.any(String), false, { allowList });
+    expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job1.job.id, expect.any(String), true, { allowList });
     expect(jobSource.reportProvingJobSuccess).toHaveBeenCalledWith(job2.job.id, expect.any(String), { allowList });
   });
 

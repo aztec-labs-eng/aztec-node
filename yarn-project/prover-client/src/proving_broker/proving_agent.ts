@@ -20,6 +20,15 @@ import type { ProofStore } from './proof_store/index.js';
 import { ProvingJobController, ProvingJobControllerStatus } from './proving_job_controller.js';
 
 /**
+ * Whether a failed job should be retried. An error that states its retryability with a boolean `retry` (as every
+ * `ProvingError` does) keeps it. Any other error is retried, since a failure nobody classified may well be
+ * environmental, and the broker caps the attempts at `PROVER_BROKER_JOB_MAX_RETRIES`.
+ */
+function shouldRetry(error: Error): boolean {
+  return 'retry' in error && typeof error.retry === 'boolean' ? error.retry : true;
+}
+
+/**
  * A helper class that encapsulates a circuit prover and connects it to a job source.
  */
 export class ProvingAgent {
@@ -233,7 +242,7 @@ export class ProvingAgent {
       const error = this.drained
         ? new ProvingError(`Agent shutting down (possible preemption): ${result.message}`, result, true)
         : result;
-      const retry = error.name === ProvingError.NAME ? (error as ProvingError).retry : false;
+      const retry = shouldRetry(error);
       this.log.error(
         `Job id=${jobId} type=${ProvingRequestType[type]} failed err=${error.message} retry=${retry}`,
         error,
