@@ -48,6 +48,9 @@ export class BrowserEmbeddedWallet extends EmbeddedWallet {
 
     const pxeOptions: PXECreationOptions = {
       ...mergedCreationOverrides,
+      // The browser createPXE opens one persistent store per chain and rollup whatever the config says, so without
+      // this an ephemeral wallet would persist its PXE data and collide with any other wallet open in the same origin.
+      store: mergedCreationOverrides.store ?? (options.ephemeral ? await openTmpStore(true) : undefined),
       preloadedContractsProvider: mergedCreationOverrides.preloadedContractsProvider ?? {
         getPreloadedContracts: async () => [
           await getStandardMultiCallEntrypoint(),
