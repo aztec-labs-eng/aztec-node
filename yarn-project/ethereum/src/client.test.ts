@@ -335,6 +335,23 @@ describe('makeL1HttpTransport with a grader', () => {
     await expect(client.getBalance({ address })).resolves.toBe(1n);
   });
 
+  it('fails requests with an L1RpcError when every URL is on the wrong chain', async () => {
+    const first = await startServer({ height: 100n, balance: 1n });
+    const second = await startServer({ height: 100n, balance: 2n });
+    const transport = makeL1HttpTransport([first.url, second.url], {
+      grader: { config: graderConfig, chainId: foundry.id + 1 },
+    });
+    const client = createPublicClient({ chain: foundry, transport });
+    graders.push(transport.grader!);
+    await transport.grader!.stop();
+    await transport.grader!.probeAll();
+
+    await expect(client.getBalance({ address })).rejects.toThrow(
+      new L1RpcError(`No configured L1 RPC URL is on the expected chain (${foundry.id + 1})`),
+    );
+    expect(balanceRequests(first) + balanceRequests(second)).toBe(0);
+  });
+
   it('keeps the order a request started with when the order changes mid-request', async () => {
     const reached = promiseWithResolvers<void>();
     const release = promiseWithResolvers<void>();

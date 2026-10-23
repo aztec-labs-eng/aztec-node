@@ -71,8 +71,11 @@ export const l1RpcGraderConfigMappings: ConfigMappingsType<L1RpcGraderConfig> = 
   },
   l1RpcGraderWindow: {
     env: 'ETHEREUM_HOSTS_GRADER_WINDOW',
-    description: 'Number of recent samples per L1 RPC URL the grader looks at when deciding whether to demote it.',
-    ...numberConfigHelper(3),
+    description:
+      'Number of recent samples per L1 RPC URL the grader looks at when deciding whether to demote it. A window ' +
+      'larger than ETHEREUM_HOSTS_GRADER_THRESHOLD also demotes a URL that alternates between good and bad answers, ' +
+      'such as a load balancer in front of one healthy and one stale node.',
+    ...numberConfigHelper(5),
   },
   l1RpcGraderKeepDemoted: {
     env: 'ETHEREUM_HOSTS_GRADER_KEEP_DEMOTED',

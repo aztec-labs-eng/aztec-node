@@ -20,13 +20,14 @@ describe('L1RpcGrader', () => {
     l1RpcGraderProbeTimeoutMS: 1_000,
     l1RpcGraderMaxBlocksBehind: 2,
     l1RpcGraderThreshold: 3,
-    l1RpcGraderWindow: 3,
+    l1RpcGraderWindow: 5,
     l1RpcGraderKeepDemoted: false,
   };
 
+  /** Creates a grader over as many URLs as there are answers. */
   const makeGrader = (config: Partial<L1RpcGraderConfig> = {}) =>
     new L1RpcGrader(
-      urls,
+      urls.slice(0, answers.length),
       {
         getBlockNumber: index => {
           const answer = answers[index];
@@ -154,7 +155,7 @@ describe('L1RpcGrader', () => {
   });
 
   it('demotes a URL that alternates between good and lagging answers', async () => {
-    const grader = makeGrader({ l1RpcGraderThreshold: 3, l1RpcGraderWindow: 5 });
+    const grader = makeGrader();
     for (let i = 0; i < 6; i++) {
       answers = [i % 2 === 0 ? 100n : 90n, 100n, 100n];
       await grader.probeAll();
@@ -173,6 +174,40 @@ describe('L1RpcGrader', () => {
     chainIds = [CHAIN_ID, CHAIN_ID, CHAIN_ID];
     await probeTimes(grader, 5);
     expect(grader.getOrder()).toEqual([0, 2]);
+  });
+
+  it('never uses a URL on the wrong chain, even when every other URL is demoted', async () => {
+    chainIds = [1, CHAIN_ID, CHAIN_ID];
+    const grader = makeGrader();
+    await grader.probeAll();
+    expect(grader.getOrder()).toEqual([1, 2]);
+
+    answers = [100n, 'error', 'error'];
+    await probeTimes(grader, 3);
+    expect(grader.getOrder()).toEqual([1, 2]);
+  });
+
+  it('leaves no URL when every one of them is on the wrong chain', async () => {
+    chainIds = [1, 1, 5];
+    const grader = makeGrader();
+    await grader.probeAll();
+    expect(grader.getOrder()).toEqual([]);
+  });
+
+  it('does not restore a lagging URL when the URL ahead of it stops answering', async () => {
+    answers = [90n, 100n];
+    const grader = makeGrader();
+    await probeTimes(grader, 3);
+    expect(grader.getOrder()).toEqual([1]);
+
+    // With the URL ahead gone, the lagging URL is the highest answer, but it is still behind the chain's head.
+    answers = [90n, 'error'];
+    await probeTimes(grader, 3);
+    expect(grader.getOrder()).toEqual([0, 1]);
+
+    answers = [90n, 101n];
+    await probeTimes(grader, 3);
+    expect(grader.getOrder()).toEqual([1]);
   });
 
   it('does not let a URL on the wrong chain set the head', async () => {
@@ -201,8 +236,29 @@ describe('L1RpcGrader', () => {
     expect(grader.getOrder()).toEqual([0, 1, 2]);
   });
 
+  it('picks up where it left off when started again after stopping', async () => {
+    const grader = makeGrader();
+    answers = [90n, 100n, 100n];
+    await probeTimes(grader, 3);
+    await grader.stop();
+
+    jest.useFakeTimers();
+    try {
+      grader.start();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(grader.getOrder()).toEqual([1, 2]);
+
+      answers = [100n, 100n, 100n];
+      await jest.advanceTimersByTimeAsync(defaults.l1RpcGraderIntervalMS * 3);
+      expect(grader.getOrder()).toEqual([0, 1, 2]);
+    } finally {
+      await grader.stop();
+      jest.useRealTimers();
+    }
+  });
+
   it('rejects a threshold larger than the window', () => {
-    expect(() => makeGrader({ l1RpcGraderThreshold: 4, l1RpcGraderWindow: 3 })).toThrow(/threshold/);
+    expect(() => makeGrader({ l1RpcGraderThreshold: 6, l1RpcGraderWindow: 5 })).toThrow(/threshold/);
   });
 
   describe('on its interval', () => {

@@ -157,14 +157,21 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
 
   // A request keeps the fallback instance that was current when it started, for all of its attempts and retries.
   // Looking up the URL for each attempt instead could try a URL twice, or skip one, when the order changes mid-request.
-  let current = configured;
+  // The grader leaves no URL only when every one of them is on the wrong chain.
+  let current: FallbackTransport<HttpTransport[]> | undefined = configured;
   const grader = new L1RpcGrader(
     rpcUrls,
     {
       getBlockNumber: async index => hexToBigInt(await probeHex(index, 'eth_blockNumber')),
       getChainId: async index => hexToNumber(await probeHex(index, 'eth_chainId')),
     },
-    { config, chainId, logger, onOrderChange: order => (current = fallback(order.map(index => transports[index]))) },
+    {
+      config,
+      chainId,
+      logger,
+      onOrderChange: order =>
+        (current = order.length > 0 ? fallback(order.map(index => transports[index])) : undefined),
+    },
   );
   grader.start();
 
@@ -173,6 +180,9 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
     const base = configured(params);
     let instance = { source: configured, transport: base };
     const request: typeof base.request = (args, options) => {
+      if (current === undefined) {
+        return Promise.reject(new L1RpcError(`No configured L1 RPC URL is on the expected chain (${chainId})`));
+      }
       if (instance.source !== current) {
         instance = { source: current, transport: current(params) };
       }

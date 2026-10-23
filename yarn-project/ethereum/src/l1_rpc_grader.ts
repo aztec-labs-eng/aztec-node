@@ -74,15 +74,16 @@ type ProbeResult = { type: 'ok'; blockNumber: bigint } | { type: 'unreachable' }
 
 /**
  * Probes every L1 RPC URL for its latest block number on a fixed interval, and orders the URLs so that requests go to
- * the ones that keep up with the chain. The highest block number reported in a round is the head. A sample is bad when
- * the URL trails the head by more than `l1RpcGraderMaxBlocksBehind` blocks, or when its probe fails or times out.
- * Only a probe that answers within that many blocks is good, so a failed probe never counts towards restoring a URL
- * that was demoted for lagging: it stays out until it shows that it caught up.
+ * the ones that keep up with the chain. The head is the highest block number any URL has reported so far, so losing
+ * the URL that is furthest ahead does not make a lagging one look caught up. A sample is bad when the URL trails the
+ * head by more than `l1RpcGraderMaxBlocksBehind` blocks, which also absorbs a shallow reorg, or when its probe fails or
+ * times out. Only a probe that answers within that many blocks is good, so a failed probe never counts towards
+ * restoring a URL that was demoted for lagging: it stays out until it shows that it caught up.
  *
  * The order is the healthy URLs in the configured order. Demoted URLs are left out, unless `l1RpcGraderKeepDemoted`
- * is set, which puts them after the healthy ones in the configured order. When no URL is left, the grader falls back
- * to the configured order. A URL that reports a chain id other than the expected one is never used again, except in
- * that fallback when every URL reports the wrong chain.
+ * is set, which puts them after the healthy ones in the configured order. When every URL is demoted, the grader falls
+ * back to the configured order. A URL that reports a chain id other than the expected one is never used again, not
+ * even in that fallback, so the order is empty when every URL is on the wrong chain.
  */
 export class L1RpcGrader {
   private readonly states: UrlState[];
@@ -91,6 +92,7 @@ export class L1RpcGrader {
   private timer: NodeJS.Timeout | undefined;
   private currentRound: Promise<void> | undefined;
   private allDemoted = false;
+  private head = -1n;
   private readonly log: Logger;
 
   constructor(
@@ -111,7 +113,10 @@ export class L1RpcGrader {
     this.order = urls.map((_, index) => index);
   }
 
-  /** Starts probing, with the first round right away. The timer does not keep the process alive. */
+  /**
+   * Starts probing, with the first round right away. It can be started again after {@link stop}, keeping what it has
+   * learnt about each URL. The timer does not keep the process alive.
+   */
   public start(): void {
     if (this.running) {
       return;
@@ -127,7 +132,10 @@ export class L1RpcGrader {
     await this.currentRound;
   }
 
-  /** Returns the order in which requests should try the URLs, as indices into the configured URLs. */
+  /**
+   * Returns the order in which requests should try the URLs, as indices into the configured URLs. It is empty only when
+   * every URL is on the wrong chain.
+   */
   public getOrder(): readonly number[] {
     return this.order;
   }
@@ -136,7 +144,8 @@ export class L1RpcGrader {
   public async probeAll(): Promise<void> {
     const results = await Promise.all(this.urls.map((_, index) => this.probe(index)));
     const heights = results.flatMap(result => (result.type === 'ok' ? [result.blockNumber] : []));
-    const head = heights.reduce((max, height) => (height > max ? height : max), -1n);
+    const head = heights.reduce((max, height) => (height > max ? height : max), this.head);
+    this.head = head;
     const wasDemoted = this.states.map((_, index) => this.isDemoted(index));
 
     const maxBlocksBehind = BigInt(this.opts.config.l1RpcGraderMaxBlocksBehind);
@@ -221,11 +230,17 @@ export class L1RpcGrader {
     const eligible = this.opts.config.l1RpcGraderKeepDemoted ? [...healthy, ...demoted] : healthy;
 
     const allDemoted = eligible.length === 0;
-    const order = allDemoted ? (usable.length > 0 ? usable : all) : eligible;
+    const order = allDemoted ? usable : eligible;
     if (allDemoted && !this.allDemoted) {
-      this.log.warn('Every L1 RPC URL is demoted, so all of them are used in the configured order', {
-        urls: order.map(index => this.describe(index)),
-      });
+      if (usable.length === 0) {
+        this.log.error('Every L1 RPC URL is on the wrong chain, so L1 requests will fail', {
+          expectedChainId: this.opts.chainId,
+        });
+      } else {
+        this.log.warn('Every L1 RPC URL is demoted, so all of them are used in the configured order', {
+          urls: order.map(index => this.describe(index)),
+        });
+      }
     }
     this.allDemoted = allDemoted;
 
