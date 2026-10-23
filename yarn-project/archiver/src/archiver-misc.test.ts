@@ -29,6 +29,7 @@ import { L2FrontierCache } from './store/l2_frontier_cache.js';
 
 describe('Archiver misc', () => {
   let archiver: Archiver;
+  let makeArchiver: (debugClientGrader?: { start(): void; stop(): Promise<void> }) => Archiver;
   let synchronizer: MockProxy<ArchiverL1Synchronizer>;
   let l1Constants: L1RollupConstants & { l1StartBlockHash: Buffer32; genesisArchiveRoot: Fr };
 
@@ -64,43 +65,68 @@ describe('Archiver misc', () => {
     const initialBlockHash = await initialHeader.hash();
     const l2FrontierCache = new L2FrontierCache(archiverStore.blocks, initialBlockHash);
 
-    archiver = new Archiver(
-      publicClient,
-      publicClient,
-      rollupContract,
-      mock<OutboxContract>(),
-      {
-        rollupAddress: EthAddress.random(),
-        registryAddress: EthAddress.random(),
-        inboxAddress: EthAddress.random(),
-        governanceProposerAddress: EthAddress.random(),
-        slashingProposerAddress: EthAddress.random(),
-      },
-      archiverStore,
-      {
-        pollingIntervalMs: 1000,
-        batchSize: 1000,
-        maxAllowedEthClientDriftSeconds: 300,
-        checkpointProposalSyncGrace: 4,
-        orphanPruneNoProposalTolerance: 1,
-        skipOrphanProposedBlockPruning: false,
-        blockDuration: 2,
-      },
-      blobClient,
-      instrumentation,
-      l1Constants,
-      synchronizer,
-      events,
-      initialHeader,
-      initialBlockHash,
-      l2FrontierCache,
-      new TestRollupFeeConfigProvider(),
-      new DateProvider(),
-    );
+    makeArchiver = debugClientGrader =>
+      new Archiver(
+        publicClient,
+        publicClient,
+        rollupContract,
+        mock<OutboxContract>(),
+        {
+          rollupAddress: EthAddress.random(),
+          registryAddress: EthAddress.random(),
+          inboxAddress: EthAddress.random(),
+          governanceProposerAddress: EthAddress.random(),
+          slashingProposerAddress: EthAddress.random(),
+        },
+        archiverStore,
+        {
+          pollingIntervalMs: 1000,
+          batchSize: 1000,
+          maxAllowedEthClientDriftSeconds: 300,
+          checkpointProposalSyncGrace: 4,
+          orphanPruneNoProposalTolerance: 1,
+          skipOrphanProposedBlockPruning: false,
+          blockDuration: 2,
+        },
+        blobClient,
+        instrumentation,
+        l1Constants,
+        synchronizer,
+        events,
+        initialHeader,
+        initialBlockHash,
+        l2FrontierCache,
+        new TestRollupFeeConfigProvider(),
+        new DateProvider(),
+        undefined,
+        undefined,
+        debugClientGrader,
+      );
+    archiver = makeArchiver();
   });
 
   afterEach(async () => {
     await archiver?.stop();
+  });
+
+  it('keeps grading its debug RPC URLs after a pause and resume', async () => {
+    const grader = {
+      running: true,
+      start() {
+        this.running = true;
+      },
+      stop() {
+        this.running = false;
+        return Promise.resolve();
+      },
+    };
+    archiver = makeArchiver(grader);
+
+    await archiver.stop();
+    expect(grader.running).toBe(false);
+
+    archiver.resume();
+    expect(grader.running).toBe(true);
   });
 
   /** Returns the L1 timestamp at the start of an L2 slot. */
