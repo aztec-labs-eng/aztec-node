@@ -3,6 +3,7 @@ import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
 import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 import http from 'http';
@@ -240,13 +241,16 @@ describe('HttpBlobClient', () => {
       const client = new HttpBlobClient({
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}/lagging`, `http://localhost:${consensusHostPort}`],
       });
-      await client.start();
-      await client.testSources();
+      try {
+        await client.start();
+        await client.testSources();
 
-      // slot = (l1BlockTimestamp - genesis_time) / seconds_per_slot = (2200 - 1000) / 12 = 100
-      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 2200n });
-      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
-      client.stop();
+        // slot = (l1BlockTimestamp - genesis_time) / seconds_per_slot = (2200 - 1000) / 12 = 100
+        const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 2200n });
+        expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      } finally {
+        client.stop();
+      }
     });
 
     it('uses a consensus host that was down during testSources once it comes back up', async () => {
@@ -254,22 +258,36 @@ describe('HttpBlobClient', () => {
       await startConsensusHostServer();
       consensusHostDown = true;
 
+      const reprobeIntervalMs = 50;
       const client = new HttpBlobClient(
         {
           l1RpcUrls: [`http://localhost:${executionHostPort}`],
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
           blobAllowEmptySources: true,
         },
-        { consensusHostReprobeIntervalMs: 50 },
+        { consensusHostReprobeIntervalMs: reprobeIntervalMs },
       );
-      await client.testSources();
+      try {
+        await client.testSources();
 
-      consensusHostDown = false;
-      await sleep(500);
+        // Stay down past the immediate first re-probe and a few periodic ones, so recovery relies on the periodic loop.
+        await sleep(reprobeIntervalMs * 4);
+        consensusHostDown = false;
 
-      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
-      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
-      client.stop();
+        // isHistoricalSync keeps each unsuccessful poll short.
+        const blobs = await retryUntil(
+          async () => {
+            const fetched = await client.getBlobSidecar('0x1234', testBlobsHashes, { isHistoricalSync: true });
+            return fetched.length === testBlobsHashes.length ? fetched : undefined;
+          },
+          'blobs from recovered consensus host',
+          10,
+          0.1,
+        );
+        expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      } finally {
+        client.stop();
+      }
     });
 
     it('should handle API keys without headers', async () => {
