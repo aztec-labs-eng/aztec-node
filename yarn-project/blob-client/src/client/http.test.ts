@@ -1,6 +1,5 @@
 import { Blob, type BlobJson } from '@aztec-labs/blob-lib';
 import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
-import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -38,12 +37,20 @@ describe('HttpBlobClient', () => {
 
     let latestSlotNumber: number;
     let missedSlots: number[];
+    let emptySlots: number[];
     let genesisAvailable: boolean;
+    let executionTimestamp: bigint;
+    let beaconExecutionHash: string;
+    let secondsPerSlot: string;
 
     beforeEach(async () => {
       latestSlotNumber = 1;
       genesisAvailable = true;
+      executionTimestamp = 1024n;
+      beaconExecutionHash = '0x1234';
+      secondsPerSlot = '12';
       missedSlots = [];
+      emptySlots = [];
 
       testBlobs = await Promise.all(Array.from({ length: 2 }, () => makeRandomBlob(3)));
       testBlobsHashes = testBlobs.map(b => b.getEthVersionedBlobHash());
@@ -54,7 +61,7 @@ describe('HttpBlobClient', () => {
     const startExecutionHostServer = (): Promise<void> => {
       executionHostServer = http.createServer((_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result: { parentBeaconBlockRoot: '0x1234' } }));
+        res.end(JSON.stringify({ result: { hash: '0x1234', timestamp: `0x${executionTimestamp.toString(16)}` } }));
       });
 
       return new Promise((resolve, _reject) => {
@@ -91,12 +98,22 @@ describe('HttpBlobClient', () => {
           res.end('{"data":{"genesis_time":"1000"}}');
         } else if (req.url?.includes('/eth/v1/config/spec')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
+          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: secondsPerSlot } }));
         } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: { header: { message: { slot: latestSlotNumber } } } }));
+        } else if (req.url?.includes('/eth/v2/beacon/blocks/')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              data: { message: { body: { ['execution_payload']: { ['block_hash']: beaconExecutionHash } } } },
+            }),
+          );
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
-          if (missedSlots.some(slot => req.url?.includes(`/${slot}`))) {
+          if (emptySlots.some(slot => req.url?.split('?')[0] === `/eth/v1/beacon/blobs/${slot}`)) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ data: [] }));
+          } else if (missedSlots.some(slot => req.url?.includes(`/${slot}`))) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Not Found' }));
           } else {
@@ -168,36 +185,66 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs[1].commitment).toEqual(testBlobs[1].commitment);
     });
 
-    it('should fall back to headers call when l1BlockTimestamp is not provided', async () => {
+    it('retrieves the execution timestamp when the caller does not provide it', async () => {
+      executionTimestamp = 1036n;
+      emptySlots = [2];
       await startExecutionHostServer();
       await startConsensusHostServer();
-
       const client = new HttpBlobClient({
         l1RpcUrls: [`http://localhost:${executionHostPort}`],
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
-
-      // Call start() to cache genesis config, but do NOT pass l1BlockTimestamp
-      await client.start();
-
-      const fetchSpy = jest.spyOn(client as any, 'fetch');
-
-      // No l1BlockTimestamp — should fall back to headers call
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
-
-      expect(retrievedBlobs).toHaveLength(2);
-      // Headers call for slot resolution SHOULD have been made (via parentBeaconBlockRoot from execution RPC)
-      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/eth/v1/beacon/headers/'), expect.anything());
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
     });
 
-    it('retrieves blobs through headers when genesis configuration is unavailable', async () => {
+    it('does not guess a slot when beacon configuration is unavailable', async () => {
       await startConsensusHostServer();
       genesisAvailable = false;
       const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
-      await client.start();
-      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { parentBeaconBlockRoot: '0x1234' });
-      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
-      client.stop();
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, {
+        parentBeaconBlockRoot: '0x1234',
+        l1BlockTimestamp: 1024n,
+      });
+      expect(blobs).toEqual([]);
+    });
+
+    it('rejects blobs from a beacon block with a different execution hash', async () => {
+      await startConsensusHostServer();
+      beaconExecutionHash = '0x5678';
+      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
+      expect(await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 1024n })).toEqual([]);
+    });
+
+    it.each(['0', '-12', '12seconds', '1.5'])('rejects invalid beacon slot duration %s', async duration => {
+      await startConsensusHostServer();
+      secondsPerSlot = duration;
+      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
+      expect(await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 1024n })).toEqual([]);
+    });
+
+    it.each([999n, 1025n])('rejects execution timestamp %s that cannot identify a slot', async timestamp => {
+      await startConsensusHostServer();
+      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
+      expect(await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: timestamp })).toEqual([]);
+    });
+
+    it('retrieves blobs after skipped slots when startup beacon configuration recovers', async () => {
+      await startConsensusHostServer();
+      genesisAvailable = false;
+      emptySlots = [2];
+      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
+      try {
+        await client.start();
+        genesisAvailable = true;
+        const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, {
+          parentBeaconBlockRoot: '0x1234',
+          l1BlockTimestamp: 1036n,
+        });
+        expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      } finally {
+        client.stop();
+      }
     });
 
     it('should handle when multiple consensus hosts are provided', async () => {
@@ -458,81 +505,20 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs[3].commitment).toEqual(blobs[0].commitment);
     });
 
-    it('should handle L1 missed slots', async () => {
-      latestSlotNumber = 50;
+    it('does not return blobs from a later slot when the requested slot is missing', async () => {
       missedSlots = [33];
-
-      await startExecutionHostServer();
-      await startConsensusHostServer();
-
+      await startConsensusHostServer('my-api-key', 'X-API-KEY');
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeyHeaders: ['X-API-KEY'],
         l1ConsensusHostApiKeys: [new SecretValue('my-api-key')],
       });
-
-      const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
-
-      const retrievedBlobs = await client.getBlobSidecarFrom(
-        `http://localhost:${consensusHostPort}`,
-        33,
-        testBlobsHashes,
-        0,
+      expect(await client.getBlobSidecarFrom(`http://localhost:${consensusHostPort}`, 34, testBlobsHashes, 0)).toEqual(
+        testBlobs,
       );
-
-      expect(retrievedBlobs).toHaveLength(2);
-      expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
-
-      // Verify we hit the 404 for slot 33 before trying slot 34, and that we use the api key
-      // (see issue https://github.com/AztecProtocol/aztec-packages/issues/13415)
-      expect(fetchBlobSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`localhost:${consensusHostPort}`),
-        33,
-        0,
-        expect.anything(),
+      expect(await client.getBlobSidecarFrom(`http://localhost:${consensusHostPort}`, 33, testBlobsHashes, 0)).toEqual(
+        [],
       );
-      expect(fetchBlobSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`localhost:${consensusHostPort}`),
-        34,
-        0,
-        expect.anything(),
-      );
-    });
-
-    it('should handle L1 missed slots up to the latest slot', async () => {
-      latestSlotNumber = 38;
-      missedSlots = times(100, i => i);
-
-      await startExecutionHostServer();
-      await startConsensusHostServer();
-
-      const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
-        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
-      });
-
-      const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
-
-      const retrievedBlobs = await client.getBlobSidecarFrom(
-        `http://localhost:${consensusHostPort}`,
-        33,
-        testBlobsHashes,
-        0,
-      );
-
-      expect(retrievedBlobs).toEqual([]);
-
-      // Initial attempt + one call per slot up to latestSlotNumber
-      expect(fetchBlobSpy).toHaveBeenCalledTimes(latestSlotNumber - 33 + 1);
-      for (let i = 33; i <= latestSlotNumber; i++) {
-        expect(fetchBlobSpy).toHaveBeenCalledWith(
-          expect.stringContaining(`localhost:${consensusHostPort}`),
-          i,
-          0,
-          expect.anything(),
-        );
-      }
     });
 
     it('should fall back to archive client', async () => {
@@ -930,7 +916,7 @@ describe('HttpBlobClient FileStore Integration', () => {
     const startExecutionHostServer = (): Promise<void> => {
       executionHostServer = http.createServer((_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result: { parentBeaconBlockRoot: '0x1234' } }));
+        res.end(JSON.stringify({ result: { hash: '0x1234', timestamp: '0x400' } }));
       });
 
       return new Promise((resolve, _reject) => {
@@ -943,9 +929,20 @@ describe('HttpBlobClient FileStore Integration', () => {
 
     const startConsensusHostServer = (blobData: BlobJson[]): Promise<void> => {
       consensusHostServer = http.createServer((req, res) => {
-        if (req.url?.includes('/eth/v1/beacon/headers/')) {
+        if (req.url?.includes('/eth/v1/beacon/genesis')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"data":{"genesis_time":"1000"}}');
+        } else if (req.url?.includes('/eth/v1/config/spec')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
+        } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: { header: { message: { slot: 1 } } } }));
+        } else if (req.url?.includes('/eth/v2/beacon/blocks/')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({ data: { message: { body: { ['execution_payload']: { ['block_hash']: '0x1234' } } } } }),
+          );
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: blobData.map(b => b.blob) }));

@@ -11,13 +11,12 @@ export interface GetBlobSidecarOptions {
   isHistoricalSync?: boolean;
   /**
    * The parent beacon block root for the L1 block containing the blobs.
-   * If provided, skips the eth_getBlockByHash execution RPC call inside getSlotNumber.
+   * Retained for callers that provide L1 block metadata; slot resolution uses the execution timestamp.
    */
   parentBeaconBlockRoot?: string;
   /**
    * The timestamp of the L1 execution block containing the blobs.
-   * When provided alongside a cached beacon genesis config (fetched at startup), allows computing
-   * the beacon slot directly via timestamp math, skipping the beacon headers network call entirely.
+   * Skips the execution RPC lookup. Beacon configuration is fetched at startup or retried on demand.
    */
   l1BlockTimestamp?: bigint;
 }
