@@ -729,9 +729,9 @@ export class ProposalHandler {
 
   /**
    * Records a per-block verdict for a block proposal this node rejected for a reason that invalidates the block's
-   * signed header (a header mismatch), or whose claimed resulting archive did not match re-execution (an archive
-   * mismatch), so a checkpoint that commits to the block can later be bound to it. Bounded like the other per-slot
-   * stores (oldest slot evicted).
+   * signed header on its own (a header mismatch), or whose re-executed header matched but whose claimed resulting
+   * archive did not (an archive-only mismatch), so a checkpoint that commits to the block can later be bound to it.
+   * Bounded like the other per-slot stores (oldest slot evicted).
    */
   private recordInvalidBlockVerdict(slotNumber: SlotNumber, verdict: InvalidBlockVerdict): void {
     let verdicts = this.invalidBlockVerdictsBySlot.get(slotNumber);

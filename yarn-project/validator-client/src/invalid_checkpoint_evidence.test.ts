@@ -42,7 +42,7 @@ function headerMismatchVerdict(proposal: BlockProposal): InvalidBlockVerdict {
 }
 
 describe('checkpointCommitsToRejectedBlock', () => {
-  it('binds a header-mismatch block that is in the verified committed sequence', async () => {
+  it('binds a block rejected for its signed header that is in the verified committed sequence', async () => {
     const { checkpoint, proposals } = await makeCommittedCheckpoint(3);
     expect(await checkpointCommitsToRejectedBlock(checkpoint, proposals, [headerMismatchVerdict(proposals[1])])).toBe(
       true,
