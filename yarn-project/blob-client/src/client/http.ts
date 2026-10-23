@@ -3,6 +3,7 @@ import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { shuffle } from '@aztec-labs/foundation/array';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 import { type RpcBlock, createPublicClient } from 'viem';
@@ -13,6 +14,12 @@ import type { FileStoreBlobClient } from '../filestore/filestore_blob_client.js'
 import { DEFAULT_HEALTHCHECK_UPLOAD_INTERVAL_MINUTES } from '../filestore/healthcheck.js';
 import { type BlobClientConfig, getBlobClientConfigFromEnv } from './config.js';
 import type { BlobClientInterface, GetBlobSidecarOptions } from './interface.js';
+
+/** How often consensus hosts that failed the startup probe are probed again. */
+const CONSENSUS_HOST_REPROBE_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Outcome of probing a consensus host. Only `failed` (unreachable or erroring) hosts are probed again. */
+type ConsensusHostProbeResult = 'supernode' | 'non-supernode' | 'failed';
 
 export class HttpBlobClient implements BlobClientInterface {
   protected readonly log: Logger;
@@ -32,6 +39,9 @@ export class HttpBlobClient implements BlobClientInterface {
 
   /** Indexes of consensus hosts that serve blob sidecars (supernodes). Populated by testSources(). */
   private superNodeHostIndexes?: Set<number>;
+  /** Indexes of consensus hosts that failed the probe in testSources() and have not answered since. */
+  private failedConsensusHostIndexes = new Set<number>();
+  private consensusHostReprobe?: RunningPromise;
 
   constructor(
     config?: BlobClientConfig,
@@ -42,6 +52,8 @@ export class HttpBlobClient implements BlobClientInterface {
       fileStoreUploadClient?: FileStoreBlobClient;
       /** Callback fired when blobs are successfully fetched from any source */
       onBlobsFetched?: (blobs: Blob[]) => void;
+      /** Overrides how often consensus hosts that failed the startup probe are probed again. */
+      consensusHostReprobeIntervalMs?: number;
     } = {},
   ) {
     this.config = config ?? getBlobClientConfigFromEnv();
@@ -104,60 +116,24 @@ export class HttpBlobClient implements BlobClientInterface {
     let blobSinks = 0;
 
     const detectedSuperNodes = new Set<number>();
+    const failedHosts = new Set<number>();
 
     if (l1ConsensusHostUrls && l1ConsensusHostUrls.length > 0) {
       for (let l1ConsensusHostIndex = 0; l1ConsensusHostIndex < l1ConsensusHostUrls.length; l1ConsensusHostIndex++) {
-        const l1ConsensusHostUrl = l1ConsensusHostUrls[l1ConsensusHostIndex];
-        try {
-          const { url, ...options } = getBeaconNodeFetchOptions(
-            `${l1ConsensusHostUrl}/eth/v1/beacon/headers/head`,
-            this.config,
-            l1ConsensusHostIndex,
-          );
-          const res = await this.fetch(url, options);
-          if (!res.ok) {
-            this.log.error(`Failure reaching L1 consensus host: ${res.statusText} (${res.status})`, {
-              l1ConsensusHostUrl,
-            });
-            continue;
-          }
-
-          this.log.info(`L1 consensus host is reachable`, { l1ConsensusHostUrl });
-
-          // Check if the host serves blob sidecars (supernode/semi-supernode).
-          // Post-Fusaka (PeerDAS), non-supernode beacon nodes no longer serve the
-          // blob sidecar endpoint. A 200 response (even with an empty data array
-          // for a slot with no blobs) means the node supports serving blob sidecars.
-          const body = await res.json();
-          const headSlot = body?.data?.header?.message?.slot;
-          if (headSlot) {
-            const { url: blobUrl, ...blobOptions } = getBeaconNodeFetchOptions(
-              `${l1ConsensusHostUrl}/eth/v1/beacon/blobs/${headSlot}`,
-              this.config,
-              l1ConsensusHostIndex,
-            );
-            const blobRes = await this.fetch(blobUrl, blobOptions);
-            if (blobRes.ok) {
-              this.log.info(`L1 consensus host serves blob sidecars (supernode)`, { l1ConsensusHostUrl });
-              detectedSuperNodes.add(l1ConsensusHostIndex);
-              consensusSuperNodes++;
-            } else {
-              this.log.info(`L1 consensus host does not serve blob sidecars, skipping for blob fetching`, {
-                l1ConsensusHostUrl,
-              });
-              consensusNonSuperNodes++;
-            }
-          } else {
-            this.log.info(`L1 consensus host is reachable but could not determine head slot`, { l1ConsensusHostUrl });
-            consensusNonSuperNodes++;
-          }
-        } catch (err) {
-          this.log.error(`Error reaching L1 consensus host`, err, { l1ConsensusHostUrl });
+        const result = await this.probeConsensusHost(l1ConsensusHostIndex);
+        if (result === 'supernode') {
+          detectedSuperNodes.add(l1ConsensusHostIndex);
+          consensusSuperNodes++;
+        } else if (result === 'non-supernode') {
+          consensusNonSuperNodes++;
+        } else {
+          failedHosts.add(l1ConsensusHostIndex);
         }
       }
     }
 
     this.superNodeHostIndexes = detectedSuperNodes;
+    this.failedConsensusHostIndexes = failedHosts;
 
     if (this.archiveClient) {
       try {
@@ -203,6 +179,91 @@ export class HttpBlobClient implements BlobClientInterface {
       this.log.warn(summary);
     } else {
       this.log.info(summary);
+    }
+
+    this.startConsensusHostReprobe();
+  }
+
+  /** Checks whether the consensus host at the given index is reachable and serves blob sidecars. */
+  private async probeConsensusHost(l1ConsensusHostIndex: number): Promise<ConsensusHostProbeResult> {
+    const l1ConsensusHostUrl = this.config.l1ConsensusHostUrls![l1ConsensusHostIndex];
+    try {
+      const { url, ...options } = getBeaconNodeFetchOptions(
+        `${l1ConsensusHostUrl}/eth/v1/beacon/headers/head`,
+        this.config,
+        l1ConsensusHostIndex,
+      );
+      const res = await this.fetch(url, options);
+      if (!res.ok) {
+        this.log.error(`Failure reaching L1 consensus host: ${res.statusText} (${res.status})`, {
+          l1ConsensusHostUrl,
+        });
+        return 'failed';
+      }
+
+      this.log.info(`L1 consensus host is reachable`, { l1ConsensusHostUrl });
+
+      // Check if the host serves blob sidecars (supernode/semi-supernode).
+      // Post-Fusaka (PeerDAS), non-supernode beacon nodes no longer serve the
+      // blob sidecar endpoint. A 200 response (even with an empty data array
+      // for a slot with no blobs) means the node supports serving blob sidecars.
+      const body = await res.json();
+      const headSlot = body?.data?.header?.message?.slot;
+      if (!headSlot) {
+        this.log.info(`L1 consensus host is reachable but could not determine head slot`, { l1ConsensusHostUrl });
+        return 'non-supernode';
+      }
+
+      const { url: blobUrl, ...blobOptions } = getBeaconNodeFetchOptions(
+        `${l1ConsensusHostUrl}/eth/v1/beacon/blobs/${headSlot}`,
+        this.config,
+        l1ConsensusHostIndex,
+      );
+      const blobRes = await this.fetch(blobUrl, blobOptions);
+      if (blobRes.ok) {
+        this.log.info(`L1 consensus host serves blob sidecars (supernode)`, { l1ConsensusHostUrl });
+        return 'supernode';
+      }
+      this.log.info(`L1 consensus host does not serve blob sidecars, skipping for blob fetching`, {
+        l1ConsensusHostUrl,
+      });
+      return 'non-supernode';
+    } catch (err) {
+      this.log.error(`Error reaching L1 consensus host`, err, { l1ConsensusHostUrl });
+      return 'failed';
+    }
+  }
+
+  /** Periodically re-probes the consensus hosts that failed in testSources() until each one gives an answer. */
+  private startConsensusHostReprobe(): void {
+    if (this.failedConsensusHostIndexes.size === 0 || this.consensusHostReprobe?.isRunning()) {
+      return;
+    }
+    const intervalMs = this.opts.consensusHostReprobeIntervalMs ?? CONSENSUS_HOST_REPROBE_INTERVAL_MS;
+    this.log.warn(`Will re-probe ${this.failedConsensusHostIndexes.size} unreachable L1 consensus host(s)`, {
+      intervalMs,
+    });
+    this.consensusHostReprobe = new RunningPromise(
+      () => this.reprobeFailedConsensusHosts(),
+      this.log,
+      intervalMs,
+    ).start();
+  }
+
+  private async reprobeFailedConsensusHosts(): Promise<void> {
+    for (const l1ConsensusHostIndex of [...this.failedConsensusHostIndexes]) {
+      const result = await this.probeConsensusHost(l1ConsensusHostIndex);
+      if (result === 'failed') {
+        continue;
+      }
+      this.failedConsensusHostIndexes.delete(l1ConsensusHostIndex);
+      if (result === 'supernode') {
+        this.superNodeHostIndexes?.add(l1ConsensusHostIndex);
+      }
+    }
+    if (this.failedConsensusHostIndexes.size === 0) {
+      // Not awaited: stop() waits for this very run to finish.
+      void this.consensusHostReprobe?.stop();
     }
   }
 
@@ -794,6 +855,7 @@ export class HttpBlobClient implements BlobClientInterface {
    * Stop the blob client, clearing any periodic tasks.
    */
   public stop(): void {
+    void this.consensusHostReprobe?.stop();
     if (this.healthcheckUploadIntervalId) {
       clearInterval(this.healthcheckUploadIntervalId);
       this.healthcheckUploadIntervalId = undefined;
