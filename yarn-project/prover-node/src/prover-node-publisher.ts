@@ -7,7 +7,7 @@ import {
   type ViemCommitteeAttestations,
   computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxMonitorOptions, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { areArraysEqual } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -43,6 +43,29 @@ export type L1SubmitEpochProofArgs = {
  * replace it.
  */
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
+
+/** A proof ready for submission to L1. */
+export type EpochProofSubmission = {
+  epochNumber: EpochNumber;
+  fromCheckpoint: CheckpointNumber;
+  toCheckpoint: CheckpointNumber;
+  publicInputs: RootRollupPublicInputs;
+  proof: Proof;
+  batchedBlobInputs: BatchedBlob;
+  attestations: ViemCommitteeAttestations;
+  headers: CheckpointHeader[];
+  /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
+  kind: 'full' | 'partial';
+  /** Wall-clock deadline (proof-submission window end) past which the L1 tx should stop retrying. */
+  deadline?: Date;
+};
+
+/** Allows a pending partial proof to be replaced by a longer proof for the same epoch. */
+export type ProofSubmissionOptions = {
+  getReplacement?: (current: EpochProofSubmission) => Promise<EpochProofSubmission | undefined>;
+  /** Identifies the proof whose transaction actually mined, including reverted transactions. */
+  onMined?: (submission: EpochProofSubmission) => void;
+};
 
 /** Maximum number of times one epoch proof is sent to L1, counting resends after it ran out of gas. */
 const MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS = 3;
@@ -86,22 +109,13 @@ export class ProverNodePublisher {
     return this.l1TxUtils.getSenderAddress();
   }
 
-  public async submitEpochProof(args: {
-    epochNumber: EpochNumber;
-    fromCheckpoint: CheckpointNumber;
-    toCheckpoint: CheckpointNumber;
-    publicInputs: RootRollupPublicInputs;
-    proof: Proof;
-    batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestations;
-    headers: CheckpointHeader[];
-    /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
-    kind: 'full' | 'partial';
-    /** Wall-clock deadline (proof-submission window end) past which the L1 tx should stop retrying. */
-    deadline?: Date;
-  }): Promise<SubmitEpochProofResult> {
+  /** Submits a proof, optionally replacing it with a longer ready proof while pending. */
+  public async submitEpochProof(
+    args: EpochProofSubmission,
+    options?: ProofSubmissionOptions,
+  ): Promise<SubmitEpochProofResult> {
     const { epochNumber, fromCheckpoint, toCheckpoint, publicInputs } = args;
-    const ctx = { epochNumber, fromCheckpoint, toCheckpoint };
+    let ctx = { epochNumber, fromCheckpoint, toCheckpoint };
 
     const timer = new Timer();
 
@@ -139,9 +153,14 @@ export class ProverNodePublisher {
     }
 
     // Validate epoch proof range and hashes are correct before submitting
-    const provenPrefixLength = await this.validateEpochProofSubmission(args);
+    let provenPrefixLength = await this.validateEpochProofSubmission(args);
 
-    let sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength);
+    let sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength, undefined, options);
+    if (sent) {
+      args = sent.submission;
+      provenPrefixLength = sent.provenPrefixLength;
+      options?.onMined?.(args);
+    }
     for (let attempt = 1; sent?.receipt.status === 'reverted' && attempt < MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS; attempt++) {
       const gasLimit = await this.getOutOfGasRetryGasLimit(args, provenPrefixLength, sent.gasLimit);
       if (gasLimit === undefined) {
@@ -155,13 +174,19 @@ export class ProverNodePublisher {
         gasLimit,
         attempt: attempt + 1,
       });
-      sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength, gasLimit);
+      sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength, gasLimit, options);
+      if (sent) {
+        args = sent.submission;
+        provenPrefixLength = sent.provenPrefixLength;
+        options?.onMined?.(args);
+      }
     }
 
     if (!sent) {
       this.log.error(`Failed to mine submitEpochProof tx`, undefined, ctx);
       return 'failed';
     }
+    ctx = { epochNumber: args.epochNumber, fromCheckpoint: args.fromCheckpoint, toCheckpoint: args.toCheckpoint };
     const txReceipt = sent.receipt;
 
     // Tx was mined successfully
@@ -352,19 +377,19 @@ export class ProverNodePublisher {
   }
 
   private async sendSubmitEpochProofTx(
-    args: {
-      fromCheckpoint: CheckpointNumber;
-      toCheckpoint: CheckpointNumber;
-      deadline?: Date;
-      publicInputs: RootRollupPublicInputs;
-      proof: Proof;
-      batchedBlobInputs: BatchedBlob;
-      attestations: ViemCommitteeAttestations;
-      headers: CheckpointHeader[];
-    },
+    args: EpochProofSubmission,
     provenPrefixLength: number,
     gasLimit?: bigint,
-  ): Promise<{ receipt: TransactionReceipt; gasLimit: bigint } | undefined> {
+    options?: ProofSubmissionOptions,
+  ): Promise<
+    | {
+        receipt: TransactionReceipt;
+        gasLimit: bigint;
+        submission: EpochProofSubmission;
+        provenPrefixLength: number;
+      }
+    | undefined
+  > {
     const txArgs = [this.getSubmitEpochProofArgs(args, provenPrefixLength)] as const;
 
     this.log.info(`Submitting epoch proof to L1 rollup contract`, {
@@ -378,20 +403,68 @@ export class ProverNodePublisher {
       functionName: 'submitEpochRootProof',
       args: txArgs,
     });
+    const versions = new Map<Hex, { submission: EpochProofSubmission; provenPrefixLength: number }>([
+      [data, { submission: args, provenPrefixLength }],
+    ]);
+    const monitorOptions: L1TxMonitorOptions | undefined = options?.getReplacement
+      ? {
+          getReplacement: async state => {
+            const current = versions.get(state.request.data!);
+            if (!current || current.submission.kind === 'full') {
+              return undefined;
+            }
+            const next = await options.getReplacement!(current.submission);
+            if (!next) {
+              return undefined;
+            }
+            if (
+              next.epochNumber !== args.epochNumber ||
+              next.fromCheckpoint !== args.fromCheckpoint ||
+              next.toCheckpoint <= current.submission.toCheckpoint ||
+              !next.publicInputs.constants.proverId.equals(args.publicInputs.constants.proverId) ||
+              (next.deadline && next.deadline.getTime() <= Date.now())
+            ) {
+              return undefined;
+            }
+            const length = next.toCheckpoint - next.fromCheckpoint + 1;
+            const proverId = EthAddress.fromField(next.publicInputs.constants.proverId);
+            if (
+              (await this.rollupContract.getHasSubmittedFullEpochProof(next.epochNumber, length, proverId)) ||
+              (next.kind === 'partial' &&
+                (await this.rollupContract.getHasSubmittedProof(next.epochNumber, length, proverId)))
+            ) {
+              return undefined;
+            }
+            const prefix = await this.validateEpochProofSubmission(next);
+            const replacementData = encodeFunctionData({
+              abi: RollupAbi,
+              functionName: 'submitEpochRootProof',
+              args: [this.getSubmitEpochProofArgs(next, prefix)],
+            });
+            versions.set(replacementData, { submission: next, provenPrefixLength: prefix });
+            return { to: this.proofSubmissionTarget, data: replacementData };
+          },
+        }
+      : undefined;
     try {
-      const { receipt, state } = await this.l1TxUtils.sendAndMonitorTransaction(
+      const monitorArgs: Parameters<L1TxUtils['sendAndMonitorTransaction']> = [
         { to: this.proofSubmissionTarget, data },
         {
           ...(gasLimit !== undefined && { gasLimit }),
           // Proofs remain valid until the submission deadline, beyond the generic relative timeout.
           ...(args.deadline ? { txTimeoutAt: args.deadline, txTimeoutMs: 0, cancelTxOnTimeout: true } : {}),
         },
-      );
+      ];
+      if (monitorOptions) {
+        monitorArgs[3] = monitorOptions;
+      }
+      const { receipt, state } = await this.l1TxUtils.sendAndMonitorTransaction(...monitorArgs);
+      const mined = versions.get(state.request?.data ?? data) ?? versions.get(data)!;
       if (receipt.status !== 'success') {
         const errorMsg = await this.l1TxUtils.tryGetErrorFromRevertedTx(
-          data,
+          state.request?.data ?? data,
           {
-            args: [...txArgs],
+            args: [this.getSubmitEpochProofArgs(mined.submission, mined.provenPrefixLength)],
             functionName: 'submitEpochRootProof',
             abi: RollupAbi,
             address: this.proofSubmissionTarget,
@@ -405,7 +478,7 @@ export class ProverNodePublisher {
           gasLimit: state.gasLimit,
         });
       }
-      return { receipt, gasLimit: state.gasLimit };
+      return { receipt, gasLimit: state.gasLimit, ...mined };
     } catch (err) {
       this.log.error(`Rollup submit epoch proof failed`, err);
       return undefined;
