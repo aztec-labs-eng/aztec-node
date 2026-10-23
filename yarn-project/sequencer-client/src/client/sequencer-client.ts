@@ -1,10 +1,10 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
-import { EpochCache } from '@aztec-labs/epoch-cache';
-import { getPublicClient } from '@aztec-labs/ethereum/client';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { GovernanceProposerContract, InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { type Delayer, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
@@ -54,6 +54,8 @@ export class SequencerClient {
   public static async new(
     config: SequencerClientConfig,
     deps: {
+      /** The process's shared L1 public client. */
+      l1Client: ViemPublicClient;
       validatorClient: ValidatorClient;
       p2pClient: P2P;
       worldStateSynchronizer: WorldStateSynchronizer;
@@ -67,7 +69,7 @@ export class SequencerClient {
       publisherFactory?: SequencerPublisherFactory;
       blobClient: BlobClientInterface;
       dateProvider: DateProvider;
-      epochCache?: EpochCache;
+      epochCache: EpochCache;
       l1TxUtils: L1TxUtils[];
       funderL1TxUtils?: L1TxUtils;
       nodeKeyStore: KeystoreManager;
@@ -89,10 +91,10 @@ export class SequencerClient {
       l2BlockSource,
       l1ToL2MessageSource,
       telemetry: telemetryClient,
+      epochCache,
+      l1Client: publicClient,
     } = deps;
-    const { l1RpcUrls: rpcUrls, l1ChainId: chainId } = config;
     const log = createLogger('sequencer');
-    const publicClient = getPublicClient(config);
     const l1TxUtils = deps.l1TxUtils;
     const l1Metrics = new L1Metrics(
       telemetryClient.getMeter('L1PublisherMetrics'),
@@ -118,19 +120,6 @@ export class SequencerClient {
       publicClient,
       config.governanceProposerAddress.toString(),
     );
-    const epochCache =
-      deps.epochCache ??
-      (await EpochCache.create(
-        config.rollupAddress,
-        {
-          l1RpcUrls: rpcUrls,
-          l1ChainId: chainId,
-          viemPollingIntervalMS: config.viemPollingIntervalMS,
-          ethereumSlotDuration: config.ethereumSlotDuration,
-        },
-        { dateProvider: deps.dateProvider },
-      ));
-
     const publisherFactory =
       deps.publisherFactory ??
       new SequencerPublisherFactory(config, {

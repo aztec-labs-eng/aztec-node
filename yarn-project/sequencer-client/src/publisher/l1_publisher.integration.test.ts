@@ -434,7 +434,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
       sequencerL1Client,
       l1ContractAddresses.governanceProposerAddress.toString(),
     );
-    epochCache = await EpochCache.create(l1ContractAddresses.rollupAddress, config, { dateProvider });
+    epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
     const blobClient = createBlobClient();
     const sequencerPublisherMetrics: MockProxy<SequencerPublisherMetrics> = mock<SequencerPublisherMetrics>();
 
