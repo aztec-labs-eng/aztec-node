@@ -24,9 +24,10 @@ import {
   formatGwei,
 } from 'viem';
 
-import { serializeSignedTransaction } from '../blob_tx.js';
+import { computeSignedTransactionHash, serializeSignedTransaction } from '../blob_tx.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
+import { isAlreadyKnownTxError } from './already_known.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
 import { INSUFFICIENT_FUNDS_BACKOFF_MS, MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
@@ -277,6 +278,34 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     return await this.signTransaction(txRequest as TransactionSerializable);
   }
 
+  /**
+   * Broadcasts a signed tx and returns its hash, computed from the signed tx rather than taken from the node's reply,
+   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send.
+   */
+  private async sendSignedTransaction(serializedTransaction: Hex, nonce: number): Promise<Hex> {
+    const txHash = computeSignedTransactionHash(serializedTransaction);
+    const account = this.getSenderAddress().toString();
+    let rpcHash: Hex | undefined;
+    try {
+      rpcHash = await this.client.sendRawTransaction({ serializedTransaction });
+    } catch (err) {
+      if (!isAlreadyKnownTxError(err)) {
+        throw err;
+      }
+      this.logger.info(`L1 node already knows tx ${txHash}, treating it as sent`, { txHash, nonce, account });
+      return txHash;
+    }
+    if (rpcHash?.toLowerCase() !== txHash.toLowerCase()) {
+      this.logger.warn(`L1 node returned hash ${rpcHash} for tx ${txHash}, tracking the tx by its own hash`, {
+        txHash,
+        rpcHash,
+        nonce,
+        account,
+      });
+    }
+    return txHash;
+  }
+
   private async checkInterruptedOrTimedOut(gasConfig: Pick<L1TxConfig, 'txTimeoutAt'>): Promise<Date> {
     if (this.interrupted) {
       throw new InterruptError(`Transaction sending is interrupted`);
@@ -341,7 +370,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
         const txData = this.makeTxData(baseState, { isCancelTx: false });
 
         const signedRequest = await this.prepareSignedTransaction(txData);
-        txHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+        txHash = await this.sendSignedTransaction(signedRequest, nonce);
         this.lastSentNonce = nonce;
       } finally {
         this.sendMutex.release();
@@ -602,7 +631,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
           const txData = this.makeTxData(state, { isCancelTx });
 
           const signedRequest = await this.prepareSignedTransaction(txData);
-          const newHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+          const newHash = await this.sendSignedTransaction(signedRequest, nonce);
 
           this.logger.verbose(
             `Sent L1 speed-up tx ${newHash} replacing ${currentTxHash} for nonce ${nonce} from ${account}`,
@@ -874,7 +903,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
     const txData = this.makeTxData(state, { isCancelTx: true });
     const signedRequest = await this.prepareSignedTransaction(txData);
-    const cancelTxHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+    const cancelTxHash = await this.sendSignedTransaction(signedRequest, nonce);
 
     state.cancelTxHashes.push(cancelTxHash);
     await this.updateState(state, TxUtilsState.CANCELLED);
