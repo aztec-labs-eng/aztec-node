@@ -19,10 +19,12 @@ import {
   http,
   isHex,
   publicActions,
+  shouldThrow,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
+import { isAlreadyKnownTxError } from './already_known.js';
 import { createEthereumChain, isAnvilTestChain } from './chain.js';
 import type { L1RpcGraderConfig } from './l1_reader.js';
 import { L1RpcGrader } from './l1_rpc_grader.js';
@@ -138,7 +140,7 @@ export type L1HttpTransportOptions = {
  */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOptions): L1HttpTransport {
   const transports = rpcUrls.map(url => makeL1UrlTransport(url, opts?.timeout));
-  const configured = fallback(transports);
+  const configured = makeL1Fallback(transports);
   if (!opts?.grader || transports.length < 2) {
     return wrapL1RpcTransport(configured);
   }
@@ -170,7 +172,7 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
       chainId,
       logger,
       onOrderChange: order =>
-        (current = order.length > 0 ? fallback(order.map(index => transports[index])) : undefined),
+        (current = order.length > 0 ? makeL1Fallback(order.map(index => transports[index])) : undefined),
     },
   );
   grader.start();
@@ -192,6 +194,15 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
   };
 
   return Object.assign(wrapL1RpcTransport(graded), { grader });
+}
+
+/**
+ * Creates a fallback over the given per-URL transports. Besides the errors viem's fallback stops at, it stops at a node
+ * that already holds a sent tx: that answer is conclusive, and a later URL failing the send for another reason would
+ * otherwise hide it.
+ */
+function makeL1Fallback(transports: HttpTransport[]): FallbackTransport<HttpTransport[]> {
+  return fallback(transports, { shouldThrow: err => shouldThrow(err) || isAlreadyKnownTxError(err) });
 }
 
 /** Creates the transport for a single L1 RPC URL, as used inside the fallback and by the grader's probes. */
