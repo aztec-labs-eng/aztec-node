@@ -39,11 +39,16 @@ describe('HttpBlobClient', () => {
     let latestSlotNumber: number;
     let missedSlots: number[];
     let genesisAvailable: boolean;
+    let consensusHostDown: boolean;
+    /** Head of the host served under the /lagging path prefix, which has no blobs past it. */
+    let laggingHostSlotNumber: number;
 
     beforeEach(async () => {
       latestSlotNumber = 1;
       genesisAvailable = true;
       missedSlots = [];
+      consensusHostDown = false;
+      laggingHostSlotNumber = 0;
 
       testBlobs = await Promise.all(Array.from({ length: 2 }, () => makeRandomBlob(3)));
       testBlobsHashes = testBlobs.map(b => b.getEthVersionedBlobHash());
@@ -86,6 +91,15 @@ describe('HttpBlobClient', () => {
           return;
         }
 
+        if (consensusHostDown) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Service Unavailable' }));
+          return;
+        }
+
+        const isLagging = req.url?.startsWith('/lagging/');
+        const requestedSlot = Number(req.url?.match(/\/eth\/v1\/beacon\/blobs\/(\d+)/)?.[1]);
+
         if (genesisAvailable && req.url?.includes('/eth/v1/beacon/genesis')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end('{"data":{"genesis_time":"1000"}}');
@@ -94,9 +108,13 @@ describe('HttpBlobClient', () => {
           res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
         } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ data: { header: { message: { slot: latestSlotNumber } } } }));
+          const slot = isLagging ? laggingHostSlotNumber : latestSlotNumber;
+          res.end(JSON.stringify({ data: { header: { message: { slot } } } }));
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
-          if (missedSlots.some(slot => req.url?.includes(`/${slot}`))) {
+          if (
+            missedSlots.some(slot => req.url?.includes(`/${slot}`)) ||
+            (isLagging && requestedSlot > laggingHostSlotNumber)
+          ) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Not Found' }));
           } else {
@@ -212,6 +230,46 @@ describe('HttpBlobClient', () => {
       const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
+    });
+
+    it('falls back to the next consensus host when the first one is behind', async () => {
+      await startConsensusHostServer();
+      laggingHostSlotNumber = 80;
+      latestSlotNumber = 105;
+
+      const client = new HttpBlobClient({
+        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}/lagging`, `http://localhost:${consensusHostPort}`],
+      });
+      await client.start();
+      await client.testSources();
+
+      // slot = (l1BlockTimestamp - genesis_time) / seconds_per_slot = (2200 - 1000) / 12 = 100
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 2200n });
+      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      client.stop();
+    });
+
+    it('uses a consensus host that was down during testSources once it comes back up', async () => {
+      await startExecutionHostServer();
+      await startConsensusHostServer();
+      consensusHostDown = true;
+
+      const client = new HttpBlobClient(
+        {
+          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+          blobAllowEmptySources: true,
+        },
+        { consensusHostReprobeIntervalMs: 50 },
+      );
+      await client.testSources();
+
+      consensusHostDown = false;
+      await sleep(500);
+
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      client.stop();
     });
 
     it('should handle API keys without headers', async () => {
