@@ -327,21 +327,6 @@ describe('ProposalHandler checkpoint validation', () => {
       });
     });
 
-    it('returns last_block_archive_mismatch when signed blocks of the slot follow the checkpoint last block', async () => {
-      // The checkpoint's last block is local, and so is a later block of the same slot from the same proposer: the
-      // proposal leaves a signed block of its own slot out, which no local race explains.
-      const archiveRoot = Fr.random();
-      mockLocalSlotBlocks(blockSource, makeSlotBlocks([archiveRoot, Fr.random()]));
-
-      const result = await handler.handleCheckpointProposal(await makeProposal({ archiveRoot }), proposalInfo);
-      expect(result).toEqual({
-        isValid: false,
-        reason: 'last_block_archive_mismatch',
-        checkpointNumber: CheckpointNumber(1),
-      });
-      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT.last_block_archive_mismatch).toBe(true);
-    });
-
     it('returns too_many_blocks_in_checkpoint when blocks exceed maxBlocksPerCheckpoint', async () => {
       config = { ...config, maxBlocksPerCheckpoint: 2 };
       handler = new ProposalHandler(
@@ -1415,27 +1400,27 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(checkpointsBuilder.getFork).toHaveBeenCalledWith(parentBlockNumber, parentBlockHash);
     });
 
+    /** Runs `proposal` through the registered all-nodes checkpoint handler and returns the failures it reported. */
+    async function runAllNodesCheckpointHandler(proposal: Awaited<ReturnType<typeof makeProposal>>) {
+      const failures: CheckpointProposalValidationResult[] = [];
+      handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
+        failures.push(result);
+      });
+      const p2p = mock<P2P>();
+      let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
+      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+        checkpointHandler = h;
+      });
+      handler.register(p2p, true);
+      await checkpointHandler!(proposal, {} as any);
+      return failures;
+    }
+
     // The rebuild and the checkpoint circuit both take the header's lastArchiveRoot from the archive the checkpoint's
     // first block builds on, so a header naming any other archive is the proposer's doing. A fork whose archive
     // disagrees with that first block is this node's world state off the archiver's chain, which is not.
     describe('checkpoint last archive root', () => {
       const chainArchiveRoot = Fr.random();
-
-      /** Runs `proposal` through the registered all-nodes checkpoint handler and returns the failures it reported. */
-      async function runAllNodesCheckpointHandler(proposal: Awaited<ReturnType<typeof makeProposal>>) {
-        const failures: CheckpointProposalValidationResult[] = [];
-        handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
-          failures.push(result);
-        });
-        const p2p = mock<P2P>();
-        let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
-        p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
-          checkpointHandler = h;
-        });
-        handler.register(p2p, true);
-        await checkpointHandler!(proposal, {} as any);
-        return failures;
-      }
 
       /** A proposal whose header claims `lastArchiveRoot`, over the deep-validation blocks. */
       async function makeProposalClaiming(lastArchiveRoot: Fr, overrides: Partial<FieldsOf<CheckpointHeader>> = {}) {
@@ -1577,6 +1562,159 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(failures).toEqual([{ isValid: false, reason: 'last_block_not_found' }]);
         expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
+      });
+    });
+
+    // A proposal whose signed archive is followed by later blocks of the same slot leaves those blocks out. Whether this
+    // node stored them before the proposal arrived depends on timing: an attester that had not yet stored them sees
+    // the same payload as valid. The omission accuses the proposer only; the covered blocks' own content decides
+    // whether the payload is evidence against its attesters.
+    describe('a checkpoint that leaves later blocks of its slot out', () => {
+      /**
+       * Stores a later block of the slot after its last local block, consuming messages up to `leafCount`. Returns the
+       * blocks the slot held before it, which a proposal signed at the last of them covers.
+       */
+      async function storeLaterBlockOfSlot(leafCount = 0) {
+        const covered = await blockSource.getBlocksForSlot(SlotNumber(1));
+        const last = covered[covered.length - 1];
+        const later = {
+          ...last,
+          archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(covered.length + 1)),
+          number: last.number + 1,
+          indexWithinCheckpoint: IndexWithinCheckpoint(last.indexWithinCheckpoint + 1),
+          header: {
+            ...last.header,
+            state: { l1ToL2MessageTree: { nextAvailableLeafIndex: leafCount } },
+            lastArchive: last.archive,
+          },
+        } as unknown as L2Block;
+        blockSource.getBlocksForSlot.mockResolvedValue([...covered, later]);
+        return covered;
+      }
+
+      /** Asserts that the payload was rejected as leaving blocks out, without being recorded against its attesters. */
+      function expectRejectedForProposerOnly(failures: CheckpointProposalValidationResult[]) {
+        expect(failures).toEqual([
+          { isValid: false, reason: 'last_block_archive_mismatch', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('invalid');
+      }
+
+      it('rejects valid covered blocks as last_block_archive_mismatch without accusing the attesters', async () => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+      });
+
+      it.each([
+        [
+          'the consumed Inbox prefix is unavailable',
+          () => l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValue(new Error('Inbox range not synced')),
+        ],
+        [
+          'forking world state fails',
+          () => checkpointsBuilder.getFork.mockRejectedValue(new Error('Unable to initialize from future block')),
+        ],
+      ])('keeps last_block_archive_mismatch when %s', async (_name, breakLocalView) => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        breakLocalView();
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+      });
+
+      it('reports a wrong last archive root of the covered blocks, accusing the attesters', async () => {
+        setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: makeMatchingHeader() });
+
+        const failures = await runAllNodesCheckpointHandler(proposal);
+
+        expect(failures).toEqual([
+          { isValid: false, reason: 'last_archive_root_mismatch', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(true);
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([proposal.getPayloadHash()]);
+      });
+
+      // The later block consumed messages this node cannot read, so only a rebuild over the covered blocks alone
+      // reaches the header comparison.
+      it('rebuilds the covered blocks only, reporting their header mismatch and accusing the attesters', async () => {
+        const header = setupMatchingRebuild();
+        const covered = await storeLaterBlockOfSlot(4);
+        const proposal = await makeProposal({
+          archiveRoot,
+          checkpointHeader: makeMatchingHeader({ lastArchiveRoot: header.lastArchiveRoot, totalManaUsed: new Fr(999) }),
+        });
+
+        const failures = await runAllNodesCheckpointHandler(proposal);
+
+        expect(failures).toEqual([
+          { isValid: false, reason: 'checkpoint_header_mismatch', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(true);
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([proposal.getPayloadHash()]);
+        // The rebuild mock returns a fixed checkpoint, so the blocks it is handed are what shows the later one left out.
+        expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalledWith(
+          CheckpointNumber(1),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          covered,
+          expect.anything(),
+        );
+      });
+
+      it('applies the block cap to the covered blocks only', async () => {
+        handler.updateConfig({ maxBlocksPerCheckpoint: 1 });
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+      });
+
+      // A local fault while checking the covered blocks is not a verdict on them, but the omission already is one.
+      it('keeps last_block_archive_mismatch when checking the covered blocks throws, still disposing the fork', async () => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        mockCheckpointBuilder.completeCheckpoint.mockRejectedValue(new Error('complete failed'));
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
+        expect(mockDispose).toHaveBeenCalled();
+      });
+
+      it('keeps last_block_archive_mismatch when reading the checkpoint ancestry throws', async () => {
+        const header = setupMatchingRebuild();
+        await storeLaterBlockOfSlot();
+        blockSource.getCheckpointsData.mockRejectedValue(new Error('checkpoint store unavailable'));
+
+        const failures = await runAllNodesCheckpointHandler(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+        );
+
+        expectRejectedForProposerOnly(failures);
       });
     });
 
