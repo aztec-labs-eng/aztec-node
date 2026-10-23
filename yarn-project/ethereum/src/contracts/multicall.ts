@@ -13,7 +13,14 @@ import {
   multicall3Abi,
 } from 'viem';
 
-import type { L1BlobInputs, L1TxConfig, L1TxRequest, L1TxState, L1TxUtils } from '../l1_tx_utils/index.js';
+import type {
+  L1BlobInputs,
+  L1TxConfig,
+  L1TxRequest,
+  L1TxState,
+  L1TxUtils,
+  SendAndMonitorOpts,
+} from '../l1_tx_utils/index.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { tryDecodeRevertReason } from '../utils.js';
 
@@ -188,14 +195,14 @@ export class Multicall3 {
   /**
    * Sends a batch of requests through aggregate3. Individual calls may fail (allowFailure: true),
    * but the top-level multicall is expected to land successfully. Throws if the send fails or if
-   * the receipt reports a reverted status.
+   * the receipt reports a reverted status. `opts.onTxSent` is awaited once the multicall is sent, before its receipt.
    */
   static async forward<TOptGasLimitRequired extends boolean>(
     requests: L1TxRequest[],
     l1TxUtils: L1TxUtils,
     gasConfig: TOptGasLimitRequired extends true ? RequiredBy<L1TxConfig, 'gasLimit'> : L1TxConfig | undefined,
     blobConfig: L1BlobInputs | undefined,
-    opts: { gasLimitRequired?: TOptGasLimitRequired } = {},
+    opts: { gasLimitRequired?: TOptGasLimitRequired } & SendAndMonitorOpts = {},
   ) {
     if (opts.gasLimitRequired && !gasConfig?.gasLimit) {
       throw new Error('Multicall gasLimit is required when gasLimitRequired is true');
@@ -222,6 +229,7 @@ export class Multicall3 {
       },
       gasConfig,
       blobConfig,
+      { onTxSent: opts.onTxSent },
     );
 
     // This shouldn't happen. Any failure in individual calls is swallowed by forward since we set
