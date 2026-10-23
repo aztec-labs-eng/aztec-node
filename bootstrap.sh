@@ -159,6 +159,12 @@ function install_deps {
   fi
 }
 
+# ci3 is a submodule: without it nothing below can be sourced.
+if [ ! -f "$(git rev-parse --show-toplevel)/ci3/source" ]; then
+  echo "ci3 submodule is not initialised. Run: git submodule update --init ci3" >&2
+  exit 1
+fi
+
 # Special case for installing dependencies (can run on older bash).
 if [ "${1:-}" = "install_deps" ]; then
   set -euo pipefail
