@@ -122,9 +122,24 @@ git clone https://github.com/aztec-labs-eng/aztec-node.git
 cd aztec-node
 git checkout v6.0.0
 cd docs/examples/webapp-tutorial
+touch yarn.lock
 ./setup.sh
 node esbuild.extension.mjs
 ```
+
+:::warning Fix the wallet method handler in v6.0.0
+In v6.0.0, `test-extension/src/offscreen/offscreen.ts` fails every wallet call that returns nothing, so creating a game from the dApp fails with `"undefined" is not valid JSON` (raised by `registerContract`). Before running `node esbuild.extension.mjs`, change this line in `handleWalletMethod`:
+
+```typescript
+const jsonSafe = JSON.parse(jsonStringify(result));
+```
+
+to:
+
+```typescript
+const jsonSafe = result === undefined ? undefined : JSON.parse(jsonStringify(result));
+```
+:::
 
 Then load it in Chrome:
 

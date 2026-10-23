@@ -50,8 +50,15 @@ git clone https://github.com/aztec-labs-eng/aztec-node.git
 cd aztec-node
 git checkout v6.0.0
 cd docs/examples/webapp-tutorial
+touch yarn.lock
 ./setup.sh
 ```
+
+The empty `yarn.lock` tells yarn 4 that this directory is its own project rather than part of the `docs/` workspace. Without it, `./setup.sh` fails with "doesn't seem to be part of the project".
+
+:::warning Fix the test-account helpers in v6.0.0
+In the v6.0.0 example, `scripts/deploy-and-interact.ts` and `src/embedded-wallet.ts` create the test accounts with `createSchnorrAccount`. The local network funds its test accounts at genesis as *initializerless* Schnorr accounts, so those calls produce undeployed addresses and every transaction from them fails. Replace `createSchnorrAccount` with `createSchnorrInitializerlessAccount` in both files (same arguments) before running `yarn interact` or the browser app.
+:::
 
 ## Architecture
 

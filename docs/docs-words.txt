@@ -314,6 +314,7 @@ polyfilling
 Poseidon
 posesses
 postprocesses
+preapproved
 preconfigured
 preconfirmed
 precheck
