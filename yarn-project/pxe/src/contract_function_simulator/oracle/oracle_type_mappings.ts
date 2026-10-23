@@ -85,6 +85,7 @@ import {
 } from '../noir-structs/resolved_tagging_strategy.js';
 import type { ResolvedTx } from '../noir-structs/resolved_tx.js';
 import type { TxEffectData } from '../noir-structs/tx_effect_data.js';
+import type { TxEffectWithBlockData } from '../noir-structs/tx_effect_with_block_data.js';
 import type { UtilityContext } from '../noir-structs/utility_context.js';
 import { packAsHintedNote } from './note_packing_utils.js';
 
@@ -553,6 +554,11 @@ export const PENDING_TAGGED_LOG: TypeMapping<PendingTaggedLog> = STRUCT([
 export const BLOCK_REFERENCE: TypeMapping<BlockReference> = STRUCT([
   { name: 'blockNumber', type: U32 },
   { name: 'blockHash', type: FIELD },
+]);
+
+export const TX_EFFECT_WITH_BLOCK: TypeMapping<TxEffectWithBlockData> = STRUCT<TxEffectWithBlockData>([
+  { name: 'effect', type: TX_EFFECT },
+  { name: 'block', type: BLOCK_REFERENCE },
 ]);
 
 export const UNSILOED_MESSAGE_NULLIFIER: TypeMapping<UnsiloedMessageNullifier> = STRUCT([

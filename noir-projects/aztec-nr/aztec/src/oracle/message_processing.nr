@@ -4,8 +4,10 @@ use crate::messages::processing::{
     log_retrieval_response::LogRetrievalResponse, NoteValidationRequest, pending_tagged_log::PendingTaggedLog,
     provided_secret::ProvidedSecret,
 };
+use crate::oracle::block_reference::BlockReference;
 use crate::protocol::address::AztecAddress;
 use crate::protocol::blob_data::TxEffect;
+use crate::protocol::traits::{Deserialize, Serialize};
 
 /// Finds new private logs that may have been sent to all registered accounts in PXE in the current contract and
 /// returns them in an ephemeral array with an oracle-allocated base slot.
@@ -74,3 +76,22 @@ pub unconstrained fn get_tx_effects(tx_hashes: EphemeralArray<Field>) -> Ephemer
 
 #[oracle(aztec_utl_getTxEffects)]
 unconstrained fn get_tx_effects_oracle(tx_hashes: EphemeralArray<Field>) -> EphemeralArray<Option<TxEffect>> {}
+
+/// A settled transaction's effects together with the block it was included in.
+#[derive(Deserialize, Eq, Serialize)]
+pub struct TxEffectWithBlock {
+    pub effect: TxEffect,
+    pub block: BlockReference,
+}
+
+/// Like [`get_tx_effects`], but pairs each effect with its block.
+pub unconstrained fn get_tx_effects_with_block(
+    tx_hashes: EphemeralArray<Field>,
+) -> EphemeralArray<Option<TxEffectWithBlock>> {
+    get_tx_effects_with_block_oracle(tx_hashes)
+}
+
+#[oracle(aztec_utl_getTxEffectsWithBlock)]
+unconstrained fn get_tx_effects_with_block_oracle(
+    tx_hashes: EphemeralArray<Field>,
+) -> EphemeralArray<Option<TxEffectWithBlock>> {}

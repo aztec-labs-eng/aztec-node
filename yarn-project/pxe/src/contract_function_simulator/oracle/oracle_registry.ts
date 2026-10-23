@@ -46,6 +46,7 @@ import {
   RESOLVED_TX,
   STR,
   TX_EFFECT,
+  TX_EFFECT_WITH_BLOCK,
   TX_HASH,
   type TypeMapping,
   U8,
@@ -283,6 +284,11 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getTxEffects: makeEntry({
     params: [{ name: 'txHashes', type: EPHEMERAL_ARRAY(TX_HASH) }],
     returnType: EPHEMERAL_ARRAY(OPTION(TX_EFFECT)),
+  }),
+
+  aztec_utl_getTxEffectsWithBlock: makeEntry({
+    params: [{ name: 'txHashes', type: EPHEMERAL_ARRAY(TX_HASH) }],
+    returnType: EPHEMERAL_ARRAY(OPTION(TX_EFFECT_WITH_BLOCK)),
   }),
 
   aztec_utl_setCapsule: makeEntry({

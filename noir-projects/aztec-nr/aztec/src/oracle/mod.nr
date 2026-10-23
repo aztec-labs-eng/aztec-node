@@ -95,6 +95,7 @@ pub mod logs;
         quote { validate_and_store_enqueued_notes_and_events_oracle },
         quote { get_logs_by_tag_oracle },
         quote { get_tx_effects_oracle },
+        quote { get_tx_effects_with_block_oracle },
     ],
 )]
 pub mod message_processing;

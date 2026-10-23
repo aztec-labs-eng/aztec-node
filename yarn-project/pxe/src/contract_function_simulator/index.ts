@@ -104,6 +104,7 @@ export type { LogRetrievalResponse } from './noir-structs/log_retrieval_response
 export { NoteValidationRequest } from './noir-structs/note_validation_request.js';
 export type { PendingTaggedLog } from './noir-structs/pending_tagged_log.js';
 export type { TxEffectData } from './noir-structs/tx_effect_data.js';
+export type { TxEffectWithBlockData } from './noir-structs/tx_effect_with_block_data.js';
 export type { ProvidedSecret } from './noir-structs/provided_secret.js';
 export type { ResolvedTx } from './noir-structs/resolved_tx.js';
 export type { NullifierMembershipWitnessData } from './noir-structs/nullifier_membership_witness_data.js';
