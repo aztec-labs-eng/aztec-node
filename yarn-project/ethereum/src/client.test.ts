@@ -6,6 +6,7 @@ import { type Server, createServer } from 'node:http';
 import { BlockNotFoundError, TransactionReceiptNotFoundError, createPublicClient, toHex } from 'viem';
 import { foundry, sepolia } from 'viem/chains';
 
+import { isAlreadyKnownTxError } from './already_known.js';
 import {
   L1RpcError,
   L1RpcNullResultError,
@@ -18,7 +19,7 @@ import {
 } from './client.js';
 import type { L1RpcGraderConfig } from './l1_reader.js';
 import type { L1RpcGrader } from './l1_rpc_grader.js';
-import { type RecordingRpcServer, startRecordingRpcServer } from './test/recording_rpc_server.js';
+import { type RecordingRpcServer, RpcErrorAnswer, startRecordingRpcServer } from './test/recording_rpc_server.js';
 
 describe('createExtendedL1Client polling', () => {
   const privateKey = `0x${'01'.repeat(32)}`;
@@ -209,6 +210,31 @@ describe('makeL1HttpTransport with an RPC that answers null', () => {
   });
 });
 
+describe('makeL1HttpTransport with a node that already knows a sent tx', () => {
+  let servers: RecordingRpcServer[] = [];
+
+  afterEach(async () => {
+    await Promise.all(servers.map(server => server.close()));
+    servers = [];
+  });
+
+  it('stops at that URL when the next one fails the send differently', async () => {
+    const knows = await startRecordingRpcServer({
+      answer: () => Promise.reject(new RpcErrorAnswer(-32000, 'already known')),
+    });
+    const other = await startRecordingRpcServer({
+      answer: () => Promise.reject(new RpcErrorAnswer(-32601, 'method not found')),
+    });
+    servers.push(knows, other);
+    const client = createPublicClient({ chain: foundry, transport: makeL1HttpTransport([knows.url, other.url]) });
+
+    const error = await client.request({ method: 'eth_sendRawTransaction', params: ['0x02'] }).catch(err => err);
+
+    expect(isAlreadyKnownTxError(error)).toBe(true);
+    expect(other.methods).toEqual([]);
+  });
+});
+
 describe('makeL1HttpTransport with a grader', () => {
   const graderConfig: L1RpcGraderConfig = {
     l1RpcGraderIntervalMS: 60_000,
@@ -231,7 +257,7 @@ describe('makeL1HttpTransport with a grader', () => {
   });
 
   /** An L1 node at `height` that answers eth_getBalance with `balance`, or fails it when undefined. */
-  type FakeNode = { height: bigint; balance?: bigint; onBalance?: () => Promise<void> };
+  type FakeNode = { height: bigint; balance?: bigint; onBalance?: () => Promise<void>; sendError?: string };
 
   const startServer = async (node: FakeNode) => {
     const server = await startRecordingRpcServer({
@@ -247,6 +273,8 @@ describe('makeL1HttpTransport with a grader', () => {
               throw new Error('balance not available');
             }
             return toHex(node.balance);
+          case 'eth_sendRawTransaction':
+            throw new RpcErrorAnswer(-32000, node.sendError ?? 'send not available');
           default:
             throw new Error(`unexpected method ${method}`);
         }
@@ -350,6 +378,20 @@ describe('makeL1HttpTransport with a grader', () => {
       new L1RpcError(`No configured L1 RPC URL is on the expected chain (${foundry.id + 1})`),
     );
     expect(balanceRequests(first) + balanceRequests(second)).toBe(0);
+  });
+
+  it('stops at a graded URL that already knows a sent tx', async () => {
+    const lagging = await startServer({ height: 10n });
+    const knows = await startServer({ height: 100n, sendError: 'already known' });
+    const other = await startServer({ height: 100n, sendError: 'transaction type not supported' });
+    const { client, grader } = await makeClient([lagging.url, knows.url, other.url]);
+    await grader!.probeAll();
+
+    const error = await client.request({ method: 'eth_sendRawTransaction', params: ['0x02'] }).catch(err => err);
+
+    expect(isAlreadyKnownTxError(error)).toBe(true);
+    expect(knows.methods).toContain('eth_sendRawTransaction');
+    expect([...lagging.methods, ...other.methods]).not.toContain('eth_sendRawTransaction');
   });
 
   it('keeps the order a request started with when the order changes mid-request', async () => {

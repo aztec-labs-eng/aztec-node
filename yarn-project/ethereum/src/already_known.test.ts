@@ -1,7 +1,7 @@
 import { RpcRequestError, UnknownRpcError } from 'viem';
 
-import { L1RpcError } from '../client.js';
 import { isAlreadyKnownTxError } from './already_known.js';
+import { L1RpcError } from './client.js';
 
 /** Builds an error shaped like the one a send gets when the node answers with a JSON-RPC error. */
 function makeSendError(message: string, code = -32000) {

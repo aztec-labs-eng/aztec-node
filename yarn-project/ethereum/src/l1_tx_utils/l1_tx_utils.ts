@@ -24,10 +24,11 @@ import {
   formatGwei,
 } from 'viem';
 
+import { isAlreadyKnownTxError } from '../already_known.js';
 import { computeSignedTransactionHash, serializeSignedTransaction } from '../blob_tx.js';
+import { L1RpcNullResultError } from '../client.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
-import { isAlreadyKnownTxError } from './already_known.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
 import { INSUFFICIENT_FUNDS_BACKOFF_MS, MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
@@ -280,7 +281,9 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
   /**
    * Broadcasts a signed tx and returns its hash, computed from the signed tx rather than taken from the node's reply,
-   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send.
+   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send, and
+   * so does a send that every node answered with null: such a node took the request without confirming it, and if the
+   * tx never lands, the monitor speeds it up and sends it again.
    */
   private async sendSignedTransaction(serializedTransaction: Hex, nonce: number): Promise<Hex> {
     const txHash = computeSignedTransactionHash(serializedTransaction);
@@ -289,11 +292,15 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     try {
       rpcHash = await this.client.sendRawTransaction({ serializedTransaction });
     } catch (err) {
-      if (!isAlreadyKnownTxError(err)) {
-        throw err;
+      if (isAlreadyKnownTxError(err)) {
+        this.logger.info(`L1 node already knows tx ${txHash}, treating it as sent`, { txHash, nonce, account });
+        return txHash;
       }
-      this.logger.info(`L1 node already knows tx ${txHash}, treating it as sent`, { txHash, nonce, account });
-      return txHash;
+      if (getErrorCause(err, L1RpcNullResultError)) {
+        this.logger.warn(`L1 node answered null to tx ${txHash}, treating it as sent`, { txHash, nonce, account });
+        return txHash;
+      }
+      throw err;
     }
     if (rpcHash?.toLowerCase() !== txHash.toLowerCase()) {
       this.logger.warn(`L1 node returned hash ${rpcHash} for tx ${txHash}, tracking the tx by its own hash`, {
