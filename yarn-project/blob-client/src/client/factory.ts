@@ -1,3 +1,4 @@
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 
 import { MemoryBlobStore } from '../blobstore/memory_blob_store.js';
@@ -14,6 +15,8 @@ import { LocalBlobClient } from './local.js';
 
 export interface CreateBlobClientDeps {
   logger?: Logger;
+  /** L1 execution client, used to look up a block's parent beacon root when resolving its beacon slot. */
+  l1Client?: Pick<ViemPublicClient, 'request'>;
   /** FileStore clients for reading blobs */
   fileStoreClients?: FileStoreBlobClient[];
   /** FileStore client for uploading blobs */
@@ -36,6 +39,7 @@ export function createBlobClient(config?: BlobClientConfig, deps?: CreateBlobCli
   });
   return new HttpBlobClient(config, {
     logger: log,
+    l1Client: deps?.l1Client,
     fileStoreClients: deps?.fileStoreClients,
     fileStoreUploadClient: deps?.fileStoreUploadClient,
   });
@@ -61,14 +65,14 @@ export interface BlobClientWithFileStoresConfig extends BlobClientConfig {
  * 5. Starting the client (uploads initial healthcheck file if upload client is configured)
  *
  * @param config - Configuration containing blob client settings and chain metadata
- * @param logger - Optional logger for the blob client
+ * @param deps - The shared L1 public client, and an optional logger for the blob client
  * @returns A BlobClientInterface configured with file store support, already started
  */
 export async function createBlobClientWithFileStores(
   config: BlobClientWithFileStoresConfig,
-  logger?: Logger,
+  deps: { l1Client: Pick<ViemPublicClient, 'request'>; logger?: Logger },
 ): Promise<BlobClientInterface> {
-  const log = logger ?? createLogger('blob-client');
+  const log = deps.logger ?? createLogger('blob-client');
 
   const fileStoreMetadata: BlobFileStoreMetadata = {
     l1ChainId: config.l1ChainId,
@@ -90,6 +94,7 @@ export async function createBlobClientWithFileStores(
 
   const client = createBlobClient(config, {
     logger: log,
+    l1Client: deps.l1Client,
     fileStoreClients,
     fileStoreUploadClient,
   });

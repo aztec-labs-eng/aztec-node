@@ -1,11 +1,10 @@
 import type { Archiver } from '@aztec-labs/archiver';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { createEthereumChain } from '@aztec-labs/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { pick } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -28,7 +27,6 @@ import type {
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
 import { L1Metrics, type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
-import { createPublicClient } from 'viem';
 
 import type { SpecificProverNodeConfig } from './config.js';
 import { SUBMIT_EPOCH_PROOF_REFERENCE_SEND } from './gas_constants.js';
@@ -36,6 +34,8 @@ import { ProverNode } from './prover-node.js';
 import { ProverPublisherFactory } from './prover-publisher-factory.js';
 
 export type ProverNodeDeps = {
+  /** The process's shared L1 public client. Publishers sign with their own keys but send through it. */
+  l1Client: ViemPublicClient;
   telemetry?: TelemetryClient;
   log?: Logger;
   archiver: Archiver;
@@ -66,7 +66,7 @@ export async function createProverNode(
   const dateProvider = deps.dateProvider ?? new DateProvider();
   const log = deps.log ?? createLogger('prover');
 
-  const { p2pClient, archiver, keyStoreManager, worldStateSynchronizer } = deps;
+  const { p2pClient, archiver, keyStoreManager, worldStateSynchronizer, l1Client: publicClient } = deps;
 
   // Extract the prover signers from the key store and verify that we have one.
   await keyStoreManager?.validateSigners();
@@ -92,15 +92,6 @@ export async function createProverNode(
   const broker = deps.broker ?? (await createAndStartProvingBroker(config, telemetry));
 
   const prover = await createProverClient(proverClientConfig, worldStateSynchronizer, broker, telemetry);
-
-  const { l1RpcUrls: rpcUrls, l1ChainId: chainId } = config;
-  const chain = createEthereumChain(rpcUrls, chainId);
-
-  const publicClient = createPublicClient({
-    chain: chain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
-    pollingInterval: config.viemPollingIntervalMS,
-  });
 
   const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
 

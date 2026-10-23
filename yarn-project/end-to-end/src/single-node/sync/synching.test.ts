@@ -44,6 +44,7 @@ import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 import { Blob } from '@aztec-labs/blob-lib';
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
@@ -447,7 +448,10 @@ describe('single-node/sync/synching', () => {
     await (aztecNode as any).stop();
     await (sequencer as any).stop();
 
-    const blobClient = await createBlobClientWithFileStores(config, createLogger('test:blob-client:client'));
+    const blobClient = await createBlobClientWithFileStores(config, {
+      l1Client: getPublicClient(config),
+      logger: createLogger('test:blob-client:client'),
+    });
 
     const l1TxUtils = createL1TxUtils(
       deployL1ContractsValues.l1Client,
@@ -461,7 +465,7 @@ describe('single-node/sync/synching', () => {
       config.governanceProposerAddress.toString(),
     );
     const slashingProposerContract = await rollupContract.getSlashingProposer();
-    const epochCache = await EpochCache.create(config.rollupAddress, config, { dateProvider });
+    const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
     const sequencerPublisherMetrics: MockProxy<SequencerPublisherMetrics> = mock<SequencerPublisherMetrics>();
     using publisher = new SequencerPublisher(
       {
@@ -614,9 +618,15 @@ describe('single-node/sync/synching', () => {
             await aztecNode.stop();
           }
 
-          const blobClient = await createBlobClientWithFileStores(
+          const l1Client = getPublicClient(opts.config!);
+          const blobClient = await createBlobClientWithFileStores(opts.config!, {
+            l1Client,
+            logger: createLogger('test:blob-client:client'),
+          });
+          const epochCache = await EpochCache.create(
+            new RollupContract(l1Client, opts.config!.rollupAddress),
             opts.config!,
-            createLogger('test:blob-client:client'),
+            { dateProvider: opts.dateProvider! },
           );
           const nativeWs = await createWorldState(opts.config!, opts.genesis);
           const initialHeader = nativeWs.getInitialHeader();
@@ -624,7 +634,13 @@ describe('single-node/sync/synching', () => {
           const archiver = await createArchiver(
             opts.config!,
             // The checkpoints synced here stay far below the rollup's mana limit, so a test provider is enough.
-            { blobClient, dateProvider: opts.dateProvider!, feeConfigProvider: new TestRollupFeeConfigProvider() },
+            {
+              l1Client,
+              blobClient,
+              epochCache,
+              dateProvider: opts.dateProvider!,
+              feeConfigProvider: new TestRollupFeeConfigProvider(),
+            },
             { blockUntilSync: true },
             initialHeader,
             initialBlockHash,

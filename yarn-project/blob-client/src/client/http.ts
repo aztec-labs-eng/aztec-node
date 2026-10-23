@@ -1,11 +1,11 @@
 import { Blob, type BlobJson, computeEthVersionedBlobHash } from '@aztec-labs/blob-lib';
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { shuffle } from '@aztec-labs/foundation/array';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
-import { type RpcBlock, createPublicClient } from 'viem';
+import type { RpcBlock } from 'viem';
 
 import { createBlobArchiveClient } from '../archive/factory.js';
 import type { BlobArchiveClient } from '../archive/interface.js';
@@ -37,6 +37,8 @@ export class HttpBlobClient implements BlobClientInterface {
     config?: BlobClientConfig,
     private readonly opts: {
       logger?: Logger;
+      /** L1 execution client, used to look up a block's parent beacon root when the caller does not provide it. */
+      l1Client?: Pick<ViemPublicClient, 'request'>;
       archiveClient?: BlobArchiveClient;
       fileStoreClients?: FileStoreBlobClient[];
       fileStoreUploadClient?: FileStoreBlobClient;
@@ -592,7 +594,7 @@ export class HttpBlobClient implements BlobClientInterface {
     parentBeaconBlockRoot?: string,
     l1BlockTimestamp?: bigint,
   ): Promise<number | undefined> {
-    const { l1ConsensusHostUrls, l1RpcUrls } = this.config;
+    const { l1ConsensusHostUrls } = this.config;
     if (!l1ConsensusHostUrls || l1ConsensusHostUrls.length === 0) {
       this.log.debug('No consensus host url configured');
       return undefined;
@@ -611,16 +613,14 @@ export class HttpBlobClient implements BlobClientInterface {
 
     if (!parentBeaconBlockRoot) {
       // parentBeaconBlockRoot not provided by caller — fetch it from the execution RPC
-      if (!l1RpcUrls || l1RpcUrls.length === 0) {
-        this.log.debug('No execution host url configured');
+      const { l1Client } = this.opts;
+      if (!l1Client) {
+        this.log.debug('No execution client configured');
         return undefined;
       }
 
-      const client = createPublicClient({
-        transport: makeL1HttpTransport(l1RpcUrls, { timeout: this.config.l1HttpTimeoutMS }),
-      });
       try {
-        const res: RpcBlock = await client.request({
+        const res: RpcBlock = await l1Client.request({
           method: 'eth_getBlockByHash',
           params: [blockHash, /*tx flag*/ false],
         });
