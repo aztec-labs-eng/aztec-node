@@ -24,21 +24,44 @@ const traceResultSchema = z.object({
   output: schemas.HexStringWith0x.optional(),
 });
 
-/** Zod schema for a single trace from trace_transaction */
-export const traceSchema = z.object({
-  action: traceActionSchema,
-  result: traceResultSchema.optional(),
-  error: z.string().optional(),
+/** Fields shared by every entry type in a trace_transaction response */
+const traceEntryBaseSchema = z.object({
+  error: z.string().nullish(),
   subtraces: z.number(),
   traceAddress: z.array(z.number()),
-  type: z.string(),
 });
+
+/** Zod schema for a call entry from trace_transaction. Calls that halted (e.g. out of gas) have a null result. */
+const callTraceSchema = traceEntryBaseSchema.extend({
+  type: z.literal('call'),
+  action: traceActionSchema,
+  result: traceResultSchema.nullish(),
+});
+
+/**
+ * Zod schema for any non-call entry from trace_transaction (create, suicide, reward, or types added later).
+ * Their action and result vary by type and are not needed, so only the fields used to track failed subtrees are kept.
+ */
+const nonCallTraceSchema = traceEntryBaseSchema.extend({
+  type: z.string().refine(type => type !== 'call', { message: 'Call entries must match the call trace schema' }),
+});
+
+/** Zod schema for a single trace from trace_transaction */
+export const traceSchema = z.union([callTraceSchema, nonCallTraceSchema]);
 
 /** Type for trace_transaction response */
 type TraceTransaction = z.infer<typeof traceSchema>;
 
+/** Type for a call entry in a trace_transaction response */
+type CallTrace = z.infer<typeof callTraceSchema>;
+
 /** Zod schema for the full trace_transaction response (array of traces) */
 export const traceTransactionResponseSchema: ZodFor<TraceTransaction[]> = z.array(traceSchema);
+
+/** Narrows a validated entry to a call; the schema only accepts 'call' entries that match the call schema. */
+function isCallTrace(trace: TraceTransaction): trace is CallTrace {
+  return trace.type === 'call';
+}
 
 /**
  * Traces a transaction and extracts all CALL operations to a specific contract and function selector.
@@ -90,7 +113,7 @@ export async function getSuccessfulCallsFromTrace(
   // Helper to check if a trace is a descendant of an errored trace
   function isDescendantOfError(traceAddress: number[]): boolean {
     // Check all possible ancestor paths
-    for (let i = 1; i < traceAddress.length; i++) {
+    for (let i = 0; i < traceAddress.length; i++) {
       const ancestorAddress = traceAddress.slice(0, i);
       if (erroredTraceAddresses.has(JSON.stringify(ancestorAddress))) {
         return true;
@@ -108,7 +131,7 @@ export async function getSuccessfulCallsFromTrace(
 
     // Check if this is a CALL type trace to the target address with matching selector and result
     if (
-      trace.type === 'call' &&
+      isCallTrace(trace) &&
       trace.action.callType.toLowerCase() === 'call' &&
       trace.action.to?.toLowerCase() === normalizedTarget &&
       trace.action.input?.toLowerCase().startsWith(normalizedSelector) &&
