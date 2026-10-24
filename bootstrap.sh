@@ -160,72 +160,11 @@ function install_deps {
   fi
 }
 
-# Brings every submodule to the commit this repository pins, so a fresh clone, or one where a pull
-# moved a pin, works without a manual `git submodule update`. Runs before ci3 is sourced and cannot
-# use it: ci3 is one of the submodules it may have to fetch.
-#
-#   at the pin                                   nothing; a few git calls, no network
-#   missing                                      shallow init
-#   at another commit, clean, detached           moved to the pin
-#   tracked files modified, or on a branch       left alone with a warning: someone is working in it
-#   marked `update = none`                       skipped
-#   directory not empty but not a checkout       git refuses; init fails, touches nothing
-#
-# Untracked files (build output) do not count as work: git keeps them across a checkout. Quiet unless
-# it changes something, and never on stdout, since callers' stdout is often data.
-function init_submodules {
-  local root path pin name todo=()
-  # This file's directory, not git's top level: the latter follows the caller's working directory,
-  # which may be outside this repository or inside one of its submodules.
-  root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-  # The pinned commit of every submodule at this commit, from one git call.
-  while read -r _ pin _ path; do
-    name=$(git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' |
-      awk -v p="$path" '$2 == p { sub(/^submodule\./, "", $1); sub(/\.path$/, "", $1); print $1 }')
-    [ "$(git -C "$root" config -f .gitmodules --get "submodule.$name.update" || true)" = none ] && continue
-    # The .git check matters: in an uninitialised (empty) directory, `git -C` answers for this repository.
-    if [ -e "$root/$path/.git" ]; then
-      [ "$(git -C "$root/$path" rev-parse HEAD 2>/dev/null)" = "$pin" ] && continue
-    fi
-    todo+=("$path")
-  done < <(git -C "$root" ls-files -s | awk '$1 == "160000"')
-  [ ${#todo[@]} -eq 0 ] && return 0
-
-  # Entry points start in parallel: one does the work, the rest wait and then find nothing to do.
-  # flock is not on macOS by default; there the race is left to git's own locks.
-  if command -v flock >/dev/null; then
-    exec 9>"$(git -C "$root" rev-parse --git-common-dir)/init_submodules.lock"
-    flock 9
-  fi
-
-  local pull=() out
-  for path in "${todo[@]}"; do
-    pin=$(git -C "$root" ls-files -s -- "$path" | awk '{ print $2 }')
-    if [ -e "$root/$path/.git" ]; then
-      local head=$(git -C "$root/$path" rev-parse HEAD 2>/dev/null)
-      [ "$head" = "$pin" ] && continue
-      if [ -n "$(git -C "$root/$path" status --porcelain --untracked-files=no)" ] ||
-        git -C "$root/$path" symbolic-ref -q HEAD >/dev/null; then
-        echo "warning: $path is at ${head:0:7}, not the pinned ${pin:0:7}, and has modified files or is" \
-          "on a branch; leaving it. Run 'git submodule update $path' to use the pin." >&2
-        continue
-      fi
-    fi
-    pull+=("$path")
-  done
-  [ ${#pull[@]} -eq 0 ] && return 0
-
-  echo "Pulling submodules: ${pull[*]}" >&2
-  if ! out=$(git -C "$root" submodule update --init --recursive --depth 1 --jobs 8 -- "${pull[@]}" 2>&1); then
-    echo "$out" >&2
-    echo "Pulling submodules failed: ${pull[*]}" >&2
-    return 1
-  fi
-}
-
-# `init` stops here, so scripts and workflows can prepare the checkout without the rest of this
-# script; every other command gets its submodules prepared too.
-init_submodules || exit 1
+# Bring every submodule to the commit this repository pins, before anything sources ci3: fetch missing
+# ones, move stale ones. Git refuses rather than overwrite local changes; to work in a submodule
+# without this moving it, `git config submodule.<name>.update none`. stdout is kept clean: callers'
+# stdout is often data. `init` stops here, so scripts can prepare the checkout without the rest.
+git -C "$(dirname "${BASH_SOURCE[0]}")" submodule update --init --recursive --depth 1 --jobs 8 --quiet >&2 || exit 1
 [ "${1:-}" = "init" ] && exit 0
 
 # Special case for installing dependencies (can run on older bash).

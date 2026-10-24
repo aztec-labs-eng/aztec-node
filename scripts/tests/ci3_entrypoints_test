@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every script that sources ci3 must run `bootstrap.sh init` before it does, and stop if it fails, so
 # that it works on a fresh clone and after a pull that moves the ci3 pin, and never runs a stale ci3.
-# The root bootstrap.sh, which implements init, runs init_submodules itself.
+# The root bootstrap.sh, which implements init, updates the submodules itself.
 #
 # This applies to every such script, not only to the ones people run directly: scripts are also
 # started by other scripts that do not source ci3, by composite actions, by TypeScript tests and by
@@ -18,7 +18,7 @@ while IFS= read -r f; do
   count=$((count + 1))
   first_source=$(grep -n -E "$ci3_source_re" "$f" | head -1 | cut -d: -f1)
   required='bootstrap.sh" init || exit 1'
-  [ "$f" == bootstrap.sh ] && required='init_submodules || exit 1'
+  [ "$f" == bootstrap.sh ] && required='submodule update --init'
   first_prep=$(grep -n -F "$required" "$f" | head -1 | cut -d: -f1 || true)
   if [ -z "$first_prep" ] || [ "$first_prep" -gt "$first_source" ]; then
     missing+=("$f")

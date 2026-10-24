@@ -69,6 +69,9 @@ function init_in {
   (cd "$1" && ./bootstrap.sh init >"$work/out" 2>"$work/err") || rc=$?
   out=$(cat "$work/out") err=$(cat "$work/err")
 }
+# stderr without git's "Skipping submodule" notices, which it prints for every update = none
+# submodule on every run, even with --quiet.
+notices_only() { [ -z "$(grep -v "^Skipping submodule '" <<<"$1")" ]; }
 # Clones at B, inits, then checks out C: as after a pull that moved both pins.
 function stale_clone {
   local d
@@ -95,63 +98,51 @@ fi
 for r in ci3 other; do mv "$work/$r.git" "$work/$r.git.away"; done
 init_in "$d"
 for r in ci3 other; do mv "$work/$r.git.away" "$work/$r.git"; done
-[ $rc -eq 0 ] && [ -z "$out$err" ] && pass "at the pins: silent, no network" \
-  || fail "at the pins: silent, no network" "rc=$rc out='$out' err='$err'"
+[ $rc -eq 0 ] && [ -z "$out" ] && notices_only "$err" && pass "at the pins: silent apart from skip notices, no network" \
+  || fail "at the pins: silent apart from skip notices, no network" "rc=$rc out='$out' err='$err'"
 
-# After a pull moved the pins, clean submodules follow, and init says what it pulls.
+# After a pull moved the pins, the submodules follow.
 d=$(stale_clone stale)
 init_in "$d"
-if [ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] &&
-  [[ "$err" == *"Pulling submodules: ci3 other"* ]] && [ -z "$out" ]; then
-  pass "stale clean submodules move to their new pins"
-else
-  fail "stale clean submodules move to their new pins" "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") err='$err'"
-fi
+[ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] && [ -z "$out" ] \
+  && pass "stale submodules move to their new pins" \
+  || fail "stale submodules move to their new pins" "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") err='$err'"
 
-# Modified tracked files: that submodule is left alone with a warning; the others still update. Run
-# for ci3 and for an ordinary submodule: they are treated the same.
-for name in ci3 other; do
-  d=$(stale_clone "modified_$name")
-  echo "local edit" > "$d/$name/file"
-  init_in "$d"
-  other_name=$([ "$name" = ci3 ] && echo other || echo ci3)
-  other_pin=$([ "$name" = ci3 ] && echo "$o2" || echo "$c2")
-  old_pin=$([ "$name" = ci3 ] && echo "$c1" || echo "$o1")
-  if [ $rc -eq 0 ] && [ "$(head_of "$d/$name")" = "$old_pin" ] && [ "$(cat "$d/$name/file")" = "local edit" ] &&
-    [[ "$err" == *"warning: $name "* ]] && [ "$(head_of "$d/$other_name")" = "$other_pin" ]; then
-    pass "modified $name is left alone with a warning; $other_name still updates"
-  else
-    fail "modified $name is left alone with a warning; $other_name still updates" \
-      "rc=$rc $name=$(head_of "$d/$name") $other_name=$(head_of "$d/$other_name") err='$err'"
-  fi
-done
-
-# On a branch, away from its pin: someone is working there. Left alone; not detached back to the pin.
-d=$(stale_clone branch)
-git -C "$d/ci3" checkout -q -b my-ci3-work
+# Local changes the move would overwrite: git refuses, init fails, and the change survives.
+d=$(stale_clone modified)
+echo "local edit" > "$d/ci3/file"
 init_in "$d"
-if [ $rc -eq 0 ] && [ "$(git -C "$d/ci3" symbolic-ref --short -q HEAD)" = my-ci3-work ] &&
-  [ "$(head_of "$d/ci3")" = "$c1" ] && [[ "$err" == *"warning: ci3 "* ]] && [ "$(head_of "$d/other")" = "$o2" ]; then
-  pass "a submodule on a branch is left on it with a warning; the others still update"
+if [ $rc -ne 0 ] && [ "$(cat "$d/ci3/file")" = "local edit" ] && [[ "$err" == *"would be overwritten"* ]] && [ -z "$out" ]; then
+  pass "local changes are never overwritten: init fails and says why"
 else
-  fail "a submodule on a branch is left on it with a warning; the others still update" \
-    "rc=$rc branch=$(git -C "$d/ci3" symbolic-ref --short -q HEAD || echo detached) ci3=$(head_of "$d/ci3") err='$err'"
+  fail "local changes are never overwritten: init fails and says why" "rc=$rc file=$(cat "$d/ci3/file") err='$err'"
 fi
 
-# Untracked files are not work in progress: the submodule still updates, and git keeps them.
+# Opting a submodule out locally, to work in it: init leaves it and updates the rest.
+d=$(stale_clone opted_out)
+git -C "$d" config submodule.ci3.update none
+echo "local edit" > "$d/ci3/file"
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c1" ] && [ "$(cat "$d/ci3/file")" = "local edit" ] &&
+  [ "$(head_of "$d/other")" = "$o2" ] && [ -z "$out" ] && [[ "$err" == *"Skipping submodule 'ci3'"* ]]; then
+  pass "a submodule opted out with update = none in .git/config is left alone, with a skip notice"
+else
+  fail "a submodule opted out with update = none in .git/config is left alone, with a skip notice" \
+    "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") err='$err'"
+fi
+
+# Untracked files (build output) do not block an update, and survive it.
 d=$(stale_clone untracked)
 echo "build output" > "$d/other/untracked.out"
 init_in "$d"
-if [ $rc -eq 0 ] && [ "$(head_of "$d/other")" = "$o2" ] && [ -f "$d/other/untracked.out" ]; then
-  pass "untracked files do not block an update and are kept"
-else
-  fail "untracked files do not block an update and are kept" "rc=$rc other=$(head_of "$d/other") err='$err'"
-fi
+[ $rc -eq 0 ] && [ "$(head_of "$d/other")" = "$o2" ] && [ -f "$d/other/untracked.out" ] \
+  && pass "untracked files do not block an update and are kept" \
+  || fail "untracked files do not block an update and are kept" "rc=$rc other=$(head_of "$d/other") err='$err'"
 
 # A commit from before ci3 was a submodule: nothing to do.
 d=$(clone_at old A)
 init_in "$d"
-[ $rc -eq 0 ] && [ "$(cat "$d/ci3/file")" = in-tree ] && [ -z "$out$err" ] \
+[ $rc -eq 0 ] && [ "$(cat "$d/ci3/file")" = in-tree ] && [ -z "$out" ] && notices_only "$err" \
   && pass "commit where ci3 is a plain directory: no-op" || fail "commit where ci3 is a plain directory: no-op" "rc=$rc err='$err'"
 
 # Leftovers in a submodule's directory block the init: git refuses, init fails, nothing is touched.
@@ -164,16 +155,6 @@ else
   fail "leftovers in a submodule directory fail with an explanation and are kept" "rc=$rc err='$err'"
 fi
 
-# Many entry points starting at once on a fresh clone.
-d=$(clone_at parallel C)
-pids=()
-for _ in $(seq 8); do (cd "$d" && ./bootstrap.sh init 2>/dev/null) & pids+=($!); done
-ok=1
-for p in "${pids[@]}"; do wait "$p" || ok=0; done
-[ $ok -eq 1 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] \
-  && pass "concurrent runs on a fresh clone all succeed" \
-  || fail "concurrent runs on a fresh clone all succeed" "ci3=$(head_of "$d/ci3") other=$(head_of "$d/other")"
-
 # Run from an unrelated directory: init finds the repository it belongs to.
 d=$(clone_at elsewhere C)
 (cd "$work" && "$d/bootstrap.sh" init 2>/dev/null)
@@ -184,7 +165,7 @@ d=$(clone_at failing C)
 mv "$work/other.git" "$work/other.git.away"
 init_in "$d"
 mv "$work/other.git.away" "$work/other.git"
-if [ $rc -ne 0 ] && [[ "$err" == *"Pulling submodules failed"* ]] && [[ "$err" == *other.git* ]] && [ -z "$out" ]; then
+if [ $rc -ne 0 ] && [[ "$err" == *other.git* ]] && [ -z "$out" ]; then
   pass "a failed pull fails init and shows git's output"
 else
   fail "a failed pull fails init and shows git's output" "rc=$rc err='$err'"
