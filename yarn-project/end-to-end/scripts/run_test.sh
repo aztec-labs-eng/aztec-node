@@ -6,6 +6,7 @@
 #
 # To avoid thrashing the disk, we mount /tmp as a 1gb tmpfs.
 # We separate out jests temp dir for now, as it consumes a lot of space and we want to quota /tmp independently.
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 source $(git rev-parse --show-toplevel)/ci3/source
 
 type=$1

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 source $(git rev-parse --show-toplevel)/ci3/source
 source shared/setup.sh
 

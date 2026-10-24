@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 # Covers every committed input of deps_hash (the yarn-project hash spans all of yarn-project/), because the
