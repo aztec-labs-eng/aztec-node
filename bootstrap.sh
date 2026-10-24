@@ -328,7 +328,6 @@ EOF
   chmod +x $hooks_dir/post-merge
 }
 
-
 function start_txes {
   # Until Kev's kzg lib stops using Tokio.
   export TOKIO_WORKER_THREADS=1
