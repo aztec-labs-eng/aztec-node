@@ -56,7 +56,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Validate inputs
         run: |

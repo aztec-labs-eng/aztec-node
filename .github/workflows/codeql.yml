@@ -54,7 +54,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Prepare the ci3 submodule
-      run: scripts/prep_ci3.sh
+      run: ./bootstrap.sh init
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL

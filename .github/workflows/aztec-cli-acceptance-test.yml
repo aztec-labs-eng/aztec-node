@@ -42,7 +42,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Run Aztec CLI acceptance test
         timeout-minutes: 30
@@ -70,7 +70,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Notify Slack on success
         if: needs.release-acceptance.result == 'success'

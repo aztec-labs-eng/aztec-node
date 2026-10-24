@@ -45,7 +45,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Resolve the image under test
         id: image
@@ -99,7 +99,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -131,7 +131,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
