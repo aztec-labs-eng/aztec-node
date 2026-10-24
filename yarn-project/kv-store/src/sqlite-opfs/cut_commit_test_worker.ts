@@ -2,7 +2,15 @@
 // commit has reached the database file, so the test can kill the worker mid-commit.
 import sqlite3InitModule from '@aztec-labs/sqlite3mc-wasm';
 
-self.onmessage = async ({ data: { directory, dbPath, hangAfter } }) => {
+// A rejected handler promise does not reach the page's `error` event, so rethrow outside it.
+self.onmessage = ({ data }) =>
+  void cutCommit(data).catch(err =>
+    setTimeout(() => {
+      throw err;
+    }),
+  );
+
+async function cutCommit({ directory, dbPath, hangAfter }: { directory: string; dbPath: string; hangAfter: number }) {
   const sqlite3 = await sqlite3InitModule();
   const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'aztec-kv-opfs', directory });
   const db = new pool.OpfsSAHPoolDb(dbPath);
@@ -19,4 +27,4 @@ self.onmessage = async ({ data: { directory, dbPath, hangAfter } }) => {
     return 1;
   });
   db.exec(`UPDATE data SET value = randomblob(600), hash = hex(randomblob(16)) WHERE tick()`);
-};
+}

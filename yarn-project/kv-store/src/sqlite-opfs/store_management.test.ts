@@ -146,10 +146,16 @@ describe('sqlite-opfs store management', () => {
 
     // @dependency ./cut_commit_test_worker.ts
     const worker = new Worker(new URL('./cut_commit_test_worker.js', import.meta.url), { type: 'module' });
-    const hanging = new Promise(resolve => (worker.onmessage = resolve));
-    worker.postMessage({ directory: storePoolDirectory(name), dbPath: `/${name}`, hangAfter: entries - 500 });
-    await hanging;
-    worker.terminate();
+    try {
+      const hanging = new Promise((resolve, reject) => {
+        worker.onmessage = resolve;
+        worker.onerror = event => reject(new Error(event.message));
+      });
+      worker.postMessage({ directory: storePoolDirectory(name), dbPath: `/${name}`, hangAfter: entries - 500 });
+      await hanging;
+    } finally {
+      worker.terminate();
+    }
 
     // The terminated worker frees its access handles asynchronously, as after a navigation.
     let reopened: AztecSQLiteOPFSStore | undefined;
