@@ -93,8 +93,6 @@ jobs:
           lfs: true
           persist-credentials: false
           submodules: recursive
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
