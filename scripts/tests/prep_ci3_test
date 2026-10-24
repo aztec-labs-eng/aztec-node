@@ -23,7 +23,11 @@ git init -q --bare -b main "$work/ci3.git"
 git -C "$work/ci3.git" config uploadpack.allowReachableSHA1InWant true
 git clone -q "$work/ci3.git" "$work/ci3-src" 2>/dev/null
 echo "v1" > "$work/ci3-src/source"
-git -C "$work/ci3-src" add source && git -C "$work/ci3-src" commit -qm v1 && git -C "$work/ci3-src" push -q origin HEAD:main
+real_ci3="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/ci3"
+mkdir -p "$work/ci3-src/internal"
+cp "$real_ci3/dump_fail" "$work/ci3-src/dump_fail"
+cp "$real_ci3/internal/source_color" "$work/ci3-src/internal/source_color"
+git -C "$work/ci3-src" add -A && git -C "$work/ci3-src" commit -qm v1 && git -C "$work/ci3-src" push -q origin HEAD:main
 c1=$(git -C "$work/ci3-src" rev-parse HEAD)
 echo "v2" > "$work/ci3-src/source"
 git -C "$work/ci3-src" commit -qam v2 && git -C "$work/ci3-src" push -q origin HEAD:main
@@ -45,6 +49,29 @@ git -C "$super_src" add ci3 && git -C "$super_src" commit -qm B
 git -C "$super_src/ci3" checkout -q "$c2"
 git -C "$super_src" add ci3 && git -C "$super_src" commit -qm C
 git -C "$super_src" tag A HEAD~2 && git -C "$super_src" tag B HEAD~1 && git -C "$super_src" tag C HEAD
+
+function make_remote {
+  local name=$1; shift
+  git init -q --bare -b main "$work/$name.git"
+  git -C "$work/$name.git" config uploadpack.allowReachableSHA1InWant true
+  git clone -q "$work/$name.git" "$work/$name-src" 2>/dev/null
+  for v in "$@"; do
+    echo "$v" > "$work/$name-src/file"
+    git -C "$work/$name-src" add file && git -C "$work/$name-src" commit -qm "$v" && git -C "$work/$name-src" push -q origin HEAD:main
+  done
+}
+make_remote other o1 o2
+make_remote skipped s1
+o1=$(git -C "$work/other-src" rev-parse HEAD~1)
+o2=$(git -C "$work/other-src" rev-parse HEAD)
+# D: C plus other at o1 and skipped marked update = none. E: other moves to o2.
+git -C "$super_src" submodule add -q "file://$work/other.git" other 2>/dev/null
+git -C "$super_src/other" checkout -q "$o1"
+git -C "$super_src" submodule add -q "file://$work/skipped.git" skipped 2>/dev/null
+git -C "$super_src" config -f .gitmodules submodule.skipped.update none
+git -C "$super_src" add -A && git -C "$super_src" commit -qm D && git -C "$super_src" tag D
+git -C "$super_src/other" checkout -q "$o2"
+git -C "$super_src" add other && git -C "$super_src" commit -qm E && git -C "$super_src" tag E
 
 # A fresh clone of the superproject at a given commit, without submodules: what a developer gets.
 function clone_at {
@@ -141,6 +168,59 @@ if [ $rc -eq 0 ] && [ "$(ci3_head "$d")" = "$c2" ] && [ -z "$out" ]; then
   pass "bootstrap.sh init prepares ci3 and stops, nothing on stdout"
 else
   fail "bootstrap.sh init prepares ci3 and stops, nothing on stdout" "rc=$rc head=$(ci3_head "$d" 2>&1) stdout='$out'"
+fi
+
+other_head() { git -C "$1/other" rev-parse HEAD 2>/dev/null || echo none; }
+
+# init also pulls the other submodules: all of them on a fresh clone, but not those marked
+# update = none.
+d=$(clone_at init_all D)
+out=$(cd "$d" && ./bootstrap.sh init 2>/dev/null) && rc=0 || rc=$?
+if [ $rc -eq 0 ] && [ "$(ci3_head "$d")" = "$c2" ] && [ "$(other_head "$d")" = "$o1" ] && [ ! -e "$d/skipped/.git" ] && [ -z "$out" ]; then
+  pass "init pulls ci3 and the other submodules, skips update = none, nothing on stdout"
+else
+  fail "init pulls ci3 and the other submodules, skips update = none, nothing on stdout" "rc=$rc ci3=$(ci3_head "$d") other=$(other_head "$d") skipped=$([ -e "$d/skipped/.git" ] && echo pulled || echo not) stdout='$out'"
+fi
+
+# With everything at its pin, init is silent and needs no remote.
+mv "$work/ci3.git" "$work/ci3.git.away"; mv "$work/other.git" "$work/other.git.away"
+err=$(cd "$d" && ./bootstrap.sh init 2>&1 >/dev/null) && rc=0 || rc=$?
+mv "$work/ci3.git.away" "$work/ci3.git"; mv "$work/other.git.away" "$work/other.git"
+[ $rc -eq 0 ] && [ -z "$err" ] && pass "init at the pins: silent, no network" || fail "init at the pins: silent, no network" "rc=$rc err='$err'"
+
+# A pull that moves another submodule's pin: init follows it and says what it is pulling.
+git -C "$d" checkout -q E
+err=$(cd "$d" && ./bootstrap.sh init 2>&1 >/dev/null) && rc=0 || rc=$?
+if [ $rc -eq 0 ] && [ "$(other_head "$d")" = "$o2" ] && [[ "$err" == *"Pulling submodules: other"* ]]; then
+  pass "init moves a stale submodule to its new pin and says so"
+else
+  fail "init moves a stale submodule to its new pin and says so" "rc=$rc other=$(other_head "$d") err='$err'"
+fi
+
+# ci3 on a branch, away from its pin, while another submodule is stale: init must update the other
+# submodule without detaching ci3 back to the pin.
+d=$(clone_at init_branch D)
+(cd "$d" && ./bootstrap.sh init 2>/dev/null)
+git -C "$d" checkout -q E
+git -C "$d/ci3" fetch -q --depth 1 origin "$c1"
+git -C "$d/ci3" checkout -q -b my-ci3-work "$c1"
+(cd "$d" && ./bootstrap.sh init 2>/dev/null) && rc=0 || rc=$?
+if [ $rc -eq 0 ] && [ "$(git -C "$d/ci3" symbolic-ref --short HEAD 2>/dev/null)" = my-ci3-work ] && [ "$(ci3_head "$d")" = "$c1" ] && [ "$(other_head "$d")" = "$o2" ]; then
+  pass "init updates other submodules without detaching ci3 work"
+else
+  fail "init updates other submodules without detaching ci3 work" "rc=$rc ci3=$(git -C "$d/ci3" symbolic-ref --short HEAD 2>&1) other=$(other_head "$d")"
+fi
+
+# A failed pull fails init and shows git's output.
+d=$(clone_at init_fail D)
+(cd "$d" && "$d/scripts/prep_ci3.sh" 2>/dev/null)
+mv "$work/other.git" "$work/other.git.away"
+out=$(cd "$d" && ./bootstrap.sh init 2>"$work/init_fail.err") && rc=0 || rc=$?
+mv "$work/other.git.away" "$work/other.git"
+if [ $rc -ne 0 ] && grep -q "command failed" "$work/init_fail.err" && [ -z "$out" ]; then
+  pass "a failed pull fails init and dumps git's output"
+else
+  fail "a failed pull fails init and dumps git's output" "rc=$rc err='$(head -c 300 "$work/init_fail.err")'"
 fi
 
 if [ $fails -ne 0 ]; then
