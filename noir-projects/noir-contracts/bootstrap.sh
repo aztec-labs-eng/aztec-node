@@ -16,6 +16,7 @@
 # - Just ask me (charlie) for guidance if you're suffering.
 # - I remain convinced we don't need node for these kinds of things, and we can be more performant/expressive with bash.
 # - We could perhaps make it less tricky to work with by leveraging more tempfiles and less stdin/stdout.
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 # entrypoint for docs

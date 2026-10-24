@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(hash_str $(cache_content_hash .rebuild_patterns) $(../yarn-project/bootstrap.sh hash))

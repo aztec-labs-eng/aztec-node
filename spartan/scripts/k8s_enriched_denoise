@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENRICHER="$SCRIPT_DIR/k8s_enricher.ts"
 
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 NO_CD=1 source "$(git rev-parse --show-toplevel)/ci3/source"
 
 namespace="${1:?namespace is required}"

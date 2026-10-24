@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
 NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
 
 # Port a merged PR to another branch as a standalone PR.
