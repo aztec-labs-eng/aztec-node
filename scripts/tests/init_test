@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Tests `./bootstrap.sh init`, with this repository's bootstrap.sh, against a throwaway superproject
+# whose submodules (ci3, another, and one marked update = none) come from local repositories, so no
+# network is needed.
+set -euo pipefail
+
+bootstrap_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bootstrap.sh"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# Local submodule urls are refused by default (protocol.file.allow); init itself must not need any
+# configuration, so allow it through the environment for every git call in this test.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+unset root ci3
+
+fails=0
+pass() { echo "PASS: $1"; }
+fail() { echo "FAIL: $1${2:+ ($2)}"; fails=$((fails + 1)); }
+
+# A remote with one commit per argument, each writing that argument to ./file.
+function make_remote {
+  local name=$1
+  shift
+  git init -q --bare -b main "$work/$name.git"
+  git -C "$work/$name.git" config uploadpack.allowReachableSHA1InWant true
+  git clone -q "$work/$name.git" "$work/$name-src" 2>/dev/null
+  for v in "$@"; do
+    echo "$v" > "$work/$name-src/file"
+    git -C "$work/$name-src" add file
+    git -C "$work/$name-src" commit -qm "$v"
+    git -C "$work/$name-src" push -q origin HEAD:main
+  done
+}
+make_remote ci3 c1 c2
+make_remote other o1 o2
+make_remote skipped s1
+c1=$(git -C "$work/ci3-src" rev-parse HEAD~1) c2=$(git -C "$work/ci3-src" rev-parse HEAD)
+o1=$(git -C "$work/other-src" rev-parse HEAD~1) o2=$(git -C "$work/other-src" rev-parse HEAD)
+
+# The superproject. A: ci3 is a plain directory, as before it became a submodule. B: ci3 at c1, other
+# at o1, skipped marked update = none. C: ci3 at c2, other at o2.
+src="$work/super-src"
+git init -q -b main "$src"
+cp "$bootstrap_src" "$src/bootstrap.sh"
+mkdir "$src/ci3" && echo in-tree > "$src/ci3/file"
+git -C "$src" add -A && git -C "$src" commit -qm A && git -C "$src" tag A
+git -C "$src" rm -rq ci3
+for name in ci3 other skipped; do
+  git -C "$src" submodule add -q "file://$work/$name.git" "$name" 2>/dev/null
+done
+git -C "$src" config -f .gitmodules submodule.skipped.update none
+git -C "$src/ci3" checkout -q "$c1" && git -C "$src/other" checkout -q "$o1"
+git -C "$src" add -A && git -C "$src" commit -qm B && git -C "$src" tag B
+git -C "$src/ci3" checkout -q "$c2" && git -C "$src/other" checkout -q "$o2"
+git -C "$src" add -A && git -C "$src" commit -qm C && git -C "$src" tag C
+
+# A fresh clone at a commit, without submodules: what a developer gets.
+function clone_at {
+  local dir="$work/$1"
+  git clone -q --no-recurse-submodules "$src" "$dir"
+  git -C "$dir" checkout -q "$2"
+  echo "$dir"
+}
+head_of() { [ -e "$1/.git" ] && git -C "$1" rev-parse HEAD || echo none; }
+# Runs init in $1 from that directory; sets rc, and out/err to its stdout/stderr.
+function init_in {
+  rc=0
+  (cd "$1" && ./bootstrap.sh init >"$work/out" 2>"$work/err") || rc=$?
+  out=$(cat "$work/out") err=$(cat "$work/err")
+}
+# Clones at B, inits, then checks out C: as after a pull that moved both pins.
+function stale_clone {
+  local d
+  d=$(clone_at "$1" B)
+  (cd "$d" && ./bootstrap.sh init 2>/dev/null)
+  git -C "$d" checkout -q C
+  echo "$d"
+}
+
+# A fresh clone gets every submodule at its pin, except update = none, and init stops before the rest
+# of bootstrap.sh (which would fail here: no ci3/source, no toolchains). Nothing on stdout: entry
+# points run inside pipelines whose stdout is data.
+d=$(clone_at fresh C)
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] &&
+  [ "$(head_of "$d/skipped")" = none ] && [ -z "$out" ]; then
+  pass "fresh clone: every submodule pulled at its pin, update = none skipped, nothing on stdout"
+else
+  fail "fresh clone: every submodule pulled at its pin, update = none skipped, nothing on stdout" \
+    "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") skipped=$(head_of "$d/skipped") out='$out' err='$err'"
+fi
+
+# Everything at its pin: silent, and no remote needed.
+for r in ci3 other; do mv "$work/$r.git" "$work/$r.git.away"; done
+init_in "$d"
+for r in ci3 other; do mv "$work/$r.git.away" "$work/$r.git"; done
+[ $rc -eq 0 ] && [ -z "$out$err" ] && pass "at the pins: silent, no network" \
+  || fail "at the pins: silent, no network" "rc=$rc out='$out' err='$err'"
+
+# After a pull moved the pins, clean submodules follow, and init says what it pulls.
+d=$(stale_clone stale)
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] &&
+  [[ "$err" == *"Pulling submodules: ci3 other"* ]] && [ -z "$out" ]; then
+  pass "stale clean submodules move to their new pins"
+else
+  fail "stale clean submodules move to their new pins" "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") err='$err'"
+fi
+
+# Modified tracked files: that submodule is left alone with a warning; the others still update. Run
+# for ci3 and for an ordinary submodule: they are treated the same.
+for name in ci3 other; do
+  d=$(stale_clone "modified_$name")
+  echo "local edit" > "$d/$name/file"
+  init_in "$d"
+  other_name=$([ "$name" = ci3 ] && echo other || echo ci3)
+  other_pin=$([ "$name" = ci3 ] && echo "$o2" || echo "$c2")
+  old_pin=$([ "$name" = ci3 ] && echo "$c1" || echo "$o1")
+  if [ $rc -eq 0 ] && [ "$(head_of "$d/$name")" = "$old_pin" ] && [ "$(cat "$d/$name/file")" = "local edit" ] &&
+    [[ "$err" == *"warning: $name "* ]] && [ "$(head_of "$d/$other_name")" = "$other_pin" ]; then
+    pass "modified $name is left alone with a warning; $other_name still updates"
+  else
+    fail "modified $name is left alone with a warning; $other_name still updates" \
+      "rc=$rc $name=$(head_of "$d/$name") $other_name=$(head_of "$d/$other_name") err='$err'"
+  fi
+done
+
+# On a branch, away from its pin: someone is working there. Left alone; not detached back to the pin.
+d=$(stale_clone branch)
+git -C "$d/ci3" checkout -q -b my-ci3-work
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(git -C "$d/ci3" symbolic-ref --short -q HEAD)" = my-ci3-work ] &&
+  [ "$(head_of "$d/ci3")" = "$c1" ] && [[ "$err" == *"warning: ci3 "* ]] && [ "$(head_of "$d/other")" = "$o2" ]; then
+  pass "a submodule on a branch is left on it with a warning; the others still update"
+else
+  fail "a submodule on a branch is left on it with a warning; the others still update" \
+    "rc=$rc branch=$(git -C "$d/ci3" symbolic-ref --short -q HEAD || echo detached) ci3=$(head_of "$d/ci3") err='$err'"
+fi
+
+# Untracked files are not work in progress: the submodule still updates, and git keeps them.
+d=$(stale_clone untracked)
+echo "build output" > "$d/other/untracked.out"
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(head_of "$d/other")" = "$o2" ] && [ -f "$d/other/untracked.out" ]; then
+  pass "untracked files do not block an update and are kept"
+else
+  fail "untracked files do not block an update and are kept" "rc=$rc other=$(head_of "$d/other") err='$err'"
+fi
+
+# A commit from before ci3 was a submodule: nothing to do.
+d=$(clone_at old A)
+init_in "$d"
+[ $rc -eq 0 ] && [ "$(cat "$d/ci3/file")" = in-tree ] && [ -z "$out$err" ] \
+  && pass "commit where ci3 is a plain directory: no-op" || fail "commit where ci3 is a plain directory: no-op" "rc=$rc err='$err'"
+
+# Leftovers in a submodule's directory block the init: git refuses, init fails, nothing is touched.
+d=$(clone_at leftovers C)
+mkdir -p "$d/ci3/__pycache__" && echo x > "$d/ci3/__pycache__/stale.pyc"
+init_in "$d"
+if [ $rc -ne 0 ] && [ -f "$d/ci3/__pycache__/stale.pyc" ] && [[ "$err" == *"not an empty directory"* ]] && [ -z "$out" ]; then
+  pass "leftovers in a submodule directory fail with an explanation and are kept"
+else
+  fail "leftovers in a submodule directory fail with an explanation and are kept" "rc=$rc err='$err'"
+fi
+
+# Many entry points starting at once on a fresh clone.
+d=$(clone_at parallel C)
+pids=()
+for _ in $(seq 8); do (cd "$d" && ./bootstrap.sh init 2>/dev/null) & pids+=($!); done
+ok=1
+for p in "${pids[@]}"; do wait "$p" || ok=0; done
+[ $ok -eq 1 ] && [ "$(head_of "$d/ci3")" = "$c2" ] && [ "$(head_of "$d/other")" = "$o2" ] \
+  && pass "concurrent runs on a fresh clone all succeed" \
+  || fail "concurrent runs on a fresh clone all succeed" "ci3=$(head_of "$d/ci3") other=$(head_of "$d/other")"
+
+# Run from an unrelated directory: init finds the repository it belongs to.
+d=$(clone_at elsewhere C)
+(cd "$work" && "$d/bootstrap.sh" init 2>/dev/null)
+[ "$(head_of "$d/ci3")" = "$c2" ] && pass "works from any working directory" || fail "works from any working directory"
+
+# A pull that fails: init fails, and git's own output says why.
+d=$(clone_at failing C)
+mv "$work/other.git" "$work/other.git.away"
+init_in "$d"
+mv "$work/other.git.away" "$work/other.git"
+if [ $rc -ne 0 ] && [[ "$err" == *"Pulling submodules failed"* ]] && [[ "$err" == *other.git* ]] && [ -z "$out" ]; then
+  pass "a failed pull fails init and shows git's output"
+else
+  fail "a failed pull fails init and shows git's output" "rc=$rc err='$err'"
+fi
+
+if [ $fails -ne 0 ]; then
+  echo "$fails test(s) failed."
+  exit 1
+fi
+echo "All tests passed."
