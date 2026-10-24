@@ -28,7 +28,7 @@ set -euo pipefail
 #   AZTEC_* env vars        - Contract configuration (from .env file)
 
 repo_root="$(git rev-parse --show-toplevel)"
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
 source "${repo_root}/ci3/source"
 
 log() { echo "[INFO]  $(date -Is) - $*"; }

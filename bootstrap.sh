@@ -160,7 +160,7 @@ function install_deps {
 }
 
 # ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it.
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"
+"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
 
 # Special case for installing dependencies (can run on older bash).
 if [ "${1:-}" = "install_deps" ]; then

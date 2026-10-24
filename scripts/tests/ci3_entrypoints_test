@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Every script that sources ci3 must run scripts/prep_ci3.sh before it does, so that it works on a
-# fresh clone and after a pull that moves the ci3 pin.
+# Every script that sources ci3 must run scripts/prep_ci3.sh before it does, and stop if it fails, so
+# that it works on a fresh clone and after a pull that moves the ci3 pin, and never runs a stale ci3.
 #
 # This applies to every such script, not only to the ones people run directly: scripts are also
 # started by other scripts that do not source ci3, by composite actions, by TypeScript tests and by
@@ -16,7 +16,7 @@ count=0
 while IFS= read -r f; do
   count=$((count + 1))
   first_source=$(grep -n -E "$ci3_source_re" "$f" | head -1 | cut -d: -f1)
-  first_prep=$(grep -n -F "scripts/prep_ci3.sh" "$f" | head -1 | cut -d: -f1 || true)
+  first_prep=$(grep -n -F 'scripts/prep_ci3.sh" || exit 1' "$f" | head -1 | cut -d: -f1 || true)
   if [ -z "$first_prep" ] || [ "$first_prep" -gt "$first_source" ]; then
     missing+=("$f")
   fi
@@ -26,7 +26,7 @@ if [ ${#missing[@]} -ne 0 ]; then
   echo "These scripts source ci3 without running scripts/prep_ci3.sh first:"
   printf '  %s\n' "${missing[@]}"
   echo 'Add this line before the line that sources ci3:'
-  echo '  "$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh"'
+  echo '  "$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1'
   exit 1
 fi
 echo "All $count scripts that source ci3 run scripts/prep_ci3.sh first."
