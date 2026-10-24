@@ -66,8 +66,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Resolve the image under test
         id: image
@@ -138,8 +137,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -169,8 +167,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

@@ -32,8 +32,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       # NOTE: in ci3.yml we just rely on draft mode not being mergable.
       # Here we are a little more careful than just skipping the worklfow, in case of an edge case allowing merge.

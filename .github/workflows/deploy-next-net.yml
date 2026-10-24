@@ -45,8 +45,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Determine image tag
         id: determine_tag
@@ -84,8 +83,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -132,8 +130,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       # The runner's gcloud has its component manager disabled, so the plugin has to
       # come from setup-gcloud. The teardown action installs it too, but only after
