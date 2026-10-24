@@ -42,8 +42,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Run Aztec CLI acceptance test
         timeout-minutes: 30
@@ -71,8 +70,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
 
       - name: Notify Slack on success
         if: needs.release-acceptance.result == 'success'

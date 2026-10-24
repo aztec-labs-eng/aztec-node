@@ -48,8 +48,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        # A no-op on refs from before ci3 became a submodule, which have no prep script.
-        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
+        run: scripts/prep_ci3.sh
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
