@@ -2,7 +2,7 @@
 # This runs an individual test from the dest folder.
 # It's the script used by ./bootstrap.sh test_cmds.
 # It means we can return a concise, easy to read, easy to run command for reproducing a test run.
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source
 
 test=$1

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it.
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source
 
 cmd=${1:-}

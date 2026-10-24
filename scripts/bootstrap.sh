@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test entry for the repository-level scripts in scripts/. Mirrors .claude/bootstrap.sh: emits test
 # commands via `test_cmds`, runs them via `test`.
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(cache_content_hash "^scripts/prep_ci3.sh" "^scripts/tests/prep_ci3_test")

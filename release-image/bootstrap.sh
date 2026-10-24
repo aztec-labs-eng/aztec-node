@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(cache_content_hash ^release-image/Dockerfile ^release-image/Dockerfile.base.dockerignore ^release-image/Dockerfile.dockerignore ^build-images/src/Dockerfile ^labs-aztec-toolchain/bootstrap.sh ^yarn-project/yarn.lock)
