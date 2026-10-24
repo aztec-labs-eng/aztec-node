@@ -45,9 +45,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:

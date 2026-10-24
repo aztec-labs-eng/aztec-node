@@ -41,10 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           fetch-depth: 1
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
 
       - name: Determine image tag
         id: determine_tag
@@ -79,9 +81,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           fetch-depth: 1
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -125,9 +129,11 @@ jobs:
       # since all the teardown reads is next-net.env and network_teardown.sh.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           fetch-depth: 1
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
 
       # The runner's gcloud has its component manager disabled, so the plugin has to
       # come from setup-gcloud. The teardown action installs it too, but only after
