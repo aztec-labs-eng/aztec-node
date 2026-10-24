@@ -56,8 +56,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          submodules: true
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
 
       - name: Set up Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0

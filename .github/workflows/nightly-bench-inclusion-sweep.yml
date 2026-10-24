@@ -48,9 +48,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
 
       - name: Determine image tag
         id: docker-image
@@ -115,9 +117,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           credentials_json: ${{ secrets.GCP_HELM_SA_KEY }}
@@ -174,9 +178,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -205,9 +211,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: true
           ref: main
           persist-credentials: false
+      - name: Prepare the ci3 submodule
+        # A no-op on refs from before ci3 became a submodule, which have no prep script.
+        run: if [ -x scripts/prep_ci3.sh ]; then scripts/prep_ci3.sh; fi
       - name: Notify Slack on failure
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
