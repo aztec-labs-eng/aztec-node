@@ -6,7 +6,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-"$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source "${REPO_ROOT}/ci3/source"
 
 # Basic logging helpers

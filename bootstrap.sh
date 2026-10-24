@@ -6,6 +6,7 @@
 #   ./bootstrap.sh: Max parallelism. Only use on serious hardware.
 #   ./bootstrap.sh gentle: Less parallelism. Gentler on hardware. Slow.
 #   ./bootstrap.sh check: Check required toolchains and versions are installed.
+#   ./bootstrap.sh init: Fetch the ci3 submodule, or move it to its pinned commit. Run before anything sources ci3.
 #   ./bootstrap.sh clean: Force a complete clean of the repo. Erases untracked files, be careful!
 
 ### TOOLCHAIN INSTALLATIONS ############################################################################################
@@ -159,8 +160,10 @@ function install_deps {
   fi
 }
 
-# ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it.
+# ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it. `init`
+# stops here, so scripts and workflows can prepare the checkout without the rest of this script.
 "$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+[ "${1:-}" = "init" ] && exit 0
 
 # Special case for installing dependencies (can run on older bash).
 if [ "${1:-}" = "install_deps" ]; then

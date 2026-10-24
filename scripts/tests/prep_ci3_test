@@ -4,6 +4,7 @@
 set -euo pipefail
 
 prep_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/prep_ci3.sh"
+bootstrap_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bootstrap.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -34,6 +35,7 @@ super_src="$work/super-src"
 git init -q -b main "$super_src"
 mkdir -p "$super_src/scripts" "$super_src/ci3"
 cp "$prep_src" "$super_src/scripts/prep_ci3.sh"
+cp "$bootstrap_src" "$super_src/bootstrap.sh"
 echo "in-tree" > "$super_src/ci3/source"
 git -C "$super_src" add -A && git -C "$super_src" commit -qm A
 git -C "$super_src" rm -rq ci3
@@ -130,6 +132,16 @@ for p in "${pids[@]}"; do wait "$p" || ok=0; done
 d=$(clone_at elsewhere C)
 (cd "$work" && "$d/scripts/prep_ci3.sh" 2>/dev/null)
 [ "$(ci3_head "$d")" = "$c2" ] && pass "works from any working directory" || fail "works from any working directory"
+
+# `bootstrap.sh init`, the entry point everything calls, with the repository's real bootstrap.sh: it
+# prepares ci3 on a fresh clone and stops before the rest of the script, which needs ci3 and tools.
+d=$(clone_at init C)
+out=$(cd "$d" && ./bootstrap.sh init 2>/dev/null) && rc=0 || rc=$?
+if [ $rc -eq 0 ] && [ "$(ci3_head "$d")" = "$c2" ] && [ -z "$out" ]; then
+  pass "bootstrap.sh init prepares ci3 and stops, nothing on stdout"
+else
+  fail "bootstrap.sh init prepares ci3 and stops, nothing on stdout" "rc=$rc head=$(ci3_head "$d" 2>&1) stdout='$out'"
+fi
 
 if [ $fails -ne 0 ]; then
   echo "$fails test(s) failed."
