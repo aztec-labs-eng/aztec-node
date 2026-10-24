@@ -149,7 +149,10 @@ describe('sqlite-opfs store management', () => {
     try {
       const hanging = new Promise((resolve, reject) => {
         worker.onmessage = resolve;
-        worker.onerror = event => reject(new Error(event.message));
+        worker.onerror = event => {
+          event.preventDefault();
+          reject(new Error(event.message));
+        };
       });
       worker.postMessage({ directory: storePoolDirectory(name), dbPath: `/${name}`, hangAfter: entries - 500 });
       await hanging;
