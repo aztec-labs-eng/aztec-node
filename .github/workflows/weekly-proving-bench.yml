@@ -37,10 +37,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Resolve the image under test
         id: image
@@ -95,10 +94,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -127,10 +125,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -172,10 +169,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -206,10 +202,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Notify Slack on success
         if: success()

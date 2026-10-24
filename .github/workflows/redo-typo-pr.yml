@@ -25,9 +25,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
+        submodules: true
         token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
-    - name: Prepare the ci3 submodule
-      run: ./bootstrap.sh init
 
     - name: Authenticate with GitHub CLI
       run: |

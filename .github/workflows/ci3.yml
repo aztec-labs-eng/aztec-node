@@ -54,6 +54,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           # The commit to checkout. We want our actual commit, and not the result of merging the PR to the target.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Fetch all of the PR's commits.
@@ -61,8 +62,6 @@ jobs:
           # This job never pushes, and the repo is public, so the remote reads it does make on the
           # runner resolve anonymously; the EC2 build instance clones with its own GITHUB_TOKEN.
           persist-credentials: false
-      - name: Prepare the ci3 submodule
-        run: ./bootstrap.sh init
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
