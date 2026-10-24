@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Port to each target
         if: steps.targets.outputs.any == 'true'

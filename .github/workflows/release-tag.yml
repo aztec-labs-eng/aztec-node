@@ -102,7 +102,7 @@ jobs:
           ref: refs/heads/${{ inputs.branch }}
           token: ${{ steps.app.outputs.token }}
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Create and push tag
         # Passed as env rather than interpolated with ${{ }}: an expression is

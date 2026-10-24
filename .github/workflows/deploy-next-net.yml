@@ -45,7 +45,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Determine image tag
         id: determine_tag
@@ -83,7 +83,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -130,7 +130,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Prepare the ci3 submodule
-        run: scripts/prep_ci3.sh
+        run: ./bootstrap.sh init
 
       # The runner's gcloud has its component manager disabled, so the plugin has to
       # come from setup-gcloud. The teardown action installs it too, but only after

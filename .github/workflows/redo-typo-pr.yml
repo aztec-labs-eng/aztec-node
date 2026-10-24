@@ -27,7 +27,7 @@ jobs:
       with:
         token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
     - name: Prepare the ci3 submodule
-      run: scripts/prep_ci3.sh
+      run: ./bootstrap.sh init
 
     - name: Authenticate with GitHub CLI
       run: |
