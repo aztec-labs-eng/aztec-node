@@ -21,13 +21,6 @@ export DENOISE := 1
 
 ROOT := $(shell git rev-parse --show-toplevel)
 
-# Recipes run ci3's scripts directly, some as later stages of a pipeline that all start at once, so
-# no single recipe can prepare the ci3 submodule in time: do it once, when make starts.
-_ := $(shell $(ROOT)/scripts/prep_ci3.sh >&2)
-ifneq ($(.SHELLSTATUS),0)
-$(error scripts/prep_ci3.sh failed; see above)
-endif
-
 # Core helper to run a shell command with colored, prefixed output
 # Usage: $(call run_command,label,directory,command)
 # Color is automatically computed from label hash by color_prefix script
@@ -108,9 +101,7 @@ release: fast
 claude-tests:
 	$(call test,$@,.claude)
 
-#==============================================================================
 # Repository scripts
-#==============================================================================
 
 .PHONY: scripts-tests
 scripts-tests:
