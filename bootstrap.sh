@@ -6,7 +6,7 @@
 #   ./bootstrap.sh: Max parallelism. Only use on serious hardware.
 #   ./bootstrap.sh gentle: Less parallelism. Gentler on hardware. Slow.
 #   ./bootstrap.sh check: Check required toolchains and versions are installed.
-#   ./bootstrap.sh init: Fetch the ci3 submodule, or move it to its pinned commit. Run before anything sources ci3.
+#   ./bootstrap.sh init: Fetch the submodules, or move them to their pinned commits. Run before anything sources ci3.
 #   ./bootstrap.sh clean: Force a complete clean of the repo. Erases untracked files, be careful!
 
 ### TOOLCHAIN INSTALLATIONS ############################################################################################
@@ -160,9 +160,33 @@ function install_deps {
   fi
 }
 
-# ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it. `init`
-# stops here, so scripts and workflows can prepare the checkout without the rest of this script.
+# Pulls every submodule that is missing or not at its pin, except ci3, which prep_ci3.sh owns (it
+# leaves a ci3 with local work alone, which a plain `git submodule update` would not), and those
+# marked `update = none`. Runs before ci3 is sourced, using only ci3/dump_fail. Quiet unless it pulls
+# something; on failure dump_fail shows the full output. stdout is left clean: callers' stdout is data.
+function pull_submodules {
+  local root=$(git rev-parse --show-toplevel) paths=() key path name pin
+  while read -r key path; do
+    [ "$path" = ci3 ] && continue
+    name=${key#submodule.}
+    name=${name%.path}
+    [ "$(git -C "$root" config -f .gitmodules --get "submodule.$name.update" || true)" = none ] && continue
+    pin=$(git -C "$root" ls-files -s -- "$path" | awk '$1 == "160000" { print $2 }')
+    [ -n "$pin" ] || continue
+    if [ ! -e "$root/$path/.git" ] || [ "$(git -C "$root/$path" rev-parse HEAD 2>/dev/null)" != "$pin" ]; then
+      paths+=("$path")
+    fi
+  done < <(git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' || true)
+  [ ${#paths[@]} -eq 0 ] && return 0
+  echo "Pulling submodules: ${paths[*]}" >&2
+  (cd "$root" && ci3/dump_fail "git submodule update --init --recursive --depth 1 --jobs 8 -- ${paths[*]}" >/dev/null)
+}
+
+# Make the checkout ready before anything sources ci3: ci3 itself (fetched, or moved to the pinned
+# commit), then the other submodules. `init` stops here, so scripts can prepare the checkout without
+# the rest of this script.
 "$(git rev-parse --show-toplevel)/scripts/prep_ci3.sh" || exit 1
+pull_submodules || exit 1
 [ "${1:-}" = "init" ] && exit 0
 
 # Special case for installing dependencies (can run on older bash).
@@ -321,15 +345,11 @@ EOF
   cat <<EOF >$hooks_dir/post-merge
 #!/usr/bin/env bash
 set -euo pipefail
-git submodule update --init --recursive
+./bootstrap.sh init
 EOF
   chmod +x $hooks_dir/post-merge
 }
 
-function pull_submodules {
-  echo_header "pull submodules"
-  denoise "git submodule update --init --recursive --depth 1 --jobs 8"
-}
 
 function start_txes {
   # Until Kev's kzg lib stops using Tokio.
@@ -390,19 +410,14 @@ function stop_txes {
   fi
 }
 
-function prep {
-  check_toolchains
-  pull_submodules
-}
-
 function build {
-  prep
+  check_toolchains
   echo_header "build"
   make ${1:-fast}
 }
 
 function build_and_test {
-  prep
+  check_toolchains
   echo_header "build and test"
 
   # Start the test engine.
@@ -680,7 +695,7 @@ case "$cmd" in
   ;;
   "gentle")
     install_hooks
-    prep
+    check_toolchains
     if [ -t 1 ]; then
       export DUMP_FAIL=1
     fi
@@ -717,7 +732,7 @@ case "$cmd" in
     # the cache for this commit. No test engine; bench uploads bench-<treehash>.
     export CI=1
     export CI_FULL=1
-    prep
+    check_toolchains
     make bench
     bench
     ;;
