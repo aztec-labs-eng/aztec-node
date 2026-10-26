@@ -8,7 +8,6 @@ use std::meta::derive;
 // @dev: If you change the following struct you have to update:
 // - account_entrypoint.ts (specifically `getEntrypointAbi()`)
 // - default_multi_call_entrypoint.ts (specifically `getEntrypointAbi()`)
-// - function_call.ts
 // - encoding.ts
 #[derive(Deserialize, Serialize)]
 pub struct FunctionCall {
