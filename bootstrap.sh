@@ -944,7 +944,7 @@ case "$cmd" in
   # RELEASES #
   ############
   "ci-release")
-    # Single command that tests and publishes a release.
+    # Single command that builds and publishes a release.
     # DRY_RUN=1 exercises the whole flow without publishing — this is how releases are tested in CI.
     export CI=1
     export USE_TEST_CACHE=1
