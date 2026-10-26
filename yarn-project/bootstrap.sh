@@ -503,16 +503,17 @@ function release_packages {
   export NPM_RELEASE_RESOLUTIONS="$resolutions"
 
   # Validate every manifest before anything is published: deploy_npm applies the same
-  # scoped-release rules per package inside the loop below, where a failure would abort
-  # the release with earlier packages already live on npm.
+  # scoped-release rules per package during the publish below, where a failure would stop
+  # the release with other packages already live on npm.
   echo "Validating package manifests..."
   for package in $packages; do
     (cd $package && release_prep_package_json --check "$1")
   done
 
-  for package in $packages; do
-    (cd $package && retry "deploy_npm $1")
-  done
+  # Packages publish in no dependency order, so a failed publish can leave its dependents live
+  # without it until the release is re-run. --halt soon starts no new publish after a failure and
+  # lets in-flight uploads finish.
+  echo "$packages" | parallel -j 8 --tag --line-buffer --halt soon,fail=1 "cd {} && retry 'deploy_npm $1'"
 }
 
 function release {
