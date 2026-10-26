@@ -142,7 +142,7 @@ These are managed in a single place, the file in the repository root `.test_patt
     owners: [*nico]
 ```
 
-Each entry's `regex` is matched against the test command; with `error_regex`, the entry applies only to failures whose output matches. `retry: true` retries a failing test once, and a pass on the retry is a flake that alerts the listed owners in Slack (#aztec3-ci) instead of failing the build. `on` and `channel` choose which events (`flake`, `fail`) post and where, as described at the top of the file. `skip: true` disables a test outright — reserve it for tests that fail constantly. This allows us to clearly see and manage which tests are currently disabled due to flakey behaviour.
+Each entry's `regex` is matched against the test command; with `error_regex`, the entry applies only to failures whose output matches. `retry: true` retries a failing test once, and a pass on the retry is a flake that alerts the listed owners in Slack (#aztec3-ci) instead of failing the build. `notify_on` and `channel` choose which events (`flake`, `fail`) post and where, as described at the top of the file. `skip: true` disables a test outright — reserve it for tests that fail constantly. This allows us to clearly see and manage which tests are currently disabled due to flakey behaviour.
 
 If you run into a flakey test (which should be _much_ less common once the grinder is running), disable it here and notify the relevant team.
 

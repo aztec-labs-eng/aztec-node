@@ -4,7 +4,7 @@
 #                    Only do this for tests that are currently expected to fail constantly and the noise is unbearable!
 #   retry: true      Retry a failing test once; a pass on the retry is a flake and does not fail the build.
 #                    A failing test that matches no entry with retry: true fails the build.
-#   on: [...]        The events that post to Slack: flake, fail, or both. Default: [flake].
+#   notify_on: [...] The events that post to Slack: flake, fail, or both. Default: [flake].
 #   channel: "#..."  The Slack channel those posts go to. Default: #aztec3-ci.
 #   owners: [...]    Who those posts tag. Owners are identified by their Slack id, (profile, three dots, copy member id).
 
@@ -49,7 +49,7 @@ tests:
 
   # Contract artifact backwards-compat tests run in full CI only, so a PR's own CI usually does not catch a break.
   - regex: "^CONTRACT_ARTIFACTS_VERSION="
-    on: [fail, flake]
+    notify_on: [fail, flake]
     channel: "#team-fairies"
     owners: [*nico]
 
