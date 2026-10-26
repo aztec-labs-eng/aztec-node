@@ -51,6 +51,7 @@ tests:
   - regex: "^CONTRACT_ARTIFACTS_VERSION="
     on: [fail, flake]
     channel: "#team-fairies"
+    owners: [*nico]
 
   # Slack testing.
   - regex: "nonsense to match"
