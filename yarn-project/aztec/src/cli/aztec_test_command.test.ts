@@ -1,7 +1,7 @@
 import { times } from '@aztec-labs/foundation/collection';
 import { describe, expect, it } from '@jest/globals';
 import { Buffer } from 'buffer';
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { once } from 'events';
 import { createServer } from 'net';
 import { delimiter, dirname, join } from 'path';
@@ -27,9 +27,9 @@ const STARTUP_FAILURE_TIMEOUT_MS = 60_000;
 const FULL_RUN_TIMEOUT_MS = 100_000;
 
 describe('aztec test', () => {
-  it('delivers all test output when the reader falls behind', () => {
+  it('delivers all test output when the reader falls behind', async () => {
     // Pass output through until nargo starts testing, then stop reading so that nargo's writes fill the pipe.
-    const { status, stdout, stderr } = runInBash(
+    const { status, stdout, stderr } = await runInBash(
       `
       "$AZTEC_SH" test --show-output | {
         while IFS= read -r line; do
@@ -57,22 +57,22 @@ describe('aztec test', () => {
     await using portHolder = createServer().listen(TXE_PORT, '127.0.0.1');
     await once(portHolder, 'listening');
 
-    const { status, stdout, stderr } = runInBash('"$AZTEC_SH" test', { timeoutMs: STARTUP_FAILURE_TIMEOUT_MS });
+    const { status, stdout, stderr } = await runInBash('"$AZTEC_SH" test', { timeoutMs: STARTUP_FAILURE_TIMEOUT_MS });
 
     expect(status).not.toBe(0);
     expect(stderr).toContain(`port ${TXE_PORT}`);
     expect(stdout).not.toContain('Running 1 test function');
   }, 120_000);
 
-  it('fails when the TXE exits before it starts listening', () => {
+  it('fails when the TXE exits before it starts listening', async () => {
     // With a single worker the TXE creates its temp contract store before listening, so an unusable temp directory
     // makes it exit first. Compiling this workspace does not need the temp directory.
-    const { status, signal, stderr } = runInBash('"$AZTEC_SH" test', {
+    const { status, signal, stderr } = await runInBash('"$AZTEC_SH" test', {
       env: { TXE_WORKERS: '1', TMPDIR: '/nonexistent' },
       timeoutMs: STARTUP_FAILURE_TIMEOUT_MS,
     });
 
-    // A hung run ends with the timeout's SIGTERM instead of an exit status.
+    // A hung run ends with the timeout's SIGKILL instead of an exit status.
     expect(signal).toBeNull();
     expect(status).not.toBe(0);
     expect(stderr).toContain('TXE exited');
@@ -81,14 +81,25 @@ describe('aztec test', () => {
 
 /**
  * Runs a bash script in the test workspace, with `$AZTEC_SH` pointing at the wrapper and nargo on the PATH. `env` adds
- * to the inherited environment; `timeoutMs` kills the script with SIGTERM once it elapses.
+ * to the inherited environment; once `timeoutMs` elapses, the script and every process it started are killed.
  */
-function runInBash(script: string, { env = {}, timeoutMs }: { env?: NodeJS.ProcessEnv; timeoutMs: number }) {
+async function runInBash(script: string, { env = {}, timeoutMs }: { env?: NodeJS.ProcessEnv; timeoutMs: number }) {
   const nargoDir = process.env.NARGO ? [dirname(process.env.NARGO)] : [];
-  return spawnSync('bash', ['-c', script], {
+  // In a process group of its own, everything the script starts, such as the TXE holding its port, can be killed along
+  // with it instead of outliving the timeout. SIGKILL, since a hung process may not act on SIGTERM.
+  const child = spawn('bash', ['-c', script], {
     cwd: WORKSPACE,
-    encoding: 'utf-8',
+    detached: true,
     env: { ...process.env, AZTEC_SH, PATH: [...nargoDir, process.env.PATH].join(delimiter), ...env },
-    timeout: timeoutMs,
   });
+  const timer = setTimeout(() => process.kill(-child.pid!, 'SIGKILL'), timeoutMs);
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf-8').on('data', (chunk: string) => (stdout += chunk));
+  child.stderr.setEncoding('utf-8').on('data', (chunk: string) => (stderr += chunk));
+  const { status, signal } = await new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(resolve =>
+    child.on('close', (status, signal) => resolve({ status, signal })),
+  );
+  clearTimeout(timer);
+  return { status, signal, stdout, stderr };
 }
