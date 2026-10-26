@@ -245,7 +245,7 @@ Use `TypedEventEmitter<TEventMap>` interface for typed events.
 </typescript_style>
 
 <ci_config>
-When a test intermittently fails but shouldn't block CI, edit `.test_patterns.yml` (at the git root, not in yarn-project) and add an entry under `tests:`. Without `error_regex`, the test is always flagged as flaky when it fails. With `error_regex`, only flagged when output matches. `skip: true` disables the test entirely (avoid unless constantly failing). Flaky tests alert owners in #aztec3-ci Slack but don't fail CI.
+When a test intermittently fails but shouldn't block CI, edit `.test_patterns.yml` (at the git root, not in yarn-project) and add an entry under `tests:` with `retry: true` and `owners`; without `retry: true` the failure still fails the build. Without `error_regex`, the test is always flagged as flaky when it fails. With `error_regex`, only flagged when output matches. `skip: true` disables the test entirely (avoid unless constantly failing). Flaky tests alert owners in #aztec3-ci Slack but don't fail CI.
 </ci_config>
 
 ## Dependency Management
