@@ -89,8 +89,9 @@ chonk-inputs:
 crs:
 	$(call run_command,$@,$(ROOT)/ci3/aws,./download_crs.sh)
 
-# Release.
-release: fast
+# Release: everything the projects in RELEASE_PROJECTS (ci3/source_release_target) publish from.
+# Keep in sync with that list.
+release: aztec-nr yarn-project aztec-up playground release-image
 
 #==============================================================================
 # .claude tooling
