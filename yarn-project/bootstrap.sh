@@ -513,7 +513,8 @@ function release_packages {
   # Packages publish in no dependency order, so a failed publish can leave its dependents live
   # without it until the release is re-run. --halt soon starts no new publish after a failure and
   # lets in-flight uploads finish.
-  echo "$packages" | parallel -j 8 --tag --line-buffer --halt soon,fail=1 "cd {} && retry 'deploy_npm $1'"
+  echo "$packages" | parallel -j 8 --tagstring '{/}' --line-buffer --halt soon,fail=1 \
+    denoise "'cd {} && retry \"deploy_npm $1\"'"
 }
 
 function release {
