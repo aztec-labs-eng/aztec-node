@@ -61,6 +61,14 @@ auth:
   htpasswd:
     file: ./htpasswd
 
+# JWT rather than the default legacy tokens, which re-run the htpasswd bcrypt check on every request
+# that carries one, including every packument and tarball read.
+security:
+  api:
+    jwt:
+      sign:
+        expiresIn: 1d
+
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
@@ -99,14 +107,12 @@ packages:
 
 logs: { type: stdout, format: pretty, level: warn }
 EOF
-  # The login below registers the user; a file left by an earlier run could hold another password.
-  rm -f /tmp/htpasswd
 
   local verdaccio_version=7.0.1
+  export PATH="/tmp/verdaccio-pkg/bin:$PATH"
   if [ "$(verdaccio --version 2>/dev/null)" != "v$verdaccio_version" ]; then
     # Install to a local prefix to avoid requiring root for global npm install.
     npm i -g --prefix /tmp/verdaccio-pkg verdaccio@$verdaccio_version
-    export PATH="/tmp/verdaccio-pkg/bin:$PATH"
   fi
 
   rm -rf verdaccio-storage
@@ -118,6 +124,8 @@ EOF
     echo_stderr ":4873 is already in use; refusing to publish to an unknown registry."
     exit 1
   fi
+  # The login below registers the user; a file left by an earlier run could hold another password.
+  rm -f /tmp/htpasswd
   verdaccio --config /tmp/verdaccio-config.yaml --listen 4873 &>/dev/null &
   verdaccio_pid=$!
   trap 'kill $verdaccio_pid &>/dev/null || true' EXIT
@@ -137,7 +145,7 @@ EOF
   # Verdaccio accepts Basic credentials only on its login route and answers 401 to any other
   # request that carries them, so npm authenticates with the token the login returns.
   local token
-  if ! token=$(curl -sf -X PUT -H 'content-type: application/json' \
+  if ! token=$(curl -sSf -X PUT -H 'content-type: application/json' \
     -d '{"name":"testuser","password":"testpass"}' \
     http://localhost:4873/-/user/org.couchdb.user:testuser | jq -er .token); then
     echo_stderr "Could not log in to the local registry on :4873."
