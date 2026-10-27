@@ -1231,7 +1231,7 @@ variable "PROVER_OXIDE_SIDECAR" {
   description = "Optional epoch-proof sidecar."
   type = object({
     enabled                     = optional(bool, false)
-    image                       = optional(string, "azteclabs/oxide-relayer@sha256:e3bc6eb730aad40ec0ec46c8f16c09484bbc18e79cd17a364cb83f7e6571762f")
+    image                       = optional(string, "")
     manifest_url                = optional(string, "")
     portal                      = optional(string, "")
     proof_submission_target     = optional(string, "")
