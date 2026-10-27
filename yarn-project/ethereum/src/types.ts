@@ -44,7 +44,7 @@ export type DebugCallTrace = {
   calls?: DebugCallTrace[];
 };
 
-/** Action object for a trace_transaction call */
+/** Action object for a call entry in a trace_transaction response */
 export type TraceAction = {
   from: Hex;
   to?: Hex;
@@ -54,21 +54,34 @@ export type TraceAction = {
   value?: Hex;
 };
 
-/** Result object for a trace_transaction call */
+/** Result object for a call entry in a trace_transaction response */
 export type TraceResult = {
   gasUsed?: Hex;
   output?: Hex;
 };
 
-/** Return type for a single trace in trace_transaction response */
-export type TraceTransactionResponse = {
+/** A call entry in a trace_transaction response. Calls that halted (e.g. out of gas) have a null result. */
+export type TraceCallResponse = {
   action: TraceAction;
-  result?: TraceResult;
-  error?: string;
+  result?: TraceResult | null;
+  error?: string | null;
+  subtraces: number;
+  traceAddress: number[];
+  type: 'call';
+};
+
+/** A non-call entry (create, suicide, reward) in a trace_transaction response, whose action and result vary by type */
+export type TraceNonCallResponse = {
+  action?: unknown;
+  result?: unknown;
+  error?: string | null;
   subtraces: number;
   traceAddress: number[];
   type: string;
 };
+
+/** Return type for a single trace in trace_transaction response */
+export type TraceTransactionResponse = TraceCallResponse | TraceNonCallResponse;
 
 /** Type for a viem public client with support for debug methods */
 export type ViemPublicDebugClient = PublicClient<
