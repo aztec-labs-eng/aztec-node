@@ -1,11 +1,9 @@
 import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
-import { uniqueBy } from '@aztec-labs/foundation/collection';
 import { vkAsFields } from '@aztec-labs/foundation/crypto/keys';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
-import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { pushTestData } from '@aztec-labs/foundation/testing';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -42,7 +40,6 @@ import {
   type PrivateCallExecutionResult,
   type PrivateExecutionResult,
   TxRequest,
-  collectNested,
   collectNoteHashNullifierCounterMap,
   getFinalMinRevertibleSideEffectCounter,
 } from '@aztec-labs/stdlib/tx';
@@ -52,7 +49,10 @@ import { Buffer } from 'buffer';
 import { BatchPlanner } from './batch_planner.js';
 import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
-import type { PrivateKernelInputsProvider } from './private_kernel_inputs_provider.js';
+import {
+  type PrivateKernelInputsProvider,
+  getUpdatedClassIdHintsOfCalledContracts,
+} from './private_kernel_inputs_provider.js';
 
 const NULL_SIMULATE_OUTPUT: PrivateKernelSimulateOutput<PrivateKernelCircuitPublicInputs> = {
   publicInputs: PrivateKernelCircuitPublicInputs.empty(),
@@ -131,7 +131,9 @@ export class PrivateKernelExecutionProver {
     // reusing the existing single-app `needsReset()` check.
     const planner = new BatchPlanner(noteHashNullifierCounterMap, splitCounter, this.maxBatchSize);
 
-    const updatedClassIdHintsMap = await this.prefetchUpdatedClassIdHints(executionResult);
+    const updatedClassIdHintsMap = await getUpdatedClassIdHintsOfCalledContracts(executionResult, address =>
+      this.inputsProvider.getUpdatedClassIdHints(address),
+    );
 
     while (executionStack.length) {
       if (!firstIteration) {
@@ -213,7 +215,10 @@ export class PrivateKernelExecutionProver {
 
     // Round the aggregated expirationTimestamp down to reduce precision and avoid leaking which private
     // functions were called via their exact expiration offsets.
-    const expirationTimestampUpperBound = computeTxExpirationTimestamp(output.publicInputs);
+    const expirationTimestampUpperBound = computeTxExpirationTimestamp({
+      anchorBlockTimestamp: output.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp,
+      expirationTimestamp: output.publicInputs.expirationTimestamp,
+    });
 
     const resetInputs = await finalResetBuilder.build(this.inputsProvider);
     const mergedInputs = new PrivateKernelResetTailCircuitPrivateInputs(
@@ -389,24 +394,6 @@ export class PrivateKernelExecutionProver {
     });
 
     return await this.createPrivateCallData(next, updatedClassIdHintsMap);
-  }
-
-  /** Prefetches updated class id hints for all unique contracts in the execution tree in parallel. */
-  private async prefetchUpdatedClassIdHints(
-    executionResult: PrivateExecutionResult,
-  ): Promise<Map<string, UpdatedClassIdHints>> {
-    const allAddresses = collectNested([executionResult.entrypoint], exec => [
-      exec.publicInputs.callContext.contractAddress,
-    ]);
-    const uniqueAddresses = uniqueBy(allAddresses, a => a.toString());
-    return new Map<string, UpdatedClassIdHints>(
-      await allToCompletion(
-        uniqueAddresses.map(
-          async addr =>
-            [addr.toString(), await this.inputsProvider.getUpdatedClassIdHints(addr)] as [string, UpdatedClassIdHints],
-        ),
-      ),
-    );
   }
 
   private async createPrivateCallData(

@@ -286,6 +286,10 @@ describe('automine/simulation/kernelless_simulation', () => {
       expect(kernellessFeePayer).toEqual(withKernelsFeePayer);
       expect(kernellessFeePayer).toEqual(swapperAddress);
 
+      expect(kernellessTxResult.publicInputs.expirationTimestamp).toEqual(
+        withKernelsTxResult.publicInputs.expirationTimestamp,
+      );
+
       simulateTxSpy.mockRestore();
     });
   });

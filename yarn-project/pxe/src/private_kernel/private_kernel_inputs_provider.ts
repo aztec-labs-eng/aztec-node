@@ -5,8 +5,10 @@ import {
   UPDATES_VALUE_SIZE,
   VK_TREE_HEIGHT,
 } from '@aztec-labs/constants';
+import { uniqueBy } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import type { KeyStore } from '@aztec-labs/key-store';
 import { getVKIndex, getVKSiblingPath } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -22,7 +24,7 @@ import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { UpdatedClassIdHints } from '@aztec-labs/stdlib/kernel';
 import type { NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
-import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { type BlockHeader, type PrivateExecutionResult, collectNested } from '@aztec-labs/stdlib/tx';
 import type { VerificationKeyAsFields } from '@aztec-labs/stdlib/vks';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
@@ -144,41 +146,70 @@ export class PrivateKernelInputsProvider {
    * Returns a membership witness and leaf index to our public data indexed merkle tree,
    * along with an associated DelayedPublicMutable containing the class ID to update.
    */
-  public async getUpdatedClassIdHints(contractAddress: AztecAddress): Promise<UpdatedClassIdHints> {
-    const { delayedPublicMutableSlot, delayedPublicMutableHashSlot } =
-      await DelayedPublicMutableValuesWithHash.getContractUpdateSlots(contractAddress);
-
-    const hashLeafSlot = await computePublicDataTreeLeafSlot(
-      ProtocolContractAddress.ContractInstanceRegistry,
-      delayedPublicMutableHashSlot,
-    );
-    const anchor = await this.blockHeader.toBlockParameter();
-
-    const updatedClassIdWitness = await this.node.getPublicDataWitness(anchor, hashLeafSlot);
-
-    if (!updatedClassIdWitness) {
-      throw new Error(`No public data tree witness found for ${hashLeafSlot}`);
-    }
-
-    // In an indexed merkle tree, getPublicDataWitness returns a leaf whose slot matches our query
-    // only if the slot has been written to. Otherwise, it returns the "low leaf" predecessor, whose
-    // slot will differ. Most contracts are never updated, so we can skip the readFromTree call
-    // (which triggers multiple RPC calls) and return empty values directly.
-    const readStorage = (storageSlot: Fr) =>
-      this.node.getPublicStorageAt(anchor, ProtocolContractAddress.ContractInstanceRegistry, storageSlot);
-    const slotExists = updatedClassIdWitness.leafPreimage.leaf.slot.equals(hashLeafSlot);
-    const delayedPublicMutableValues = slotExists
-      ? await DelayedPublicMutableValues.readFromTree(delayedPublicMutableSlot, readStorage)
-      : DelayedPublicMutableValues.empty(UPDATES_VALUE_SIZE);
-
-    return new UpdatedClassIdHints(
-      new MembershipWitness(
-        PUBLIC_DATA_TREE_HEIGHT,
-        updatedClassIdWitness.index,
-        updatedClassIdWitness.siblingPath.toTuple(),
-      ),
-      updatedClassIdWitness.leafPreimage,
-      delayedPublicMutableValues,
-    );
+  public getUpdatedClassIdHints(contractAddress: AztecAddress): Promise<UpdatedClassIdHints> {
+    return getUpdatedClassIdHints(this.node, this.blockHeader, contractAddress);
   }
+}
+
+/**
+ * Returns the contract instance registry's DelayedPublicMutable holding `contractAddress`'s class id updates, as of
+ * `anchorBlockHeader`, along with its membership witness in the public data tree.
+ */
+export async function getUpdatedClassIdHints(
+  node: AztecNode,
+  anchorBlockHeader: BlockHeader,
+  contractAddress: AztecAddress,
+): Promise<UpdatedClassIdHints> {
+  const { delayedPublicMutableSlot, delayedPublicMutableHashSlot } =
+    await DelayedPublicMutableValuesWithHash.getContractUpdateSlots(contractAddress);
+
+  const hashLeafSlot = await computePublicDataTreeLeafSlot(
+    ProtocolContractAddress.ContractInstanceRegistry,
+    delayedPublicMutableHashSlot,
+  );
+  const anchor = await anchorBlockHeader.toBlockParameter();
+
+  const updatedClassIdWitness = await node.getPublicDataWitness(anchor, hashLeafSlot);
+
+  if (!updatedClassIdWitness) {
+    throw new Error(`No public data tree witness found for ${hashLeafSlot}`);
+  }
+
+  // In an indexed merkle tree, getPublicDataWitness returns a leaf whose slot matches our query
+  // only if the slot has been written to. Otherwise, it returns the "low leaf" predecessor, whose
+  // slot will differ. Most contracts are never updated, so we can skip the readFromTree call
+  // (which triggers multiple RPC calls) and return empty values directly.
+  const readStorage = (storageSlot: Fr) =>
+    node.getPublicStorageAt(anchor, ProtocolContractAddress.ContractInstanceRegistry, storageSlot);
+  const slotExists = updatedClassIdWitness.leafPreimage.leaf.slot.equals(hashLeafSlot);
+  const delayedPublicMutableValues = slotExists
+    ? await DelayedPublicMutableValues.readFromTree(delayedPublicMutableSlot, readStorage)
+    : DelayedPublicMutableValues.empty(UPDATES_VALUE_SIZE);
+
+  return new UpdatedClassIdHints(
+    new MembershipWitness(
+      PUBLIC_DATA_TREE_HEIGHT,
+      updatedClassIdWitness.index,
+      updatedClassIdWitness.siblingPath.toTuple(),
+    ),
+    updatedClassIdWitness.leafPreimage,
+    delayedPublicMutableValues,
+  );
+}
+
+/**
+ * Returns the {@link UpdatedClassIdHints} of every contract called in `executionResult`, keyed by contract address,
+ * fetching each contract's hints once with `getHints`.
+ */
+export async function getUpdatedClassIdHintsOfCalledContracts(
+  executionResult: PrivateExecutionResult,
+  getHints: (contractAddress: AztecAddress) => Promise<UpdatedClassIdHints>,
+): Promise<Map<string, UpdatedClassIdHints>> {
+  const calledContracts = uniqueBy(
+    collectNested([executionResult.entrypoint], execution => [execution.publicInputs.callContext.contractAddress]),
+    address => address.toString(),
+  );
+  return new Map(
+    await allToCompletion(calledContracts.map(async address => [address.toString(), await getHints(address)] as const)),
+  );
 }

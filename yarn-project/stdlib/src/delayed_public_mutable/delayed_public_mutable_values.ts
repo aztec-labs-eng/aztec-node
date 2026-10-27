@@ -3,6 +3,7 @@ import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
+import type { UInt64 } from '../types/shared.js';
 import { ScheduledDelayChange } from './scheduled_delay_change.js';
 import { ScheduledValueChange } from './scheduled_value_change.js';
 
@@ -76,6 +77,18 @@ export class DelayedPublicMutableValues {
 
   isEmpty(): boolean {
     return this.svc.isEmpty() && this.sdc.isEmpty();
+  }
+
+  /**
+   * Returns the last timestamp at which the value current at `anchorBlockTimestamp` is guaranteed to still be current.
+   * A tx that reads this value in private must not be included after it. `initialDelay` is the delay in effect before
+   * any change to it.
+   */
+  getTimeHorizon(anchorBlockTimestamp: UInt64, initialDelay: UInt64): UInt64 {
+    return this.svc.getTimeHorizon(
+      anchorBlockTimestamp,
+      this.sdc.getEffectiveMinimumDelayAt(anchorBlockTimestamp, initialDelay),
+    );
   }
 
   writeToTree(delayedPublicMutableSlot: Fr, storageWrite: (storageSlot: Fr, value: Fr) => Promise<void>) {

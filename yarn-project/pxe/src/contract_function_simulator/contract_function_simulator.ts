@@ -5,6 +5,7 @@ import {
   AVM_EMITNULLIFIER_BASE_L2_GAS,
   AVM_SENDL2TOL1MSG_BASE_L2_GAS,
   DA_GAS_PER_FIELD,
+  DEFAULT_UPDATE_DELAY,
   FIXED_AVM_STARTUP_L2_GAS,
   L2_GAS_PER_CONTRACT_CLASS_LOG,
   L2_GAS_PER_L2_TO_L1_MSG,
@@ -25,6 +26,7 @@ import {
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
 } from '@aztec-labs/constants';
+import { minBigint } from '@aztec-labs/foundation/bigint';
 import { arrayNonEmptyLength, padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -98,6 +100,11 @@ import type { ContractClassService } from '../contract/contract_class_service.js
 import type { ContractSyncService } from '../contract/contract_sync_service.js';
 import type { ExecutionHooks } from '../hooks/index.js';
 import type { TxResolverService } from '../messages/tx_resolver_service.js';
+import { computeTxExpirationTimestamp } from '../private_kernel/hints/compute_tx_expiration_timestamp.js';
+import {
+  getUpdatedClassIdHints,
+  getUpdatedClassIdHintsOfCalledContracts,
+} from '../private_kernel/private_kernel_inputs_provider.js';
 import type { AddressStore } from '../storage/address_store/address_store.js';
 import { CapsuleService } from '../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../storage/capsule_store/capsule_store.js';
@@ -466,6 +473,41 @@ class OrderedSideEffect<T> {
 }
 
 /**
+ * Returns the expiration timestamp the tx of `privateExecutionResult` publishes when proven: the earliest of the
+ * timestamps its calls set and the time horizons of its called contracts' class ids, rounded as the prover rounds it.
+ * @param privateExecutionResult - The result of the private execution.
+ * @param node - AztecNode to read the called contracts' class id updates from, at the anchor block.
+ */
+export async function computeSimulatedTxExpirationTimestamp(
+  privateExecutionResult: PrivateExecutionResult,
+  node: AztecNode,
+): Promise<bigint> {
+  const anchorBlockHeader = privateExecutionResult.entrypoint.publicInputs.anchorBlockHeader;
+  const anchorBlockTimestamp = anchorBlockHeader.globalVariables.timestamp;
+
+  // The kernels cap the expiration timestamp at the time horizon of each called contract's class id, so the tx can't
+  // be included once a pending upgrade of a contract it ran takes effect.
+  const updatedClassIdHints = await getUpdatedClassIdHintsOfCalledContracts(privateExecutionResult, address =>
+    getUpdatedClassIdHints(node, anchorBlockHeader, address),
+  );
+  const classIdHorizons = [...updatedClassIdHints.values()].map(({ updatedClassIdValues }) =>
+    updatedClassIdValues.getTimeHorizon(anchorBlockTimestamp, BigInt(DEFAULT_UPDATE_DELAY)),
+  );
+
+  // Just like kernels, a call's expiration timestamp only counts if the call sets it.
+  const callExpirationTimestamps = collectNested([privateExecutionResult.entrypoint], execution => [
+    execution.publicInputs.expirationTimestamp,
+  ]).filter(timestamp => timestamp !== 0n);
+
+  const expirationTimestamp = minBigint(
+    anchorBlockTimestamp + BigInt(MAX_TX_LIFETIME),
+    ...classIdHorizons,
+    ...callExpirationTimestamps,
+  );
+  return computeTxExpirationTimestamp({ anchorBlockTimestamp, expirationTimestamp });
+}
+
+/**
  * Generates the final public inputs of the tail kernel circuit, an empty Chonk proof
  * and the execution steps for a `PrivateExecutionResult` as if it had been
  * processed by the private kernel prover. This skips many of the checks performed by the kernels
@@ -474,6 +516,8 @@ class OrderedSideEffect<T> {
  * @param privateExecutionResult - The result of the private execution.
  * @param debugFunctionNameGetter - A provider for contract data in order to get function names and debug info.
  * @param node - AztecNode for verifying settled read requests against the note hash and nullifier trees.
+ * @param expirationTimestamp - The tx's expiration timestamp. For a tx that may be sent, this must come from
+ * {@link computeSimulatedTxExpirationTimestamp}.
  * @param minRevertibleSideEffectCounterOverride - Optional override for the min revertible side effect counter.
  * Used by TXE to simulate account contract behavior (setting the counter before app execution).
  * @returns The simulated proving result.
@@ -482,6 +526,7 @@ export async function generateSimulatedProvingResult(
   privateExecutionResult: PrivateExecutionResult,
   debugFunctionNameGetter: (contractAddress: AztecAddress, functionSelector: FunctionSelector) => Promise<string>,
   node: AztecNode,
+  expirationTimestamp: bigint,
   minRevertibleSideEffectCounterOverride?: number,
 ): Promise<PrivateKernelExecutionProofOutput<PrivateKernelTailCircuitPublicInputs>> {
   const taggedPrivateLogs: OrderedSideEffect<PrivateLogData>[] = [];
@@ -501,11 +546,6 @@ export async function generateSimulatedProvingResult(
 
   let publicTeardownCallRequest;
 
-  // We set expiration timestamp to anchor_block_timestamp + MAX_TX_LIFETIME (24h) just like kernels do
-  let expirationTimestamp =
-    privateExecutionResult.entrypoint.publicInputs.anchorBlockHeader.globalVariables.timestamp +
-    BigInt(MAX_TX_LIFETIME);
-
   let feePayer = AztecAddress.zero();
 
   const executions = [privateExecutionResult.entrypoint];
@@ -513,12 +553,6 @@ export async function generateSimulatedProvingResult(
   while (executions.length !== 0) {
     const execution = executions.shift()!;
     executions.unshift(...execution!.nestedExecutionResults);
-
-    // Just like kernels we overwrite the default value if the call sets it.
-    const callExpirationTimestamp = execution.publicInputs.expirationTimestamp;
-    if (callExpirationTimestamp !== 0n && callExpirationTimestamp < expirationTimestamp) {
-      expirationTimestamp = callExpirationTimestamp;
-    }
 
     const { contractAddress } = execution.publicInputs.callContext;
 

@@ -419,7 +419,8 @@ where
     ///
     /// This sets the transaction's `expiration_timestamp` (see
     /// [`PrivateContext::set_expiration_timestamp`](crate::context::PrivateContext::set_expiration_timestamp)),
-    /// invalidating the transaction if not included before that time. See the 'Privacy' section below to learn more.
+    /// invalidating the transaction if not included at or before that time. See the 'Privacy' section below to learn
+    /// more.
     ///
     /// If [`schedule_value_change`](DelayedPublicMutable::schedule_value_change) has never been called, then this
     /// returns the default empty public storage value, which is all zeroes - equivalent to `let t =
@@ -446,20 +447,20 @@ where
     /// transaction: it is the smallest (most restrictive) timestamp that will be used.
     ///
     /// If the state variable **does not** have any value changes scheduled, then the timestamp will be set to that of
-    /// the anchor block plus the current delay. If multiple contracts use the same delay for their
+    /// the anchor block plus the current delay, minus one second. If multiple contracts use the same delay for their
     /// `DelayedPublicMutable` state variables, then these will all be in the same privacy set.
     ///
-    /// If the state variable **does** have a value change scheduled, then the timestamp will be set to equal the time
-    /// at which the current value will change, i.e. the one
+    /// If the state variable **does** have a value change scheduled, then the timestamp will be set to one second
+    /// before the time at which the current value will change, i.e. the one
     /// [`get_scheduled_value`](DelayedPublicMutable::get_scheduled_value) returns - which is public information. This
     /// results in an unavoidable privacy leak of any transactions in which a contract privately reads a
     /// `DelayedPublicMutable` that will change soon.
     ///
-    /// Transactions that do not read from a `DelayedPublicMutable` are part of a privacy set in which the
-    /// `expiration_timestamp` is set to their anchor block plus [`crate::protocol::constants::MAX_TX_LIFETIME`],
-    /// making this the most privacy-preserving delay. The less frequent said value changes are, the more private the
-    /// contract is. Wallets can also then choose to further lower this timestamp to make it less obvious that their
-    /// transactions are interacting with this soon-to-change variable.
+    /// A delay of [`crate::protocol::constants::MAX_TX_LIFETIME`] results in the same `expiration_timestamp` as that
+    /// of transactions that do not read from a `DelayedPublicMutable`, making this the most privacy-preserving delay.
+    /// The less frequent said value changes are, the more private the contract is. Wallets can also then choose to
+    /// further lower this timestamp to make it less obvious that their transactions are interacting with this
+    /// soon-to-change variable.
     ///
     /// ## Examples
     ///

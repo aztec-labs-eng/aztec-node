@@ -155,6 +155,26 @@ describe('automine/contracts/contract_updates', () => {
     );
   });
 
+  // Schedules an update, then simulates a call to the contract with and without kernels: both must cap the tx's
+  // expiration before the pending update takes effect.
+  it('caps the expiration at a pending update with and without kernels', async () => {
+    await contract.methods.update_to(updatedContractClassId).send({ from: defaultAccountAddress });
+
+    const request = await contract.methods.set_update_delay(DEFAULT_TEST_UPDATE_DELAY + 1n).request();
+    wallet.setSimulationMode('kernelless');
+    const kernellessResult = await wallet.simulateTx(request, { from: defaultAccountAddress });
+    wallet.setSimulationMode('full');
+    const withKernelsResult = await wallet.simulateTx(request, { from: defaultAccountAddress });
+
+    const anchorTimestamp = withKernelsResult.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp;
+    expect(withKernelsResult.publicInputs.expirationTimestamp).toBeLessThan(
+      anchorTimestamp + DEFAULT_TEST_UPDATE_DELAY,
+    );
+    expect(kernellessResult.publicInputs.expirationTimestamp).toEqual(
+      withKernelsResult.publicInputs.expirationTimestamp,
+    );
+  });
+
   // Increases the delay by 1, schedules an update, warps past the new delay, verifies the update
   // took effect.
   it('should change the update delay and then update the contract', async () => {

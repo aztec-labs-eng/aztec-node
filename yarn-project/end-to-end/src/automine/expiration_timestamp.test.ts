@@ -114,7 +114,7 @@ describe('automine/expiration_timestamp', () => {
       // 1n below the start of the next slot (header.timestamp + slotDuration). Under
       // AutomineSequencer the next block is always one slot ahead, so an expiration just
       // before that boundary is provable (expiration > anchor block timestamp) but rejected
-      // at submission because nextSlotTimestamp >= expiration.
+      // at submission because nextSlotTimestamp > expiration.
       expirationTimestamp = header.globalVariables.timestamp + aztecSlotDuration - 1n;
     });
 

@@ -1,5 +1,4 @@
 import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
-import type { PrivateKernelCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 const ROUNDED_DURATIONS = [
@@ -21,8 +20,12 @@ function roundTimestamp(blockTimestamp: bigint, expirationTimestamp: bigint): UI
   }, 0n);
 }
 
+/**
+ * Returns the expiration timestamp a tx publishes, given the highest one its private calls allow. The value is rounded
+ * down so it reveals less about which functions the tx called.
+ */
 export function computeTxExpirationTimestamp(
-  previousKernel: PrivateKernelCircuitPublicInputs,
+  { anchorBlockTimestamp, expirationTimestamp }: { anchorBlockTimestamp: UInt64; expirationTimestamp: UInt64 },
   txLifetime = MAX_TX_LIFETIME,
 ): UInt64 {
   if (txLifetime > MAX_TX_LIFETIME) {
@@ -31,9 +34,7 @@ export function computeTxExpirationTimestamp(
     );
   }
 
-  const anchorBlockTimestamp = previousKernel.constants.anchorBlockHeader.globalVariables.timestamp;
   const maxTimestamp = anchorBlockTimestamp + BigInt(txLifetime);
-  const expirationTimestamp = previousKernel.expirationTimestamp;
 
   // If the expirationTimestamp set during the tx execution is greater than or equal to the max allowed duration,
   // use the maximum allowed timestamp.
@@ -46,11 +47,11 @@ export function computeTxExpirationTimestamp(
   // This makes it harder for others to infer what function calls may have been used to produce a specific timestamp.
   const roundedTimestamp = roundTimestamp(anchorBlockTimestamp, expirationTimestamp);
 
-  // The tx can't be published if the timestamp is the same or less than the anchor block's timestamp.
-  // Future blocks will have a greater timestamp, so the tx would never be included.
+  // An expiration at or below the anchor block's timestamp leaves the tx includable only in a block sharing the
+  // anchor's timestamp (if any), so it is rejected here rather than submitted.
   if (roundedTimestamp <= anchorBlockTimestamp) {
     throw new Error(
-      `Include-by timestamp must be greater than the anchor block timestamp. Anchor block timestamp: ${anchorBlockTimestamp}. Include-by timestamp: ${expirationTimestamp}.`,
+      `Expiration timestamp must be greater than the anchor block timestamp. Anchor block timestamp: ${anchorBlockTimestamp}. Expiration timestamp: ${expirationTimestamp}.`,
     );
   }
 

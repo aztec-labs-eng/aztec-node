@@ -63,6 +63,7 @@ import { ContractClassService } from './contract/contract_class_service.js';
 import { ContractSyncService } from './contract/contract_sync_service.js';
 import {
   ContractFunctionSimulator,
+  computeSimulatedTxExpirationTimestamp,
   generateSimulatedProvingResult,
 } from './contract_function_simulator/contract_function_simulator.js';
 import { displayDebugLogs } from './contract_logging.js';
@@ -712,6 +713,7 @@ export class PXE {
         privateExecutionResult,
         (addr, sel) => this.#getDebugFunctionName(addr, sel, anchorBlockHeader),
         this.node,
+        await computeSimulatedTxExpirationTimestamp(privateExecutionResult, this.node),
       ));
     } else {
       // Kernel logic, plus proving of all private functions and kernels.
