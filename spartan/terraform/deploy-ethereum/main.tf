@@ -58,8 +58,8 @@ locals {
       checkpoint_sync_url = "https://checkpoint-sync.sepolia.ethpandaops.io"
       reth_p2p_port       = 32200
       lighthouse_p2p_port = 32201
-      reth_storage        = "1.5Ti"
-      lighthouse_storage  = "256Gi"
+      reth_storage        = "1.75Ti"
+      lighthouse_storage  = "512Gi"
       reth_resources = {
         requests = { cpu = "1", memory = "12Gi" }
         limits   = { cpu = "4", memory = "24Gi" }
@@ -86,7 +86,7 @@ locals {
       reth_p2p_port       = 32300
       lighthouse_p2p_port = 32301
       reth_storage        = "3.25Ti"
-      lighthouse_storage  = "256Gi"
+      lighthouse_storage  = "512Gi"
       reth_resources = {
         requests = { cpu = "1", memory = "48Gi" }
         limits   = { cpu = "8", memory = "96Gi" }
