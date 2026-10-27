@@ -102,7 +102,6 @@ export async function createArchiver(
     genesisArchiveRoot,
     slashingProposerAddress,
     targetCommitteeSize,
-    rollupManaLimit,
   ] = await Promise.all([
     rollup.getL1StartBlock(),
     rollup.getL1GenesisTime(),
@@ -110,7 +109,6 @@ export async function createArchiver(
     rollup.getGenesisArchiveTreeRoot(),
     rollup.getSlashingProposerAddress(),
     rollup.getTargetCommitteeSize(),
-    rollup.getManaLimit(),
   ] as const);
 
   const l1StartBlockHash = await publicClient
@@ -129,7 +127,6 @@ export async function createArchiver(
     proofSubmissionEpochs: Number(proofSubmissionEpochs),
     targetCommitteeSize,
     genesisArchiveRoot: Fr.fromString(genesisArchiveRoot.toString()),
-    rollupManaLimit: Number(rollupManaLimit),
   };
 
   const archiverConfig = merge(
@@ -176,6 +173,7 @@ export async function createArchiver(
     l1Constants,
     events,
     instrumentation.tracer,
+    deps.feeConfigProvider,
     l2FrontierCache,
     undefined, // log (use default)
   );
@@ -196,6 +194,7 @@ export async function createArchiver(
     initialHeader,
     initialBlockHash,
     l2FrontierCache,
+    deps.feeConfigProvider,
     deps.dateProvider ?? new DateProvider(),
   );
 

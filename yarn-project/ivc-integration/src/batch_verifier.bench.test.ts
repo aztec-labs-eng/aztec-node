@@ -6,6 +6,7 @@
  */
 import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { jest } from '@jest/globals';
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -75,13 +76,9 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
     // Prove the flow
     logger.info(`Proving flow: ${flow}...`);
     const proveStart = performance.now();
-    await execFileAsync(
-      BB_PATH,
-      ['prove', '--scheme', 'chonk', '--ivc_inputs_path', ivcInputsPath, '--write_vk', '-o', proofDir],
-      {
-        timeout: 600_000,
-      },
-    );
+    await execFileAsync(BB_PATH, ['prove', '--scheme', 'chonk', '--ivc_inputs_path', ivcInputsPath, '-o', proofDir], {
+      timeout: 600_000,
+    });
     const proveMs = performance.now() - proveStart;
     logger.info(`Proof generated in ${Math.ceil(proveMs)}ms`);
 
@@ -90,11 +87,11 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
     validProofFields = proofToFields(proofBuf);
     invalidProofFields = corruptProofFields(validProofFields);
 
-    // bb derives this VK from the bytecode inside the flow's msgpack, which is what it proved.
-    // The flows and the protocol circuit artifacts sit on separate pins, so a key from
-    // ProtocolCircuitVks can disagree with the proof's public input count. We tolerate this
-    // for a benchmark.
-    vk = await readFile(resolve(proofDir, 'vk'));
+    // `bb prove --scheme chonk` no longer writes a VK. The flow is a private-only transaction, so
+    // its proof verifies against the hiding-kernel-to-rollup key, taken from the protocol circuit
+    // artifacts the way BatchChonkVerifier.new does. The pinned flows are checked against these
+    // artifacts (chonk_inputs.sh check), so the key matches what was proved.
+    vk = ProtocolCircuitVks.HidingKernelToRollup.keyAsBytes;
 
     logger.info(`Proof: ${proofBuf.length} bytes, ${validProofFields.length} fields`);
   });

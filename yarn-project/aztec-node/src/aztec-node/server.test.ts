@@ -13,6 +13,7 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import { getLogLevel, setLogLevel } from '@aztec-labs/foundation/log';
 import type { Hex } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
@@ -43,7 +44,7 @@ import {
 import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   L2LogsSource,
   MerkleTreeReadOperations,
@@ -71,6 +72,7 @@ import {
   TX_ERROR_DUPLICATE_NULLIFIER_IN_TX,
   TX_ERROR_INCORRECT_L1_CHAIN_ID,
   TX_ERROR_INCORRECT_ROLLUP_VERSION,
+  TX_ERROR_INSUFFICIENT_FEE_PER_GAS,
   TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
   TX_ERROR_SIZE_ABOVE_LIMIT,
   Tx,
@@ -92,6 +94,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { type AztecNodeConfig, getConfigEnvVars } from './config.js';
 import { NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
+import { makeFrontier } from './next_block/test_helpers.js';
 import { AztecNodeService } from './server.js';
 
 // Arbitrary fixed timestamp for the mock date provider. DateProvider.now() returns milliseconds but ExpirationTimestamp
@@ -151,6 +154,7 @@ describe('aztec node', () => {
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
   let nextBlockPredictor: NextBlockPredictor;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let nodeConfig: AztecNodeConfig;
 
   const chainId = new Fr(12345);
@@ -229,6 +233,16 @@ describe('aztec node', () => {
 
     l2BlockSourceEvents = new EventEmitter();
     l2BlockSource = mock<L2BlockSourceEventEmitter>({ events: l2BlockSourceEvents as ArchiverEmitter });
+    // Mid-checkpoint by default (the proposed tip is ahead of the checkpointed one), so the next-block fee
+    // comes straight off the proposed tip's header and tx admission needs no L1 read.
+    l2BlockSource.getL2Frontier.mockResolvedValue(
+      makeFrontier({
+        proposed: BlockNumber(1),
+        checkpointedBlock: BlockNumber.ZERO,
+        checkpointed: CheckpointNumber.ZERO,
+        latestBlockGlobals: { slotNumber: SlotNumber(1), gasFees: GasFees.empty() },
+      }),
+    );
     l2BlockSource.getBlockNumber.mockImplementation(((query?: BlockQuery) => {
       if (!query || 'tag' in query) {
         return Promise.resolve(lastBlockNumber);
@@ -283,6 +297,7 @@ describe('aztec node', () => {
       new MockDateProvider(),
     );
 
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     nextBlockPredictor = NextBlockPredictor.create({
       blockSource: l2BlockSource,
       globalVariableBuilder: globalVariablesBuilder,
@@ -312,6 +327,7 @@ describe('aztec node', () => {
         rollupContract,
         feeProvider,
         nextBlockPredictor,
+        feeConfigProvider,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -507,14 +523,68 @@ describe('aztec node', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('next-block min fee'), expect.any(Error));
     });
 
-    it('does not fold the next-block fee into the current min fees or tx admission', async () => {
+    it('leaves the current min fees L1-anchored', async () => {
       quoteMinFees.mockResolvedValue({ fees: headFees, l1SyncPoint });
       const currentFees = new GasFees(0, 0);
       feeProvider.getCurrentMinFees.mockResolvedValue(currentFees);
 
       expect(await node.getCurrentMinFees()).toEqual(currentFees);
-      // A tx priced at the current min fees stays admissible even though the quote's head is far above them.
+    });
+  });
+
+  describe('tx admission against the next-block fee', () => {
+    /** Above the mock tx's maxFeesPerGas on the L2 dimension, so admission must reject against it. */
+    const feesAboveTxPrice = new GasFees(3, 3000);
+
+    let quoteMinFees: jest.SpiedFunction<NextBlockPredictor['quoteMinFees']>;
+
+    beforeEach(() => {
+      // The L1-forward fee stays below the tx's price: only the next-block fee can reject it.
+      feeProvider.getCurrentMinFees.mockResolvedValue(new GasFees(0, 0));
+      quoteMinFees = jest.spyOn(node['nextBlockPredictor'], 'quoteMinFees');
+    });
+
+    it('rejects a tx priced below the next-block fee but above the L1-forward fee', async () => {
+      quoteMinFees.mockResolvedValue({ fees: feesAboveTxPrice, l1SyncPoint: undefined });
+
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({
+        result: 'invalid',
+        reason: [expect.stringContaining(TX_ERROR_INSUFFICIENT_FEE_PER_GAS)],
+      });
+    });
+
+    it('admits a tx priced at or above the next-block fee', async () => {
+      quoteMinFees.mockResolvedValue({ fees: new GasFees(1, 5), l1SyncPoint: undefined });
+
       expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
+    });
+
+    it('prices against the L1-forward fee when the next-block fee is unavailable', async () => {
+      quoteMinFees.mockResolvedValue(undefined);
+
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
+
+      // Still a real fee check, not a skipped one: the fallback rejects a tx the L1-forward fee prices out.
+      feeProvider.getCurrentMinFees.mockResolvedValue(feesAboveTxPrice);
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({
+        result: 'invalid',
+        reason: [expect.stringContaining(TX_ERROR_INSUFFICIENT_FEE_PER_GAS)],
+      });
+    });
+
+    it('prices against the L1-forward fee when quoting the next-block fee throws', async () => {
+      quoteMinFees.mockRejectedValue(new Error('l1 unreachable'));
+
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
+    });
+
+    it('skips the next-block fee entirely when fee enforcement is skipped', async () => {
+      quoteMinFees.mockResolvedValue(undefined);
+      feeProvider.getCurrentMinFees.mockResolvedValue(feesAboveTxPrice);
+
+      expect(await node.isValidTx(await mockTxForRollup(0x10000), { skipFeeEnforcement: true })).toEqual({
+        result: 'valid',
+      });
     });
   });
 
@@ -525,12 +595,51 @@ describe('aztec node', () => {
         expect(config.maxPendingTxCount).toEqual(nodeConfig.maxPendingTxCount);
         expect('nonExistingConfig' in config).toBe(false);
       });
+
+      describe('log level', () => {
+        let originalSpec: string;
+
+        beforeEach(() => {
+          originalSpec = getLogLevel();
+        });
+
+        afterEach(() => {
+          setLogLevel(originalSpec);
+        });
+
+        it('applies and reports a log level update', async () => {
+          await node.setConfig({ logLevel: 'warn;debug:p2p' });
+          expect((await node.getConfig()).logLevel).toBe('warn;debug:p2p');
+        });
+
+        it('rejects an invalid log level spec without applying it', async () => {
+          await expect(node.setConfig({ logLevel: 'loud' })).rejects.toThrow(BadRequestError);
+          expect(getLogLevel()).toBe(originalSpec);
+        });
+
+        it('leaves the log level untouched when another update fails', async () => {
+          p2p.updateP2PConfig.mockRejectedValueOnce(new Error('bad peers'));
+          await expect(node.setConfig({ logLevel: 'warn' })).rejects.toThrow('bad peers');
+          expect(getLogLevel()).toBe(originalSpec);
+        });
+      });
     });
 
     describe('node info', () => {
       it('returns the correct node version', async () => {
         const nodeInfo = await node.getNodeInfo();
         expect(nodeInfo.nodeVersion).toBe(getPackageVersion());
+      });
+    });
+
+    describe('getL1Constants', () => {
+      it('keeps returning rollupManaLimit for older clients, from the live fee config', async () => {
+        feeConfigProvider.setFeeConfig({ manaLimit: 100_000_000n });
+        expect(await node.getL1Constants()).toEqual({ ...testL1Constants, rollupManaLimit: 100_000_000 });
+
+        // Governance raises the limit while the node runs.
+        feeConfigProvider.setFeeConfig({ manaLimit: 150_000_000n });
+        expect(await node.getL1Constants()).toEqual({ ...testL1Constants, rollupManaLimit: 150_000_000 });
       });
     });
 
@@ -1433,6 +1542,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
+          feeConfigProvider: new TestRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1622,6 +1732,7 @@ describe('aztec node', () => {
           rollupContract: undefined,
           feeProvider,
           nextBlockPredictor,
+          feeConfigProvider: new TestRollupFeeConfigProvider(),
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1692,6 +1803,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
+        feeConfigProvider: new TestRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1747,6 +1859,7 @@ describe('aztec node', () => {
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
         nextBlockPredictor,
+        feeConfigProvider: new TestRollupFeeConfigProvider(),
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),

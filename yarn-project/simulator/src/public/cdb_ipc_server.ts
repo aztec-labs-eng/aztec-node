@@ -33,6 +33,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { ContractDeploymentData, type ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { Buffer } from 'buffer';
 import { Decoder, Encoder } from 'msgpackr';
 import * as os from 'node:os';
 import * as path from 'node:path';

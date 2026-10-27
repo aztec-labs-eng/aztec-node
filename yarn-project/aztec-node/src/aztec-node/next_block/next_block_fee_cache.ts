@@ -275,6 +275,17 @@ export class NextBlockFeeCache {
       return pinnedTips();
     }
 
+    // The plan's L1 reads are pinned to the archiver's sync point, which only exists once the archiver has run a
+    // sync pass. Until then there is no L1 block to read the parent's fee header at, so price on the checkpointed tip,
+    // as the fee simulation itself falls back to L1's head.
+    const l1SyncPoint = frontier.l1SyncPoint;
+    if (l1SyncPoint === undefined) {
+      this.log.debug(
+        `Pricing the next-block boundary on checkpointed tip ${checkpointedCheckpointNumber}: no L1 sync point yet`,
+      );
+      return pinnedTips();
+    }
+
     // The helper treats pipelining and invalidation as mutually exclusive; a proposed parent takes precedence.
     const validationStatus = frontier.pendingChainValidationStatus;
     const invalidateToPendingCheckpointNumber =
@@ -287,6 +298,8 @@ export class NextBlockFeeCache {
       invalidateToPendingCheckpointNumber,
       checkpointedCheckpointNumber,
       rollup,
+      // The same L1 block the fee simulation is pinned to, so the parent's fee header and the fee agree.
+      l1BlockNumber: l1SyncPoint.blockNumber,
       signatureContext: this.signatureContext,
       log: this.log,
     });

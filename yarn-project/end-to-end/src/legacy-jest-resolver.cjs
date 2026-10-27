@@ -1,6 +1,6 @@
 // Custom Jest resolver. When CONTRACT_ARTIFACTS_VERSION is set, redirects *only* JSON artifact files under
 // @aztec-labs/noir-contracts.js/artifacts/, @aztec-labs/noir-test-contracts.js/artifacts/, and @aztec-labs/accounts/artifacts/ to
-// that version's historical artifacts, committed as legacy-contracts/<version>.tar.gz and unpacked on demand into
+// that version's historical artifacts, committed as legacy-contracts/<version>.tar.xz and unpacked on demand into
 // .legacy-contracts/<version>/ by install_legacy_contracts.cjs.
 //
 // Why JSON-only: the JSON artifact is the actual interchange surface a "deployed contract" exposes. The TS wrapper is

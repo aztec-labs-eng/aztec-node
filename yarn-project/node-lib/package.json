@@ -25,7 +25,6 @@
     "build": "yarn clean && ../scripts/tsc.sh",
     "build:dev": "../scripts/tsc.sh --watch",
     "clean": "rm -rf ./dest .tsbuildinfo",
-    "bb": "node --no-warnings ./dest/bb/index.js",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules ../node_modules/.bin/jest --passWithNoTests --maxWorkers=${JEST_MAX_WORKERS:-8}"
   },
   "jest": {
@@ -88,7 +87,7 @@
     "jest-mock-extended": "^4.0.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.3",
-    "viem": "npm:@aztec/viem@2.38.3"
+    "viem": "2.57.1"
   },
   "files": [
     "dest",
@@ -97,6 +96,6 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

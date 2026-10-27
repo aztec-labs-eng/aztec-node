@@ -3,4 +3,5 @@ export * from './priority_memory_queue.js';
 export * from './serial_queue.js';
 export * from './bounded_serial_queue.js';
 export * from './semaphore.js';
+export * from './read_write_lock.js';
 export * from './batch_queue.js';

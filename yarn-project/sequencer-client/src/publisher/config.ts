@@ -5,6 +5,7 @@ import {
   type ConfigMappingsType,
   SecretValue,
   booleanConfigHelper,
+  floatConfigHelper,
   numberConfigHelper,
 } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -52,17 +53,17 @@ export type PublisherConfig = L1TxUtilsConfig &
     publisherAllowInvalidStates?: boolean;
     /** Whether to run in fisherman mode: builds blocks on every slot for validation without publishing to L1 */
     fishermanMode?: boolean;
-    /** Address of the forwarder contract to wrap all L1 transactions through (for testing purposes only) */
-    publisherForwarderAddress?: EthAddress;
     /** Store for failed L1 transaction inputs (test networks only). Format: gs://bucket/path */
     l1TxFailedStore?: string;
     /** Min ETH balance below which a publisher gets funded. Undefined = funding disabled. */
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
-/** Shared config mappings for publisher funding, used by both sequencer and prover publisher configs. */
+/** Shared config mappings for publisher funding and balance warnings, used by both sequencer and prover configs. */
 const publisherFundingConfigMappings = {
   publisherFundingThreshold: {
     env: 'PUBLISHER_FUNDING_THRESHOLD' as const,
@@ -76,17 +77,30 @@ const publisherFundingConfigMappings = {
       'Amount of ETH to send when funding a publisher. Specified in ether (e.g. 0.5). Unset = funding disabled.',
     parseEnv: (val: string) => parseEther(val),
   },
+  publisherLowBalanceWarningMultiplier: {
+    env: 'PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER' as const,
+    description:
+      'Warn when a publisher balance is below this multiple of the ETH required for a reference L1 send (a first-of-epoch ' +
+      'proposal for sequencers, an epoch proof for provers) at current fees. Publishers that cannot afford a send are ' +
+      'never used for it.',
+    ...floatConfigHelper(4, val => {
+      if (val <= 0) {
+        throw new Error(`PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER must be positive, got ${val}`);
+      }
+    }),
+  },
 };
 
 export type ProverPublisherConfig = L1TxUtilsConfig &
   BlobClientConfig & {
     fishermanMode?: boolean;
     proverPublisherAllowInvalidStates?: boolean;
-    proverPublisherForwarderAddress?: EthAddress;
     /** Min ETH balance below which a publisher gets funded. Undefined = funding disabled. */
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
 export type SequencerPublisherConfig = L1TxUtilsConfig &
@@ -104,13 +118,14 @@ export type SequencerPublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
 export function getPublisherConfigFromProverConfig(config: ProverPublisherConfig): PublisherConfig {
   return {
     ...config,
     publisherAllowInvalidStates: config.proverPublisherAllowInvalidStates,
-    publisherForwarderAddress: config.proverPublisherForwarderAddress,
   };
 }
 
@@ -118,7 +133,6 @@ export function getPublisherConfigFromSequencerConfig(config: SequencerPublisher
   return {
     ...config,
     publisherAllowInvalidStates: config.sequencerPublisherAllowInvalidStates,
-    publisherForwarderAddress: config.sequencerPublisherForwarderAddress,
     l1TxFailedStore: config.l1TxFailedStore,
   };
 }
@@ -210,11 +224,6 @@ export const proverPublisherConfigMappings: ConfigMappingsType<ProverPublisherCo
     description:
       'Whether to run in fisherman mode: builds blocks on every slot for validation without publishing to L1',
     ...booleanConfigHelper(false),
-  },
-  proverPublisherForwarderAddress: {
-    env: `PROVER_PUBLISHER_FORWARDER_ADDRESS`,
-    description: 'Address of the forwarder contract to wrap all L1 transactions through (for testing purposes only)',
-    parseEnv: (val: string) => EthAddress.fromString(val),
   },
   ...publisherFundingConfigMappings,
 };

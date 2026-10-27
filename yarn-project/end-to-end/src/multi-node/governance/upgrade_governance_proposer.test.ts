@@ -2,6 +2,7 @@ import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode }
 
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { getAddress } from 'viem';
 
@@ -25,7 +26,7 @@ jest.setTimeout(1000 * 60 * 10);
  * proofSubEpochs=640), 4 validators, governanceProposerRoundSize=10, activationThreshold=1e22,
  * ejectionThreshold=5e21, minTxsPerBlock=0, inboxLag=2. No prover. jest.setTimeout=10m.
  */
-describe('multi-node/governance/upgrade_governance_proposer', () => {
+describeAcrossL1Forks('multi-node/governance/upgrade_governance_proposer', () => {
   let test: MultiNodeTestContext;
   let l1TxUtils: L1TxUtils;
 

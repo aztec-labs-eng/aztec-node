@@ -67,7 +67,8 @@ describe('Blob Batching', () => {
     // 'Batched' evaluation
     const { y, proof } = await onlyBlob.evaluate(finalZ);
     const q = BLS12Point.decompress(proof);
-    const finalBlobCommitmentsHash = sha256ToField([onlyBlob.commitment]);
+    // true, serialized as the byte 0x01: the flag marking the first blob of a checkpoint.
+    const finalBlobCommitmentsHash = sha256ToField([true, onlyBlob.commitment]);
 
     // Challenge gamma
     const hashedEval = await poseidon2HashWithSeparator(
@@ -184,7 +185,7 @@ describe('Blob Batching', () => {
       let batchedQ = BLS12Point.ZERO;
       let finalY = BLS12Fr.ZERO;
       let powGamma = new BLS12Fr(1n); // Since we start at gamma^0 = 1
-      let finalBlobCommitmentsHash: Buffer = Buffer.alloc(0);
+      let finalBlobCommitmentsHash = Fr.ZERO;
       for (let i = 0; i < numBlobs; i++) {
         const cOperand = commitments[i].mul(powGamma);
         const yOperand = evalYs[i].mul(powGamma);
@@ -193,7 +194,11 @@ describe('Blob Batching', () => {
         batchedQ = batchedQ.add(qOperand);
         finalY = finalY.add(yOperand);
         powGamma = powGamma.mul(finalGamma);
-        finalBlobCommitmentsHash = sha256ToField([finalBlobCommitmentsHash, blobs[i].commitment]).toBuffer();
+        // true/false (the bytes 0x01/0x00): whether the blob is the first of its checkpoint. Only blob 0 is, as there
+        // is one checkpoint.
+        finalBlobCommitmentsHash = sha256ToField(
+          i === 0 ? [true, blobs[i].commitment] : [finalBlobCommitmentsHash, false, blobs[i].commitment],
+        );
       }
 
       const batchedBlob = await BatchedBlobAccumulator.batch([blobFields], true /* verifyProof */);
@@ -201,7 +206,7 @@ describe('Blob Batching', () => {
       expect(batchedBlob.q).toEqual(batchedQ);
       expect(batchedBlob.z).toEqual(finalZ);
       expect(batchedBlob.y).toEqual(finalY);
-      expect(batchedBlob.blobCommitmentsHash.toBuffer()).toEqual(finalBlobCommitmentsHash);
+      expect(batchedBlob.blobCommitmentsHash).toEqual(finalBlobCommitmentsHash);
 
       // If the snapshot has changed, update the noir test data as well.
       expect(finalY.toString()).toMatchInlineSnapshot(`"${expectedFinalY}"`);
@@ -273,6 +278,35 @@ describe('Blob Batching', () => {
     );
 
     await BatchedBlobAccumulator.batch(blobFieldsPerCheckpoint, true /* verifyProof */);
+  });
+
+  it('binds which checkpoint each blob belongs to', async () => {
+    // The same three blobs as the 3-blob case above. Checkpoint k spans the first two and checkpoint k+1 the third; the
+    // shifted split proposes the same blobs with k's second blob moved to the front of k+1.
+    const blobFields = Array.from({ length: 2 * FIELDS_PER_BLOB + 123 }, (_, i) => new Fr(456 + i));
+    const honest = [blobFields.slice(0, 2 * FIELDS_PER_BLOB), blobFields.slice(2 * FIELDS_PER_BLOB)];
+    const shifted = [blobFields.slice(0, FIELDS_PER_BLOB), blobFields.slice(FIELDS_PER_BLOB)];
+
+    const blobs = (await Promise.all(honest.map(getBlobsPerL1Block))).flat();
+    const shiftedBlobs = (await Promise.all(shifted.map(getBlobsPerL1Block))).flat();
+    expect(shiftedBlobs.map(b => b.commitment)).toEqual(blobs.map(b => b.commitment));
+
+    const honestBatch = await BatchedBlobAccumulator.batch(honest);
+    const shiftedBatch = await BatchedBlobAccumulator.batch(shifted);
+    expect(shiftedBatch.blobCommitmentsHash).not.toEqual(honestBatch.blobCommitmentsHash);
+
+    // Run with AZTEC_GENERATE_TEST_DATA=1 to update the noir and L1 test data. The noir test takes its commitments from
+    // the 3-blob case above.
+    updateInlineFndTestData(
+      'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
+      'blob_commitments_hash_two_checkpoints_from_ts',
+      honestBatch.blobCommitmentsHash.toString(),
+    );
+    const l1TestPath = 'l1-contracts/test/rollup/libraries/bloblib/blobCommitmentsHash.t.sol';
+    blobs.forEach((blob, i) =>
+      updateInlineFndTestData(l1TestPath, `C_${i}`, `hex"${blob.commitment.toString('hex')}"`),
+    );
+    updateInlineFndTestData(l1TestPath, 'PROVEN_BLOB_COMMITMENTS_HASH', honestBatch.blobCommitmentsHash.toString());
   });
 });
 

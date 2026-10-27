@@ -100,7 +100,7 @@ async function main() {
   const interaction = await valueNotEqual.methods.increment(
     accounts[0].item,
     data.vkAsFields as unknown as FieldLike[], // 115 field VK
-    data.proofAsFields as unknown as FieldLike[], // 508 field proof
+    data.proofAsFields as unknown as FieldLike[], // 458 field proof
     data.publicInputs as unknown as FieldLike[], // Public inputs
   );
 

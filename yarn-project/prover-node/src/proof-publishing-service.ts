@@ -1,5 +1,6 @@
 import type { BatchedBlob } from '@aztec-labs/blob-lib';
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -9,6 +10,7 @@ import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 
+import type { ProverNodeJobMetrics } from './metrics.js';
 import type { ProverNodePublisher } from './prover-node-publisher.js';
 import type { ProverPublisherFactory } from './prover-publisher-factory.js';
 
@@ -51,7 +53,9 @@ export type PublishCandidate = {
 
 /**
  * Terminal outcome for a candidate. The promise from `submit()` resolves with one of these. `'already-submitted'`
- * means L1 already holds a proof of this length from this prover for the epoch, so nothing was sent.
+ * means L1 already holds a proof of this length from this prover for the epoch, so nothing was sent. For a full
+ * candidate, only a full-epoch registration counts: a proof registered while the epoch was still open is non-full,
+ * so a full candidate is resent to replace it.
  */
 export type PublishOutcome = 'published' | 'already-submitted' | 'superseded' | 'failed' | 'withdrawn' | 'expired';
 
@@ -72,6 +76,7 @@ export type ProofPublishingServiceDeps = {
   l2BlockSource: Pick<L2BlockSource, 'getBlockNumber'>;
   dateProvider: DateProvider;
   config: ProofPublishingServiceConfig;
+  metrics?: Pick<ProverNodeJobMetrics, 'recordProofSubmissionUnaffordable'>;
   bindings?: LoggerBindings;
 };
 
@@ -88,6 +93,9 @@ type EpochBucket = {
  * the candidate's own `deadline` timer caps the total wait.
  */
 const PUBLISHER_ACQUIRE_RETRY_DELAY_MS = 1_000;
+
+/** Backoff when no publisher can afford the submission: a balance only changes with a new L1 block or a top-up. */
+const PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS = 12_000;
 
 /**
  * Central owner of L1 proof submission. Sessions offer their proofs here as
@@ -125,6 +133,10 @@ export class ProofPublishingService {
   /** Tracks the candidate currently being published. Set while drain is awaiting the L1 publish. */
   private inFlight: { id: string } | undefined;
   private stopped = false;
+  /** Candidates for which the lack of an affordable publisher has already been logged. */
+  private readonly unaffordableCandidates = new Set<string>();
+  /** Pending drain retry after a failed publisher acquisition, so repeated failures never stack up retry timers. */
+  private retryTimer: NodeJS.Timeout | undefined;
 
   constructor(private readonly deps: ProofPublishingServiceDeps) {
     this.log = createLogger('prover-node:proof-publishing-service', deps.bindings);
@@ -203,6 +215,8 @@ export class ProofPublishingService {
    */
   public async stop(): Promise<void> {
     this.stopped = true;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
     await this.drainQueue.end();
     // Anything still parked in a bucket never ran through drain — resolve it as withdrawn so
     // callers awaiting `submit()` aren't left hanging.
@@ -225,6 +239,17 @@ export class ProofPublishingService {
       .catch(err => {
         this.log.error(`Drain task threw`, err);
       });
+  }
+
+  /** Schedules a drain after the delay, unless a retry is already pending. */
+  private scheduleRetry(delayMs: number): void {
+    if (this.stopped || this.retryTimer) {
+      return;
+    }
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      this.scheduleDrain();
+    }, delayMs);
   }
 
   private async drain(): Promise<void> {
@@ -295,8 +320,34 @@ export class ProofPublishingService {
   private async publishWinner(epoch: EpochNumber, winner: PublishCandidate, bucket: EpochBucket): Promise<void> {
     let publisher: PublisherLike;
     try {
-      publisher = await this.deps.publisherFactory.create();
+      publisher = await this.deps.publisherFactory.create({
+        requireAffordableSubmission: !this.deps.config.skipSubmitProof,
+      });
     } catch (err) {
+      if (err instanceof NoAffordablePublisherError) {
+        // The candidate may have expired or been withdrawn while the publisher was being acquired.
+        if (!bucket.candidates.has(winner.id)) {
+          return;
+        }
+        // Logged once per candidate: retrying every few seconds until a top-up or the deadline would spam errors.
+        if (!this.unaffordableCandidates.has(winner.id)) {
+          this.unaffordableCandidates.add(winner.id);
+          this.deps.metrics?.recordProofSubmissionUnaffordable();
+          this.log.error(
+            `Holding back the proof for candidate ${winner.id}: no publisher can afford submitting it, ` +
+              `${err.describeFunding()}; retrying`,
+            err,
+            {
+              candidateId: winner.id,
+              epoch: winner.epoch,
+              retryDelayMs: PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS,
+              ...err.toLogContext(),
+            },
+          );
+        }
+        this.scheduleRetry(PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS);
+        return;
+      }
       // Treat this as transient: the publisher pool may be temporarily exhausted
       // (every signer busy, funding tx in flight, etc.). Leave the candidate queued and
       // schedule another drain after a short backoff. If the failure persists past the
@@ -307,7 +358,7 @@ export class ProofPublishingService {
         retryDelayMs: PUBLISHER_ACQUIRE_RETRY_DELAY_MS,
         err,
       });
-      setTimeout(() => this.scheduleDrain(), PUBLISHER_ACQUIRE_RETRY_DELAY_MS);
+      this.scheduleRetry(PUBLISHER_ACQUIRE_RETRY_DELAY_MS);
       return;
     }
 
@@ -381,6 +432,7 @@ export class ProofPublishingService {
     }
     bucket.candidates.delete(id);
     bucket.resolvers.delete(id);
+    this.unaffordableCandidates.delete(id);
     if (resolve) {
       this.log.info(`Candidate ${id} resolved as ${outcome}`, { candidateId: id, outcome });
       resolve(outcome);

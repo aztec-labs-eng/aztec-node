@@ -1,5 +1,6 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { DatabaseVersion } from '@aztec-labs/stdlib/database-version/version';
+import { Buffer } from 'buffer';
 
 import { mockLogger } from '../../interfaces/utils.js';
 import { initStoreForRollupAndSchemaVersion } from '../../utils.js';

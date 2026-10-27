@@ -19,6 +19,7 @@ import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { makeTxRequest } from '@aztec-labs/stdlib/testing';
 import { PrivateCallExecutionResult, PrivateExecutionResult, type TxRequest } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 
@@ -28,13 +29,13 @@ import {
   makeKernelOutput,
 } from './hints/test_utils.js';
 import { PrivateKernelExecutionProver } from './private_kernel_execution_prover.js';
-import type { PrivateKernelOracle } from './private_kernel_oracle.js';
+import type { PrivateKernelInputsProvider } from './private_kernel_inputs_provider.js';
 
 const logger = createLogger('private_kernel_execution_prover');
 
 describe('Private Kernel Sequencer', () => {
   let txRequest: TxRequest;
-  let oracle: ReturnType<typeof mock<PrivateKernelOracle>>;
+  let inputsProvider: ReturnType<typeof mock<PrivateKernelInputsProvider>>;
   let proofCreator: ReturnType<typeof mock<PrivateKernelProver>>;
   let prover: PrivateKernelExecutionProver;
   let dependencies: { [name: string]: string[] } = {};
@@ -125,11 +126,11 @@ describe('Private Kernel Sequencer', () => {
   beforeEach(async () => {
     txRequest = makeTxRequest();
 
-    oracle = mock<PrivateKernelOracle>();
-    oracle.getVkMembershipWitness.mockResolvedValue(MembershipWitness.random(VK_TREE_HEIGHT));
-    oracle.getMasterSecretKey.mockResolvedValue(Fr.random() as any);
+    inputsProvider = mock<PrivateKernelInputsProvider>();
+    inputsProvider.getVkMembershipWitness.mockResolvedValue(MembershipWitness.random(VK_TREE_HEIGHT));
+    inputsProvider.getMasterSecretKey.mockResolvedValue(Fr.random() as any);
 
-    oracle.getContractAddressPreimage.mockResolvedValue({
+    inputsProvider.getContractAddressPreimage.mockResolvedValue({
       version: 2 as const,
       salt: Fr.random(),
       deployer: await AztecAddress.random(),
@@ -141,13 +142,13 @@ describe('Private Kernel Sequencer', () => {
       address: await AztecAddress.random(),
       saltedInitializationHash: Fr.random(),
     });
-    oracle.getContractClassIdPreimage.mockResolvedValue({
+    inputsProvider.getContractClassIdPreimage.mockResolvedValue({
       artifactHash: Fr.random(),
       publicBytecodeCommitment: Fr.random(),
       privateFunctionsRoot: Fr.random(),
     });
 
-    oracle.getDebugFunctionName.mockImplementation((_, selector) =>
+    inputsProvider.getDebugFunctionName.mockImplementation((_, selector) =>
       Promise.resolve(String.fromCharCode(selector.value)),
     );
 
@@ -165,7 +166,7 @@ describe('Private Kernel Sequencer', () => {
     proofCreator.simulateReset.mockResolvedValue(simulateProofOutput());
     proofCreator.simulateResetTail.mockResolvedValue(simulateProofOutputFinal());
 
-    prover = new PrivateKernelExecutionProver(oracle, proofCreator, true);
+    prover = new PrivateKernelExecutionProver(inputsProvider, proofCreator, true);
   });
 
   it('dispatches the right init_K / inner_K variant at MAX_APPS_PER_KERNEL', async () => {
@@ -442,8 +443,8 @@ describe('Private Kernel Sequencer', () => {
     const executionResult = new PrivateExecutionResult(aExec, Fr.zero(), []);
     await prove(executionResult);
 
-    expect(oracle.getUpdatedClassIdHints).toHaveBeenCalledTimes(2);
-    expect(oracle.getUpdatedClassIdHints).toHaveBeenCalledWith(contractAddress);
-    expect(oracle.getUpdatedClassIdHints).toHaveBeenCalledWith(contractAddressB);
+    expect(inputsProvider.getUpdatedClassIdHints).toHaveBeenCalledTimes(2);
+    expect(inputsProvider.getUpdatedClassIdHints).toHaveBeenCalledWith(contractAddress);
+    expect(inputsProvider.getUpdatedClassIdHints).toHaveBeenCalledWith(contractAddressB);
   });
 });

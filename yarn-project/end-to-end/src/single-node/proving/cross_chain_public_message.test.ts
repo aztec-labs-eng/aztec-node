@@ -3,6 +3,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
 import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
@@ -28,7 +29,7 @@ jest.setTimeout(1000 * 60 * 10);
 // CI, aztecSlot=16s/24s, epoch=6, proofSubmissionEpochs=1), minTxsPerBlock=1 (v5: the disableAnvilTestWatcher
 // override was removed). Cross-chain: writes to L1 Inbox (sendL1ToL2Message), then claims the message in a
 // public L2 function.
-describe('single-node/proving/cross_chain_public_message', () => {
+describeAcrossL1Forks('single-node/proving/cross_chain_public_message', () => {
   let context: EndToEndContext;
   let logger: Logger;
 

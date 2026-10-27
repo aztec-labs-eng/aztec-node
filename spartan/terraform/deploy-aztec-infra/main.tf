@@ -46,7 +46,7 @@ provider "google" {
 
 module "web3signer" {
   # Only deploy web3signer if we have validators or provers that need to publish to L1
-  count = tonumber(var.VALIDATOR_REPLICAS) > 0 || (var.PROVER_ENABLED && !var.PROVER_NODE_DISABLE_PROOF_PUBLISH) ? 1 : 0
+  count = tonumber(var.VALIDATOR_REPLICAS) > 0 || (var.PROVER_ENABLED && (var.PROVER_OXIDE_SIDECAR.enabled || !var.PROVER_NODE_DISABLE_PROOF_PUBLISH)) ? 1 : 0
 
   source                                   = "../modules/web3signer"
   NAMESPACE                                = var.NAMESPACE
@@ -304,6 +304,7 @@ locals {
     "validator.node.env.SEQ_BUILD_CHECKPOINT_IF_EMPTY"                            = var.SEQ_BUILD_CHECKPOINT_IF_EMPTY
     "validator.node.env.AZTEC_EPOCHS_LAG"                                         = var.AZTEC_EPOCHS_LAG
     "validator.node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG"                       = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
+    "validator.node.env.L1_GAS_LIMIT_BUFFER_PERCENTAGE"                           = var.VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_BUMP_PERCENTAGE"                          = var.VALIDATOR_L1_PRIORITY_FEE_BUMP_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE"                    = var.VALIDATOR_L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE
     "validator.node.env.BLOB_ALLOW_EMPTY_SOURCES"                                 = var.BLOB_ALLOW_EMPTY_SOURCES
@@ -318,7 +319,7 @@ locals {
     "validator.node.env.P2P_GOSSIPSUB_DLO"                                        = var.P2P_GOSSIPSUB_DLO
     "validator.node.env.P2P_GOSSIPSUB_DHI"                                        = var.P2P_GOSSIPSUB_DHI
     "validator.node.env.P2P_DROP_TX_CHANCE"                                       = var.P2P_DROP_TX_CHANCE
-    "validator.node.env.WS_NUM_HISTORIC_CHECKPOINTS"                              = var.WS_NUM_HISTORIC_CHECKPOINTS
+    "validator.node.env.WS_HISTORY_RETENTION"                                     = var.WS_HISTORY_RETENTION
     "validator.node.env.TX_COLLECTION_FILE_STORE_URLS"                            = var.TX_COLLECTION_FILE_STORE_URLS
     "validator.node.env.SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT"                      = var.SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT
     "validator.node.env.L1_TX_FAILED_STORE"                                       = var.L1_TX_FAILED_STORE
@@ -395,10 +396,14 @@ locals {
       name   = "${var.RELEASE_PREFIX}-snapshot"
       chart  = "aztec-snapshots"
       values = []
+      inline_values = [yamlencode({
+        snapshots = {
+          frequency = var.SNAPSHOT_CRON
+        }
+      })]
       custom_settings = {
         "snapshots.aztecNodeAdminUrl" = local.internal_rpc_admin_url
         "snapshots.uploadLocation"    = var.STORE_SNAPSHOT_URL
-        "snapshots.frequency"         = var.SNAPSHOT_CRON
         "nodeSelector.node-type"      = "network"
       }
       boot_node_host_path  = ""
@@ -422,6 +427,17 @@ locals {
           node = {
             logLevel           = var.LOG_LEVEL
             disableAdminApiKey = true
+            oxideSidecar = {
+              enabled                  = var.PROVER_OXIDE_SIDECAR.enabled
+              image                    = var.PROVER_OXIDE_SIDECAR.image
+              manifestUrl              = var.PROVER_OXIDE_SIDECAR.manifest_url
+              portal                   = var.PROVER_OXIDE_SIDECAR.portal
+              proofSubmissionTarget    = var.PROVER_OXIDE_SIDECAR.proof_submission_target
+              provingCostPerCheckpoint = var.PROVER_OXIDE_SIDECAR.proving_cost_per_checkpoint
+              minProfit                = var.PROVER_OXIDE_SIDECAR.min_profit
+              minProfitMarginBps       = var.PROVER_OXIDE_SIDECAR.min_profit_margin_bps
+              startupTimeoutSeconds    = var.PROVER_OXIDE_SIDECAR.startup_timeout_seconds
+            }
           }
         }
         broker = {
@@ -463,10 +479,9 @@ locals {
           "node.node.env.PROVER_PROOF_STORE"                    = var.PROVER_PROOF_STORE
           "node.node.env.L1_TX_FAILED_STORE"                    = var.L1_TX_FAILED_STORE
           "node.node.env.DEBUG_FORCE_TX_PROOF_VERIFICATION"     = var.DEBUG_FORCE_TX_PROOF_VERIFICATION
-          "node.node.env.KEY_INDEX_START"                       = var.PROVER_PUBLISHER_MNEMONIC_START_INDEX
+          "node.node.env.KEY_INDEX_START"                       = coalesce(var.PROVER_ID_MNEMONIC_INDEX, tonumber(var.PROVER_PUBLISHER_MNEMONIC_START_INDEX))
           "node.node.env.PUBLISHER_KEY_INDEX_START"             = var.PROVER_PUBLISHER_MNEMONIC_START_INDEX
           "node.node.env.PUBLISHERS_PER_PROVER"                 = var.PROVER_PUBLISHERS_PER_PROVER
-          "node.node.env.PROVER_NODE_DISABLE_PROOF_PUBLISH"     = var.PROVER_NODE_DISABLE_PROOF_PUBLISH
           "node.node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG"    = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
           "node.node.env.BLOB_ALLOW_EMPTY_SOURCES"              = var.BLOB_ALLOW_EMPTY_SOURCES
           "node.node.secret.envEnabled"                         = true
@@ -499,15 +514,18 @@ locals {
           "node.node.env.P2P_DROP_TX_CHANCE"                    = var.P2P_DROP_TX_CHANCE
           "node.node.env.P2P_MAX_PENDING_TX_COUNT"              = var.P2P_MAX_PENDING_TX_COUNT
           "node.node.env.P2P_MIN_TX_POOL_AGE_MS"                = var.P2P_MIN_TX_POOL_AGE_MS
-          "node.node.env.WS_NUM_HISTORIC_CHECKPOINTS"           = var.WS_NUM_HISTORIC_CHECKPOINTS
+          "node.node.env.WS_HISTORY_RETENTION"                  = var.WS_HISTORY_RETENTION
           "node.node.env.TX_COLLECTION_FILE_STORE_URLS"         = var.TX_COLLECTION_FILE_STORE_URLS
           "node.service.p2p.nodePortEnabled"                    = var.P2P_NODEPORT_ENABLED
           "node.service.p2p.hostPortEnabled"                    = var.P2P_HOSTPORT_ENABLED
           "node.service.p2p.announcePort"                       = local.p2p_port_prover
           "node.service.p2p.port"                               = local.p2p_port_prover
         },
+        var.PROVER_OXIDE_SIDECAR.enabled ? {} : {
+          "node.node.env.PROVER_NODE_DISABLE_PROOF_PUBLISH" = var.PROVER_NODE_DISABLE_PROOF_PUBLISH
+        },
         # Only set web3signerUrl if proof publishing is enabled
-        !var.PROVER_NODE_DISABLE_PROOF_PUBLISH ? {
+        (var.PROVER_OXIDE_SIDECAR.enabled || !var.PROVER_NODE_DISABLE_PROOF_PUBLISH) ? {
           "node.node.web3signerUrl" = "http://${var.RELEASE_PREFIX}-signer-web3signer.${var.NAMESPACE}.svc.cluster.local:9000/"
         } : {}
       )
@@ -558,7 +576,7 @@ locals {
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.BLOB_FILE_STORE_UPLOAD_URL"         = var.BLOB_FILE_STORE_UPLOAD_URL
         "node.env.TX_FILE_STORE_ENABLED"              = var.TX_FILE_STORE_ENABLED
         "node.env.TX_FILE_STORE_URL"                  = var.TX_FILE_STORE_URL
@@ -593,7 +611,7 @@ locals {
         "service.p2p.port"                            = local.p2p_port_fisherman
         "node.proverRealProofs"                       = var.PROVER_REAL_PROOFS
         "node.env.BLOB_ALLOW_EMPTY_SOURCES"           = var.BLOB_ALLOW_EMPTY_SOURCES
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG" = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
@@ -648,7 +666,7 @@ locals {
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
         "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
-        "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
+        "node.env.WS_HISTORY_RETENTION"               = var.WS_HISTORY_RETENTION
         "node.env.TX_COLLECTION_FILE_STORE_URLS"      = var.TX_COLLECTION_FILE_STORE_URLS
       }
       boot_node_host_path  = "node.env.BOOT_NODE_HOST"

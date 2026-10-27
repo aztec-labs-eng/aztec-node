@@ -131,6 +131,7 @@ export class SequencerMetrics {
           'rollup_contract_check_failed',
           'slot_mismatch',
           'block_number_mismatch',
+          'insufficient_publisher_balance',
         ],
       },
     );
@@ -274,23 +275,19 @@ export class SequencerMetrics {
     });
   }
 
-  incOpenSlot(slot: SlotNumber, proposer: string) {
+  incOpenSlot(slot: SlotNumber) {
     // sequencer went through the loop a second time. Noop
     if (slot === this.lastSeenSlot) {
       return;
     }
 
-    this.slots.add(1, {
-      [Attributes.BLOCK_PROPOSER]: proposer,
-    });
+    this.slots.add(1);
 
     this.lastSeenSlot = slot;
   }
 
-  async incFilledSlot(proposer: string, coinbase: Hex | EthAddress | undefined): Promise<void> {
-    this.filledSlots.add(1, {
-      [Attributes.BLOCK_PROPOSER]: proposer,
-    });
+  async incFilledSlot(coinbase: Hex | EthAddress | undefined): Promise<void> {
+    this.filledSlots.add(1);
     this.lastSeenSlot = undefined;
 
     if (coinbase) {
@@ -326,7 +323,8 @@ export class SequencerMetrics {
       | 'rollup_contract_check_failed'
       | 'slot_mismatch'
       | 'block_number_mismatch'
-      | 'no_peers',
+      | 'no_peers'
+      | 'insufficient_publisher_balance',
   ) {
     this.checkpointPrecheckFailed.add(1, { [Attributes.ERROR_TYPE]: checkType });
   }

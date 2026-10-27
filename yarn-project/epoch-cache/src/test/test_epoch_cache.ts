@@ -9,9 +9,16 @@ import {
 } from '@aztec-labs/stdlib/epoch-helpers';
 
 import {
+  type CommitteeMembershipLookup,
+  type EscapeHatchLookup,
+  type KnownCommitteeLookup,
+  type ProposerLookup,
+  toCommitteeLookup,
+  withoutMembers,
+} from '../committee_lookup.js';
+import {
   type EpochAndSlot,
   type EpochCacheInterface,
-  type EpochCommitteeInfo,
   PROPOSER_PIPELINING_SLOT_OFFSET,
   type SlotTag,
 } from '../epoch_cache.js';
@@ -25,7 +32,6 @@ const DEFAULT_L1_CONSTANTS: L1RollupConstants = {
   ethereumSlotDuration: 12,
   proofSubmissionEpochs: 2,
   targetCommitteeSize: 48,
-  rollupManaLimit: Number.MAX_SAFE_INTEGER,
 };
 
 /**
@@ -64,7 +70,7 @@ export class TestEpochCache implements EpochCacheInterface {
   }
 
   /**
-   * Sets the proposer address returned by getProposerAttesterAddressInSlot.
+   * Sets the proposer address returned by lookupProposer.
    * @param proposer - The address of the current proposer.
    */
   setProposer(proposer: EthAddress | undefined): this {
@@ -125,14 +131,14 @@ export class TestEpochCache implements EpochCacheInterface {
     return this.lagInEpochsForValidatorSet;
   }
 
-  getCommittee(_slot?: SlotTag): Promise<EpochCommitteeInfo> {
+  /** An empty committee is `open`, as the real cache reports a target committee size of zero. */
+  getCommittee(_slot?: SlotTag): Promise<KnownCommitteeLookup> {
+    return Promise.resolve(this.getCommitteeLookup());
+  }
+
+  private getCommitteeLookup(): KnownCommitteeLookup {
     const epoch = getEpochAtSlot(this.currentSlot, this.l1Constants);
-    return Promise.resolve({
-      committee: this.committee,
-      epoch,
-      seed: this.seed,
-      isEscapeHatchOpen: this.escapeHatchOpen,
-    });
+    return toCommitteeLookup(this.committee, { epoch, seed: this.seed, isEscapeHatchOpen: this.escapeHatchOpen });
   }
 
   getSlotNow(): SlotNumber {
@@ -218,28 +224,40 @@ export class TestEpochCache implements EpochCacheInterface {
     };
   }
 
-  getProposerAttesterAddressInSlot(_slot: SlotNumber): Promise<EthAddress | undefined> {
-    return Promise.resolve(this.proposerAddress);
+  /** An unset proposer is an `open` committee, independently of the committee set with {@link setCommittee}. */
+  lookupProposer(_slot: SlotNumber): Promise<ProposerLookup> {
+    return Promise.resolve(
+      this.proposerAddress === undefined ? { state: 'open' } : { state: 'members', proposer: this.proposerAddress },
+    );
   }
 
   getRegisteredValidators(): Promise<EthAddress[]> {
     return Promise.resolve(this.registeredValidators);
   }
 
-  isInCommittee(_slot: SlotTag, validator: EthAddress): Promise<boolean> {
-    return Promise.resolve(this.committee.some(v => v.equals(validator)));
+  lookupMembership(_slot: SlotTag, validator: EthAddress): Promise<CommitteeMembershipLookup<boolean>> {
+    const lookup = this.getCommitteeLookup();
+    return Promise.resolve(
+      lookup.state === 'members'
+        ? { state: 'members', inCommittee: lookup.committee.some(v => v.equals(validator)) }
+        : withoutMembers(lookup),
+    );
   }
 
-  filterInCommittee(_slot: SlotTag, validators: EthAddress[]): Promise<EthAddress[]> {
-    const committeeSet = new Set(this.committee.map(v => v.toString()));
-    return Promise.resolve(validators.filter(v => committeeSet.has(v.toString())));
+  filterInCommittee(_slot: SlotTag, validators: EthAddress[]): Promise<CommitteeMembershipLookup<EthAddress[]>> {
+    const lookup = this.getCommitteeLookup();
+    if (lookup.state !== 'members') {
+      return Promise.resolve(withoutMembers(lookup));
+    }
+    const committeeSet = new Set(lookup.committee.map(v => v.toString()));
+    return Promise.resolve({ state: 'members', inCommittee: validators.filter(v => committeeSet.has(v.toString())) });
   }
 
-  isEscapeHatchOpen(_epoch: EpochNumber): Promise<boolean> {
-    return Promise.resolve(this.escapeHatchOpen);
+  lookupEscapeHatch(_epoch: EpochNumber): Promise<EscapeHatchLookup> {
+    return Promise.resolve({ state: this.getCommitteeLookup().state, isEscapeHatchOpen: this.escapeHatchOpen });
   }
 
-  isEscapeHatchOpenAtSlot(_slot?: SlotTag): Promise<boolean> {
-    return Promise.resolve(this.escapeHatchOpen);
+  lookupEscapeHatchAtSlot(_slot?: SlotTag): Promise<EscapeHatchLookup> {
+    return Promise.resolve({ state: this.getCommitteeLookup().state, isEscapeHatchOpen: this.escapeHatchOpen });
   }
 }

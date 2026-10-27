@@ -1,6 +1,12 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import {
+  makeEscapeHatchLookup,
+  makeMembershipLookup,
+  makeProposerLookup,
+  makeUnstableCommittee,
+} from '@aztec-labs/epoch-cache/test';
 import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
@@ -28,6 +34,7 @@ import {
   type TxProvider,
   createSecp256k1PeerId,
 } from '@aztec-labs/p2p';
+import { AvmProcessDiedError } from '@aztec-labs/simulator/server';
 import { OffenseType, WANT_TO_CLEAR_SLASH_EVENT, WANT_TO_SLASH_EVENT } from '@aztec-labs/slasher';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { type BlockData, BlockHash, L2Block, type L2BlockSink, type L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -36,6 +43,7 @@ import {
   CheckpointReexecutionTracker,
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { SlasherConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
@@ -58,6 +66,7 @@ import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TX_ERROR_INVALID_PROOF, type Tx, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 import { AttestationTimeoutError, InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
@@ -152,12 +161,16 @@ describe('ValidatorClient', () => {
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
     });
+    checkpointsBuilder.getFeeConfigProvider.mockReturnValue(
+      new TestRollupFeeConfigProvider({ manaLimit: 200_000_000n }),
+    );
     worldState = mock<WorldStateSynchronizer>();
     epochCache = mock<EpochCache>();
 
-    epochCache.filterInCommittee.mockImplementation((_slot, addresses) => Promise.resolve(addresses));
+    epochCache.filterInCommittee.mockImplementation((_slot, addresses) =>
+      Promise.resolve(makeMembershipLookup(addresses)),
+    );
     // Includes the L1 geometry fields read by the checkpoint-validation publish deadline
     // (getLastL1SlotTimestampForL2Slot needs l1GenesisTime/slotDuration/ethereumSlotDuration), kept
     // consistent with checkpointsBuilder.getConfig() above.
@@ -204,7 +217,7 @@ describe('ValidatorClient', () => {
         query && 'number' in query ? ({ header: CheckpointHeader.empty() } as ProposedCheckpointData) : undefined,
       ),
     );
-    epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(false);
+    epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(false));
     l1ToL2MessageSource = mock<L1ToL2MessageSource>();
     txProvider = mock<TxProvider>();
     dateProvider = new TestDateProvider();
@@ -344,7 +357,7 @@ describe('ValidatorClient', () => {
 
     it('should collect attestations from its own validators', async () => {
       epochCache.filterInCommittee.mockResolvedValueOnce(
-        validatorAccounts.map(account => EthAddress.fromString(account.address)),
+        makeMembershipLookup(validatorAccounts.map(account => EthAddress.fromString(account.address))),
       );
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
       const proposal = await makeCheckpointProposal({ lastBlock: {} });
@@ -421,12 +434,16 @@ describe('ValidatorClient', () => {
           txHashes: proposal.txHashes,
         },
       });
-    const makeCheckpointProposalWithHeaderMismatch = async () => {
-      const proposalHeader = makeCheckpointHeader(0, { slotNumber: proposal.slotNumber });
+    const makeCheckpointProposalWithHeaderMismatch = async (
+      proposalHeaderOverrides: Parameters<typeof makeCheckpointHeader>[1] = {},
+    ) => {
+      const proposalHeader = makeCheckpointHeader(0, { slotNumber: proposal.slotNumber, ...proposalHeaderOverrides });
       const computedHeader = makeCheckpointHeader(0, {
         slotNumber: proposal.slotNumber,
         totalManaUsed: new Fr(999),
       });
+      // The archive the local chain's checkpoint builds on, which an honest proposal header repeats.
+      const chainLastArchiveRoot = computedHeader.lastArchiveRoot;
       const checkpointProposal = await makeCheckpointProposal({
         archiveRoot: proposal.archive,
         checkpointHeader: proposalHeader,
@@ -439,7 +456,11 @@ describe('ValidatorClient', () => {
       const checkpointBlock = {
         ...blockBuildResult.block,
         number: blockNumber,
-        header: makeBlockHeader(1, { blockNumber, slotNumber: proposal.slotNumber }),
+        header: makeBlockHeader(1, {
+          blockNumber,
+          slotNumber: proposal.slotNumber,
+          lastArchive: new AppendOnlyTreeSnapshot(chainLastArchiveRoot, TreeLeafIndex(blockNumber - 1)),
+        }),
         archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         checkpointNumber: CheckpointNumber(1),
       } as unknown as L2Block;
@@ -459,9 +480,9 @@ describe('ValidatorClient', () => {
       });
       checkpointsBuilder.getFork.mockResolvedValue({
         [Symbol.asyncDispose]: disposeFork,
-        // Match the proposal's expected starting archive so the fork archive check passes and validation
-        // reaches the header-mismatch offense under test.
-        getTreeInfo: () => Promise.resolve({ root: proposalHeader.lastArchiveRoot.toBuffer() }),
+        // Match the first block's starting archive so the fork archive check passes and validation reaches the
+        // header-mismatch offense under test.
+        getTreeInfo: () => Promise.resolve({ root: chainLastArchiveRoot.toBuffer() }),
       } as any);
       mockCheckpointBuilder.completeCheckpoint.mockResolvedValue({
         header: computedHeader,
@@ -498,15 +519,6 @@ describe('ValidatorClient', () => {
           Array.isArray(args) &&
           args[0]?.offenseType === OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
       );
-    const getAttestedToInvalidCheckpointProposalSlashEvents = (
-      emitSpy: jest.SpiedFunction<typeof validatorClient.emit>,
-    ) =>
-      emitSpy.mock.calls.filter(
-        ([event, args]) =>
-          event === WANT_TO_SLASH_EVENT &&
-          Array.isArray(args) &&
-          args[0]?.offenseType === OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
-      );
     // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the empty message prefix and the
     // parent block's L1-to-L2 leaf count is 0, so the derived per-block bundle is empty.
     const genesisPrefixRef = InboxMessagePrefixRef.empty();
@@ -537,7 +549,7 @@ describe('ValidatorClient', () => {
         }),
       );
 
-      epochCache.isInCommittee.mockResolvedValue(true);
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
       epochCache.getSlotNow.mockReturnValue(buildSlot);
       epochCache.getTargetAndNextSlot.mockReturnValue({
         targetSlot: proposal.slotNumber,
@@ -562,9 +574,11 @@ describe('ValidatorClient', () => {
         ts: buildSlotTime,
         nowSeconds: buildSlotTime,
       });
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposal.getSender());
-      epochCache.filterInCommittee.mockResolvedValue([EthAddress.fromString(validatorAccounts[0].address)]);
-      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(false);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposal.getSender()));
+      epochCache.filterInCommittee.mockResolvedValue(
+        makeMembershipLookup([EthAddress.fromString(validatorAccounts[0].address)]),
+      );
+      epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(false));
 
       // Return parent block data when requested by archive root (parent block lookup).
       // Return undefined for number-based queries (existence check — the proposed block must not exist yet).
@@ -624,7 +638,9 @@ describe('ValidatorClient', () => {
     });
 
     it('should validate block proposal', async () => {
-      epochCache.filterInCommittee.mockResolvedValue([EthAddress.fromString(validatorAccounts[0].address)]);
+      epochCache.filterInCommittee.mockResolvedValue(
+        makeMembershipLookup([EthAddress.fromString(validatorAccounts[0].address)]),
+      );
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
       expect(isValid).toBe(true);
     });
@@ -667,7 +683,7 @@ describe('ValidatorClient', () => {
         }),
       );
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       p2pClient.getProposalsForSlot.mockResolvedValue({
         blockProposals: [terminalBlock, laterBlock],
         checkpointProposals: [checkpointProposal.toCore()],
@@ -744,7 +760,9 @@ describe('ValidatorClient', () => {
     });
 
     it('uses the attestation deadline as the tx collection deadline for block proposals', async () => {
-      epochCache.filterInCommittee.mockResolvedValue([EthAddress.fromString(validatorAccounts[0].address)]);
+      epochCache.filterInCommittee.mockResolvedValue(
+        makeMembershipLookup([EthAddress.fromString(validatorAccounts[0].address)]),
+      );
 
       const futureSlot = SlotNumber(proposal.slotNumber + 20);
       const futureProposal = ValidatedBlockProposal(
@@ -771,7 +789,7 @@ describe('ValidatorClient', () => {
       });
 
       // The expected proposer for the target slot is whoever signed the future proposal.
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(futureProposal.getSender());
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(futureProposal.getSender()));
       epochCache.getTargetAndNextSlot.mockReturnValue({
         targetSlot: futureSlot,
         nextSlot: SlotNumber(futureSlot + 1),
@@ -803,7 +821,7 @@ describe('ValidatorClient', () => {
         }),
       );
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(selfSigner.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(selfSigner.address));
 
       const handleSpy = jest.spyOn(validatorClient.getProposalHandler(), 'handleBlockProposal');
       const isValid = await validatorClient.validateBlockProposal(selfProposal, sender);
@@ -812,7 +830,7 @@ describe('ValidatorClient', () => {
     });
 
     it('should return early when escape hatch is open', async () => {
-      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValueOnce(true);
+      epochCache.lookupEscapeHatchAtSlot.mockResolvedValueOnce(makeEscapeHatchLookup(true));
 
       const handleSpy = jest.spyOn(validatorClient.getProposalHandler(), 'handleBlockProposal');
 
@@ -820,6 +838,33 @@ describe('ValidatorClient', () => {
       expect(isValid).toBe(false);
       // We still validate for observability, but we reject the proposal while escape hatch is open.
       expect(handleSpy).toHaveBeenCalled();
+    });
+
+    it('rejects a block proposal without validating it when its committee is not stable', async () => {
+      epochCache.lookupEscapeHatchAtSlot.mockResolvedValueOnce(makeUnstableCommittee(EpochNumber(1), 100n));
+      const handleSpy = jest.spyOn(validatorClient.getProposalHandler(), 'handleBlockProposal');
+
+      expect(await validatorClient.validateBlockProposal(proposal, sender)).toBe(false);
+      expect(handleSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not attest to a checkpoint proposal when its committee is not stable', async () => {
+      const checkpointProposal = await makeCheckpointProposal({
+        archiveRoot: proposal.archive,
+        checkpointHeader: makeCheckpointHeader(0, { slotNumber: proposal.slotNumber }),
+        lastBlock: {
+          blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(123), slotNumber: proposal.slotNumber }),
+          indexWithinCheckpoint: IndexWithinCheckpoint(0),
+          txHashes: proposal.txHashes,
+        },
+      });
+      epochCache.filterInCommittee.mockResolvedValueOnce(makeUnstableCommittee(EpochNumber(1), 100n));
+
+      const attestations = await validatorClient.attestToCheckpointProposal(
+        ValidatedCheckpointProposalCore(checkpointProposal),
+        sender,
+      );
+      expect(attestations).toBeUndefined();
     });
 
     it('should not attest to a checkpoint proposal if we did not validate a block for that slot', async () => {
@@ -908,8 +953,8 @@ describe('ValidatorClient', () => {
         },
       });
 
-      // Mock validateCheckpointProposal to pass, so handleCheckpointProposal runs its
-      // own checks (signature, fee modifier) and then proceeds to blob upload.
+      // Mock validateCheckpointProposal to pass, which also skips its signature and fee modifier checks, so
+      // handleCheckpointProposal proceeds to blob upload.
       const validateCheckpointSpy = jest
         .spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal')
         .mockResolvedValue({ isValid: true, checkpointNumber: CheckpointNumber(1) });
@@ -1085,20 +1130,33 @@ describe('ValidatorClient', () => {
       const didValidate = await validatorClient.validateBlockProposal(proposal, sender);
       expect(didValidate).toBe(true);
 
-      // Create 3 blocks for the slot, each with a distinct archive root
+      // Create 3 blocks of one checkpoint for the slot, each with a distinct archive root and chaining onto the last
       const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1));
       const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(2));
       const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(3));
-      const blocks = [
-        { archive: block1Archive, number: 1 },
-        { archive: block2Archive, number: 2 },
-        { archive: block3Archive, number: 3 },
-      ] as unknown as L2Block[];
+      const blocks = [block1Archive, block2Archive, block3Archive].map(
+        (archive, i, archives) =>
+          ({
+            archive,
+            number: i + 1,
+            checkpointNumber: CheckpointNumber(1),
+            indexWithinCheckpoint: IndexWithinCheckpoint(i),
+            header: makeBlockHeader(1, {
+              blockNumber: BlockNumber(i + 1),
+              slotNumber: proposal.slotNumber,
+              ...(i > 0 ? { lastArchive: archives[i - 1] } : {}),
+            }),
+          }) as unknown as L2Block,
+      );
 
-      // Proposal references the middle block's archive (block 2), not the last (block 3)
+      // Proposal references the middle block's archive (block 2), not the last (block 3). Its header builds on the
+      // first block's last archive, so the covered blocks are not rejected for a wrong last archive root instead.
       const checkpointProposal = await makeCheckpointProposal({
         archiveRoot: block2Archive.root,
-        checkpointHeader: makeCheckpointHeader(0, { slotNumber: proposal.slotNumber }),
+        checkpointHeader: makeCheckpointHeader(0, {
+          slotNumber: proposal.slotNumber,
+          lastArchiveRoot: blocks[0].header.lastArchive.root,
+        }),
         lastBlock: {
           blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(2), slotNumber: proposal.slotNumber }),
           indexWithinCheckpoint: IndexWithinCheckpoint(1),
@@ -1110,6 +1168,10 @@ describe('ValidatorClient', () => {
       blockSource.getBlockData.mockResolvedValue({ header: makeBlockHeader() } as any);
       blockSource.getBlocksForSlot.mockResolvedValue(blocks);
 
+      const validateCheckpointSpy = jest.spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal');
+      // The covered blocks' consumed Inbox prefix never syncs here; keep its wait to one retry before the deadline.
+      dateProvider.setTime(getExpectedAttestationDeadline(proposal.slotNumber).getTime() - 1_000);
+
       // Checkpoint validation should fail: proposal points to block 2 but last block in slot is block 3
       const attestations = await validatorClient.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(checkpointProposal),
@@ -1117,10 +1179,17 @@ describe('ValidatorClient', () => {
       );
       expect(attestations).toBeUndefined();
       expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+      await expect(validateCheckpointSpy.mock.results[0].value).resolves.toEqual({
+        isValid: false,
+        reason: 'last_block_archive_mismatch',
+        checkpointNumber: CheckpointNumber(1),
+      });
     });
 
     it('should wait for previous block to sync', async () => {
-      epochCache.filterInCommittee.mockResolvedValue([EthAddress.fromString(validatorAccounts[0].address)]);
+      epochCache.filterInCommittee.mockResolvedValue(
+        makeMembershipLookup([EthAddress.fromString(validatorAccounts[0].address)]),
+      );
       // The proposal targets slot 100, which under pipelining is built during slot 99. Set the wall
       // clock to the start of the build slot so the reexecution deadline (start of the target slot)
       // is still in the future, leaving a retry window for the parent-block archive lookup.
@@ -1256,7 +1325,7 @@ describe('ValidatorClient', () => {
     // An open escape hatch rejects a proposal that validated, so the observation has to report the node's answer
     // rather than the validation verdict it was derived from.
     it('reports a proposal the escape hatch rejects as not accepted', async () => {
-      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(true);
+      epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(true));
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
 
@@ -1410,6 +1479,24 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(proposal.slotNumber),
         },
       ]);
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        WANT_TO_SLASH_EVENT,
+        expect.arrayContaining([expect.objectContaining({ offenseType: OffenseType.DUPLICATE_PROPOSAL })]),
+      );
+    });
+
+    it('does not slash the second signer when two signers propose at one position', async () => {
+      await validatorClient.registerHandlers();
+      const duplicateProposalCallback = p2pClient.registerDuplicateProposalCallback.mock.calls[0][0];
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      // The node's view of the slot's proposer changed between two honest proposals, so p2p counts the second
+      // signer's proposal as a duplicate at that position and reports the second signer.
+      const secondSigner = Secp256k1Signer.random();
+      duplicateProposalCallback({ slot: proposal.slotNumber, proposer: secondSigner.address, type: 'block' });
+
+      expect(validatorClient.hasProposalEquivocation(proposal.slotNumber)).toBe(true);
+      expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
     });
 
     it('marks invalid proposal slots when the bad attestation penalty is zero', async () => {
@@ -1427,47 +1514,13 @@ describe('ValidatorClient', () => {
 
     it('reexecutes for bad attestation slashing when invalid block proposer slashing is disabled', async () => {
       validatorClient.updateConfig({ slashBroadcastedInvalidBlockPenalty: 0n });
-      epochCache.filterInCommittee.mockResolvedValue([]);
+      epochCache.filterInCommittee.mockResolvedValue(makeMembershipLookup([]));
       blockBuildResult.block.archive.root = Fr.random();
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
 
       expect(isValid).toBe(false);
       expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalled();
-    });
-
-    it('emits zero-amount bad attestation offenses when the bad attestation penalty is zero', async () => {
-      await validatorClient.registerHandlers();
-      const attestationCallback = p2pClient.registerCheckpointAttestationCallback.mock.calls[0][0];
-      validatorClient.updateConfig({
-        slashBroadcastedInvalidBlockPenalty: 0n,
-        slashAttestInvalidCheckpointProposalPenalty: 0n,
-      });
-      const emitSpy = jest.spyOn(validatorClient, 'emit');
-      const attesterSigner = Secp256k1Signer.random();
-      const attestation = makeCheckpointAttestation({
-        header: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
-        attesterSigner,
-      });
-      blockBuildResult.block.archive.root = Fr.random();
-
-      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
-      attestationCallback(attestation);
-
-      expect(isValid).toBe(false);
-      expect(getAttestedToInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([
-        [
-          WANT_TO_SLASH_EVENT,
-          [
-            {
-              validator: attesterSigner.address,
-              amount: 0n,
-              offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
-              epochOrSlot: BigInt(proposal.slotNumber),
-            },
-          ],
-        ],
-      ]);
     });
 
     it('emits WANT_TO_SLASH_EVENT for checkpoint_header_mismatch checkpoint proposals', async () => {
@@ -1488,6 +1541,31 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(checkpointProposal.slotNumber),
         },
       ]);
+    });
+
+    it('emits WANT_TO_SLASH_EVENT for a checkpoint proposal claiming the wrong last archive root', async () => {
+      const checkpointHandler = registerAllNodesCheckpointHandler();
+      const { checkpointProposal, disposeFork } = await makeCheckpointProposalWithHeaderMismatch({
+        lastArchiveRoot: Fr.random(),
+      });
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      await checkpointHandler(checkpointProposal, sender);
+
+      const proposer = checkpointProposal.getSender();
+      expect(proposer).toBeDefined();
+      // Rejected from the header and the local blocks alone, without forking world state for a rebuild.
+      expect(checkpointsBuilder.getFork).not.toHaveBeenCalled();
+      expect(disposeFork).not.toHaveBeenCalled();
+      expect(emitSpy).toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, [
+        {
+          validator: proposer!,
+          amount: config.slashBroadcastedInvalidCheckpointProposalPenalty,
+          offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+          epochOrSlot: BigInt(checkpointProposal.slotNumber),
+        },
+      ]);
+      expect(validatorClient.hasInvalidProposals(checkpointProposal.slotNumber)).toBe(true);
     });
 
     it('emits WANT_TO_SLASH_EVENT for invalid fee asset price modifiers', async () => {
@@ -1522,6 +1600,7 @@ describe('ValidatorClient', () => {
       'archive_mismatch',
       'out_hash_mismatch',
       'last_block_archive_mismatch',
+      'last_archive_root_mismatch',
       'checkpoint_validation_failed',
     ])('emits checkpoint proposal slash event for %s', async reason => {
       const checkpointHandler = registerAllNodesCheckpointHandler();
@@ -1544,6 +1623,36 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(checkpointProposal.slotNumber),
         },
       ]);
+    });
+
+    it('emits the proposer offense for last_block_archive_mismatch without recording it against attesters', async () => {
+      const checkpointHandler = registerAllNodesCheckpointHandler();
+      const checkpointProposal = await makeCheckpointProposalForSlot();
+      jest.spyOn(validatorClient.getProposalHandler(), 'handleCheckpointProposal').mockResolvedValue({
+        isValid: false,
+        reason: 'last_block_archive_mismatch',
+      });
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      await checkpointHandler(checkpointProposal, sender);
+
+      expect(getBroadcastedInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([
+        [
+          WANT_TO_SLASH_EVENT,
+          [
+            {
+              validator: checkpointProposal.getSender()!,
+              amount: config.slashBroadcastedInvalidCheckpointProposalPenalty,
+              offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+              epochOrSlot: BigInt(checkpointProposal.slotNumber),
+            },
+          ],
+        ],
+      ]);
+      expect(validatorClient.hasInvalidProposals(checkpointProposal.slotNumber)).toBe(false);
+      expect(
+        validatorClient.getProposalHandler().getInvalidCheckpointProposalHashes(checkpointProposal.slotNumber),
+      ).toEqual([]);
     });
 
     it('emits zero-amount checkpoint proposal offenses when the penalty is zero', async () => {
@@ -1656,6 +1765,10 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(checkpointProposal.slotNumber),
         },
       ]);
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        WANT_TO_SLASH_EVENT,
+        expect.arrayContaining([expect.objectContaining({ offenseType: OffenseType.DUPLICATE_PROPOSAL })]),
+      );
     });
 
     it('does not mark invalid proposal slots after a non-slashable invalid checkpoint proposal', async () => {
@@ -1672,7 +1785,7 @@ describe('ValidatorClient', () => {
     });
 
     it('emits slash event even if validator is not in the current committee', async () => {
-      epochCache.filterInCommittee.mockResolvedValue([]);
+      epochCache.filterInCommittee.mockResolvedValue(makeMembershipLookup([]));
       const checkpointHandler = registerAllNodesCheckpointHandler();
       const { checkpointProposal } = await makeCheckpointProposalWithHeaderMismatch();
       const emitSpy = jest.spyOn(validatorClient, 'emit');
@@ -1694,7 +1807,7 @@ describe('ValidatorClient', () => {
     });
 
     it('does not emit checkpoint proposal slash event while escape hatch is open', async () => {
-      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(true);
+      epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(true));
       const checkpointHandler = registerAllNodesCheckpointHandler();
       const { checkpointProposal } = await makeCheckpointProposalWithHeaderMismatch();
       const emitSpy = jest.spyOn(validatorClient, 'emit');
@@ -1727,7 +1840,7 @@ describe('ValidatorClient', () => {
     });
 
     it('should request txs even if not in committee in this slot', async () => {
-      epochCache.filterInCommittee.mockResolvedValue([]);
+      epochCache.filterInCommittee.mockResolvedValue(makeMembershipLookup([]));
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
       expect(isValid).toBe(true);
@@ -1760,6 +1873,24 @@ describe('ValidatorClient', () => {
       expect(isValid).toBe(false);
     });
 
+    // The AVM process dying on every attempt says nothing about the proposal: it is this node's environment (e.g. the
+    // OOM killer), so it must not be read as a failed tx and turned into an offense against the proposer.
+    it('rejects without an offense or marking the slot invalid when the AVM process died during re-execution', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      mockCheckpointBuilder.buildBlock.mockRejectedValue(
+        new AvmProcessDiedError('AVM simulator process died twice running this simulation'),
+      );
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'simulator_failure', slashable: false }),
+      ]);
+      expect(emitSpy.mock.calls.filter(([event]) => event === WANT_TO_SLASH_EVENT)).toEqual([]);
+      expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
+    });
+
     describe('with txs carried in the proposal failing integrity validation', () => {
       beforeEach(() => {
         txProvider.getTxsForBlockProposal.mockRejectedValue(
@@ -1785,7 +1916,7 @@ describe('ValidatorClient', () => {
       });
 
       it('does not emit the offense while the escape hatch is open', async () => {
-        epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(true);
+        epochCache.lookupEscapeHatchAtSlot.mockResolvedValue(makeEscapeHatchLookup(true));
         const emitSpy = jest.spyOn(validatorClient, 'emit');
 
         const isValid = await validatorClient.validateBlockProposal(proposal, sender);
@@ -1809,7 +1940,7 @@ describe('ValidatorClient', () => {
           signer,
         }),
       );
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       const emitSpy = jest.spyOn(validatorClient, 'emit');
 
       const isValid = await validatorClient.validateBlockProposal(duplicateProposal, sender);
@@ -1841,7 +1972,14 @@ describe('ValidatorClient', () => {
     });
 
     it('should still validate if no validators are in the committee', async () => {
-      epochCache.filterInCommittee.mockResolvedValueOnce([]);
+      epochCache.filterInCommittee.mockResolvedValueOnce(makeMembershipLookup([]));
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+      expect(isValid).toBe(true);
+    });
+
+    it.each(['open', 'none'] as const)('should still validate if the committee is %s', async state => {
+      epochCache.filterInCommittee.mockResolvedValueOnce({ state });
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
       expect(isValid).toBe(true);
@@ -1849,7 +1987,7 @@ describe('ValidatorClient', () => {
 
     it('should validate with any validators in the committee', async () => {
       epochCache.filterInCommittee.mockResolvedValueOnce(
-        validatorAccounts.map(account => EthAddress.fromString(account.address)),
+        makeMembershipLookup(validatorAccounts.map(account => EthAddress.fromString(account.address))),
       );
 
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
@@ -1894,7 +2032,7 @@ describe('ValidatorClient', () => {
         );
 
         // Update epochCache mock for the new proposal
-        epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(nonFirstBlockProposal.getSender());
+        epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(nonFirstBlockProposal.getSender()));
         epochCache.getTargetAndNextSlot.mockReturnValue({
           targetSlot: nonFirstBlockProposal.slotNumber,
           nextSlot: SlotNumber(nonFirstBlockProposal.slotNumber + 1),
@@ -1960,7 +2098,7 @@ describe('ValidatorClient', () => {
       // Enable re-execution (required in fisherman mode)
 
       // Set up so validator is NOT in the committee
-      epochCache.filterInCommittee.mockResolvedValueOnce([]);
+      epochCache.filterInCommittee.mockResolvedValueOnce(makeMembershipLookup([]));
 
       // Spy on addOwnCheckpointAttestations to verify attestations are NOT added to the pool
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
@@ -2123,6 +2261,13 @@ describe('ValidatorClient', () => {
       expect(haKeyStore.start).toHaveBeenCalledTimes(1);
       await validatorClient.stop();
       expect(haKeyStore.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts when the current committee is not stable on L1 yet', async () => {
+      epochCache.filterInCommittee.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+      epochCache.getCommittee.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+      await validatorClient.start();
+      await validatorClient.stop();
     });
   });
 

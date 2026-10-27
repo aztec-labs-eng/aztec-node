@@ -1,5 +1,7 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND, AmsterdamForkDetector } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -35,6 +37,7 @@ describe('SlasherClient', () => {
   let logger: Logger;
   let mockEpochCache: MockProxy<EpochCache>;
   let telemetryClient: BenchmarkTelemetryClient;
+  let amsterdamFork: Pick<AmsterdamForkDetector, 'isActive'>;
 
   let committee: EthAddress[];
 
@@ -119,6 +122,7 @@ describe('SlasherClient', () => {
   };
 
   beforeEach(() => {
+    amsterdamFork = { isActive: () => Promise.resolve(false) };
     kvStore = openTmpStore(true);
     offensesStore = new SlasherOffensesStore(kvStore, {
       ...settings,
@@ -133,7 +137,7 @@ describe('SlasherClient', () => {
     // Create mock EpochCache
     mockEpochCache = mockDeep<EpochCache>();
     mockEpochCache.getCommitteeForEpoch.mockImplementation(epoch =>
-      Promise.resolve({ committee, seed: 0n, epoch, isEscapeHatchOpen: false }),
+      Promise.resolve(makeCommitteeLookup({ committee, epoch })),
     );
     mockEpochCache.getL1Constants.mockReturnValue({
       l1StartBlock: 0n,
@@ -143,7 +147,6 @@ describe('SlasherClient', () => {
       ethereumSlotDuration: 12,
       proofSubmissionEpochs: 8,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     });
 
     // Create mocks for L1 contracts
@@ -190,6 +193,7 @@ describe('SlasherClient', () => {
       ownValidators,
       logger,
       new SlasherMetrics(telemetryClient),
+      amsterdamFork,
     );
 
   afterEach(async () => {
@@ -282,12 +286,14 @@ describe('SlasherClient', () => {
           offenseType: OffenseType.PROPOSED_INSUFFICIENT_ATTESTATIONS, // slot-based
         });
 
-        mockEpochCache.getCommitteeForEpoch.mockResolvedValueOnce({
-          committee: undefined,
-          seed: 0n,
-          epoch: EpochNumber(0),
-          isEscapeHatchOpen: false,
-        });
+        mockEpochCache.getCommitteeForEpoch.mockResolvedValueOnce(
+          makeCommitteeLookup({
+            committee: undefined,
+            seed: 0n,
+            epoch: EpochNumber(0),
+            isEscapeHatchOpen: false,
+          }),
+        );
 
         const action = await slasherClient.getVoteOffensesAction(SlotNumber.fromBigInt(currentSlot));
 
@@ -655,6 +661,52 @@ describe('SlasherClient', () => {
       expect(action!.votes[0]).toBe(0); // committee[0]: 1 unit, dropped
       expect(action!.votes[1]).toBe(3); // committee[1]: 3 units, kept
       expect(action!.votes[2]).toBe(0); // committee[2]: 2 units, dropped
+    });
+  });
+
+  describe('slashed validators cap across the Amsterdam fork', () => {
+    const currentRound = 5n;
+    const offenderCount = 50;
+
+    const countVotedValidators = async () => {
+      const baseSlot = (currentRound - 2n) * BigInt(roundSize);
+      for (let i = 0; i < offenderCount; i++) {
+        await addOffense({
+          validator: committee[i],
+          epochOrSlot: baseSlot,
+          amount: settings.slashingAmounts[2],
+          offenseType: OffenseType.PROPOSED_INSUFFICIENT_ATTESTATIONS,
+        });
+      }
+      const action = await slasherClient.getVoteOffensesAction(SlotNumber.fromBigInt(currentRound * BigInt(roundSize)));
+      assert(action?.type === 'vote-offenses');
+      return action.votes.filter(vote => vote > 0).length;
+    };
+
+    it('votes up to the configured payload size before Amsterdam', async () => {
+      expect(await countVotedValidators()).toBe(offenderCount);
+    });
+
+    it('caps the validators voted for once Amsterdam is active', async () => {
+      amsterdamFork = { isActive: () => Promise.resolve(true) };
+      slasherClient = createClient();
+      expect(await countVotedValidators()).toBe(AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);
+    });
+
+    it('caps the validators voted for when the fork cannot be detected', async () => {
+      amsterdamFork = new AmsterdamForkDetector(
+        { getBlock: () => Promise.reject(new Error('rpc down')) },
+        { log: logger },
+      );
+      slasherClient = createClient();
+      expect(await countVotedValidators()).toBe(AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);
+    });
+
+    it('keeps a configured payload size below the Amsterdam cap', async () => {
+      amsterdamFork = { isActive: () => Promise.resolve(true) };
+      slasherClient = createClient();
+      slasherClient.updateConfig({ slashMaxPayloadSize: 10 });
+      expect(await countVotedValidators()).toBe(10);
     });
   });
 

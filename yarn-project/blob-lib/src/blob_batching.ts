@@ -142,9 +142,10 @@ export class BatchedBlobAccumulator {
   /**
    * Given blob i, accumulate all state.
    * We assume the input blob has not been evaluated at z.
+   * @param isCheckpointStart - Whether the blob is the first of its checkpoint. The first blob of the epoch always is.
    * @returns An updated blob accumulator.
    */
-  async accumulateBlob(blob: Blob, blobFieldsHash: Fr) {
+  async accumulateBlob(blob: Blob, blobFieldsHash: Fr, isCheckpointStart: boolean) {
     const { proof, y: thisY } = await blob.evaluate(this.finalBlobChallenges.z);
     const thisC = BLS12Point.decompress(blob.commitment);
     const thisQ = BLS12Point.decompress(proof);
@@ -153,7 +154,7 @@ export class BatchedBlobAccumulator {
     if (this.isEmptyState()) {
       /**
        * Init the first accumulation state of the epoch.
-       * - v_acc := sha256(C_0)
+       * - v_acc := sha256(0x01, C_0)
        * - z_acc := z_0
        * - y_acc := gamma^0 * y_0 = y_0
        * - c_acc := gamma^0 * c_0 = c_0
@@ -161,7 +162,9 @@ export class BatchedBlobAccumulator {
        * - gamma^(i + 1) = gamma^1 = gamma // denoted gamma_pow_acc
        */
       return new BatchedBlobAccumulator(
-        sha256ToField([blob.commitment]), // blobCommitmentsHashAcc = sha256(C_0)
+        // true, serialized as the byte 0x01: the checkpoint-start flag, which lets the hash bind how the epoch's blobs
+        // split into checkpoints. The epoch's first blob always starts a checkpoint.
+        sha256ToField([true, blob.commitment]), // blobCommitmentsHashAcc = sha256(0x01, C_0)
         blobChallengeZ, // zAcc = z_0
         thisY, // yAcc = gamma^0 * y_0 = 1 * y_0
         thisC, // cAcc = gamma^0 * C_0 = 1 * C_0
@@ -173,7 +176,7 @@ export class BatchedBlobAccumulator {
     } else {
       // Moving from i - 1 to i, so:
       return new BatchedBlobAccumulator(
-        sha256ToField([this.blobCommitmentsHashAcc, blob.commitment]), // blobCommitmentsHashAcc := sha256(blobCommitmentsHashAcc, C_i)
+        sha256ToField([this.blobCommitmentsHashAcc, isCheckpointStart, blob.commitment]), // blobCommitmentsHashAcc := sha256(blobCommitmentsHashAcc, 0x01 if checkpoint start else 0x00, C_i)
         await poseidon2HashWithSeparator([this.zAcc, blobChallengeZ], DomainSeparator.BLOB_Z_ACC), // zAcc := poseidon2(BLOB_Z_ACC, zAcc, z_i)
         this.yAcc.add(thisY.mul(this.gammaPow)), // yAcc := yAcc + (gamma^i * y_i)
         this.cAcc.add(thisC.mul(this.gammaPow)), // cAcc := cAcc + (gamma^i * C_i)
@@ -205,8 +208,9 @@ export class BatchedBlobAccumulator {
 
     // Initialize the acc to iterate over:
     let acc: BatchedBlobAccumulator = this.clone();
-    for (const blob of blobs) {
-      acc = await acc.accumulateBlob(blob, blobFieldsHash);
+    for (const [i, blob] of blobs.entries()) {
+      // Flags this checkpoint's first blob, matching the circuits and the flag L1 sets on each proposal's first blob.
+      acc = await acc.accumulateBlob(blob, blobFieldsHash, i === 0);
     }
     return acc;
   }

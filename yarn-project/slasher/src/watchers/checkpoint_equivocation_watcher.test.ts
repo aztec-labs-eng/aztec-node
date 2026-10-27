@@ -1,4 +1,3 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -10,7 +9,6 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import { jest } from '@jest/globals';
-import { type MockProxy, mock } from 'jest-mock-extended';
 import EventEmitter from 'node:events';
 
 import { DefaultSlasherConfig, type SlasherConfig } from '../config.js';
@@ -20,7 +18,6 @@ import { CheckpointEquivocationWatcher } from './checkpoint_equivocation_watcher
 describe('CheckpointEquivocationWatcher', () => {
   let archiverEmitter: ArchiverEmitter;
   let l2BlockSource: Pick<L2BlockSourceEventEmitter, 'events'>;
-  let epochCache: MockProxy<Pick<EpochCacheInterface, 'getProposerAttesterAddressInSlot'>>;
   let config: SlasherConfig;
   let watcher: CheckpointEquivocationWatcher;
   let handler: jest.MockedFunction<(args: WantToSlashArgs[]) => void>;
@@ -33,19 +30,18 @@ describe('CheckpointEquivocationWatcher', () => {
     checkpointNumber: CheckpointNumber(2),
     l1ArchiveRoot: Fr.random(),
     proposedArchiveRoot: Fr.random(),
+    signer: EthAddress.random(),
     ...overrides,
   });
 
   beforeEach(async () => {
     archiverEmitter = new EventEmitter() as unknown as ArchiverEmitter;
     l2BlockSource = { events: archiverEmitter };
-    epochCache = mock<Pick<EpochCacheInterface, 'getProposerAttesterAddressInSlot'>>();
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(EthAddress.random());
     config = {
       ...DefaultSlasherConfig,
       slashDuplicateProposalPenalty: 23n,
     };
-    watcher = new CheckpointEquivocationWatcher(l2BlockSource, epochCache, config);
+    watcher = new CheckpointEquivocationWatcher(l2BlockSource, config);
     handler = jest.fn();
     watcher.on(WANT_TO_SLASH_EVENT, handler);
     await watcher.start();
@@ -61,15 +57,14 @@ describe('CheckpointEquivocationWatcher', () => {
     await new Promise(resolve => setImmediate(resolve));
   };
 
-  it('emits a DUPLICATE_PROPOSAL slash for the slot proposer when divergence is detected', async () => {
-    const proposer = EthAddress.random();
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValueOnce(proposer);
+  it('emits a DUPLICATE_PROPOSAL slash for the signer named in the event', async () => {
+    const signer = EthAddress.random();
 
-    await emitAndFlush(makeEvent());
+    await emitAndFlush(makeEvent({ signer }));
 
     expect(handler).toHaveBeenCalledWith([
       {
-        validator: proposer,
+        validator: signer,
         amount: 23n,
         offenseType: OffenseType.DUPLICATE_PROPOSAL,
         epochOrSlot: 10n,
@@ -77,29 +72,20 @@ describe('CheckpointEquivocationWatcher', () => {
     ]);
   });
 
-  it('does not emit when there is no proposer for the slot', async () => {
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValueOnce(undefined);
-
-    await emitAndFlush(makeEvent());
-
-    expect(handler).not.toHaveBeenCalled();
-  });
-
   it('emits a zero-amount offense when the penalty is zero', async () => {
     await watcher.stop();
-    const proposer = EthAddress.random();
+    const signer = EthAddress.random();
     config = { ...config, slashDuplicateProposalPenalty: 0n };
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValueOnce(proposer);
-    watcher = new CheckpointEquivocationWatcher(l2BlockSource, epochCache, config);
+    watcher = new CheckpointEquivocationWatcher(l2BlockSource, config);
     handler = jest.fn();
     watcher.on(WANT_TO_SLASH_EVENT, handler);
     await watcher.start();
 
-    await emitAndFlush(makeEvent());
+    await emitAndFlush(makeEvent({ signer }));
 
     expect(handler).toHaveBeenCalledWith([
       {
-        validator: proposer,
+        validator: signer,
         amount: 0n,
         offenseType: OffenseType.DUPLICATE_PROPOSAL,
         epochOrSlot: 10n,
@@ -108,9 +94,6 @@ describe('CheckpointEquivocationWatcher', () => {
   });
 
   it('emits separately for distinct slots', async () => {
-    const proposer = EthAddress.random();
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer);
-
     await emitAndFlush(makeEvent({ slotNumber: SlotNumber(10) }));
     await emitAndFlush(makeEvent({ slotNumber: SlotNumber(11) }));
 

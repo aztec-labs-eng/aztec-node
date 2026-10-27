@@ -437,6 +437,16 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
+  aztec_utl_getSettledNoteOrigin(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_getSettledNoteOrigin',
+      inputs,
+      handler: ([noteHash, contractAddress, noteNonce]) =>
+        this.handlerAsUtility().getSettledNoteOrigin(noteHash, contractAddress, noteNonce),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
   aztec_utl_getNullifierStatuses(...inputs: ForeignCallArgs) {
     return callTxeHandler({
       oracle: 'aztec_utl_getNullifierStatuses',
@@ -504,6 +514,16 @@ export class RPCTranslator {
       inputs,
       handler: ([messageHash, nullifier]) =>
         this.handlerAsUtility().getL1ToL2MembershipWitnessV2(messageHash, nullifier),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
+  aztec_utl_tryGetL1ToL2MembershipWitness(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_tryGetL1ToL2MembershipWitness',
+      inputs,
+      handler: ([messageHash, nullifier]) =>
+        this.handlerAsUtility().tryGetL1ToL2MembershipWitness(messageHash, nullifier),
     });
   }
 
@@ -643,11 +663,29 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
+  aztec_utl_getTxEffect(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_getTxEffect',
+      inputs,
+      handler: ([txHash]) => this.handlerAsUtility().getTxEffect(txHash),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
   aztec_utl_getTxEffects(...inputs: ForeignCallArgs) {
     return callTxeHandler({
       oracle: 'aztec_utl_getTxEffects',
       inputs,
       handler: ([txHashes]) => this.handlerAsUtility().getTxEffects(txHashes),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
+  aztec_utl_getTxEffectsWithBlock(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_getTxEffectsWithBlock',
+      inputs,
+      handler: ([txHashes]) => this.handlerAsUtility().getTxEffectsWithBlock(txHashes),
     });
   }
 

@@ -4,11 +4,11 @@ import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
-import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient, ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -17,7 +17,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { executeTimeout, timeoutPromise } from '@aztec-labs/foundation/timer';
 import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { OffenseType } from '@aztec-labs/slasher';
-import { L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestation, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
 import { computeQuorum, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 import type { Log } from 'viem';
@@ -29,6 +29,7 @@ import {
   MultiNodeTestContext,
   type RegisteredValidator,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 10);
@@ -136,12 +137,11 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const calldataRetriever = new CalldataRetriever(
       l1Client as unknown as ViemPublicClient,
       l1Client as unknown as ViemPublicDebugClient,
-      VALIDATOR_COUNT,
       undefined,
       createLogger('e2e:invalidate_block:calldata'),
       EthAddress.fromString(rollupContract.address),
     );
-    const { attestations } = await calldataRetriever.getCheckpointFromRollupTx(
+    const { verbatimAttestations } = await calldataRetriever.getCheckpointFromRollupTx(
       event!.l1TransactionHash,
       event!.args.versionedBlobHashes,
       checkpointNumber,
@@ -150,6 +150,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         payloadDigest: event!.args.payloadDigest.toString(),
       },
     );
+    const attestations = CommitteeAttestation.fromPacked(verbatimAttestations, VALIDATOR_COUNT);
     const validCount = attestations.filter(a => !a.signature.isEmpty()).length;
     const quorum = computeQuorum(VALIDATOR_COUNT);
     logger.warn(`Checkpoint ${checkpointNumber} has ${validCount}/${VALIDATOR_COUNT} attestations (quorum=${quorum})`);
@@ -385,17 +386,30 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     let badProposers: EthAddress[] = [];
     let candidate = Number(test.epochCache.getEpochAndSlotNow().slot) + 2;
     const maxBadSlotSearchAttempts = 100;
+    let randaoCheckpointedEpoch: EpochNumber | undefined;
     for (let attempt = 0; attempt < maxBadSlotSearchAttempts && warpSlot === undefined; attempt++) {
       try {
+        // L1 lets us query the next epoch's proposers as soon as the current epoch starts, but its seed is the
+        // randao checkpointed by the first proposal of the current epoch. Checkpoint it now, before the sequencers
+        // start, or the first good checkpoint reshuffles the proposers of the next epoch after we picked them.
+        const { epoch: currentEpoch } = test.epochCache.getEpochAndSlotNow();
+        if (currentEpoch !== randaoCheckpointedEpoch) {
+          await test.context.cheatCodes.rollup.setupEpoch();
+          randaoCheckpointedEpoch = currentEpoch;
+        }
+
         const candidateWarpSlot = SlotNumber(candidate);
         const preBadTargetSlots = times(preBadSlotCount, i => SlotNumber.add(candidateWarpSlot, i + 1));
         const candidateSlot1 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 1);
         const candidateSlot2 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 2);
-        const [preBadProposers, p1, p2] = await Promise.all([
-          Promise.all(preBadTargetSlots.map(slot => test.epochCache.getProposerAttesterAddressInSlot(slot))),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot1),
-          test.epochCache.getProposerAttesterAddressInSlot(candidateSlot2),
-        ]);
+        const readProposer = (slot: SlotNumber) =>
+          getProposerFixingSeed(test.epochCache, test.context.cheatCodes.rollup, slot);
+        const preBadProposers: (EthAddress | undefined)[] = [];
+        for (const slot of preBadTargetSlots) {
+          preBadProposers.push(await readProposer(slot));
+        }
+        const p1 = await readProposer(candidateSlot1);
+        const p2 = await readProposer(candidateSlot2);
 
         logger.warn(`Checking bad checkpoint slots ${candidateSlot1} and ${candidateSlot2}`, {
           candidateWarpSlot,
@@ -417,7 +431,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         candidate++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('EpochNotStable')) {
+        if (!(err instanceof CommitteeNotStableError) && !msg.includes('EpochNotStable')) {
           throw err;
         }
         const block = await test.l1Client.getBlock({ includeTransactions: false });
@@ -481,8 +495,17 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const secondCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     const expectedFirstSlot = badSlot1;
     const expectedSecondSlot = badSlot2;
+    let lastCheckpointNumber: number = test.monitor.checkpointNumber;
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
       logger.warn(`Checkpoint ${checkpointNumber} at slot ${l2SlotNumber} has been mined`);
+      // An invalidation rolls the tip back and is reported as a checkpoint event at the current slot, which would
+      // otherwise resolve a bad-slot promise with an older, valid checkpoint. Compare against the previous tip rather
+      // than the highest seen, so a checkpoint re-proposed after a rollback still counts.
+      const isRollback = checkpointNumber <= lastCheckpointNumber;
+      lastCheckpointNumber = checkpointNumber;
+      if (isRollback) {
+        return;
+      }
       if (l2SlotNumber === expectedFirstSlot) {
         firstCheckpointPromise.resolve(checkpointNumber);
       }
@@ -712,6 +735,92 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected,
       onDescendant,
     );
+  });
+
+  // A proposer publishes its checkpoint with a fake attestation, invalidates it and republishes it within its slot.
+  // Checks that a node syncing from L1 afterwards reaches the same checkpointed tip as the network.
+  it('node syncing from L1 follows a checkpoint invalidated and republished within its slot', async () => {
+    const sequencers = nodes.map(node => node.getSequencer()!);
+    sequencers.forEach(s =>
+      s.updateConfig({
+        secondsBeforeInvalidatingBlockAsNonCommitteeMember: Number.MAX_SAFE_INTEGER,
+        minTxsPerBlock: 0,
+        buildCheckpointIfEmpty: true,
+      }),
+    );
+
+    // Pick a slot whose proposer proposes neither the slot before nor the slot after, so warping to the build window
+    // of the previous slot makes the republishing node's first job the intended one, and no later job of that node
+    // picks up the flag before it is cleared.
+    const {
+      slots: [previousSlot, badSlot],
+      proposers: [, proposer],
+    } = await test.findSlotsWithProposers(3, ([previous, bad, next]) => !previous.equals(bad) && !next.equals(bad));
+    const proposerNode = nodes.find(n => n.getSequencer()!.validatorAddresses!.some(a => a.equals(proposer)))!;
+    await proposerNode.setConfig({ republishAfterFakeAttestation: true });
+    logger.warn(`Configured proposer ${proposer} to republish its checkpoint at slot ${badSlot}`);
+
+    const badCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
+    test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
+      if (l2SlotNumber === badSlot) {
+        badCheckpointPromise.resolve(checkpointNumber);
+      }
+    });
+    const invalidationPromise = awaitCheckpointInvalidationEvent();
+    const fromL1Block = await l1Client.getBlockNumber();
+
+    await test.warpToBuildWindowForSlot(previousSlot);
+    await Promise.all(sequencers.map(s => s.start()));
+
+    const badCheckpointNumber = await executeTimeout(
+      () => badCheckpointPromise.promise,
+      test.L2_SLOT_DURATION_IN_S * 8 * 1000,
+      `Waiting for the checkpoint at slot ${badSlot}`,
+    );
+    const { checkpointNumber: invalidatedCheckpointNumber, event: invalidationEvent } = await invalidationPromise;
+    await proposerNode.setConfig({ republishAfterFakeAttestation: false });
+    expect(invalidatedCheckpointNumber).toEqual(badCheckpointNumber);
+
+    // The checkpoint was posted twice with the same archive and different attestations, invalidated in between.
+    const proposals = await retryUntil(
+      async () => {
+        const events = await rollupContract.getCheckpointProposedEvents(fromL1Block, await l1Client.getBlockNumber());
+        const forBad = events.filter(e => e.args.checkpointNumber === badCheckpointNumber);
+        return forBad.length >= 2 ? forBad : undefined;
+      },
+      'two CheckpointProposed events for the republished checkpoint',
+      test.L2_SLOT_DURATION_IN_S * 2,
+      0.5,
+    );
+    expect(proposals).toHaveLength(2);
+    const [first, second] = proposals;
+    expect(second.args.archive).toEqual(first.args.archive);
+    expect(second.args.attestationsHash).not.toEqual(first.args.attestationsHash);
+    expect(invalidationEvent.blockNumber!).toBeGreaterThanOrEqual(first.l1BlockNumber);
+    expect(second.l1BlockNumber).toBeGreaterThanOrEqual(invalidationEvent.blockNumber!);
+
+    // The chain carries on on top of the republished checkpoint, and the nodes that were online follow it.
+    const targetCheckpointNumber = CheckpointNumber(badCheckpointNumber + 2);
+    logger.warn(`Waiting for checkpoint ${targetCheckpointNumber} on L1 and on every live node`);
+    await test.waitUntilCheckpointNumber(targetCheckpointNumber, test.L2_SLOT_DURATION_IN_S * 8);
+    await test.waitForAllNodesToReachCheckpoint(targetCheckpointNumber, { nodes });
+
+    // A fresh node syncs the whole range from L1. Its archiver batch spans every L1 block mined so far, so the
+    // republished checkpoint and its descendants are read in a single batch.
+    const l1BlocksSoFar = Number(await l1Client.getBlockNumber());
+    const archiverBatchSize = Math.ceil((l1BlocksSoFar * test.L1_BLOCK_TIME_IN_S) / test.L2_SLOT_DURATION_IN_S) + 1;
+    logger.warn(`Starting a fresh node to sync from L1`, { l1BlocksSoFar, archiverBatchSize });
+    const lateNode = await test.createNonValidatorNode({ archiverBatchSize });
+    const getLateNodeCheckpoint = async () => (await lateNode.getChainTips()).checkpointed.checkpoint.number;
+    await retryUntil(
+      async () => (await getLateNodeCheckpoint()) >= targetCheckpointNumber,
+      'fresh node syncs past the republished checkpoint',
+      test.L2_SLOT_DURATION_IN_S * 4,
+      0.5,
+    ).catch(err => logger.warn(`Fresh node did not sync past the republished checkpoint`, { err }));
+    expect(await getLateNodeCheckpoint()).toBeGreaterThanOrEqual(targetCheckpointNumber);
+
+    logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
   });
 
   // All sequencers skip attestation collection and invalidation-as-proposer. Waits for the first

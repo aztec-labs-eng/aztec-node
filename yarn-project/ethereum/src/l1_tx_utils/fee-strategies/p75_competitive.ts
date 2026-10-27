@@ -3,6 +3,7 @@ import { formatGwei } from 'viem';
 
 import type { ViemClient } from '../../types.js';
 import { calculatePercentile } from '../../utils.js';
+import { defaultL1TxUtilsConfig } from '../config.js';
 import { WEI_CONST } from '../constants.js';
 import {
   HISTORICAL_BLOCK_COUNT,
@@ -21,14 +22,14 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
   id: 'p75_pending_txs_and_history_all_txs',
 
   async execute(client: ViemClient, context: PriorityFeeStrategyContext): Promise<PriorityFeeStrategyResult> {
-    const { isBlobTx, logger } = context;
+    const { gasConfig, isBlobTx, logger } = context;
 
     // Fire all RPC calls in parallel
     const [latestBlockResult, blobBaseFeeResult, networkEstimateResult, pendingBlockResult, feeHistoryResult] =
       await Promise.allSettled([
         client.getBlock({ blockTag: 'latest' }),
         isBlobTx ? client.getBlobBaseFee() : Promise.resolve(undefined),
-        client.estimateMaxPriorityFeePerGas().catch(() => 0n),
+        client.estimateMaxPriorityFeePerGas(),
         client.getBlock({ blockTag: 'pending', includeTransactions: true }).catch(() => null),
         client
           .getFeeHistory({
@@ -130,9 +131,16 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
       }
     }
 
-    // Sanity check: cap competitive fee at 100x network estimate to avoid using unrealistic fees
-    const maxReasonableFee = networkEstimate * 100n;
-    if (competitiveFee > maxReasonableFee && networkEstimate > 0n) {
+    // Floor only the cap input so zero or tiny RPC estimates cannot disable or collapse the sanity cap.
+    const minimumEstimateForCap = BigInt(
+      Math.trunc(
+        (gasConfig.minimumPriorityFeePerGasForCap ?? defaultL1TxUtilsConfig.minimumPriorityFeePerGasForCap) *
+          Number(WEI_CONST),
+      ),
+    );
+    const estimateForCap = networkEstimate > minimumEstimateForCap ? networkEstimate : minimumEstimateForCap;
+    const maxReasonableFee = estimateForCap * 100n;
+    if (competitiveFee > maxReasonableFee) {
       logger?.debug('Competitive fee exceeds sanity cap, using capped value', {
         competitiveFee: formatGwei(competitiveFee),
         networkEstimate: formatGwei(networkEstimate),

@@ -1,4 +1,4 @@
-import { type TxMetaData, stubTxMetaData } from '../tx_metadata.js';
+import { type TxMetaData, comparePriority, stubTxMetaData } from '../tx_metadata.js';
 import { FeePayerBalancePreAddRule } from './fee_payer_balance_pre_add_rule.js';
 import { type PreAddPoolAccess, TxPoolRejectionCode } from './interfaces.js';
 
@@ -23,8 +23,10 @@ describe('FeePayerBalancePreAddRule', () => {
     getFeePayerBalance: () => Promise.resolve(balance),
     getFeePayerPendingTxs: () => existingTxs,
     getPendingTxCount: () => existingTxs.length,
-    getLowestPriorityPendingTx: () =>
-      existingTxs.length > 0 ? existingTxs.reduce((min, t) => (t.priorityFee < min.priorityFee ? t : min)) : undefined,
+    iteratePendingByPriority: order => {
+      const ascending = [...existingTxs].sort(comparePriority).map(t => t.txHash);
+      return order === 'asc' ? ascending : ascending.reverse();
+    },
   });
 
   beforeEach(() => {

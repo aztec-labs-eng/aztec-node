@@ -12,10 +12,11 @@ import { foundry } from 'viem/chains';
 import { Delayer, createDelayer, waitUntilBlock, wrapClientWithDelayer } from '../l1_tx_utils/tx_delayer.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { EthCheatCodes } from './eth_cheat_codes.js';
+import { describeAcrossL1Forks } from './l1_hardfork.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
 
-describe('tx_delayer', () => {
+describeAcrossL1Forks('tx_delayer', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let logger: Logger;

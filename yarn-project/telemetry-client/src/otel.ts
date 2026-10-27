@@ -49,7 +49,7 @@ import type {
 } from './telemetry.js';
 
 /** Wraps an OpenTelemetry Meter to implement our custom Meter interface */
-class WrappedMeter implements Meter {
+export class WrappedMeter implements Meter {
   constructor(private otelMeter: OtelMeter) {}
 
   createGauge(metric: MetricDefinition): Gauge {

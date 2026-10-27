@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { toBigIntBE } from '../../bigint-buffer/index.js';
 import { randomBoolean } from '../../crypto/random/index.js';
 import { hexSchemaFor } from '../../schemas/utils.js';

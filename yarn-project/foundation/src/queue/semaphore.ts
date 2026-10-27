@@ -7,9 +7,12 @@ export interface ISemaphore {
 
 /**
  * Allows the acquiring of up to `size` tokens before calls to acquire block, waiting for a call to release().
+ * Blocked calls acquire in the order they were made: a released token goes to the one waiting longest, never to a
+ * later call.
  */
 export class Semaphore {
   private readonly queue = new FifoMemoryQueue<boolean>();
+  private cancelled = false;
 
   constructor(size: number) {
     new Array(size).fill(true).map(() => this.queue.put(true));
@@ -27,12 +30,33 @@ export class Semaphore {
   }
 
   /**
+   * Takes a token if one is free, without waiting. A token is never free while acquire() calls are waiting for one, so
+   * this never takes one ahead of them.
+   * @returns Whether the caller may proceed: a token was taken, or the semaphore is cancelled.
+   */
+  public tryAcquire(): boolean {
+    return this.cancelled || this.queue.getImmediate() !== undefined;
+  }
+
+  /**
    * Releases a token back into the semaphore, allowing another acquire call to proceed.
-   * If there are any pending calls to acquire(), one of them will be unblocked and allowed to proceed.
+   * If there are any pending calls to acquire(), the one waiting longest is unblocked and allowed to proceed.
    * This method should only be called by the holder of the acquired token to ensure proper functionality
    * and avoid unexpected behavior.
    */
   public release() {
-    this.queue.put(true);
+    if (!this.cancelled) {
+      this.queue.put(true);
+    }
+  }
+
+  /**
+   * Stops limiting access: every pending acquire() call proceeds, as does every later one (and tryAcquire() succeeds),
+   * and release() does nothing.
+   * Lets callers waiting for a token stop waiting once the resource is gone, so they must check for that themselves.
+   */
+  public cancel() {
+    this.cancelled = true;
+    this.queue.cancel();
   }
 }

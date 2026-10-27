@@ -1,9 +1,38 @@
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import {
   type ConfigMappingsType,
   getConfigFromMappings,
   numberConfigHelper,
   optionalNumberConfigHelper,
 } from '@aztec-labs/foundation/config';
+
+/** Controls whether world-state history follows the finalized tip or retains a fixed checkpoint boundary. */
+export type WorldStateHistoryRetention =
+  | { type: 'rolling'; checkpoints: number }
+  | { type: 'pinned'; checkpoint: CheckpointNumber }
+  | { type: 'archive' };
+
+function parseHistoryRetention(value: string): WorldStateHistoryRetention {
+  if (value === 'archive') {
+    return { type: 'archive' };
+  }
+  const match = /^(rolling|pinned):([0-9]+)$/.exec(value);
+  const count = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(count) || count < 1) {
+    throw new Error('Expected rolling:<positive checkpoint count>, pinned:<positive checkpoint number>, or archive');
+  }
+  return match[1] === 'rolling'
+    ? { type: 'rolling', checkpoints: count }
+    : { type: 'pinned', checkpoint: CheckpointNumber(count) };
+}
+
+function migrateLegacyHistoryRetention(value: string): string {
+  const checkpoints = Number(value);
+  if (!value.trim() || !Number.isSafeInteger(checkpoints)) {
+    throw new Error(`Invalid legacy history retention '${value}'; expected a whole number`);
+  }
+  return checkpoints < 1 ? 'archive' : `rolling:${checkpoints}`;
+}
 
 /** World State synchronizer configuration values. */
 export interface WorldStateConfig {
@@ -34,8 +63,8 @@ export interface WorldStateConfig {
   /** Optional directory for the world state DB, if unspecified will default to the general data directory */
   worldStateDataDirectory?: string;
 
-  /** The number of historic checkpoints worth of blocks to maintain */
-  worldStateCheckpointHistory: number;
+  /** The policy for retaining historic checkpoints. */
+  worldStateHistoryRetention: WorldStateHistoryRetention;
 }
 
 export const worldStateConfigMappings: ConfigMappingsType<WorldStateConfig> = {
@@ -88,12 +117,23 @@ export const worldStateConfigMappings: ConfigMappingsType<WorldStateConfig> = {
     env: 'WS_DATA_DIRECTORY',
     description: 'Optional directory for the world state database',
   },
-  worldStateCheckpointHistory: {
-    env: 'WS_NUM_HISTORIC_CHECKPOINTS',
+  worldStateHistoryRetention: {
+    env: 'WS_HISTORY_RETENTION',
+    fallback: ['WS_NUM_HISTORIC_CHECKPOINTS', 'WS_NUM_HISTORIC_BLOCKS'],
+    deprecatedFallback: [
+      { env: 'WS_NUM_HISTORIC_CHECKPOINTS', transform: migrateLegacyHistoryRetention },
+      { env: 'WS_NUM_HISTORIC_BLOCKS', transform: migrateLegacyHistoryRetention },
+    ],
     description:
-      'The number of historic checkpoints worth of blocks to maintain. Values less than 1 mean all history is maintained',
-    fallback: ['WS_NUM_HISTORIC_BLOCKS'],
-    ...numberConfigHelper(64),
+      'World-state history retention: rolling:N retains N finalized checkpoints, pinned:N retains checkpoint N onwards, archive retains all history.',
+    parseEnv: parseHistoryRetention,
+    defaultValue: { type: 'rolling', checkpoints: 64 },
+    printDefault: (value: WorldStateHistoryRetention) =>
+      value.type === 'archive'
+        ? 'archive'
+        : value.type === 'rolling'
+          ? `rolling:${value.checkpoints}`
+          : `pinned:${value.checkpoint}`,
   },
 };
 

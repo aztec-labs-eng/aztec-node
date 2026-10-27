@@ -2,15 +2,16 @@ import { type Color, createColors, isColorSupported } from 'colorette';
 import isNode from 'detect-node';
 import { pino, symbols } from 'pino';
 import type { Writable } from 'stream';
-import { inspect } from 'util';
 
 import { compactArray } from '../collection/array.js';
+import { getEnv } from '../config/env.js';
 import type { EnvVar } from '../config/index.js';
 import { parseBooleanEnv } from '../config/parse-env.js';
+import { inspect } from '../inspect/index.js';
 import { AWSCloudLoggerConfig } from './aws-logger-config.js';
 import { convertBigintsToStrings } from './bigint-utils.js';
 import { GoogleCloudLoggerConfig } from './gcloud-logger-config.js';
-import { getLogLevelFromFilters, parseLogLevelEnvVar } from './log-filters.js';
+import { type LogFilters, formatLogLevelSpec, getLogLevelFromFilters, parseLogLevelEnvVar } from './log-filters.js';
 import type { LogLevel } from './log-levels.js';
 import type { LogData, LogFn } from './log_fn.js';
 
@@ -57,15 +58,14 @@ export function createLogger(module: string, bindings?: LoggerBindings): Logger 
   const actor = resolvedBindings?.actor;
   const instanceId = resolvedBindings?.instanceId;
 
-  const pinoLogger = logger.child(
-    { module, ...(actor && { actor }), ...(instanceId && { instanceId }) },
-    { level: getLogLevelFromFilters(logFilters, module) },
-  );
+  const getPinoLogger = createPinoChild(module, { actor, instanceId });
 
   // We check manually for isLevelEnabled to avoid calling processLogData unnecessarily.
   // Note that isLevelEnabled is missing from the browser version of pino.
-  const logFn = (level: LogLevel, msg: string, data?: unknown) =>
-    isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData((data as LogData) ?? {}), msg);
+  const logFn = (level: LogLevel, msg: string, data?: unknown) => {
+    const pinoLogger = getPinoLogger();
+    return isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData((data as LogData) ?? {}), msg);
+  };
 
   return {
     silent: () => {},
@@ -85,9 +85,11 @@ export function createLogger(module: string, bindings?: LoggerBindings): Logger 
     /** Log as trace. Use for when we want to denial-of-service any recipient of the logs. */
     trace: (msg: string, data?: unknown) => logFn('trace', msg, data),
     /** Level of the logger */
-    level: pinoLogger.level as LogLevel,
+    get level() {
+      return getPinoLogger().level as LogLevel;
+    },
     /** Whether the given level is enabled for this logger. */
-    isLevelEnabled: (level: LogLevel) => isLevelEnabled(pinoLogger, level),
+    isLevelEnabled: (level: LogLevel) => isLevelEnabled(getPinoLogger(), level),
     /** Module name for the logger. */
     module,
     /** Creates another logger by extending this logger module name and preserving bindings. */
@@ -128,16 +130,68 @@ function isLevelEnabled(logger: pino.Logger<'verbose', boolean>, level: LogLevel
     : logger.levels.values[level] >= logger.levels.values[logger.level];
 }
 
-// Load log levels from environment variables.
-const defaultLogLevel = process.env.NODE_ENV === 'test' ? 'silent' : 'info';
-export const [logLevel, logFilters] = parseLogLevelEnvVar(process.env.LOG_LEVEL, defaultLogLevel);
+// Load log levels from environment variables. These exports reflect the startup configuration;
+// the current values (mutable via setLogLevel) are tracked separately below.
+const defaultLogLevel = getEnv().NODE_ENV === 'test' ? 'silent' : 'info';
+export const [logLevel, logFilters] = parseLogLevelEnvVar(getEnv().LOG_LEVEL, defaultLogLevel);
+
+let currentLogLevel: LogLevel = logLevel;
+let currentLogFilters: LogFilters = logFilters;
+
+// Bumped on every setLogLevel. Pino children fix their level at creation and do not follow later changes to the
+// parent, so each child compares this against the generation it last synced to and recomputes its level lazily on
+// its next use. This avoids keeping a registry of every live logger, since some code paths create short-lived ones.
+let logLevelGeneration = 0;
+
+/**
+ * Creates a pino child logger with the current per-module filter level applied. Returns an accessor rather than the
+ * logger itself: every use must go through it so the child picks up levels changed via setLogLevel.
+ * Internal to the logging module: use createLogger unless a raw pino instance is required.
+ */
+export function createPinoChild(module: string, bindings: LoggerBindings = {}): () => pino.Logger<'verbose'> {
+  const { actor, instanceId } = bindings;
+  const child = logger.child(
+    { module, ...(actor && { actor }), ...(instanceId && { instanceId }) },
+    { level: getLogLevelFromFilters(currentLogFilters, module) },
+  );
+  let syncedGeneration = logLevelGeneration;
+  return () => {
+    if (syncedGeneration !== logLevelGeneration) {
+      child.level = getLogLevelFromFilters(currentLogFilters, module) ?? currentLogLevel;
+      syncedGeneration = logLevelGeneration;
+    }
+    return child;
+  };
+}
+
+/**
+ * Updates the log level and per-module filters of all loggers created via createLogger, and of loggers created
+ * afterwards. Accepts the same format as the `LOG_LEVEL` env var (e.g. `info` or `debug;trace:sequencer,p2p`).
+ * Only affects the current thread: worker threads and spawned processes such as prover agents keep their own
+ * configuration.
+ * @param spec - Log level spec in `LOG_LEVEL` env var format. Throws if invalid, leaving current levels untouched.
+ */
+export function setLogLevel(spec: string): void {
+  const [newLevel, newFilters] = parseLogLevelEnvVar(spec, defaultLogLevel);
+  const previous = getLogLevel();
+  currentLogLevel = newLevel;
+  currentLogFilters = newFilters;
+  logger.level = newLevel;
+  logLevelGeneration++;
+  logger.info({ module: 'logger' }, `Updated log level from ${previous} to ${getLogLevel()}`);
+}
+
+/** Returns the current log level and per-module filters in the `LOG_LEVEL` env var format. */
+export function getLogLevel(): string {
+  return formatLogLevelSpec(currentLogLevel, currentLogFilters);
+}
 
 // Define custom logging levels for pino.
 const customLevels = { verbose: 25 };
 
 // Global pino options, tweaked for the active cloud logging backend.
-const useGcloudLogging = parseBooleanEnv(process.env['USE_GCLOUD_LOGGING' satisfies EnvVar]);
-const useAwsLogging = parseBooleanEnv(process.env['USE_AWS_LOGGING' satisfies EnvVar]);
+const useGcloudLogging = parseBooleanEnv(getEnv()['USE_GCLOUD_LOGGING' satisfies EnvVar]);
+const useAwsLogging = parseBooleanEnv(getEnv()['USE_AWS_LOGGING' satisfies EnvVar]);
 const loggingConfig = useGcloudLogging
   ? GoogleCloudLoggerConfig
   : useAwsLogging
@@ -190,14 +244,14 @@ export const levels = {
 };
 
 // Transport options for pretty logging to stderr via pino-pretty.
-const colorEnv = process.env['FORCE_COLOR' satisfies EnvVar];
+const colorEnv = getEnv()['FORCE_COLOR' satisfies EnvVar];
 const useColor = colorEnv === undefined ? isColorSupported : parseBooleanEnv(colorEnv);
 const { bold, reset, cyan, magenta, yellow, blue, green, magentaBright, yellowBright, blueBright, greenBright } =
   createColors({ useColor });
 
 // Per-actor coloring: each unique actor gets a different color for easier visual distinction.
 // Disabled when LOG_NO_COLOR_PER_ACTOR is set to a truthy value.
-const useColorPerActor = useColor && !parseBooleanEnv(process.env['LOG_NO_COLOR_PER_ACTOR' satisfies EnvVar]);
+const useColorPerActor = useColor && !parseBooleanEnv(getEnv()['LOG_NO_COLOR_PER_ACTOR' satisfies EnvVar]);
 const actorColors: Color[] = [yellow, magenta, blue, green, magentaBright, yellowBright, blueBright, greenBright];
 const actorColorMap = new Map<string, Color>();
 let nextColorIndex = 0;
@@ -255,7 +309,7 @@ const pinoPrettyBaseOpts = {
   customLevels: 'fatal:60,error:50,warn:40,info:30,verbose:25,debug:20,trace:10',
   customColors: 'fatal:bgRed,error:red,warn:yellow,info:green,verbose:magenta,debug:blue,trace:gray',
   minimumLevel: 'trace' as const,
-  singleLine: !parseBooleanEnv(process.env['LOG_MULTILINE' satisfies EnvVar]),
+  singleLine: !parseBooleanEnv(getEnv()['LOG_MULTILINE' satisfies EnvVar]),
 };
 
 /**
@@ -292,7 +346,7 @@ const stdioTransport: pino.TransportTargetOptions = {
 // would mean that all child loggers created before the telemetry-client is initialized would not have
 // this transport configured. Note that the target is defined as the export in the telemetry-client,
 // since pino will load this transport separately on a worker thread, to minimize disruption to the main loop.
-const otlpEndpoint = process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT' satisfies EnvVar];
+const otlpEndpoint = getEnv()['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT' satisfies EnvVar];
 const otlpEnabled = !!otlpEndpoint && !useGcloudLogging;
 const otelOpts = { levels };
 const otelTransport: pino.TransportTargetOptions = {
@@ -307,7 +361,7 @@ function makeLogger() {
   }
   // If running in a child process then cancel this if statement section by uncommenting below
   // else if (false) {
-  else if (process.env.JEST_WORKER_ID) {
+  else if (getEnv().JEST_WORKER_ID) {
     // We are on jest, so we need sync logging and stream to stderr.
     // We expect jest/setup.mjs to kick in later and replace set up a pretty logger,
     // but if for some reason it doesn't, at least we're covered with a default logger.
@@ -316,7 +370,7 @@ function makeLogger() {
     // Regular nodejs with transports on worker thread, using pino-pretty for console logging if LOG_JSON
     // is not set, and an optional OTLP transport if the OTLP endpoint is set.
     const targets: pino.TransportSingleOptions[] = compactArray([
-      parseBooleanEnv(process.env.LOG_JSON) ? stdioTransport : prettyTransport,
+      parseBooleanEnv(getEnv().LOG_JSON) ? stdioTransport : prettyTransport,
       otlpEnabled ? otelTransport : undefined,
     ]);
     return pino(pinoOpts, pino.transport({ targets, levels: levels.values }));
@@ -371,7 +425,12 @@ type ErrorLogFn = (msg: string, err?: unknown, data?: LogData) => void;
 /**
  * Logger that supports multiple severity levels.
  */
-export type Logger = { [K in LogLevel]: LogFn } & { /** Error log function */ error: ErrorLogFn } & {
+export type Logger = { [K in LogLevel]: LogFn } & {
+  /** Fatal log function */
+  fatal: ErrorLogFn;
+  /** Error log function */
+  error: ErrorLogFn;
+} & {
   level: LogLevel;
   isLevelEnabled: (level: LogLevel) => boolean;
   module: string;

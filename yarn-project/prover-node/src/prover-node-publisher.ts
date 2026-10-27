@@ -12,6 +12,7 @@ import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-ty
 import { areArraysEqual } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
@@ -19,7 +20,6 @@ import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import type { L1PublishProofStats } from '@aztec-labs/stdlib/stats';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
-import { inspect } from 'util';
 import { type Hex, type TransactionReceipt, encodeFunctionData, formatEther, formatGwei } from 'viem';
 
 import { type EstimatedSubmitProofStats, ProverNodePublisherMetrics } from './metrics.js';
@@ -38,9 +38,14 @@ export type L1SubmitEpochProofArgs = {
 
 /**
  * Result of a proof submission attempt. `'already-submitted'` means this prover had already registered a proof of
- * the same length for the epoch on L1, so nothing was sent; it is not a failure.
+ * the same length for the epoch on L1, so nothing was sent; it is not a failure. For a full proof, only a full-epoch
+ * registration counts: a proof registered while the epoch was still open is non-full, so a full proof is resent to
+ * replace it.
  */
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
+
+/** Maximum number of times one epoch proof is sent to L1, counting resends after it ran out of gas. */
+const MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS = 3;
 
 export class ProverNodePublisher {
   private metrics: ProverNodePublisherMetrics;
@@ -102,10 +107,15 @@ export class ProverNodePublisher {
 
     // The rollup reverts on a second submission from the same prover for the same epoch and length, so don't
     // spend gas on one. Reachable when re-running an epoch we have already submitted a proof for, which is
-    // not a failure: our reward shares for it are already registered.
+    // not a failure: our reward shares for it are already registered. The one exception is a full-epoch proof
+    // replacing a non-full registration, which is the only way to get the activity-score increase for the epoch.
     const proverId = EthAddress.fromField(publicInputs.constants.proverId);
     const length = toCheckpoint - fromCheckpoint + 1;
-    if (await this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId)) {
+    const [registered, registeredFullEpoch] = await Promise.all([
+      this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId),
+      this.rollupContract.getHasSubmittedFullEpochProof(epochNumber, length, proverId),
+    ]);
+    if (registeredFullEpoch || (registered && args.kind === 'partial')) {
       this.log.warn(`Skipping epoch proof submission as prover already submitted a proof for this epoch`, {
         ...ctx,
         proverId,
@@ -113,24 +123,46 @@ export class ProverNodePublisher {
       });
       return 'already-submitted';
     }
+    if (registered) {
+      // L1 did not count the earlier proof as covering the whole epoch when it was submitted, e.g. it was sent
+      // while the epoch was still open: our own partial proof, or a third party proving under our prover id.
+      // If L1 does not count this proof as full either, the rollup rejects it and this returns 'failed' rather than
+      // 'already-submitted'. That is unlikely: a full session only starts once the epoch is complete, and proving a
+      // whole epoch takes long enough that the proof lands after the epoch has closed on L1. The remaining case is
+      // an under-attested checkpoint of the epoch still pending after our range when we resend. Gas estimation
+      // catches the revert before anything is sent.
+      this.log.warn(`Resubmitting full epoch proof to replace a non-full registration of the same length`, {
+        ...ctx,
+        proverId,
+        length,
+      });
+    }
 
     // Validate epoch proof range and hashes are correct before submitting
     const provenPrefixLength = await this.validateEpochProofSubmission(args);
 
-    const txReceipt = await this.sendSubmitEpochProofTx(args, provenPrefixLength);
-    if (!txReceipt) {
+    let sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength);
+    for (let attempt = 1; sent?.receipt.status === 'reverted' && attempt < MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS; attempt++) {
+      const gasLimit = await this.getOutOfGasRetryGasLimit(args, provenPrefixLength, sent.gasLimit);
+      if (gasLimit === undefined) {
+        break;
+      }
+      this.metrics.recordFailedTx();
+      this.log.warn(`Resending epoch proof with a fresh gas limit after it ran out of gas`, {
+        ...ctx,
+        revertedTxHash: sent.receipt.transactionHash,
+        revertedGasLimit: sent.gasLimit,
+        gasLimit,
+        attempt: attempt + 1,
+      });
+      sent = await this.sendSubmitEpochProofTx(args, provenPrefixLength, gasLimit);
+    }
+
+    if (!sent) {
       this.log.error(`Failed to mine submitEpochProof tx`, undefined, ctx);
       return 'failed';
     }
-
-    try {
-      this.metrics.recordSenderBalance(
-        await this.l1TxUtils.getSenderBalance(),
-        this.l1TxUtils.getSenderAddress().toString(),
-      );
-    } catch (err) {
-      this.log.warn(`Failed to record the ETH balance of the prover node: ${err}`);
-    }
+    const txReceipt = sent.receipt;
 
     // Tx was mined successfully
     if (txReceipt.status === 'success') {
@@ -331,13 +363,15 @@ export class ProverNodePublisher {
       headers: CheckpointHeader[];
     },
     provenPrefixLength: number,
-  ): Promise<TransactionReceipt | undefined> {
+    gasLimit?: bigint,
+  ): Promise<{ receipt: TransactionReceipt; gasLimit: bigint } | undefined> {
     const txArgs = [this.getSubmitEpochProofArgs(args, provenPrefixLength)] as const;
 
     this.log.info(`Submitting epoch proof to L1 rollup contract`, {
       proofSize: args.proof.withoutPublicInputs().length,
       fromCheckpoint: args.fromCheckpoint,
       toCheckpoint: args.toCheckpoint,
+      gasLimit,
     });
     const data = encodeFunctionData({
       abi: RollupAbi,
@@ -345,9 +379,9 @@ export class ProverNodePublisher {
       args: txArgs,
     });
     try {
-      const { receipt } = await this.l1TxUtils.sendAndMonitorTransaction(
+      const { receipt, state } = await this.l1TxUtils.sendAndMonitorTransaction(
         { to: this.proofSubmissionTarget, data },
-        { txTimeoutAt: args.deadline },
+        { ...(gasLimit !== undefined && { gasLimit }), txTimeoutAt: args.deadline },
       );
       if (receipt.status !== 'success') {
         const errorMsg = await this.l1TxUtils.tryGetErrorFromRevertedTx(
@@ -361,12 +395,53 @@ export class ProverNodePublisher {
           /*blobInputs*/ undefined,
           /*stateOverride*/ [],
         );
-        this.log.error(`Rollup submit epoch proof tx reverted with ${errorMsg ?? 'unknown error'}`);
-        return undefined;
+        this.log.error(`Rollup submit epoch proof tx reverted with ${errorMsg ?? 'unknown error'}`, undefined, {
+          txHash: receipt.transactionHash,
+          gasUsed: receipt.gasUsed,
+          gasLimit: state.gasLimit,
+        });
       }
-      return receipt;
+      return { receipt, gasLimit: state.gasLimit };
     } catch (err) {
       this.log.error(`Rollup submit epoch proof failed`, err);
+      return undefined;
+    }
+  }
+
+  /**
+   * Returns the gas limit to resend a reverted proof tx with, or undefined if it should not be resent.
+   *
+   * L1 state changes between our estimate and inclusion can raise the proof's gas cost without invalidating it. A
+   * receipt does not say why a tx reverted, so a proof is resent only if a fresh estimate at the latest state succeeds
+   * and asks for more gas than the reverted tx had: a revert the rollup would repeat fails the estimate, and a revert
+   * that was not out of gas gets no larger limit.
+   */
+  private async getOutOfGasRetryGasLimit(
+    args: {
+      fromCheckpoint: CheckpointNumber;
+      toCheckpoint: CheckpointNumber;
+      publicInputs: RootRollupPublicInputs;
+      proof: Proof;
+      batchedBlobInputs: BatchedBlob;
+      attestations: ViemCommitteeAttestations;
+      headers: CheckpointHeader[];
+    },
+    provenPrefixLength: number,
+    revertedGasLimit: bigint,
+  ): Promise<bigint | undefined> {
+    const data = this.encodeSubmitEpochProofCalldata(args, provenPrefixLength);
+    try {
+      const gasLimit = await this.l1TxUtils.estimateGas(this.l1TxUtils.getSenderAddress().toString(), {
+        to: this.proofSubmissionTarget,
+        data,
+      });
+      return gasLimit > revertedGasLimit ? gasLimit : undefined;
+    } catch (err) {
+      this.log.warn(`Not resending reverted epoch proof: gas estimation fails at the latest state`, {
+        fromCheckpoint: args.fromCheckpoint,
+        toCheckpoint: args.toCheckpoint,
+        err,
+      });
       return undefined;
     }
   }

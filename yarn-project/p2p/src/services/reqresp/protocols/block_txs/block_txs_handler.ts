@@ -35,10 +35,15 @@ export function reqRespBlockTxsHandler(
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST, { cause: err });
     }
 
-    // The explicit-hash fallback is served even when the block is not found, so bound it:
-    // otherwise a peer could name many hashes (with an empty bit list) and force
-    // one response to serialize a full tx per hash.
-    if (request.txHashes.length > MAX_BLOCK_TXS_PER_REQUEST) {
+    // Cheap early bound before any attestation-pool / archiver / tx-pool work: reject when the
+    // explicit-hash list, or the number of requested indices, already exceeds the per-request cap on
+    // its own. The index bitvector has no duplicate positions, so its set-bit count is a lower bound
+    // on the served set; the explicit-hash list is bounded as it was before. The deduplicated
+    // served-set cap below stays the authoritative gate for the dual-form (index + explicit) overlap.
+    if (
+      request.txHashes.length > MAX_BLOCK_TXS_PER_REQUEST ||
+      request.txIndices.getTrueIndices().length > MAX_BLOCK_TXS_PER_REQUEST
+    ) {
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
     }
 
@@ -73,6 +78,14 @@ export function reqRespBlockTxsHandler(
         const requestedIndices = new Set(request.txIndices.getTrueIndices());
         blockTxHashes.filter((_, idx) => requestedIndices.has(idx)).forEach(h => requestedTxsHashes.add(h.toString()));
       }
+    }
+
+    // One response is capped at MAX_BLOCK_TXS_PER_REQUEST transactions. Both request forms feed one
+    // deduplicated set - the dumb-peer requester sends the same txs by index and by explicit hash -
+    // so cap the deduplicated served count, not the raw sum, before fetching and serializing. This
+    // bounds the work one peer can drive while still accepting a legitimate dual-form batch.
+    if (requestedTxsHashes.size > MAX_BLOCK_TXS_PER_REQUEST) {
+      throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
     }
 
     // Finally, get the txs from the pool and create the response.

@@ -2,6 +2,7 @@ import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
 import { MAX_L2_BLOCK_SIZE_KB, MAX_MESSAGE_SIZE_KB, MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
+import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -1,6 +1,6 @@
 import { prettyPrintJSON } from '@aztec-labs/cli/utils';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
 import { computeBn254G1PublicKeyCompressed } from '@aztec-labs/foundation/crypto/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -8,6 +8,7 @@ import type { LogFn } from '@aztec-labs/foundation/log';
 import type { EthAccount, EthPrivateKey, ValidatorKeyStore } from '@aztec-labs/node-keystore/types';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Wallet } from '@ethersproject/wallet';
+import { Buffer } from 'buffer';
 import { constants as fsConstants, mkdirSync } from 'fs';
 import { access, writeFile } from 'fs/promises';
 import { availableParallelism, homedir } from 'os';
@@ -15,6 +16,12 @@ import { dirname, isAbsolute, join } from 'path';
 import { mnemonicToAccount } from 'viem/accounts';
 import { Worker } from 'worker_threads';
 
+import {
+  type BlsKeyDerivationPolicy,
+  type GeneratedMnemonic,
+  resolveBlsKeyDerivationPolicy,
+  selectBlsKey,
+} from './bls_key_derivation.js';
 import { defaultBlsPath } from './utils.js';
 
 type EthJsonV3WorkerResult = { json: string } | { error: { message: string; name?: string; stack?: string } };
@@ -59,13 +66,23 @@ function encryptEthJsonV3InWorker(privateKeyHex: string, password: string): Prom
 }
 
 async function encryptEthJsonV3(privateKeyHex: string, password: string): Promise<string> {
-  if (process.env.JEST_WORKER_ID !== undefined) {
+  if (getEnv().JEST_WORKER_ID !== undefined) {
     return await new Wallet(privateKeyHex).encrypt(password);
   }
   return await encryptEthJsonV3InWorker(privateKeyHex, password);
 }
 
-export type ValidatorSummary = { attesterEth?: string; attesterBls?: string; publisherEth?: string[] };
+export type ValidatorSummary = {
+  attesterEth?: string;
+  attesterBls?: string;
+  /** Derivation path of the BLS key, including the candidate component when the candidate is not 0. */
+  blsPath?: string;
+  /** Candidate selected by the BLS key derivation policy; 0 unless a retry picked another one. */
+  blsCandidate?: number;
+  /** The `--bls-key-derivation-max-gas` budget, when it took part in selecting a candidate other than 0. */
+  blsMaxGas?: number;
+  publisherEth?: string[];
+};
 
 export type BuildValidatorsInput = {
   validatorCount: number;
@@ -79,12 +96,16 @@ export type BuildValidatorsInput = {
   feeRecipient: AztecAddress;
   coinbase?: EthAddress;
   remoteSigner?: string;
+  /** Defaults to the policy used when no BLS key derivation flag is given. */
+  blsKeyDerivation?: BlsKeyDerivationPolicy;
+  /** Set when the CLI generated `mnemonic` in this run. */
+  generatedMnemonic?: GeneratedMnemonic;
 };
 
 export function withValidatorIndex(path: string, accountIndex: number = 0, addressIndex: number = 0) {
   // NOTE: The legacy BLS CLI is to allow users who generated keys in 2.1.4 to be able to use the same command
   // to re-generate their keys. In 2.1.5 we switched how we append addresses to the path so this is to maintain backwards compatibility.
-  const useLegacyBlsCli = ['true', '1', 'yes', 'y'].includes(process.env.LEGACY_BLS_CLI ?? '');
+  const useLegacyBlsCli = ['true', '1', 'yes', 'y'].includes(getEnv().LEGACY_BLS_CLI ?? '');
 
   const defaultBlsPathParts = defaultBlsPath.split('/');
 
@@ -153,6 +174,8 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
     feeRecipient,
     coinbase,
     remoteSigner,
+    blsKeyDerivation = resolveBlsKeyDerivationPolicy({}),
+    generatedMnemonic,
   } = input;
 
   const summaries: ValidatorSummary[] = [];
@@ -163,7 +186,11 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
       const basePath = blsPath ?? defaultBlsPath;
       const perValidatorPath = withValidatorIndex(basePath, accountIndex, addressIndex);
 
-      const blsPrivKey = ikm || mnemonic ? deriveBlsPrivateKey(mnemonic, ikm, perValidatorPath) : undefined;
+      const blsKey =
+        ikm || mnemonic
+          ? selectBlsKey(blsKeyDerivation, { mnemonic, ikm, perValidatorPath, generatedMnemonic })
+          : undefined;
+      const blsPrivKey = blsKey?.privateKey;
       const blsPubCompressed = blsPrivKey ? await computeBlsPublicKeyCompressed(blsPrivKey) : undefined;
 
       const ethAttester = deriveEthAttester(mnemonic, accountIndex, addressIndex, remoteSigner);
@@ -198,6 +225,9 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
       summaries.push({
         attesterEth: attesterEthAddress,
         attesterBls: blsPubCompressed,
+        blsPath: blsKey?.path,
+        blsCandidate: blsKey?.candidate,
+        blsMaxGas: blsKey?.maxGas,
         publisherEth: publisherAddresses.length > 0 ? publisherAddresses : undefined,
       });
 
@@ -252,6 +282,10 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
     if (v.attesterBls) {
       lines.push(`    bls: ${v.attesterBls}`);
     }
+    if (v.blsCandidate) {
+      const maxGas = v.blsMaxGas !== undefined ? `, max gas ${v.blsMaxGas}` : '';
+      lines.push(`    bls derivation path: ${v.blsPath} (candidate ${v.blsCandidate}${maxGas})`);
+    }
     if (v.publisherEth && v.publisherEth.length > 0) {
       lines.push(`  publisher:`);
       for (const addr of v.publisherEth) {
@@ -259,9 +293,33 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
       }
     }
   }
+  if (summaries.some(v => v.blsCandidate)) {
+    lines.push(
+      'Some BLS keys were derived from a retry candidate (see "bls derivation path" above).',
+      'To regenerate them from the mnemonic, re-run with --bls-key-derivation-v6 and the same --bls-key-derivation-max-gas, if any.',
+    );
+  }
   if (lines.length > 0) {
     log(lines.join('\n'));
   }
+}
+
+/** BLS keys in `summaries` that came from a retry candidate, for reporting alongside JSON output. */
+export function getBlsKeyCandidates(summaries: ValidatorSummary[]) {
+  return summaries
+    .filter(v => v.blsCandidate)
+    .map(v => ({
+      attesterEth: v.attesterEth,
+      bls: v.attesterBls,
+      path: v.blsPath,
+      candidate: v.blsCandidate,
+      ...(v.blsMaxGas !== undefined ? { maxGas: v.blsMaxGas } : {}),
+    }));
+}
+
+/** Derivation path of each BLS key in `summaries`, keyed by its compressed public key. */
+export function getBlsDerivationPaths(summaries: ValidatorSummary[]): Map<string, string> {
+  return new Map(summaries.flatMap(v => (v.attesterBls && v.blsPath ? [[v.attesterBls, v.blsPath] as const] : [])));
 }
 
 export function maybePrintJson(log: LogFn, jsonFlag: boolean | undefined, obj: unknown) {
@@ -300,10 +358,14 @@ export async function writeBn254BlsKeystore(
   return outPath;
 }
 
-/** Replace plaintext BLS keys in validators with { path, password } pointing to BN254 keystore files. */
+/**
+ * Replace plaintext BLS keys in validators with { path, password } pointing to BN254 keystore files. Each file records
+ * the key's derivation path from `derivationPaths` (keyed by compressed public key), or an empty path for keys missing
+ * from it, such as keys that were already in a keystore file, whose origin is unknown.
+ */
 export async function writeBlsBn254ToFile(
   validators: ValidatorKeyStore[],
-  options: { outDir: string; password: string; blsPath?: string },
+  options: { outDir: string; password: string; derivationPaths?: Map<string, string> },
 ): Promise<void> {
   await Promise.all(
     validators.map(async (v, i) => {
@@ -319,7 +381,7 @@ export async function writeBlsBn254ToFile(
       }
 
       const pub = await computeBlsPublicKeyCompressed(blsKey);
-      const path = options.blsPath ?? defaultBlsPath;
+      const path = options.derivationPaths?.get(pub) ?? '';
       const fileBase = `${String(i + 1)}_${pub.slice(2, 18)}`;
       const keystorePath = await writeBn254BlsKeystore(options.outDir, fileBase, options.password, blsKey, pub, path);
 

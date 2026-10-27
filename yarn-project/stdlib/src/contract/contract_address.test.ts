@@ -77,7 +77,7 @@ describe('ContractAddress', () => {
     const logger = createLogger('stdlib:contract_address:test');
     logger.info(`Computed contract address from instance in ${ms}ms`);
     expect(address.toString()).toMatchInlineSnapshot(
-      `"0x0c295919fa5b94d9b9fa5e24e9cef2e8e757c17e2cecd366055571c88d9e2a44"`,
+      `"0x1e3ec1cc97c8ed6301003a493b5450dd2620c71224aa586d3b5140e8959fd0dc"`,
     );
   });
 });

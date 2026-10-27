@@ -1,5 +1,5 @@
 import { Archiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { BBCircuitVerifier, QueuedIVCVerifier, SelfHealingChonkVerifier } from '@aztec-labs/bb-prover';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
@@ -18,7 +18,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { first } from '@aztec-labs/foundation/iterable';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { type Logger, createLogger, getLogLevel, isValidLogLevelSpec, setLogLevel } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { count } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -54,7 +54,12 @@ import type {
   ProtocolContractAddresses,
 } from '@aztec-labs/stdlib/contract';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees, type ManaUsageEstimate, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import {
+  GasFees,
+  type ManaUsageEstimate,
+  type RollupFeeConfigProvider,
+  getNetworkTxGasLimits,
+} from '@aztec-labs/stdlib/gas';
 import type {
   AztecNode,
   AztecNodeAdmin,
@@ -146,6 +151,8 @@ export interface AztecNodeServiceDeps {
   rollupContract: RollupContract | undefined;
   feeProvider: FeeProvider;
   nextBlockPredictor: NextBlockPredictor;
+  /** Live rollup fee settings, for the mana limit tx gas limits are derived from. Stopped with the node. */
+  feeConfigProvider: RollupFeeConfigProvider;
   epochCache: EpochCacheInterface;
   packageVersion: string;
   peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -199,6 +206,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   protected readonly rollupContract: RollupContract | undefined;
   protected readonly feeProvider: FeeProvider;
   protected readonly nextBlockPredictor: NextBlockPredictor;
+  protected readonly feeConfigProvider: RollupFeeConfigProvider;
   protected readonly epochCache: EpochCacheInterface;
   protected readonly packageVersion: string;
   private peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -231,6 +239,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.rollupContract = deps.rollupContract;
     this.feeProvider = deps.feeProvider;
     this.nextBlockPredictor = deps.nextBlockPredictor;
+    this.feeConfigProvider = deps.feeConfigProvider;
     this.epochCache = deps.epochCache;
     this.packageVersion = deps.packageVersion;
     this.peerProofVerifier = deps.peerProofVerifier;
@@ -313,8 +322,15 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.blockSource.getL2Tips();
   }
 
-  public getL1Constants(): Promise<L1RollupConstants> {
-    return this.blockSource.getL1Constants();
+  public async getL1Constants(): Promise<L1RollupConstants> {
+    const constants = await this.blockSource.getL1Constants();
+    // Older clients' schemas still require `rollupManaLimit`, so keep sending it, now with the live value. Newer
+    // clients' schemas strip the extra key.
+    const response: L1RollupConstants & { rollupManaLimit: number } = {
+      ...constants,
+      rollupManaLimit: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
+    };
+    return response;
   }
 
   public getSyncedL2SlotNumber() {
@@ -465,7 +481,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // timetable's blocks-per-checkpoint and the network-minimum per-block multipliers) — never this node's
     // local caps or configured multipliers, which can make the node stricter at block-building time but
     // cannot define what the network accepts for relay. Clients read txsLimits to set fallback gas limits.
-    const maxTxGas = getNetworkTxGasLimits(this.config, l1Constants);
+    const maxTxGas = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
 
     const nodeInfo: NodeInfo = {
       nodeVersion,
@@ -632,6 +648,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     await tryStop(this.p2pClient);
     await tryStop(this.nextBlockPredictor);
     await tryStop(this.feeProvider);
+    await tryStop(this.feeConfigProvider);
     // Dispose the AVM backend before world state: it kills the bb-avm-sim processes and closes the CDB IPC
     // server, releasing their connections to the WSDB so it shuts down cleanly (and freeing the
     // Server/Socket/ChildProcess handles that would otherwise keep the process alive after teardown).
@@ -827,7 +844,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     const l1Constants = await this.blockSource.getL1Constants();
     // Enforce the same network admission limit the node advertises in getNodeInfo (network-wide, not this
     // node's local caps), so a tx the wallet sized against txsLimits is not rejected here.
-    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
+    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
     const validator = createTxValidatorForAcceptingTxsOverRPC(
       db,
       this.contractDataSource,
@@ -841,7 +858,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
           ...(await getDefaultAllowedSetupFunctions()),
           ...(this.config.txPublicSetupAllowListExtend ?? []),
         ],
-        gasFees: await this.getCurrentMinFees(),
+        gasFees: skipFeeEnforcement ? GasFees.empty() : await this.getNextBlockMinFees(),
         skipFeeEnforcement,
         isSimulation,
         txsPermitted: !this.config.disableTransactions,
@@ -854,13 +871,38 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return await validator.validateTx(tx);
   }
 
-  public getConfig(): Promise<AztecNodeAdminConfig> {
-    const schema = AztecNodeAdminConfigSchema;
-    const keys = schema.keyof().options;
-    return Promise.resolve(pick(this.config, ...keys));
+  /**
+   * The fee the next block will charge, for RPC admission: a transaction has to be priced against the block it
+   * would actually enter, and the L1-forward projection cannot stand in for a fee an in-progress checkpoint
+   * already froze. Quotes rather than the relay path's cache-first read, so a single submission waits out a
+   * boundary refresh instead of being rejected.
+   *
+   * Falls back to the L1-forward fee when the next block cannot be priced, which happens whenever this node's
+   * chain has run far enough ahead of L1 that the upcoming boundary's parent state is not readable there yet.
+   * That is common enough that rejecting every submission for its duration would be worse than admitting
+   * against the looser price: the pool sweeps a transaction the next block cannot afford once the fee resolves.
+   */
+  private async getNextBlockMinFees(): Promise<GasFees> {
+    const quote = await this.nextBlockPredictor.quoteMinFees().catch((err: Error) => {
+      this.log.warn(`Failed to compute the next-block min fee for tx admission`, err);
+      return undefined;
+    });
+    if (quote) {
+      return quote.fees;
+    }
+    this.log.verbose(`Admitting txs against the L1-forward min fee: the next block's fee is unavailable`);
+    return await this.feeProvider.getCurrentMinFees();
   }
 
-  public async setConfig(config: Partial<AztecNodeAdminConfig>): Promise<void> {
+  public getConfig(): Promise<AztecNodeAdminConfig> {
+    const keys = AztecNodeAdminConfigSchema.omit({ logLevel: true }).keyof().options;
+    return Promise.resolve({ ...pick(this.config, ...keys), logLevel: getLogLevel() });
+  }
+
+  public async setConfig({ logLevel, ...config }: Partial<AztecNodeAdminConfig>): Promise<void> {
+    if (logLevel !== undefined && !isValidLogLevelSpec(logLevel)) {
+      throw new BadRequestError(`Invalid log level spec: ${logLevel}`);
+    }
     const newConfig = { ...this.config, ...config };
     // If the sequencer is currently paused via pauseSequencer(), record the caller's desired
     // minTxsPerBlock as the restore value (so resumeSequencer applies it) and keep the freeze
@@ -884,7 +926,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     if (newConfig.realProofs !== this.config.realProofs) {
       await Promise.all([tryStop(this.peerProofVerifier), tryStop(this.rpcProofVerifier)]);
       if (newConfig.realProofs) {
-        this.peerProofVerifier = await BatchChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
+        this.peerProofVerifier = await SelfHealingChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
         const rpcVerifier = await BBCircuitVerifier.new(newConfig);
         this.rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, newConfig.numConcurrentIVCVerifiers);
       } else {
@@ -893,6 +935,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
       }
     }
 
+    if (logLevel !== undefined) {
+      setLogLevel(logLevel);
+    }
     this.config = newConfig;
   }
 

@@ -118,7 +118,7 @@ List of all slashable offenses in the system:
 
 ### DUPLICATE_PROPOSAL
 **Description**: A proposer sent multiple block or checkpoint proposals for the same position (slot and indexWithinCheckpoint for blocks, or slot for checkpoints) with different content. Since each slot has exactly one designated proposer, sending conflicting proposals is equivocation. This also covers the case where a proposer broadcasts one checkpoint proposal via P2P but submits a different checkpoint to L1 for the same slot.
-**Detection**: Detected in two places. (1) The P2P layer flags duplicates when a second proposal arrives for the same position with a different archive; the AttestationPool tracks proposals by position and the first duplicate is propagated (Accept) so other validators can witness the offense. (2) CheckpointEquivocationWatcher compares the archive root of each L1-confirmed checkpoint against retained signed P2P checkpoint proposals from the same slot's proposer and flags any mismatch.
+**Detection**: Detected in two places. (1) The P2P layer flags a second proposal at the same position with a different payload; the AttestationPool tracks proposals by position, retains up to two per position, and the first duplicate is propagated (Accept) so other validators can witness the offense. P2P only marks the slot as equivocated: its count is per position, not per signer, so it does not slash. Once the slot has closed, BroadcastedProposalWatcher reads the retained proposals, groups them by recovered signer, and flags a signer that signed two different payloads for the same block index or for the slot's checkpoint. (2) The archiver compares each L1-confirmed checkpoint with the locally proposed checkpoint for the same slot. When they differ and the local copy was signed by the address the rollup's `getProposerAt` names for that slot, it emits `CheckpointEquivocationDetected` and CheckpointEquivocationWatcher slashes that signer. It does not attribute during an escape hatch, when L1 does not check the committee's proposer, or when the lookup fails.
 **Target**: Proposer who broadcast the duplicate proposal.
 **Time Unit**: Slot-based offense.
 
@@ -129,14 +129,14 @@ List of all slashable offenses in the system:
 **Time Unit**: Slot-based offense.
 
 ### ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL
-**Description**: A committee member attested to a checkpoint proposal in a slot where this node detected a slashable invalid block proposal.
-**Detection**: ValidatorClient marks slots with invalid block proposals detected via reexecution and slashes checkpoint attesters seen for that slot. If proposal equivocation is later detected for the slot, pending bad-attestation offenses are cleared.
-**Target**: Committee members who attested in the invalid proposal slot.
+**Description**: A committee member attested to a checkpoint proposal that this node found invalid. The attester is slashed only for the payload it signed, not for other invalid proposals in the same slot.
+**Detection**: The proposal handler records the signed-payload hash of each checkpoint proposal it rejects as invalid. When it cannot find the checkpoint's last block, it also records the hash if the checkpoint commits to a block it rejected for a reason bound to the block header. A checkpoint rejected only because it leaves later blocks of its slot out is not recorded, since an attester that had not yet received those blocks would rightly find it valid; its proposer is still slashed. AttestedInvalidProposalWatcher slashes the attesters whose signed payload hash was recorded, and skips slots with proposal equivocation.
+**Target**: Committee members who attested to the invalid checkpoint payload.
 **Time Unit**: Slot-based offense.
 
 ### BROADCASTED_INVALID_CHECKPOINT_PROPOSAL
 **Description**: A proposer broadcast an invalid checkpoint proposal, either one that terminates before a higher-index block proposal signed by the same proposer in the same slot, one whose signed header does not match deterministic validator recomputation, or one with a malformed fee asset price modifier. The first case also covers AZIP-7's _Submitting Block Proposal After Checkpoint_: a later block signed by the same proposer in the same slot makes the prior checkpoint retroactively invalid.
-**Detection**: BroadcastedInvalidCheckpointProposalWatcher scans retained P2P proposal evidence and compares checkpoint archive roots to signed block proposals from the same slot and signer. ValidatorClient also validates checkpoint proposals during the all-nodes callback and emits this offense when checkpoint header recomputation fails or the signed fee asset price modifier is malformed.
+**Detection**: BroadcastedProposalWatcher scans retained P2P proposal evidence and compares checkpoint archive roots to signed block proposals from the same slot and signer. ValidatorClient also validates checkpoint proposals during the all-nodes callback and emits this offense when checkpoint header recomputation fails or the signed fee asset price modifier is malformed.
 **Target**: Proposer who broadcast the invalid checkpoint proposal.
 **Time Unit**: Slot-based offense.
 
@@ -202,7 +202,9 @@ Inactivity slashing is one of the most critical, since it allows purging validat
 Inactivity slashing is handled by the `Sentinel` (in `aztec-node/src/sentinel/`), which monitors performance of all validators slot-by-slot. With the multiple-blocks-per-slot model, block proposals and checkpoints are distinct concepts: proposers build multiple blocks per slot, but attestations are only for checkpoints. After each slot, the sentinel assigns one of the following to the proposer for the slot, in highest-confidence order:
 
 - `checkpoint-mined` — a checkpoint covering this slot has landed on L1
-- `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully
+- `checkpoint-unpublished` — a valid checkpoint proposal built on a parent that is on L1 reached quorum, yet the proposer did not land it
+- `checkpoint-orphaned` — a valid checkpoint proposal could not land because the parent it built on never landed on L1, or because an earlier slot landed its checkpoint number after it had reached quorum
+- `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully, and it could not be classified as unpublished or orphaned
 - `checkpoint-invalid` — the local node re-executed a checkpoint proposal for this slot and rejected it (header / archive / out-hash mismatch, limit breach, etc.). Proposer-fault
 - `checkpoint-unvalidated` — a checkpoint proposal arrived but the local node could not validate it (missing blocks/txs, timeout). Treated as proposer-fault
 - `checkpoint-missed` — block proposals seen on P2P but no checkpoint proposal at all
@@ -212,10 +214,10 @@ Re-execution outcomes are read from the `CheckpointReexecutionTracker`, which th
 
 Each non-proposer committee member is assigned one of:
 - `attestation-sent` if their checkpoint attestation was seen on L1 or on the P2P network
-- `attestation-missed` if the proposer status was `checkpoint-mined` or `checkpoint-valid` but no checkpoint attestation was seen
+- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen, unless a different checkpoint landed in the parent's position or an earlier slot landed the proposal's checkpoint number
 - none in any other case
 
-`blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot.
+`blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot. `checkpoint-unpublished` and `checkpoint-orphaned` do not count toward inactivity yet: they are recorded in the sentinel's history and stats only.
 
 The sentinel evaluates an epoch once `sentinelEpochEndBufferSlots` (default 2) L2 slots have elapsed past the epoch's last slot AND the per-slot recorder has covered that last slot. Epoch evaluation does not wait for an L1 proof — it relies on local-state evidence (the re-execution tracker plus L1 checkpoint landings) — so inactive validators are slashed promptly regardless of prover availability.
 

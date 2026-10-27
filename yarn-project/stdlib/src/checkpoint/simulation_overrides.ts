@@ -14,6 +14,11 @@ import { computeCheckpointPayloadDigest } from './digest.js';
 type CheckpointSimulationOverridesPlanInput = {
   /** Target rollup contract. */
   rollup: RollupContract;
+  /**
+   * L1 block the caller runs its fee simulation at. The pipelined parent's fee header is derived from the L1 state at
+   * that block too, so the fee quote does not mix two L1 snapshots.
+   */
+  l1BlockNumber: bigint;
   /** Checkpoint number to be proposed. */
   checkpointNumber: CheckpointNumber;
   /** Logger instance. */
@@ -103,6 +108,7 @@ export async function buildCheckpointSimulationOverridesPlan(
       checkpointNumber: input.checkpointNumber,
       proposedCheckpointData: input.proposedCheckpointData,
       rollup: input.rollup,
+      l1BlockNumber: input.l1BlockNumber,
       log: input.log,
     });
     if (feeHeader) {
@@ -136,6 +142,8 @@ type PipelinedParentFeeHeaderInput = {
   checkpointNumber: CheckpointNumber;
   proposedCheckpointData: ProposedCheckpointData;
   rollup: RollupContract;
+  /** L1 block to read the grandparent and the mana target at. */
+  l1BlockNumber: bigint;
   log: Logger;
 };
 
@@ -154,9 +162,10 @@ export async function computePipelinedParentFeeHeader(
 
   const grandparentCheckpointNumber = CheckpointNumber(input.checkpointNumber - 2);
 
+  const opts = { blockNumber: input.l1BlockNumber };
   const [grandparentCheckpoint, manaTarget] = await Promise.all([
-    input.rollup.getCheckpoint(grandparentCheckpointNumber),
-    input.rollup.getManaTarget(),
+    input.rollup.getCheckpoint(grandparentCheckpointNumber, opts),
+    input.rollup.getManaTarget(opts),
   ]);
 
   if (!grandparentCheckpoint?.feeHeader) {

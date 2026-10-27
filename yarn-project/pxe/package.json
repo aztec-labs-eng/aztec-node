@@ -86,12 +86,13 @@
     "@aztec-labs/simulator": "workspace:^",
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
+    "buffer": "^6.0.3",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "lodash.omit": "^4.5.0",
     "sha3": "^2.1.4",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.3"
+    "viem": "2.57.1"
   },
   "devDependencies": {
     "@aztec-labs/noir-test-contracts.js": "workspace:^",
@@ -116,6 +117,6 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

@@ -19,7 +19,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
-import { createEthereumChain } from './chain.js';
+import { createEthereumChain, isAnvilTestChain } from './chain.js';
 import type { ExtendedViemWalletClient, ViemPublicClient } from './types.js';
 
 type Config = {
@@ -45,7 +45,10 @@ export class L1RpcError extends Error {
 
 /** Creates a viem fallback HTTP transport for the given L1 RPC URLs. */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number }) {
-  return wrapL1RpcTransport(fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout }))));
+  // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
+  return wrapL1RpcTransport(
+    fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout, maxResponseBodySize: false }))),
+  );
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */
@@ -158,7 +161,7 @@ export function createExtendedL1Client(
     account: hdAccount,
     chain,
     transport: makeL1HttpTransport(rpcUrls, { timeout: opts?.httpTimeoutMS }),
-    pollingInterval: pollingIntervalMS,
+    pollingInterval: pollingIntervalMS ?? (isAnvilTestChain(chain.id) ? 100 : undefined),
   }).extend(publicActions);
 
   return extendedClient;

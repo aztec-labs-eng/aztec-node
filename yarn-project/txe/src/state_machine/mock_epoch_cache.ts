@@ -1,6 +1,14 @@
-import type { EpochAndSlot, EpochCacheInterface, EpochCommitteeInfo, SlotTag } from '@aztec-labs/epoch-cache';
+import type {
+  CommitteeLookup,
+  CommitteeMembershipLookup,
+  EpochAndSlot,
+  EpochCacheInterface,
+  EscapeHatchLookup,
+  ProposerLookup,
+  SlotTag,
+} from '@aztec-labs/epoch-cache';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 
 /**
@@ -8,13 +16,8 @@ import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdl
  * Since in TXE we don't validate transactions, mock suffices here.
  */
 export class MockEpochCache implements EpochCacheInterface {
-  getCommittee(_slot: SlotTag = 'now'): Promise<EpochCommitteeInfo> {
-    return Promise.resolve({
-      committee: undefined,
-      seed: 0n,
-      epoch: EpochNumber.ZERO,
-      isEscapeHatchOpen: false,
-    });
+  getCommittee(_slot: SlotTag = 'now'): Promise<CommitteeLookup> {
+    return Promise.resolve({ state: 'none', seed: 0n, epoch: EpochNumber.ZERO, isEscapeHatchOpen: false });
   }
 
   getSlotNow(): SlotNumber {
@@ -77,28 +80,28 @@ export class MockEpochCache implements EpochCacheInterface {
     };
   }
 
-  getProposerAttesterAddressInSlot(_slot: SlotNumber): Promise<EthAddress | undefined> {
-    return Promise.resolve(undefined);
+  lookupProposer(_slot: SlotNumber): Promise<ProposerLookup> {
+    return Promise.resolve({ state: 'none' });
   }
 
-  isInCommittee(_slot: SlotTag, _validator: EthAddress): Promise<boolean> {
-    return Promise.resolve(false);
+  lookupMembership(_slot: SlotTag, _validator: EthAddress): Promise<CommitteeMembershipLookup<boolean>> {
+    return Promise.resolve({ state: 'none' });
   }
 
   getRegisteredValidators(): Promise<EthAddress[]> {
     return Promise.resolve([]);
   }
 
-  filterInCommittee(_slot: SlotTag, _validators: EthAddress[]): Promise<EthAddress[]> {
-    return Promise.resolve([]);
+  filterInCommittee(_slot: SlotTag, _validators: EthAddress[]): Promise<CommitteeMembershipLookup<EthAddress[]>> {
+    return Promise.resolve({ state: 'none' });
   }
 
-  isEscapeHatchOpen(_epoch: EpochNumber): Promise<boolean> {
-    return Promise.resolve(false);
+  lookupEscapeHatch(_epoch: EpochNumber): Promise<EscapeHatchLookup> {
+    return Promise.resolve({ state: 'none', isEscapeHatchOpen: false });
   }
 
-  isEscapeHatchOpenAtSlot(_slot: SlotTag): Promise<boolean> {
-    return Promise.resolve(false);
+  lookupEscapeHatchAtSlot(_slot: SlotTag): Promise<EscapeHatchLookup> {
+    return Promise.resolve({ state: 'none', isEscapeHatchOpen: false });
   }
 
   getL1Constants(): L1RollupConstants {

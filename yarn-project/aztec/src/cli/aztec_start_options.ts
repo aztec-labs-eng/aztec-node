@@ -33,14 +33,16 @@ export interface AztecStartOption {
   printDefault?: (val: any) => string;
   env: EnvVar | undefined;
   fallback?: EnvVar[];
+  deprecatedFallback?: ConfigMapping<unknown>['deprecatedFallback'];
   parseVal?: (val: string) => any;
 }
 
 export const getOptions = (namespace: string, configMappings: Record<string, ConfigMapping<unknown>>) => {
   const options: AztecStartOption[] = [];
-  for (const [key, { env, defaultValue: def, parseEnv, description, printDefault, fallback }] of Object.entries(
-    configMappings,
-  )) {
+  for (const [
+    key,
+    { env, defaultValue: def, parseEnv, description, printDefault, fallback, deprecatedFallback },
+  ] of Object.entries(configMappings)) {
     if (universalOptions.includes(key)) {
       continue;
     }
@@ -52,6 +54,7 @@ export const getOptions = (namespace: string, configMappings: Record<string, Con
       printDefault,
       env: env,
       fallback,
+      deprecatedFallback,
       parseVal: parseEnv,
     });
   }
@@ -215,7 +218,7 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
   'WORLD STATE': [
     configToFlag('--world-state-data-directory', worldStateConfigMappings.worldStateDataDirectory),
     configToFlag('--world-state-db-map-size-kb', worldStateConfigMappings.worldStateDbMapSizeKb),
-    configToFlag('--world-state-checkpoint-history', worldStateConfigMappings.worldStateCheckpointHistory),
+    configToFlag('--world-state-history-retention', worldStateConfigMappings.worldStateHistoryRetention),
   ],
   // We can't easily auto-generate node options as they're parts of modules defined below
   'AZTEC NODE': [

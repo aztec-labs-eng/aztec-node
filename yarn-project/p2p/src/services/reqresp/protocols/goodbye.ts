@@ -1,5 +1,6 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { PeerId } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 
 import type { PeerManagerInterface } from '../../peer-manager/interface.js';
 import { ReqRespSubProtocol, type ReqRespSubProtocolHandler } from '../interface.js';

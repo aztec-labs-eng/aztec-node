@@ -23,6 +23,8 @@ import {
 
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../../config.js';
 import type { GlobalVariableBuilder } from '../../global_variable_builder/global_builder.js';
+import { PROPOSE_REFERENCE_SEND } from '../../publisher/gas_constants.js';
+import { PublisherManagerMetrics } from '../../publisher/publisher-manager-metrics.js';
 import { SequencerPublisherFactory } from '../../publisher/sequencer-publisher-factory.js';
 import { AutomineSequencer } from './automine_sequencer.js';
 
@@ -56,7 +58,7 @@ export type CreateAutomineSequencerArgs = {
       | 'resume'
     >;
   p2pClient: P2P & Pick<ConcreteP2PClient, 'sync'>;
-  l1Constants: { l1GenesisTime: bigint; slotDuration: number; ethereumSlotDuration: number; rollupManaLimit: number };
+  l1Constants: { l1GenesisTime: bigint; slotDuration: number; ethereumSlotDuration: number };
   /** When true, run the auto-settle / clock-reconcile loop (local-network only). */
   autoSettle?: boolean;
   log: Logger;
@@ -93,6 +95,8 @@ export async function createAutomineSequencer({
   const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {
     bindings: log.getBindings(),
     funder: funderL1TxUtils,
+    metrics: new PublisherManagerMetrics(telemetry, 'sequencer'),
+    referenceSend: config.fishermanMode ? undefined : PROPOSE_REFERENCE_SEND,
   });
   const governanceProposerContract = new GovernanceProposerContract(
     publicClient,
@@ -145,7 +149,6 @@ export async function createAutomineSequencer({
       l1GenesisTime: l1Constants.l1GenesisTime,
       slotDuration: l1Constants.slotDuration,
       ethereumSlotDuration: l1Constants.ethereumSlotDuration,
-      rollupManaLimit: l1Constants.rollupManaLimit,
       epochDuration: config.aztecEpochDuration,
     },
     coinbase,

@@ -1,10 +1,11 @@
-import { MockPrefilledArchiver } from '@aztec-labs/archiver/test';
+import { MockArchiver, MockPrefilledArchiver } from '@aztec-labs/archiver/test';
 import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
@@ -52,7 +53,7 @@ describe('world-state integration', () => {
       worldStateBlockCheckIntervalMS: 20,
       worldStateBlockRequestBatchSize: 5,
       worldStateDbMapSizeKb: 1024 * 1024,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' },
     };
 
     archiver = new MockPrefilledArchiver(checkpoints);
@@ -163,6 +164,19 @@ describe('world-state integration', () => {
     });
   });
 
+  describe('clear', () => {
+    it('resyncs from genesis after clearing the world state', async () => {
+      await archiver.createBlocks(5);
+      await synchronizer.start();
+      await expectSynchedToBlock(5);
+
+      await synchronizer.clear();
+
+      await awaitSync(5);
+      await expectSynchedToBlock(5);
+    });
+  });
+
   describe('reorgs', () => {
     it('prunes blocks upon a reorg and resyncs', async () => {
       await archiver.createBlocks(5);
@@ -236,6 +250,88 @@ describe('world-state integration', () => {
   });
 
   describe('finalized chain', () => {
+    it('retains complete checkpoints before and after a future pin is reached', async () => {
+      const source = new MultiBlockArchiver();
+      await source.setInitialHeader(db.getInitialHeader());
+      source.setGenesisArchiveRoot(new Fr(GENESIS_ARCHIVE_ROOT));
+      const fork = await db.fork(BlockNumber.ZERO);
+      for (let i = 0; i < 7; i++) {
+        const { checkpoint, messages } = await mockCheckpoint(CheckpointNumber(i + 1), fork, {
+          startBlockNumber: BlockNumber(3 * i + 1),
+          numBlocks: 3,
+        });
+        source.addCheckpoint(checkpoint, messages);
+      }
+      await fork.close();
+      synchronizer = new TestWorldStateSynchronizer(db, source, {
+        ...config,
+        worldStateHistoryRetention: { type: 'pinned', checkpoint: CheckpointNumber(3) },
+      });
+      await synchronizer.start();
+
+      for (const [finalized, checkpoint, oldest] of [
+        [5, 2, 4],
+        [10, 4, 7],
+        [17, 6, 7],
+      ]) {
+        await synchronizer.handleBlockStreamEvent({
+          type: 'chain-finalized',
+          block: { number: BlockNumber(finalized), hash: '' },
+          checkpoint: { number: CheckpointNumber(checkpoint), hash: '' },
+        });
+        await retryFastUntil(async () => (await db.getStatusSummary()).oldestHistoricalBlock === oldest);
+        await expect(db.getSnapshot(BlockNumber(oldest - 1)).getTreeInfo(MerkleTreeId.ARCHIVE)).rejects.toThrow();
+        for (let number = oldest; number < oldest + 3; number++) {
+          const snapshot = await db.getSnapshot(BlockNumber(number)).getTreeInfo(MerkleTreeId.ARCHIVE);
+          expect(new Fr(snapshot.root)).toEqual((await source.getBlock({ number: BlockNumber(number) }))!.archive.root);
+        }
+      }
+
+      const nextFork = await db.fork(BlockNumber(21));
+      const next = await mockCheckpoint(CheckpointNumber(8), nextFork, {
+        startBlockNumber: BlockNumber(22),
+        numBlocks: 3,
+      });
+      await nextFork.close();
+      source.addCheckpoint(next.checkpoint, next.messages);
+      await synchronizer.syncImmediate(BlockNumber(24));
+      expect((await db.getStatusSummary()).unfinalizedBlockNumber).toBe(24);
+      expect((await db.getStatusSummary()).oldestHistoricalBlock).toBe(7);
+    });
+
+    it.each([128, 256])('accepts a restart with an increased history window of %i', async history => {
+      await archiver.createBlocks(20);
+      await synchronizer.start();
+      await synchronizer.stopBlockStream();
+      await db.setFinalized(BlockNumber(15));
+      await db.removeHistoricalBlocks(BlockNumber(10));
+
+      synchronizer = new TestWorldStateSynchronizer(db, archiver, {
+        ...config,
+        worldStateHistoryRetention: { type: 'rolling', checkpoints: history },
+      });
+      await synchronizer.start();
+      await expectSynchedToBlock(20, 15);
+      expect((await db.getStatusSummary()).oldestHistoricalBlock).toBe(10);
+    });
+
+    it.each(['pinned', 'archive'] as const)('rejects a %s restart missing required history', async type => {
+      await archiver.createBlocks(20);
+      await synchronizer.start();
+      await synchronizer.stopBlockStream();
+      await db.setFinalized(BlockNumber(15));
+      await db.removeHistoricalBlocks(BlockNumber(10));
+
+      synchronizer = new TestWorldStateSynchronizer(db, archiver, {
+        ...config,
+        worldStateHistoryRetention: type === 'pinned' ? { type, checkpoint: CheckpointNumber(5) } : { type },
+      });
+      await expect(synchronizer.start()).rejects.toThrow(
+        type === 'pinned' ? 'history is required from the start of checkpoint 5' : 'all checkpoint history is required',
+      );
+      expect((await db.getStatusSummary()).oldestHistoricalBlock).toBe(10);
+    });
+
     it('syncs finalized chain tip', async () => {
       await archiver.createBlocks(5);
       archiver.setFinalizedBlockNumber(3);
@@ -294,5 +390,13 @@ class TestWorldStateSynchronizer extends ServerWorldStateSynchronizer {
   // Stops the block stream but not the db so we can reuse it for another synchronizer
   public async stopBlockStream() {
     await this.blockStream?.stop();
+  }
+}
+
+class MultiBlockArchiver extends MockArchiver {
+  public addCheckpoint(checkpoint: Checkpoint, messages: Fr[]) {
+    this.checkpointList.push(checkpoint);
+    this.appendL1ToL2Messages(messages);
+    this.addProposedBlocks(checkpoint.blocks);
   }
 }

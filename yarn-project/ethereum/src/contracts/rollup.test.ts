@@ -2,7 +2,7 @@ import { InboxAbi } from '@aztec-foundation/l1-artifacts/InboxAbi';
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { L1RpcError, getPublicClient } from '@aztec-labs/ethereum/client';
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -16,11 +16,13 @@ import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import { RollupCheatCodes } from '../test/rollup_cheat_codes.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
 import { buildSimulationOverridesStateOverride } from './chain_state_override.js';
+import { GSEContract } from './gse.js';
 import { InboxContract } from './inbox.js';
 import { type CheckpointPreflightArgs, type FeeHeader, RollupContract, TempCheckpointLogField } from './rollup.js';
 
@@ -234,7 +236,7 @@ describe('computeChildFeeHeader', () => {
   });
 });
 
-describe('Rollup', () => {
+describeWithAnvil('Rollup', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let publicClient: ViemClient;
@@ -581,6 +583,26 @@ describe('Rollup', () => {
     });
   });
 
+  describe('getAttesters', () => {
+    it('reads the attester count on the same timestamp basis as the addresses', async () => {
+      // At the past ts the set had 4 attesters; the current set has 3 (one exited). getAttesters(ts)
+      // must size the read from the ts count, or it drops a still-staked attester from the larger snapshot.
+      const addr = (d: string): `0x${string}` => `0x${'a'.repeat(39)}${d}`;
+      const snapshot = ['0', '1', '2', '3'].map(addr);
+      using _atTime = jest.spyOn(rollup, 'getAttesterCountAtTime').mockResolvedValue(snapshot.length);
+      using activeCount = jest.spyOn(rollup, 'getActiveAttesterCount').mockResolvedValue(3);
+      using _fromIndices = jest
+        .spyOn(GSEContract.prototype, 'getAttestersFromIndicesAtTime')
+        .mockImplementation((_instance, _ts, indices) => Promise.resolve(indices.map(i => snapshot[Number(i)])));
+
+      const got = (await rollup.getAttesters(100n)).map(a => a.toString().toLowerCase());
+
+      // All four ts attesters are returned, not a 3-prefix; and the current-count path is not used.
+      expect(got).toEqual(snapshot);
+      expect(activeCount).not.toHaveBeenCalled();
+    });
+  });
+
   describe('makeArchiveOverride', () => {
     it('creates state override that correctly sets archive for a checkpoint number', async () => {
       const checkpointNumber = CheckpointNumber(5);
@@ -802,6 +824,57 @@ describe('Rollup', () => {
 
       expect(await rollup.getProtocolFeeMargin()).toBe(2000);
       expect(await rollup.getProtocolFeeMargin({ blockNumber: pinnedBlock })).toBe(1000);
+    });
+  });
+
+  describe('mana target and limit', () => {
+    it('reads the values governance set after the first read', async () => {
+      const rollupCheatCodes = new RollupCheatCodes(cheatCodes, deployed.l1ContractAddresses);
+      const initialTarget = await rollup.getManaTarget();
+      const initialLimit = await rollup.getManaLimit();
+      const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+
+      const raisedTarget = initialTarget + initialTarget / 2n;
+      await rollupCheatCodes.setManaTarget(raisedTarget);
+
+      expect(await rollup.getManaTarget()).toBe(raisedTarget);
+      expect(await rollup.getManaLimit()).toBe(raisedTarget * 2n);
+      expect(await rollup.getManaTarget({ blockNumber: pinnedBlock })).toBe(initialTarget);
+      expect(await rollup.getManaLimit({ blockNumber: pinnedBlock })).toBe(initialLimit);
+    });
+  });
+
+  describe('isEpochSetUp', () => {
+    let setupRollup: RollupContract;
+    let setupRollupCheatCodes: RollupCheatCodes;
+
+    beforeAll(async () => {
+      // A rollup with an empty target committee, so setupEpoch succeeds without any staked validators.
+      const privateKeyRaw = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
+      const setupDeployment = await deployAztecL1Contracts(rpcUrl, privateKeyRaw, foundry.id, {
+        ...DefaultL1ContractsConfig,
+        aztecTargetCommitteeSize: 0,
+        vkTreeRoot,
+        protocolContractsHash,
+        genesisArchiveRoot,
+        realVerifier: false,
+      });
+      setupRollup = new RollupContract(publicClient, setupDeployment.l1ContractAddresses.rollupAddress.toString());
+      setupRollupCheatCodes = new RollupCheatCodes(cheatCodes, setupDeployment.l1ContractAddresses);
+    });
+
+    it('reads the committee commitment at the requested L1 block', async () => {
+      const blockBeforeSetup = await publicClient.getBlockNumber({ cacheTime: 0 });
+      await setupRollupCheatCodes.setupEpoch();
+      const blockAfterSetup = await publicClient.getBlock({ includeTransactions: false });
+
+      const epoch = EpochNumber.fromBigInt(
+        await setupRollup.getContract().read.getEpochAt([blockAfterSetup.timestamp]),
+      );
+
+      expect(await setupRollup.isEpochSetUp(epoch, { blockNumber: blockBeforeSetup })).toBe(false);
+      expect(await setupRollup.isEpochSetUp(epoch, { blockNumber: blockAfterSetup.number })).toBe(true);
+      expect(await setupRollup.isEpochSetUp(epoch)).toBe(true);
     });
   });
 

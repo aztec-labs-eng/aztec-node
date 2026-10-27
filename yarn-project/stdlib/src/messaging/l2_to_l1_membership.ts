@@ -2,6 +2,7 @@ import { MAX_CHECKPOINTS_PER_EPOCH, OUT_HASH_TREE_LEAF_COUNT } from '@aztec-labs
 import { type EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { SiblingPath, UnbalancedMerkleTreeCalculator, computeUnbalancedShaRoot } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import type { AztecNode } from '../interfaces/aztec-node.js';

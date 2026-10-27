@@ -5,6 +5,7 @@ import { type ContractArtifact, ContractArtifactSchema } from '@aztec-labs/stdli
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { type ContractInstanceWithAddress, ContractInstanceWithAddressSchema } from '@aztec-labs/stdlib/contract';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 export type ForeignCallSingle = string;

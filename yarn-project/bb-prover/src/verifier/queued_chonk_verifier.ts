@@ -102,7 +102,12 @@ export class QueuedIVCVerifier implements ClientProtocolCircuitVerifier {
   }
 
   async stop(): Promise<void> {
-    await this.queue.end();
-    await this.verifier.stop();
+    // Stopped first so that verifications waiting for a bb instance fail rather than keep the queue from draining. Queued
+    // verifications that have not started yet fail too.
+    try {
+      await this.verifier.stop();
+    } finally {
+      await this.queue.end();
+    }
   }
 }

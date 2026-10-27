@@ -1,5 +1,6 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { LruMap } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -33,11 +34,15 @@ import type { WorldStateStatusFull } from '../native/message.js';
 import type { MerkleTreeAdminDatabase } from '../world-state-db/merkle_tree_db.js';
 import type { WorldStateConfig } from './config.js';
 import { WorldStateSynchronizerError } from './errors.js';
+import { validateWorldStateHistory } from './history.js';
 
 export type { SnapshotDataKeys };
 
 // four checkpoint's worth of blocks
 const MAX_BLOCK_PRUNE = 40;
+
+// The block stream only reads hashes near the tips, so a small bound is enough to keep the cache from growing unbounded.
+const MAX_CACHED_BLOCK_HASHES = 64;
 
 /**
  * Synchronizes the world state with the L2 blocks from a L2BlockSource via a block stream.
@@ -47,10 +52,7 @@ const MAX_BLOCK_PRUNE = 40;
 export class ServerWorldStateSynchronizer
   implements WorldStateSynchronizer, L2BlockStreamLocalDataProvider, L2BlockStreamEventHandler
 {
-  private readonly merkleTreeCommitted: MerkleTreeReadOperations;
-
   private latestBlockNumberAtStart = BlockNumber.ZERO;
-  private historyToKeep: number | undefined;
   private currentState: WorldStateRunningState = WorldStateRunningState.IDLE;
 
   private syncPromise = promiseWithResolvers<void>();
@@ -68,6 +70,12 @@ export class ServerWorldStateSynchronizer
   private stopping = false;
   private stopPromise: Promise<void> | undefined;
 
+  // Archive hashes the block stream reads for its tips and reorg checks, keyed by block number. Committed archive leaves
+  // only change through this class (unwind, clear, history pruning), each of which bumps the generation and empties the
+  // cache, so a read that overlaps one of those mutations is never cached.
+  private readonly blockHashCache = new LruMap<number, string>(MAX_CACHED_BLOCK_HASHES);
+  private blockHashCacheGeneration = 0;
+
   constructor(
     private readonly merkleTreeDb: MerkleTreeAdminDatabase,
     private readonly l2BlockSource: L2BlockSource & L1ToL2MessageSource,
@@ -75,14 +83,8 @@ export class ServerWorldStateSynchronizer
     private instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     private readonly log: Logger = createLogger('world_state'),
   ) {
-    this.merkleTreeCommitted = this.merkleTreeDb.getCommitted();
     this.mutationQueue.start();
-    this.historyToKeep = config.worldStateCheckpointHistory < 1 ? undefined : config.worldStateCheckpointHistory;
-    this.log.info(
-      `Created world state synchroniser with block history of ${
-        this.historyToKeep === undefined ? 'infinity' : this.historyToKeep
-      }`,
-    );
+    this.log.info('Created world state synchronizer', { historyRetention: config.worldStateHistoryRetention });
   }
 
   public getCommitted(): MerkleTreeReadOperations {
@@ -100,7 +102,7 @@ export class ServerWorldStateSynchronizer
     // snapshot's own view so the exact handle we return is validated against the requested fork.
     const actualHash =
       blockNumber === BlockNumber.ZERO
-        ? (await this.merkleTreeCommitted.getInitialHeader().hash()).toString()
+        ? (await this.merkleTreeDb.getCommitted().getInitialHeader().hash()).toString()
         : (await snapshot.getLeafValue(MerkleTreeId.ARCHIVE, BigInt(blockNumber)))?.toString();
 
     if (actualHash === undefined) {
@@ -147,7 +149,7 @@ export class ServerWorldStateSynchronizer
     try {
       await this.mutationQueue.put(async () => {
         this.pruningCutoff = undefined;
-        await this.merkleTreeDb.clear();
+        await this.withBlockHashCacheInvalidation(() => this.merkleTreeDb.clear());
       });
     } finally {
       if (!wasPaused && !this.stopping) {
@@ -167,6 +169,16 @@ export class ServerWorldStateSynchronizer
     if (this.currentState !== WorldStateRunningState.IDLE) {
       return this.syncPromise;
     }
+
+    const summary = await this.merkleTreeDb.getStatusSummary();
+    if (this.config.worldStateHistoryRetention.type !== 'rolling') {
+      await validateWorldStateHistory(this.config, summary, this.l2BlockSource);
+    }
+    this.log.info('World state history available at startup', {
+      oldestHistoricBlock: summary.oldestHistoricalBlock,
+      latestBlock: summary.unfinalizedBlockNumber,
+      historyRetention: this.config.worldStateHistoryRetention,
+    });
 
     // Get the current latest block number
     this.latestBlockNumberAtStart = BlockNumber(await this.l2BlockSource.getBlockNumber());
@@ -220,7 +232,7 @@ export class ServerWorldStateSynchronizer
     const summary = await this.merkleTreeDb.getStatusSummary();
     const status: WorldStateSyncStatus = {
       latestBlockNumber: summary.unfinalizedBlockNumber,
-      latestBlockHash: (await this.getL2BlockHash(summary.unfinalizedBlockNumber)) ?? '',
+      latestBlockHash: (await this.readL2BlockHash(summary.unfinalizedBlockNumber)) ?? '',
       finalizedBlockNumber: summary.finalizedBlockNumber,
       oldestHistoricBlockNumber: summary.oldestHistoricalBlock,
       treesAreSynched: summary.treesAreSynched,
@@ -281,7 +293,7 @@ export class ServerWorldStateSynchronizer
       }
 
       // If a block hash was provided, verify we're on the expected fork
-      const currentHash = await this.getL2BlockHash(targetBlockNumber);
+      const currentHash = await this.readL2BlockHash(targetBlockNumber);
       if (currentHash === blockHash.toString()) {
         return currentBlockNumber;
       }
@@ -322,7 +334,7 @@ export class ServerWorldStateSynchronizer
 
     // If a block hash was provided, verify we're on the expected fork after syncing, throw otherwise
     if (blockHash !== undefined && targetBlockNumber !== undefined) {
-      const updatedHash = await this.getL2BlockHash(targetBlockNumber);
+      const updatedHash = await this.readL2BlockHash(targetBlockNumber);
       if (updatedHash !== blockHash.toString()) {
         throw new WorldStateSynchronizerError(
           `Block hash mismatch at block ${targetBlockNumber} (expected ${blockHash} but got ${updatedHash})`,
@@ -341,12 +353,47 @@ export class ServerWorldStateSynchronizer
     return updatedBlockNumber;
   }
 
-  /** Returns the L2 block hash for a given number. Used by the L2BlockStream for detecting reorgs. */
+  /**
+   * Returns the L2 block hash for a given number, served from memory when it was read before. Used by the
+   * L2BlockStream for detecting reorgs.
+   */
   public async getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
-    if (number === BlockNumber.ZERO) {
-      return (await this.merkleTreeCommitted.getInitialHeader().hash()).toString();
+    return this.blockHashCache.get(number) ?? (await this.readAndCacheL2BlockHash(number));
+  }
+
+  /** Reads the L2 block hash for a given number from the committed archive tree. */
+  private async readL2BlockHash(number: BlockNumber): Promise<string | undefined> {
+    // Block 0 is read from the archive as well (its first leaf is the initial header hash, which init asserts) rather
+    // than from the in-memory initial header, so a node idling at genesis still reaches wsdb on every block stream poll
+    // (see getL2Tips). The committed view is fetched per call because clear() replaces the instance.
+    const leaf = await this.merkleTreeDb.getCommitted().getLeafValue(MerkleTreeId.ARCHIVE, BigInt(number));
+    // Native wsdb returns zero for unwritten leaves; even the genesis archive leaf is nonzero.
+    return leaf && !leaf.isZero() ? leaf.toString() : undefined;
+  }
+
+  private async readAndCacheL2BlockHash(number: BlockNumber): Promise<string | undefined> {
+    const generation = this.blockHashCacheGeneration;
+    const hash = await this.readL2BlockHash(number);
+    // A missing leaf is not cached: the block may be added later without any invalidation.
+    if (hash !== undefined && generation === this.blockHashCacheGeneration) {
+      this.blockHashCache.set(number, hash);
     }
-    return this.merkleTreeCommitted.getLeafValue(MerkleTreeId.ARCHIVE, BigInt(number)).then(leaf => leaf?.toString());
+    return hash;
+  }
+
+  private invalidateBlockHashCache() {
+    this.blockHashCacheGeneration++;
+    this.blockHashCache.clear();
+  }
+
+  /** Runs a mutation that can change committed archive leaves, invalidating the block hash cache around it. */
+  private async withBlockHashCacheInvalidation<T>(fn: () => Promise<T>): Promise<T> {
+    this.invalidateBlockHashCache();
+    try {
+      return await fn();
+    } finally {
+      this.invalidateBlockHashCache();
+    }
   }
 
   /**
@@ -356,7 +403,10 @@ export class ServerWorldStateSynchronizer
    */
   public async getL2Tips(): Promise<LocalChainTips> {
     const status = await this.merkleTreeDb.getStatusSummary();
-    const unfinalizedBlockHashPromise = this.getL2BlockHash(status.unfinalizedBlockNumber);
+    // The status summary is cached in memory, so the proposed tip hash is always read from wsdb: that keeps one native
+    // round trip per block stream poll, so the node notices when wsdb dies. It also refreshes the cache entry that the
+    // walk-back reads right after. The finalized and proven hashes come from the cache.
+    const unfinalizedBlockHashPromise = this.readAndCacheL2BlockHash(status.unfinalizedBlockNumber);
     const finalizedBlockHashPromise = this.getL2BlockHash(status.finalizedBlockNumber);
 
     const provenBlockNumber = this.provenBlockNumber ?? status.finalizedBlockNumber;
@@ -506,7 +556,8 @@ export class ServerWorldStateSynchronizer
       return;
     }
     const summary = await this.merkleTreeDb.setFinalized(blockNumber);
-    if (this.historyToKeep === undefined) {
+    const policy = this.config.worldStateHistoryRetention;
+    if (policy.type === 'archive') {
       return;
     }
     const finalisedBlockData = await this.l2BlockSource.getBlockData({ number: summary.finalizedBlockNumber });
@@ -517,7 +568,10 @@ export class ServerWorldStateSynchronizer
       return;
     }
     // Compute the required historic checkpoint number
-    const newHistoricCheckpointNumber = finalisedBlockData.checkpointNumber - this.historyToKeep + 1;
+    const newHistoricCheckpointNumber =
+      policy.type === 'rolling'
+        ? finalisedBlockData.checkpointNumber - policy.checkpoints + 1
+        : Math.min(policy.checkpoint, finalisedBlockData.checkpointNumber);
     if (newHistoricCheckpointNumber <= 1) {
       return;
     }
@@ -554,7 +608,7 @@ export class ServerWorldStateSynchronizer
 
   private async handleChainPruned(blockNumber: BlockNumber) {
     this.log.info(`Chain pruned to block ${blockNumber}`);
-    const status = await this.merkleTreeDb.unwindBlocks(blockNumber);
+    const status = await this.withBlockHashCacheInvalidation(() => this.merkleTreeDb.unwindBlocks(blockNumber));
     if (this.provenBlockNumber !== undefined && this.provenBlockNumber > blockNumber) {
       this.provenBlockNumber = undefined;
     }
@@ -597,7 +651,9 @@ export class ServerWorldStateSynchronizer
             const nextBlock = BlockNumber(
               Math.min(cutoff, Math.max(1, summary.oldestHistoricalBlock) + MAX_BLOCK_PRUNE),
             );
-            const status = await this.merkleTreeDb.removeHistoricalBlocks(nextBlock);
+            const status = await this.withBlockHashCacheInvalidation(() =>
+              this.merkleTreeDb.removeHistoricalBlocks(nextBlock),
+            );
             if (status.summary.oldestHistoricalBlock <= summary.oldestHistoricalBlock) {
               throw new Error('Historical pruning did not advance the oldest block');
             }

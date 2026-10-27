@@ -3,7 +3,6 @@ import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 import { toACVMField } from '@aztec-labs/simulator/client';
-import type { UnsiloedMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import {
   ARRAY,
@@ -20,6 +19,7 @@ import {
   EPHEMERAL_ARRAY,
   EVENT_VALIDATION_REQUEST,
   FACT_COLLECTION,
+  FACT_SCOPE,
   FIELD,
   FIXED_ARRAY,
   FUNCTION_SELECTOR,
@@ -30,6 +30,7 @@ import {
   MEMBERSHIP_WITNESS,
   type MaybePromise,
   NOTE,
+  NOTE_ORIGIN,
   NOTE_SELECTOR,
   NOTE_VALIDATION_REQUEST,
   NULLIFIER_MEMBERSHIP_WITNESS,
@@ -44,12 +45,13 @@ import {
   RESOLVED_TAGGING_STRATEGY,
   RESOLVED_TX,
   STR,
-  STRUCT,
   TX_EFFECT,
+  TX_EFFECT_WITH_BLOCK,
   TX_HASH,
   type TypeMapping,
   U8,
   U32,
+  UNSILOED_MESSAGE_NULLIFIER,
   UTILITY_CONTEXT,
   assertReadersConsumed,
   slotsOf,
@@ -193,17 +195,17 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getL1ToL2MembershipWitnessV2: makeEntry({
     params: [
       { name: 'messageHash', type: FIELD },
-      {
-        name: 'nullifier',
-        type: OPTION(
-          STRUCT<UnsiloedMessageNullifier>([
-            { name: 'contractAddress', type: AZTEC_ADDRESS },
-            { name: 'nullifier', type: FIELD },
-          ]),
-        ),
-      },
+      { name: 'nullifier', type: OPTION(UNSILOED_MESSAGE_NULLIFIER) },
     ],
     returnType: MEMBERSHIP_WITNESS(L1_TO_L2_MSG_TREE_HEIGHT),
+  }),
+
+  aztec_utl_tryGetL1ToL2MembershipWitness: makeEntry({
+    params: [
+      { name: 'messageHash', type: FIELD },
+      { name: 'nullifier', type: OPTION(UNSILOED_MESSAGE_NULLIFIER) },
+    ],
+    returnType: OPTION(MEMBERSHIP_WITNESS(L1_TO_L2_MSG_TREE_HEIGHT)),
   }),
 
   aztec_utl_getFromPublicStorage: makeEntry({
@@ -237,6 +239,15 @@ export const ORACLE_REGISTRY = {
       { name: 'packedHintedNoteLength', type: U32 },
     ],
     returnType: BOUNDED_VEC(NOTE),
+  }),
+
+  aztec_utl_getSettledNoteOrigin: makeEntry({
+    params: [
+      { name: 'noteHash', type: FIELD },
+      { name: 'contractAddress', type: AZTEC_ADDRESS },
+      { name: 'noteNonce', type: FIELD },
+    ],
+    returnType: OPTION(NOTE_ORIGIN),
   }),
 
   aztec_utl_getPendingTaggedLogsV2: makeEntry({
@@ -273,6 +284,11 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getTxEffects: makeEntry({
     params: [{ name: 'txHashes', type: EPHEMERAL_ARRAY(TX_HASH) }],
     returnType: EPHEMERAL_ARRAY(OPTION(TX_EFFECT)),
+  }),
+
+  aztec_utl_getTxEffectsWithBlock: makeEntry({
+    params: [{ name: 'txHashes', type: EPHEMERAL_ARRAY(TX_HASH) }],
+    returnType: EPHEMERAL_ARRAY(OPTION(TX_EFFECT_WITH_BLOCK)),
   }),
 
   aztec_utl_setCapsule: makeEntry({
@@ -344,7 +360,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_recordFact: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
       { name: 'factTypeId', type: FIELD },
@@ -356,7 +372,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_deleteFactCollection: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
     ],
@@ -365,7 +381,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getFactCollection: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
     ],
@@ -375,7 +391,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getFactCollectionsByType: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
     ],
     returnType: EPHEMERAL_ARRAY(FACT_COLLECTION),

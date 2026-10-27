@@ -3,6 +3,7 @@ import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { FileStore } from '@aztec-labs/stdlib/file-store';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { getLatestSnapshotMetadata } from './download.js';

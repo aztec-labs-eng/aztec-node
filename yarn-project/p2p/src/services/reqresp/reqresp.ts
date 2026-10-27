@@ -5,6 +5,7 @@ import { executeTimeout } from '@aztec-labs/foundation/timer';
 import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
 import type { IncomingStreamData, PeerId, Stream } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 import type { Libp2p } from 'libp2p';
 import { pipeline } from 'node:stream/promises';
 import type { Uint8ArrayList } from 'uint8arraylist';

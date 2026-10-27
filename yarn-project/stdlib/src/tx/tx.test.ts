@@ -9,6 +9,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { LogHash, ScopedLogHash } from '../kernel/log_hash.js';
@@ -81,6 +82,39 @@ describe('Tx', () => {
         Fr.ZERO.toString(),
       );
       await expect(Tx.schema.parseAsync(json)).rejects.toThrow(expect.objectContaining({ name: 'ZodError' }));
+    });
+  });
+
+  describe('public calldata counts', () => {
+    const mockTxWithTwoCalls = () =>
+      mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 2,
+        numberOfRevertiblePublicCallRequests: 0,
+        hasPublicTeardownCallRequest: false,
+        publicCalldataSize: 3,
+      });
+
+    it('counts calldata once per entry and once per call when every call has its own entry', async () => {
+      const tx = await mockTxWithTwoCalls();
+      expect(tx.getTotalPublicCalldataCount()).toBe(6);
+      expect(tx.getDeliveredPublicCalldataCount()).toBe(6);
+    });
+
+    it('counts calldata shared by several calls once per call it is delivered to', async () => {
+      const tx = await mockTxWithTwoCalls();
+      const [shared] = tx.publicFunctionCalldata;
+      for (const request of tx.data.getNonRevertiblePublicCallRequests()) {
+        request.calldataHash = shared.hash;
+      }
+      tx.publicFunctionCalldata.splice(0, tx.publicFunctionCalldata.length, shared);
+      expect(tx.getTotalPublicCalldataCount()).toBe(3);
+      expect(tx.getDeliveredPublicCalldataCount()).toBe(6);
+    });
+
+    it('counts a call without a calldata entry as receiving no calldata', async () => {
+      const tx = await mockTxWithTwoCalls();
+      tx.data.getNonRevertiblePublicCallRequests()[0].calldataHash = Fr.random();
+      expect(tx.getDeliveredPublicCalldataCount()).toBe(3);
     });
   });
 

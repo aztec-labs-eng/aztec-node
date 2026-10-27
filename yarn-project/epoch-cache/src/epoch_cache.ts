@@ -1,7 +1,8 @@
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
-import { NoCommitteeError, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { RollupContract, isEpochNotStableError } from '@aztec-labs/ethereum/contracts';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -14,11 +15,20 @@ import {
   getSlotAtNextL1Block,
   getSlotAtTimestamp,
   getSlotRangeForEpoch,
-  getStartTimestampForEpoch,
   getTimestampForSlot,
+  getTimestampRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import { createPublicClient, encodeAbiParameters, keccak256 } from 'viem';
 
+import {
+  type CommitteeLookup,
+  type CommitteeMembershipLookup,
+  type EscapeHatchLookup,
+  type KnownCommitteeLookup,
+  type ProposerLookup,
+  toCommitteeLookup,
+  withoutMembers,
+} from './committee_lookup.js';
 import { type EpochCacheConfig, getEpochCacheConfigEnvVars } from './config.js';
 
 /** The proposer pipelines by building one slot ahead. */
@@ -31,34 +41,39 @@ export type EpochAndSlot = {
   ts: bigint;
 };
 
-export type EpochCommitteeInfo = {
-  committee: EthAddress[] | undefined;
-  seed: bigint;
-  epoch: EpochNumber;
-  /** True if the epoch is within an open escape hatch window. */
-  isEscapeHatchOpen: boolean;
-};
-
 export type SlotTag = 'now' | 'next' | SlotNumber;
 
 /** Minimal L1 block info used for cache provenance. */
 type L1BlockInfo = { number: bigint; hash: `0x${string}`; timestamp: bigint };
 
-/** Resolved cache entry with L1 provenance metadata. */
+/** Resolved cache entry for an epoch whose seed is fixed on L1, with L1 provenance metadata. */
 type CachedEpochEntry = {
-  data: EpochCommitteeInfo;
+  kind: 'committee';
+  data: KnownCommitteeLookup;
   /** L1 block number at which the committee data was originally queried. */
   lastQueryL1BlockNumber: bigint;
   /** L1 block hash at which the committee data was originally queried. Used to detect reorgs. */
   lastQueryL1BlockHash: `0x${string}`;
   /** Latest L1 block timestamp at the time of the most recent refresh (full fetch or lightweight check). */
   lastRefreshL1Timestamp: bigint;
-  /** Whether the epoch's sampling data falls within finalized L1 history. */
+  /** Whether the L1 block the entry was read at is finalized. */
   finalized: boolean;
 };
 
+/** Marker for an epoch whose seed could still change as of an L1 block. Re-checked against L1 once it expires. */
+type UnstableEpochEntry = {
+  kind: 'unstable';
+  /** L1 block at which the seed was found not to be fixed yet. */
+  l1BlockNumber: bigint;
+  /** The later of that block's timestamp and the check's local time, so a lagging L1 tip is not re-checked early. */
+  lastRefreshL1Timestamp: bigint;
+};
+
+type EpochEntry = CachedEpochEntry | UnstableEpochEntry;
+
 export interface EpochCacheInterface {
-  getCommittee(slot: SlotTag | undefined): Promise<EpochCommitteeInfo>;
+  /** Looks up the committee of the epoch containing the given slot. */
+  getCommittee(slot: SlotTag | undefined): Promise<CommitteeLookup>;
   getSlotNow(): SlotNumber;
   getTargetSlot(): SlotNumber;
   getEpochNow(): EpochNumber;
@@ -67,16 +82,21 @@ export interface EpochCacheInterface {
   getEpochAndSlotInNextL1Slot(): EpochAndSlot & { nowSeconds: bigint };
   /** Returns epoch/slot info for the next L1 slot with pipeline offset applied. */
   getTargetEpochAndSlotInNextL1Slot(): EpochAndSlot & { nowSeconds: bigint };
-  isEscapeHatchOpen(epoch: EpochNumber): Promise<boolean>;
-  isEscapeHatchOpenAtSlot(slot: SlotTag): Promise<boolean>;
+  /** Looks up whether the escape hatch is open for the given epoch. */
+  lookupEscapeHatch(epoch: EpochNumber): Promise<EscapeHatchLookup>;
+  /** Looks up whether the escape hatch is open for the epoch containing the given slot. */
+  lookupEscapeHatchAtSlot(slot: SlotTag): Promise<EscapeHatchLookup>;
   getProposerIndexEncoding(epoch: EpochNumber, slot: SlotNumber, seed: bigint): `0x${string}`;
   computeProposerIndex(slot: SlotNumber, epoch: EpochNumber, seed: bigint, size: bigint): bigint;
   getCurrentAndNextSlot(): { currentSlot: SlotNumber; nextSlot: SlotNumber };
   getTargetAndNextSlot(): { targetSlot: SlotNumber; nextSlot: SlotNumber };
-  getProposerAttesterAddressInSlot(slot: SlotNumber): Promise<EthAddress | undefined>;
+  /** Looks up the proposer for the given slot. */
+  lookupProposer(slot: SlotNumber): Promise<ProposerLookup>;
   getRegisteredValidators(): Promise<EthAddress[]>;
-  isInCommittee(slot: SlotTag, validator: EthAddress): Promise<boolean>;
-  filterInCommittee(slot: SlotTag, validators: EthAddress[]): Promise<EthAddress[]>;
+  /** Looks up whether a validator sits on the given slot's committee. */
+  lookupMembership(slot: SlotTag, validator: EthAddress): Promise<CommitteeMembershipLookup<boolean>>;
+  /** Looks up which of the given validators sit on the given slot's committee. */
+  filterInCommittee(slot: SlotTag, validators: EthAddress[]): Promise<CommitteeMembershipLookup<EthAddress[]>>;
   getL1Constants(): L1RollupConstants;
   getLagInEpochsForValidatorSet(): number;
 }
@@ -95,7 +115,7 @@ export class EpochCache implements EpochCacheInterface {
    * Single map holding both resolved entries and in-flight promises.
    * A `Promise` value means a fetch is in progress; concurrent callers await it.
    */
-  protected cache: Map<EpochNumber, CachedEpochEntry | Promise<CachedEpochEntry>> = new Map();
+  protected cache: Map<EpochNumber, EpochEntry | Promise<EpochEntry>> = new Map();
   private allValidators: Set<string> = new Set();
   private lastValidatorRefresh = 0;
   private readonly log: Logger = createLogger('epoch-cache');
@@ -144,7 +164,6 @@ export class EpochCache implements EpochCacheInterface {
       lagInEpochsForValidatorSet,
       lagInEpochsForRandao,
       targetCommitteeSize,
-      rollupManaLimit,
     ] = await Promise.all([
       rollup.getL1StartBlock(),
       rollup.getL1GenesisTime(),
@@ -154,7 +173,6 @@ export class EpochCache implements EpochCacheInterface {
       rollup.getLagInEpochsForValidatorSet(),
       rollup.getLagInEpochsForRandao(),
       rollup.getTargetCommitteeSize(),
-      rollup.getManaLimit(),
     ] as const);
 
     const l1RollupConstants = {
@@ -167,7 +185,6 @@ export class EpochCache implements EpochCacheInterface {
       lagInEpochsForValidatorSet: Number(lagInEpochsForValidatorSet),
       lagInEpochsForRandao: Number(lagInEpochsForRandao),
       targetCommitteeSize: Number(targetCommitteeSize),
-      rollupManaLimit: Number(rollupManaLimit),
     };
 
     return new EpochCache(rollup, l1RollupConstants, deps.dateProvider, {
@@ -241,15 +258,15 @@ export class EpochCache implements EpochCacheInterface {
     };
   }
 
-  public getCommitteeForEpoch(epoch: EpochNumber): Promise<EpochCommitteeInfo> {
+  public getCommitteeForEpoch(epoch: EpochNumber): Promise<CommitteeLookup> {
     const [startSlot] = getSlotRangeForEpoch(epoch, this.l1constants);
     return this.getCommittee(startSlot);
   }
 
   /** Returns whether the escape hatch is open for the given epoch. */
-  public async isEscapeHatchOpen(epoch: EpochNumber): Promise<boolean> {
-    const info = await this.getCommitteeForEpoch(epoch);
-    return info.isEscapeHatchOpen;
+  public async lookupEscapeHatch(epoch: EpochNumber): Promise<EscapeHatchLookup> {
+    const lookup = await this.getCommitteeForEpoch(epoch);
+    return lookup.state === 'unstable' ? lookup : { state: lookup.state, isEscapeHatchOpen: lookup.isEscapeHatchOpen };
   }
 
   /**
@@ -258,7 +275,7 @@ export class EpochCache implements EpochCacheInterface {
    * This is a lightweight helper intended for callers that already have a slot number and only
    * need the escape hatch flag (without pulling full committee info).
    */
-  public async isEscapeHatchOpenAtSlot(slot: SlotTag = 'now'): Promise<boolean> {
+  public async lookupEscapeHatchAtSlot(slot: SlotTag = 'now'): Promise<EscapeHatchLookup> {
     const epoch =
       slot === 'now'
         ? this.getEpochNow()
@@ -266,7 +283,7 @@ export class EpochCache implements EpochCacheInterface {
           ? this.getEpochAndSlotInNextL1Slot().epoch
           : getEpochAtSlot(slot, this.l1constants);
 
-    return await this.isEscapeHatchOpen(epoch);
+    return await this.lookupEscapeHatch(epoch);
   }
 
   /**
@@ -275,42 +292,44 @@ export class EpochCache implements EpochCacheInterface {
    * Returns cached data if the entry is finalized or still fresh (queried less than one
    * Ethereum slot ago). Stale non-finalized entries are re-queried, and concurrent callers
    * coalesce on the same in-flight promise so the L1 query happens only once.
+   *
+   * Returns `unstable` while the epoch's sample seed can still change on L1. Callers should treat that as "not known
+   * yet": the same query returns the committee once the seed is fixed.
    */
-  public async getCommittee(slot: SlotTag = 'now'): Promise<EpochCommitteeInfo> {
+  public async getCommittee(slot: SlotTag = 'now'): Promise<CommitteeLookup> {
     const { epoch, ts } = this.getEpochAndTimestamp(slot);
+    const entry = await this.getEntry(epoch, ts);
+    if (entry.kind === 'unstable') {
+      return { state: 'unstable', epoch, l1BlockNumber: entry.l1BlockNumber };
+    }
+    return entry.data;
+  }
 
+  /** Returns the cached entry for an epoch, awaits the in-flight fetch for it, or starts a new one. */
+  private async getEntry(epoch: EpochNumber, ts: bigint): Promise<EpochEntry> {
     const cached = this.cache.get(epoch);
 
     // In-flight promise: another caller is already fetching this epoch — just await it.
     if (cached instanceof Promise) {
-      return (await cached).data;
+      return cached;
     }
 
     // Resolved entry: return it if finalized or still fresh.
-    if (cached && (cached.finalized || !this.isStale(cached))) {
-      return cached.data;
+    if (cached && ((cached.kind === 'committee' && cached.finalized) || !this.isStale(cached))) {
+      return cached;
     }
 
-    // Stale non-finalized entry: do a lightweight refresh first (check block hash + finalized ts).
-    // Only fall back to a full re-fetch if the L1 block was reorged.
-    if (cached) {
-      const promise = this.refreshStaleEntry(cached, epoch, ts);
-      this.cache.set(epoch, promise);
-      try {
-        return (await promise).data;
-      } catch (err) {
-        this.cache.set(epoch, cached);
-        throw err;
-      }
-    }
-
-    // No entry at all: full fetch.
-    const promise = this.fetchAndCache(epoch, ts);
+    // Stale non-finalized entry: do a lightweight refresh first (check block hash + finalized block).
+    // Only fall back to a full re-fetch if the L1 block was reorged. Otherwise, do a full fetch.
+    const promise =
+      cached?.kind === 'committee' ? this.refreshStaleEntry(cached, epoch, ts) : this.fetchAndCache(epoch, ts);
     this.cache.set(epoch, promise);
     try {
-      return (await promise).data;
+      return await promise;
     } catch (err) {
-      this.cache.delete(epoch);
+      if (this.cache.get(epoch) === promise) {
+        this.cache.delete(epoch);
+      }
       throw err;
     }
   }
@@ -337,71 +356,99 @@ export class EpochCache implements EpochCacheInterface {
   }
 
   /** Returns true if a non-finalized cache entry is older than one Ethereum slot. */
-  private isStale(entry: CachedEpochEntry): boolean {
+  private isStale(entry: EpochEntry): boolean {
     const nowSeconds = BigInt(this.dateProvider.nowInSeconds());
     return nowSeconds - entry.lastRefreshL1Timestamp >= BigInt(this.l1constants.ethereumSlotDuration);
   }
 
-  /** Whether a cached epoch entry has been marked as finalized. Returns undefined if not cached or still in-flight. */
+  /** Whether a cached epoch entry is finalized. Undefined if not cached, in-flight or unstable. */
   public isFinalized(epoch: EpochNumber): boolean | undefined {
     const entry = this.cache.get(epoch);
-    if (!entry || entry instanceof Promise) {
+    if (!entry || entry instanceof Promise || entry.kind !== 'committee') {
       return undefined;
     }
     return entry.finalized;
   }
 
-  /** Returns the latest L1 timestamp stored in the cached entry. Undefined if not cached or in-flight. */
+  /** Returns the latest L1 timestamp stored in the cached entry. Undefined if not cached, in-flight or unstable. */
   public getCachedLastRefreshL1Timestamp(epoch: EpochNumber): bigint | undefined {
     const entry = this.cache.get(epoch);
-    if (!entry || entry instanceof Promise) {
+    if (!entry || entry instanceof Promise || entry.kind !== 'committee') {
       return undefined;
     }
     return entry.lastRefreshL1Timestamp;
   }
 
-  /** Computes the sampling timestamp for an epoch's committee data. */
-  private getSamplingTimestamp(epoch: EpochNumber): bigint {
-    const { lagInEpochsForRandao, epochDuration, slotDuration } = this.l1constants;
-    const epochStartTs = getStartTimestampForEpoch(epoch, this.l1constants);
-    return epochStartTs - BigInt(lagInEpochsForRandao) * BigInt(epochDuration) * BigInt(slotDuration);
+  /**
+   * Whether the sample seed for `epoch` is fixed as of the given L1 block. The seed for epoch E hashes the randao
+   * that L1 checkpoints in epoch S = E - lagInEpochsForRandao, under the key start(S). It is fixed once that randao
+   * is written, or once no later L1 block can land in S, since any later checkpoint is keyed at a later epoch's start.
+   */
+  private async isSeedFixed(epoch: EpochNumber, block: L1BlockInfo): Promise<boolean> {
+    const { targetCommitteeSize, lagInEpochsForRandao } = this.l1constants;
+
+    // The seed is irrelevant when the committee is empty and anyone may propose.
+    if (targetCommitteeSize === 0) {
+      return true;
+    }
+
+    // Epochs sampled before genesis read the zero randao that precedes the genesis checkpoint.
+    const samplingEpoch = BigInt(epoch) - BigInt(lagInEpochsForRandao);
+    if (samplingEpoch < 0n) {
+      return true;
+    }
+
+    // A block in S's last L1 slot is S's last block, as L1 blocks are at least one Ethereum slot apart. Waiting for a
+    // block past S would also cost E's second slot, which a pipelined proposer decides on while the tip is still in S.
+    const [samplingEpochStart, samplingEpochLastL1Slot] = getTimestampRangeForEpoch(
+      EpochNumber.fromBigInt(samplingEpoch),
+      this.l1constants,
+    );
+    if (block.timestamp >= samplingEpochLastL1Slot) {
+      return true;
+    }
+    if (block.timestamp < samplingEpochStart) {
+      return false;
+    }
+
+    // v6 views don't revert while S's randao can still change, so read S's commitment, which setupEpoch stores after
+    // checkpointing that randao. Drop this once every supported rollup reverts with EpochNotStable (v7 onwards).
+    return await this.rollup.isEpochSetUp(EpochNumber.fromBigInt(samplingEpoch), { blockNumber: block.number });
   }
 
   /**
    * Lightweight refresh for a stale non-finalized entry. Queries only the block hash at
-   * the original block number and the finalized block timestamp — avoids the expensive
+   * the original block number and the finalized block — avoids the expensive
    * getCommitteeAt and getSampleSeedAt calls on the rollup contract.
    *
    * If the block hash still matches (no L1 reorg), we keep the existing data and just
    * update the provenance timestamp. If the finalized block has caught up, we promote the
-   * entry to finalized. If there was a reorg (hash mismatch), we fall back to a full fetch.
+   * entry to finalized. If there was a reorg (hash mismatch), we fall back to a full fetch,
+   * and drop the stale entry if that fetch fails.
    */
-  private async refreshStaleEntry(stale: CachedEpochEntry, epoch: EpochNumber, ts: bigint): Promise<CachedEpochEntry> {
+  private async refreshStaleEntry(stale: CachedEpochEntry, epoch: EpochNumber, ts: bigint): Promise<EpochEntry> {
     const [blockAtOriginal, l1FinalizedBlock, latestBlock] = await Promise.all([
       this.rollup.client.getBlock({ blockNumber: stale.lastQueryL1BlockNumber, includeTransactions: false }),
       getFinalizedL1Block(this.rollup.client),
       this.rollup.client.getBlock({ includeTransactions: false }),
-    ]);
+    ]).catch(err => {
+      this.cache.set(epoch, stale);
+      throw err;
+    });
 
     if (blockAtOriginal.hash === stale.lastQueryL1BlockHash) {
       // No reorg: the data is still valid. Check if we can now mark it as finalized.
-      const samplingTs = this.getSamplingTimestamp(epoch);
-      const finalized =
-        !!(stale.data.committee && stale.data.committee.length > 0) &&
-        l1FinalizedBlock !== undefined &&
-        samplingTs <= l1FinalizedBlock.timestamp;
-
       const refreshed: CachedEpochEntry = {
         ...stale,
         lastRefreshL1Timestamp: latestBlock.timestamp,
-        finalized,
+        finalized: this.isEntryFinalized(stale.data, stale.lastQueryL1BlockNumber, l1FinalizedBlock),
       };
       this.cache.set(epoch, refreshed);
       return refreshed;
     }
 
     // Reorg detected: block hash mismatch. Do a full re-fetch.
-    // Pass the already-fetched block timestamps to avoid redundant queries.
+    // Pass the already-fetched blocks to avoid redundant queries.
     this.log.warn(`L1 reorg detected for epoch ${epoch}: block ${stale.lastQueryL1BlockNumber} hash changed`, {
       epoch,
       expectedHash: stale.lastQueryL1BlockHash,
@@ -410,55 +457,92 @@ export class EpochCache implements EpochCacheInterface {
     return this.fetchAndCache(epoch, ts, { latestBlock, finalizedBlock: l1FinalizedBlock });
   }
 
-  /**
-   * Fetches committee data from L1, determines finalization status, and stores in the cache.
-   *
-   * Uses `lagInEpochsForRandao` (the binding constraint, always <= lagInEpochsForValidatorSet)
-   * and computes the sampling timestamp from the epoch start to match the L1 contract's logic.
-   *
-   * When called from refreshStaleEntry after a reorg, the latest and finalized blocks are
-   * passed in to avoid redundant L1 queries.
-   */
+  /** Fetches an epoch's entry with {@link fetchEntry} and stores it in the cache. */
   private async fetchAndCache(
     epoch: EpochNumber,
     ts: bigint,
-    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: { timestamp: bigint } | undefined },
-  ): Promise<CachedEpochEntry> {
-    const [committee, seedBuffer, latestBlock, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
-      this.rollup.getCommitteeAt(ts),
-      this.rollup.getSampleSeedAt(ts),
-      prefetched?.latestBlock ?? this.rollup.client.getBlock({ includeTransactions: false }),
-      prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
-      this.rollup.isEscapeHatchOpen(epoch),
-    ]);
-
-    const samplingTs = this.getSamplingTimestamp(epoch);
-
-    if (samplingTs > latestBlock.timestamp) {
-      throw new Error(
-        `Cannot query committee for future epoch ${epoch}: ` +
-          `sampling timestamp ${samplingTs} is beyond latest L1 block at ${latestBlock.timestamp}. ` +
-          `Check your Ethereum node is synced.`,
-      );
-    }
-
-    // Empty committees are never marked finalized so they always get re-queried after TTL.
-    // If L1 has no finalized block yet (devnet startup), entries stay unfinalized.
-    const hasCommittee = !!(committee && committee.length > 0);
-    const finalized = hasCommittee && finalizedBlock !== undefined && samplingTs <= finalizedBlock.timestamp;
-    const data: EpochCommitteeInfo = { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen };
-    const entry: CachedEpochEntry = {
-      data,
-      lastQueryL1BlockNumber: latestBlock.number!,
-      lastQueryL1BlockHash: latestBlock.hash!,
-      lastRefreshL1Timestamp: latestBlock.timestamp,
-      finalized,
-    };
-
+    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: L1BlockInfo | undefined },
+  ): Promise<EpochEntry> {
+    const entry = await this.fetchEntry(epoch, ts, prefetched);
     this.cache.set(epoch, entry);
     this.purgeCache();
-
     return entry;
+  }
+
+  /**
+   * Reads an epoch's committee from L1 and determines its finalization status, or returns an unstable marker if the
+   * epoch's seed can still change as of the latest L1 block. When called from refreshStaleEntry after a reorg, the
+   * latest and finalized blocks are passed in to avoid redundant L1 queries.
+   */
+  private async fetchEntry(
+    epoch: EpochNumber,
+    ts: bigint,
+    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: L1BlockInfo | undefined },
+  ): Promise<EpochEntry> {
+    // Pin the rollup reads to one L1 block so the entry's provenance matches the data it holds. The escape hatch flag
+    // is only partly pinned: the hatch address is resolved at the latest block, and any read error counts as closed.
+    const latestBlock = prefetched?.latestBlock ?? (await this.rollup.client.getBlock({ includeTransactions: false }));
+    const blockNumber = latestBlock.number;
+    const unstable: UnstableEpochEntry = {
+      kind: 'unstable',
+      l1BlockNumber: blockNumber,
+      lastRefreshL1Timestamp: maxBigint(latestBlock.timestamp, BigInt(this.dateProvider.nowInSeconds())),
+    };
+
+    if (!(await this.isSeedFixed(epoch, latestBlock))) {
+      this.log.debug(`Committee for epoch ${epoch} is not stable yet as of L1 block ${blockNumber}`, {
+        epoch,
+        l1BlockNumber: blockNumber,
+        l1BlockTimestamp: latestBlock.timestamp,
+      });
+      return unstable;
+    }
+
+    const reads = await Promise.all([
+      this.rollup.getCommitteeAt(ts, { blockNumber }),
+      this.rollup.getSampleSeedAt(ts, { blockNumber }),
+      prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
+      this.rollup.isEscapeHatchOpen(epoch, { blockNumber }),
+    ]).catch(err => {
+      if (isEpochNotStableError(err)) {
+        return undefined;
+      }
+      throw err;
+    });
+    if (!reads) {
+      return unstable;
+    }
+    const [committee, seedBuffer, finalizedBlock, isEscapeHatchOpen] = reads;
+
+    // Reads by block number follow the canonical chain, so a reorg mid-fetch could mix the seed check above with
+    // committee data from another fork. Confirm the queried block is still canonical before trusting the reads.
+    const queriedBlock = await this.rollup.client.getBlock({ blockNumber, includeTransactions: false });
+    if (queriedBlock.hash !== latestBlock.hash) {
+      throw new Error(`L1 block ${blockNumber} was reorged out while reading the committee for epoch ${epoch}`);
+    }
+
+    const data = toCommitteeLookup(committee, { seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen });
+    const entry: CachedEpochEntry = {
+      kind: 'committee',
+      data,
+      lastQueryL1BlockNumber: blockNumber,
+      lastQueryL1BlockHash: latestBlock.hash,
+      lastRefreshL1Timestamp: latestBlock.timestamp,
+      finalized: this.isEntryFinalized(data, blockNumber, finalizedBlock),
+    };
+    return entry;
+  }
+
+  /**
+   * An entry's committee and seed are final once the L1 block it was read at is finalized (the escape hatch flag is
+   * not). Entries without members are never marked finalized, so they get re-queried after the TTL.
+   */
+  private isEntryFinalized(
+    data: KnownCommitteeLookup,
+    queryL1BlockNumber: bigint,
+    finalizedBlock: L1BlockInfo | undefined,
+  ): boolean {
+    return data.state === 'members' && finalizedBlock !== undefined && finalizedBlock.number >= queryL1BlockNumber;
   }
 
   /**
@@ -508,79 +592,47 @@ export class EpochCache implements EpochCacheInterface {
     return { targetSlot, nextSlot };
   }
 
-  /**
-   * Get the proposer attester address in the given L2 slot
-   * @returns The proposer attester address. If the committee does not exist, we throw a NoCommitteeError.
-   * If the committee is empty (i.e. target committee size is 0, and anyone can propose), we return undefined.
-   */
-  public getProposerAttesterAddressInSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
-    const epochAndSlot = this.getEpochAndSlotAtSlot(slot);
-    return this.getProposerAttesterAddressAt(epochAndSlot);
+  /** Looks up the proposer for the given L2 slot. */
+  public lookupProposer(slot: SlotNumber): Promise<ProposerLookup> {
+    return this.lookupProposerAt(this.getEpochAndSlotAtSlot(slot));
   }
 
-  /**
-   * Get the proposer attester address in the next slot
-   * @returns The proposer attester address. If the committee does not exist, we throw a NoCommitteeError.
-   * If the committee is empty (i.e. target committee size is 0, and anyone can propose), we return undefined.
-   */
-  public getProposerAttesterAddressInNextSlot(): Promise<EthAddress | undefined> {
-    const epochAndSlot = this.getEpochAndSlotInNextL1Slot();
-    return this.getProposerAttesterAddressAt(epochAndSlot);
+  /** Looks up the proposer for the L2 slot of the next L1 slot. */
+  public lookupProposerInNextSlot(): Promise<ProposerLookup> {
+    return this.lookupProposerAt(this.getEpochAndSlotInNextL1Slot());
   }
 
-  /**
-   * Get the proposer attester address at a given epoch and slot
-   * @param when - The epoch and slot to get the proposer attester address at
-   * @returns The proposer attester address. If the committee does not exist, we throw a NoCommitteeError.
-   * If the committee is empty (i.e. target committee size is 0, and anyone can propose), we return undefined.
-   */
-  private async getProposerAttesterAddressAt(when: EpochAndSlot) {
-    const { epoch, slot } = when;
-    const { committee, seed } = await this.getCommittee(slot);
-    if (!committee) {
-      throw new NoCommitteeError();
-    } else if (committee.length === 0) {
-      return undefined;
+  private async lookupProposerAt({ slot }: EpochAndSlot): Promise<ProposerLookup> {
+    return this.proposerFromCommitteeLookup(await this.getCommittee(slot), slot);
+  }
+
+  /** Derives the proposer for a slot from its epoch's committee lookup. */
+  public proposerFromCommitteeLookup(lookup: CommitteeLookup, slot: SlotNumber): ProposerLookup {
+    if (lookup.state !== 'members') {
+      return withoutMembers(lookup);
     }
-
+    const { committee, epoch, seed } = lookup;
     const proposerIndex = this.computeProposerIndex(slot, epoch, seed, BigInt(committee.length));
-    return committee[Number(proposerIndex)];
-  }
-
-  public getProposerFromEpochCommittee(
-    epochCommitteeInfo: EpochCommitteeInfo,
-    slot: SlotNumber,
-  ): EthAddress | undefined {
-    if (!epochCommitteeInfo.committee || epochCommitteeInfo.committee.length === 0) {
-      return undefined;
-    }
-    const proposerIndex = this.computeProposerIndex(
-      slot,
-      epochCommitteeInfo.epoch,
-      epochCommitteeInfo.seed,
-      BigInt(epochCommitteeInfo.committee.length),
-    );
-
-    return epochCommitteeInfo.committee[Number(proposerIndex)];
+    return { state: 'members', proposer: committee[Number(proposerIndex)] };
   }
 
   /** Check if a validator is in the given slot's committee */
-  async isInCommittee(slot: SlotTag, validator: EthAddress): Promise<boolean> {
-    const { committee } = await this.getCommittee(slot);
-    if (!committee) {
-      return false;
+  async lookupMembership(slot: SlotTag, validator: EthAddress): Promise<CommitteeMembershipLookup<boolean>> {
+    const lookup = await this.getCommittee(slot);
+    if (lookup.state !== 'members') {
+      return withoutMembers(lookup);
     }
-    return committee.some(v => v.equals(validator));
+    return { state: 'members', inCommittee: lookup.committee.some(v => v.equals(validator)) };
   }
 
   /** From the set of given addresses, return all that are on the committee for the given slot */
-  async filterInCommittee(slot: SlotTag, validators: EthAddress[]): Promise<EthAddress[]> {
-    const { committee } = await this.getCommittee(slot);
-    if (!committee) {
-      return [];
+  async filterInCommittee(slot: SlotTag, validators: EthAddress[]): Promise<CommitteeMembershipLookup<EthAddress[]>> {
+    const lookup = await this.getCommittee(slot);
+    if (lookup.state !== 'members') {
+      return withoutMembers(lookup);
     }
-    const committeeSet = new Set(committee.map(v => v.toString()));
-    return validators.filter(v => committeeSet.has(v.toString()));
+    const committeeSet = new Set(lookup.committee.map(v => v.toString()));
+    return { state: 'members', inCommittee: validators.filter(v => committeeSet.has(v.toString())) };
   }
 
   async getRegisteredValidators(): Promise<EthAddress[]> {

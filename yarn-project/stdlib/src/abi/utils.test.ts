@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { parseSignedInt } from './utils.js';
 
 describe('parse signed int', () => {

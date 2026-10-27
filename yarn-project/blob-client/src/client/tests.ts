@@ -1,4 +1,5 @@
 import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
+import { Buffer } from 'buffer';
 import type { Hex } from 'viem';
 
 import type { BlobClientInterface } from './interface.js';

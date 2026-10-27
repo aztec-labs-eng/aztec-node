@@ -1,4 +1,5 @@
 import { EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -12,7 +13,7 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { BlockData, L2Block, L2BlockSink, L2BlockSource, ProposedCheckpointSink } from '@aztec-labs/stdlib/block';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   BlockBuilderOptions,
   MerkleTreeWriteOperations,
@@ -21,7 +22,7 @@ import type {
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import type { CheckpointProposal, CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
 import { type CheckpointGlobalVariables, GlobalVariables, type Tx } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -324,6 +325,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointNumber,
       BlockNumber.ZERO,
       CheckpointNumber(checkpointNumber - 1),
+      1n, // syncedL1BlockNumber
       proposer,
       publisher,
       attestorAddress,
@@ -338,6 +340,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
+      new TestRollupFeeConfigProvider(),
       signatureContext,
       config,
       timetable,
@@ -365,7 +368,6 @@ describe('CheckpointProposalJob Timing Tests', () => {
       epochDuration: 16,
       proofSubmissionEpochs: 4,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     // Initialize test state
@@ -413,12 +415,14 @@ describe('CheckpointProposalJob Timing Tests', () => {
 
     // Set up mocks
     epochCache = mockDeep<EpochCache>();
-    epochCache.getCommittee.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
 
     publisher = mockDeep<SequencerPublisher>();
     publisher.epochCache = epochCache;
@@ -497,7 +501,9 @@ describe('CheckpointProposalJob Timing Tests', () => {
     validatorClient = mock<ValidatorClient>();
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve([]));
     validatorClient.createBlockProposal.mockResolvedValue({} as any);
-    validatorClient.createCheckpointProposal.mockResolvedValue({} as any);
+    validatorClient.createCheckpointProposal.mockResolvedValue(
+      mock<CheckpointProposal>({ getSender: () => attestorAddress }),
+    );
     validatorClient.signAttestationsAndSigners.mockResolvedValue(mockedSig);
     validatorClient.getCoinbaseForAttestor.mockReturnValue(coinbase);
     validatorClient.getFeeRecipientForAttestor.mockReturnValue(globalVariables.feeRecipient);

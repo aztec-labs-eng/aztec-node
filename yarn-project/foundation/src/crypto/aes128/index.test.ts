@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 import { Aes128 } from './index.js';

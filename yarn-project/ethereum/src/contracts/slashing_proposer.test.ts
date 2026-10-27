@@ -11,6 +11,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type Hex, type TypedDataDefinition, encodeFunctionData, hashTypedData } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -18,11 +19,12 @@ import { foundry } from 'viem/chains';
 import { createExtendedL1Client } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsArgs, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { RollupContract, decodeSlashConsensusVotes } from './index.js';
 import { SlashingProposerContract } from './slashing_proposer.js';
 
-describe('SlashingProposer', () => {
+describeAcrossL1Forks('SlashingProposer', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let deployerPrivateKeyRaw: Hex;

@@ -32,8 +32,12 @@ import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/clien
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
-import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
-import type { NoteStatus } from '@aztec-labs/stdlib/note';
+import {
+  type UnsiloedMessageNullifier,
+  getL1ToL2MessageWitness,
+  lookUpL1ToL2MessageWitness,
+} from '@aztec-labs/stdlib/messaging';
+import { NoteStatus } from '@aztec-labs/stdlib/note';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type BlockHeader,
@@ -44,6 +48,7 @@ import {
   type TxHash,
   type TxReceipt,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import { createContractLogger, logContractMessage, stripAztecnrLogPrefix } from '../../contract_logging.js';
@@ -58,7 +63,7 @@ import type { AddressStore } from '../../storage/address_store/address_store.js'
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import { FactCollectionKey, FactCollectionTypeKey, anchoredTipBlockNumbers } from '../../storage/fact_store/index.js';
-import type { BlockReference, FactService } from '../../storage/fact_store/index.js';
+import type { BlockReference, FactScope, FactService } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
@@ -70,10 +75,11 @@ import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { EventValidationRequest } from '../noir-structs/event_validation_request.js';
-import { type FactCollection, emptyFactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
+import { type FactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import type { NoteData } from '../noir-structs/note_data.js';
+import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import type { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
 import {
   type NullifierMembershipWitnessData,
@@ -86,6 +92,7 @@ import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
 import type { PublicDataWitnessData } from '../noir-structs/public_data_witness_data.js';
 import type { ResolvedTx } from '../noir-structs/resolved_tx.js';
 import type { TxEffectData } from '../noir-structs/tx_effect_data.js';
+import type { TxEffectWithBlockData } from '../noir-structs/tx_effect_with_block_data.js';
 import type { UtilityContext } from '../noir-structs/utility_context.js';
 import { pickNotes } from '../pick_notes.js';
 import type { TransientArrayService } from '../transient_array_service.js';
@@ -507,6 +514,33 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
+   * Returns the tx and block in which a settled note of the executing contract was created, or `None` if no such note
+   * is known. Nullified notes are also returned.
+   */
+  public async getSettledNoteOrigin(
+    noteHash: Fr,
+    contractAddress: AztecAddress,
+    noteNonce: Fr,
+  ): Promise<Option<NoteOrigin>> {
+    this.#assertOwnContract(contractAddress);
+
+    // The store is only indexed by contract, so this scans all of the contract's notes. The query is rare enough and
+    // stores are small enough that this is not a concern.
+    const notes = await this.noteStore.getNotes(
+      { contractAddress, status: NoteStatus.ACTIVE_OR_NULLIFIED, scopes: this.scopes },
+      this.changeSetId,
+    );
+    const note = notes.find(note => note.noteHash.equals(noteHash) && note.noteNonce.equals(noteNonce));
+
+    return note
+      ? Option.some({
+          txHash: note.txHash.hash,
+          block: { blockNumber: note.l2BlockNumber, blockHash: Fr.fromHexString(note.l2BlockHash) },
+        })
+      : Option.none();
+  }
+
+  /**
    * Returns the status of each inner nullifier: whether it exists in the nullifier tree at the anchor block and, if
    * so, the block it was inserted in. Results are aligned with the input.
    */
@@ -557,6 +591,27 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     );
 
     return new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple());
+  }
+
+  /**
+   * Returns the membership witness of an L1 to L2 message, or none if there is no such message.
+   * @param messageHash - Hash of the message.
+   * @param nullifier - When present, the unsiloed nullifier of the message and the address to silo it with. The witness
+   * is only returned if the siloed nullifier is absent from the nullifier tree, i.e. the message has not been consumed.
+   * @returns The l1 to l2 membership witness (index of message in the tree and sibling path), or none.
+   */
+  public async tryGetL1ToL2MembershipWitness(
+    messageHash: Fr,
+    nullifier: Option<UnsiloedMessageNullifier>,
+  ): Promise<Option<MembershipWitness<typeof L1_TO_L2_MSG_TREE_HEIGHT>>> {
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
+    const lookup = await lookUpL1ToL2MessageWitness(this.aztecNode, messageHash, nullifier.value, anchor);
+    if (lookup.type !== 'found') {
+      return Option.none();
+    }
+
+    const [messageIndex, siblingPath] = lookup.witness;
+    return Option.some(new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple()));
   }
 
   /**
@@ -740,20 +795,16 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /** Fetches transaction effects for all hashes, preserving request order. */
-  public async getTxEffects(txHashes: EphemeralArray<TxHash>): Promise<EphemeralArray<Option<TxEffectData>>> {
-    const hashes = txHashes.readAll(this.ephemeralArrayService);
-    const invalidHash = hashes.find(txHash => txHash.hash.isZero());
-    if (invalidHash) {
-      throw new Error('Invalid tx hash passed into aztec_utl_getTxEffects oracle handler');
-    }
+  public getTxEffects(txHashes: EphemeralArray<TxHash>): Promise<EphemeralArray<Option<TxEffectData>>> {
+    return this.#getTxEffectsBatch(txHashes, 'aztec_utl_getTxEffects', txHash => this.#getTxEffectOption(txHash));
+  }
 
-    const uniqueTxHashes = uniqueBy(hashes, h => h.toString());
-    const options = await allToCompletion(uniqueTxHashes.map(txHash => this.#getTxEffectOption(txHash)));
-    const optionsByHash = new Map(uniqueTxHashes.map((txHash, i) => [txHash.toString(), options[i]]));
-
-    return EphemeralArray.fromValues(
-      this.ephemeralArrayService,
-      hashes.map(txHash => optionsByHash.get(txHash.toString())!),
+  /** Fetches transaction effects for all hashes, preserving request order, each paired with its block. */
+  public getTxEffectsWithBlock(
+    txHashes: EphemeralArray<TxHash>,
+  ): Promise<EphemeralArray<Option<TxEffectWithBlockData>>> {
+    return this.#getTxEffectsBatch(txHashes, 'aztec_utl_getTxEffectsWithBlock', txHash =>
+      this.#getTxEffectWithBlockOption(txHash),
     );
   }
 
@@ -804,7 +855,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public recordFact(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
     factTypeId: Fr,
@@ -826,7 +877,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public deleteFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<void> {
@@ -842,7 +893,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public async getFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<Option<FactCollection>> {
@@ -864,13 +915,13 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
             collection.facts,
           ),
         )
-      : Option.none(emptyFactCollection(this.ephemeralArrayService));
+      : Option.none();
   }
 
   /** Returns every fact collection of `factCollectionTypeId`. */
   public async getFactCollectionsByType(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
   ): Promise<EphemeralArray<FactCollection>> {
     this.#assertOwnContract(contractAddress);
@@ -1230,12 +1281,44 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     return receipt;
   }
 
+  async #getTxEffectsBatch<T>(
+    txHashes: EphemeralArray<TxHash>,
+    oracleName: string,
+    fetch: (txHash: TxHash) => Promise<Option<T>>,
+  ): Promise<EphemeralArray<Option<T>>> {
+    const hashes = txHashes.readAll(this.ephemeralArrayService);
+    if (hashes.some(txHash => txHash.hash.isZero())) {
+      throw new Error(`Invalid tx hash passed into ${oracleName} oracle handler`);
+    }
+
+    const uniqueTxHashes = uniqueBy(hashes, h => h.toString());
+    const options = await allToCompletion(uniqueTxHashes.map(fetch));
+    const optionsByHash = new Map(uniqueTxHashes.map((txHash, i) => [txHash.toString(), options[i]]));
+
+    return EphemeralArray.fromValues(
+      this.ephemeralArrayService,
+      hashes.map(txHash => optionsByHash.get(txHash.toString())!),
+    );
+  }
+
   async #getTxEffectOption(txHash: TxHash): Promise<Option<TxEffectData>> {
+    const withBlock = await this.#getTxEffectWithBlockOption(txHash);
+    return withBlock.isSome() ? Option.some(withBlock.value.effect) : Option.none();
+  }
+
+  async #getTxEffectWithBlockOption(txHash: TxHash): Promise<Option<TxEffectWithBlockData>> {
     const receipt = await this.#getTxReceiptWithEffect(txHash);
+    // TODO: getTxReceipt takes no block parameter, so this resolves the tx against the node's current tip and
+    // then only compares block numbers. A reorg or a pruned proposed block below the anchor can seat a different block
+    // at the same height, letting an effect from a block that is not on the anchor's chain through. Anchor by block
+    // hash once the node exposes an anchored tx-effect lookup.
     if (!receipt.isMined() || !receipt.txEffect || receipt.blockNumber > this.anchorBlockHeader.getBlockNumber()) {
       return Option.none();
     }
-    return Option.some(this.#toTxEffectData(receipt.txEffect));
+    return Option.some({
+      effect: this.#toTxEffectData(receipt.txEffect),
+      block: { blockNumber: receipt.blockNumber, blockHash: receipt.blockHash.toFr() },
+    });
   }
 
   #toTxEffectData(txEffect: TxEffect): TxEffectData {

@@ -431,7 +431,7 @@ export VALIDATOR_HA_SIGNING_TIMEOUT_MS=3000      # Default: 3000ms
 | `VALIDATOR_HA_MAX_STUCK_DUTIES_AGE_MS` | Max age before cleanup                           | `2 * slotDuration` |
 | `VALIDATOR_HA_POOL_MAX`                | Max database connections                         | `10`               |
 | `VALIDATOR_HA_POOL_MIN`                | Min database connections                         | `0`                |
-| `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H`    | Clean up old signed duties after this many hours | N/A                |
+| `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H`    | Duty retention from signing start, in hours (minimum two slots) | `24` |
 
 
 When `VALIDATOR_HA_SIGNING_ENABLED=true`, the validator client automatically:
@@ -548,6 +548,31 @@ If validator duties stop when you stop one node, check:
 - HA signing is enabled (`VALIDATOR_HA_SIGNING_ENABLED=true`)
 - Node ID is correctly configured
 - Database migrations were run successfully
+
+## Signing history and rollup upgrades
+
+Signing records are isolated by rollup address. With the signing-history retention fix, restarting a node preserves
+records for other rollups sharing its PostgreSQL database. This allows replicas serving different rollups to retain
+their own double-signing protection during an upgrade.
+
+:::warning Older replicas sharing the database
+Older node versions delete signing records for other rollups on startup. Every replica sharing the database must
+include the retention fix before you rely on this protection during a rollup transition. Updating only the replica
+serving the new rollup does not prevent an older replica from deleting its records on restart.
+:::
+
+By default, duties are retained for 24 hours, measured from when signing started. Retention is clamped to at least two
+full slot durations, covering the rest of the current slot and the next slot. The validator reads the slot duration
+from the rollup contract.
+
+Background cleanup runs at startup and approximately hourly, removing old records across all rollups in the shared
+database, including unfinished duties abandoned by nodes that never return. A replica serving the new rollup can
+therefore clean up records for a retired rollup. Cleanup of the node's own stuck, unfinished signing duties uses a
+separate timeout.
+
+Set `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H` to a positive number of hours to override the default, using the same value on
+every replica sharing the database. Changes apply to existing records as well as new ones. No additional database
+migration is required for this retention policy.
 
 ## Operational Best Practices
 

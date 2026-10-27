@@ -6,6 +6,7 @@
  */
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeMembershipLookup } from '@aztec-labs/epoch-cache/test';
 import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -17,6 +18,7 @@ import type { P2P, TxProvider } from '@aztec-labs/p2p';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   SlasherConfig,
   ValidatorClientFullConfig,
@@ -103,8 +105,10 @@ describe('ValidatorClient HA Integration', () => {
       slotDuration: 24,
       l1ChainId: 1,
       rollupVersion: 1,
-      rollupManaLimit: 200_000_000,
     });
+    checkpointsBuilder.getFeeConfigProvider.mockReturnValue(
+      new TestRollupFeeConfigProvider({ manaLimit: 200_000_000n }),
+    );
     worldState = mock<WorldStateSynchronizer>();
     epochCache = mock<EpochCache>();
     epochCache.getL1Constants.mockReturnValue({
@@ -113,7 +117,9 @@ describe('ValidatorClient HA Integration', () => {
       ethereumSlotDuration: 4,
     } as any);
     // Default mock: return all addresses passed (all are in committee)
-    epochCache.filterInCommittee.mockImplementation((_slot, addresses) => Promise.resolve(addresses));
+    epochCache.filterInCommittee.mockImplementation((_slot, addresses) =>
+      Promise.resolve(makeMembershipLookup(addresses)),
+    );
     blockSource = mock<L2BlockSource & L2BlockSink>();
     l1ToL2MessageSource = mock<L1ToL2MessageSource>();
     txProvider = mock<TxProvider>();

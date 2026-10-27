@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { type Server, createServer } from 'node:http';
 
 /** A JSON-RPC endpoint that records the method of every request it receives. */

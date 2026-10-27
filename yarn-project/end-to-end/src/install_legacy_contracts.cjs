@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Unpacks the committed legacy artifact tarballs (legacy-contracts/<version>.tar.gz) into the
+// Unpacks the committed legacy artifact tarballs (legacy-contracts/<version>.tar.xz) into the
 // gitignored .legacy-contracts/<version>/ cache. See legacy-contracts/README.md for the tarball
 // layout and how versions are added.
 //
@@ -32,8 +32,8 @@ function listVersions() {
   }
   return fs
     .readdirSync(tarballDir)
-    .filter(f => f.endsWith('.tar.gz'))
-    .map(f => f.slice(0, -'.tar.gz'.length))
+    .filter(f => f.endsWith('.tar.xz'))
+    .map(f => f.slice(0, -'.tar.xz'.length))
     .sort();
 }
 
@@ -45,7 +45,7 @@ function installLegacyContracts(version) {
   if (fs.existsSync(dest)) {
     return;
   }
-  const tarball = path.join(tarballDir, `${version}.tar.gz`);
+  const tarball = path.join(tarballDir, `${version}.tar.xz`);
   if (!fs.existsSync(tarball)) {
     throw new Error(`[legacy-contracts] no committed artifacts for ${version} (expected ${tarball})`);
   }
@@ -56,7 +56,7 @@ function installLegacyContracts(version) {
   const tmp = fs.mkdtempSync(path.join(cacheBase, `.${version}.tmp-`));
   try {
     process.stderr.write(`[legacy-contracts] unpacking ${path.basename(tarball)} -> ${dest}\n`);
-    execFileSync('tar', ['-xzf', tarball, '-C', tmp], { stdio: ['ignore', 'ignore', 'inherit'] });
+    execFileSync('tar', ['-xJf', tarball, '-C', tmp], { stdio: ['ignore', 'ignore', 'inherit'] });
     for (const pkg of REDIRECTED) {
       if (!fs.existsSync(path.join(tmp, version, pkg, 'artifacts'))) {
         throw new Error(`[legacy-contracts] ${path.basename(tarball)} is missing ${pkg}/artifacts`);

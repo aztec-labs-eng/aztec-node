@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { Buffer } from 'buffer';
 
 import { Schnorr } from './index.js';
 

@@ -11,6 +11,23 @@ This changelog documents all configuration changes, new features, and breaking c
 
 ## Version history
 
+### [v6.0.0](./v6.md)
+
+Hard fork: a complete new deployment from genesis. Every artifact location moved, and the executor configuration was renamed with no fallback.
+
+**Key changes:**
+- New locations for everything: `azteclabs/aztec` on DockerHub, `@aztec-labs/*` and `@aztec-foundation/*` on npm, `aztec-labs-eng/aztec-node` for source
+- `ACVM_*` configuration renamed to `NOIR_EXECUTE_*`, with no fallback. A real-proving node fails to start on the old names; one without real proofs starts anyway on slow WASM simulation, so a clean startup does not prove the config migrated
+- Attester-initiated sequencer exits, including batched exits for operators running many delegations. Live on the rollup now; the CLI wrappers arrive in `v6.0.0` stable, so for rc.1 call the contract directly
+- New RPC methods: `aztec_getTxEffectMembershipWitness`, `aztec_getValidatorStatsBatch`
+- `v6.0.0-rc.1` is Testnet only; Mainnet's first v6 release will be `v6.0.0` stable
+
+**Migration difficulty**: High
+
+[View full changelog →](./v6.md)
+
+---
+
 ### [v5.2.0](./v5.2.md)
 
 Node-operator hardening release: peerless nodes stop acting, slashing votes against your own validators are surfaced, and the RPC server gains timeout and CORS configuration.

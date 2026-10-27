@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { TxMetaData } from '../tx_metadata.js';
@@ -10,6 +10,7 @@ export const EvictionEvent = {
   TXS_ADDED: 'txs_added',
   BLOCK_MINED: 'block_mined',
   CHAIN_PRUNED: 'chain_pruned',
+  SLOT_PREPARED: 'slot_prepared',
 } as const;
 
 export type EvictionEventType = (typeof EvictionEvent)[keyof typeof EvictionEvent];
@@ -32,6 +33,10 @@ export type EvictionContext =
       block: BlockHeader;
       newNullifiers: string[];
       feePayers: string[];
+    }
+  | {
+      event: typeof EvictionEvent.SLOT_PREPARED;
+      slotNumber: SlotNumber;
     };
 
 /**
@@ -63,8 +68,8 @@ export interface PreAddPoolAccess {
   /** Get current count of pending transactions */
   getPendingTxCount(): number;
 
-  /** Get the lowest priority pending tx metadata */
-  getLowestPriorityPendingTx(): TxMetaData | undefined;
+  /** Iterate pending tx hashes in priority order ('asc' yields the lowest priority first) */
+  iteratePendingByPriority(order: 'asc' | 'desc'): Iterable<string>;
 }
 
 /** A single eviction tagged with the rule that caused it. */

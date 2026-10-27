@@ -53,11 +53,13 @@ locals {
 
   ethereum_chains = {
     sepolia = {
+      reth_image          = "ghcr.io/paradigmxyz/reth:v2.7.0"
+      lighthouse_image    = "sigp/lighthouse:v8.3.0-rc.0"
       checkpoint_sync_url = "https://checkpoint-sync.sepolia.ethpandaops.io"
       reth_p2p_port       = 32200
       lighthouse_p2p_port = 32201
-      reth_storage        = "1.5Ti"
-      lighthouse_storage  = "256Gi"
+      reth_storage        = "1.75Ti"
+      lighthouse_storage  = "512Gi"
       reth_resources = {
         requests = { cpu = "1", memory = "12Gi" }
         limits   = { cpu = "4", memory = "24Gi" }
@@ -66,17 +68,25 @@ locals {
         requests = { cpu = "1", memory = "8Gi" }
         limits   = { cpu = "4", memory = "16Gi" }
       }
-      execution_hosts       = ["json-rpc.eth-sepolia.rpc.aztec-labs.com"]
-      beacon_hosts          = ["beacon.eth-sepolia.rpc.aztec-labs.com"]
-      reth_extra_args       = []
+      execution_hosts = ["json-rpc.eth-sepolia.rpc.aztec-labs.com"]
+      beacon_hosts    = ["beacon.eth-sepolia.rpc.aztec-labs.com"]
+      # Glamsterdam state-creation repricing pushes L1 contract deploy estimates past reth's 50M default.
+      reth_extra_args = [
+        "--gpo.ignoreprice=2",
+        "--rpc.gascap=150000000",
+        "--http.api=eth,net,web3,trace",
+        "--rpc.max-tracing-requests=2",
+      ]
       lighthouse_extra_args = []
     }
     mainnet = {
+      reth_image          = "ghcr.io/paradigmxyz/reth:v2.3.0"
+      lighthouse_image    = "sigp/lighthouse:v8.2.0"
       checkpoint_sync_url = "https://mainnet.checkpoint.sigp.io"
       reth_p2p_port       = 32300
       lighthouse_p2p_port = 32301
       reth_storage        = "3.25Ti"
-      lighthouse_storage  = "256Gi"
+      lighthouse_storage  = "512Gi"
       reth_resources = {
         requests = { cpu = "1", memory = "48Gi" }
         limits   = { cpu = "8", memory = "96Gi" }
@@ -85,9 +95,13 @@ locals {
         requests = { cpu = "1", memory = "12Gi" }
         limits   = { cpu = "8", memory = "24Gi" }
       }
-      execution_hosts       = ["json-rpc.eth-mainnet.rpc.aztec-labs.com"]
-      beacon_hosts          = ["beacon.eth-mainnet.rpc.aztec-labs.com"]
-      reth_extra_args       = []
+      execution_hosts = ["json-rpc.eth-mainnet.rpc.aztec-labs.com"]
+      beacon_hosts    = ["beacon.eth-mainnet.rpc.aztec-labs.com"]
+      reth_extra_args = [
+        "--gpo.ignoreprice=2",
+        "--http.api=eth,net,web3,trace",
+        "--rpc.max-tracing-requests=2",
+      ]
       lighthouse_extra_args = []
     }
   }
@@ -178,6 +192,7 @@ module "ethereum_nodes" {
   CHAIN               = each.key
   CHECKPOINT_SYNC_URL = each.value.checkpoint_sync_url
 
+  RETH_IMAGE         = each.value.reth_image
   RETH_P2P_PORT      = each.value.reth_p2p_port
   RETH_STORAGE       = each.value.reth_storage
   STORAGE_CLASS_NAME = local.storage_class_name
@@ -196,6 +211,7 @@ module "ethereum_nodes" {
     ip = google_compute_address.internal_load_balancer["${each.key}-reth"].address
   }
 
+  LIGHTHOUSE_IMAGE    = each.value.lighthouse_image
   LIGHTHOUSE_P2P_PORT = each.value.lighthouse_p2p_port
   LIGHTHOUSE_STORAGE  = each.value.lighthouse_storage
   LIGHTHOUSE_RESOURCES = {

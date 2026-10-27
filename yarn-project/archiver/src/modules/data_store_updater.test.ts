@@ -24,17 +24,21 @@ import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts'
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { CheckpointValidationError } from '@aztec-labs/stdlib/checkpoint';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import '@aztec-labs/stdlib/testing/jest';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 import {
+  DuplicateTxHashError,
   InboxConsumptionRewindsError,
   InboxMessagePrefixChangedError,
   InboxPrefixMismatchError,
@@ -45,6 +49,7 @@ import { registerProtocolContracts, registerStandardContracts } from '../factory
 import { type ArchiverDataStores, createArchiverDataStores } from '../store/data_stores.js';
 import { L2FrontierCache } from '../store/l2_frontier_cache.js';
 import {
+  makeChainedCheckpoints,
   makeCheckpoint,
   makeInboxMessages,
   makeL1PublishedData,
@@ -160,7 +165,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
   beforeEach(async () => {
     store = createArchiverDataStores(await openTmpStore('data_store_updater_test'), GENESIS_BLOCK_HEADER_HASH);
-    updater = new ArchiverDataStoreUpdater(store);
+    updater = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider());
 
     // Create contract class log from sample fixture data
     contractClassLog = ContractClassLog.fromBuffer(getSampleContractClassPublishedEventPayload());
@@ -441,11 +446,40 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
 
       // Remove the checkpoint
-      await updater.removeCheckpointsAfter(CheckpointNumber(0));
+      await expect(updater.removeCheckpointsAfter(CheckpointNumber(0))).resolves.toBe(true);
 
       // Verify the contract data was removed
       expect(await store.contractClasses.getContractClass(contractClassId)).toBeUndefined();
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeUndefined();
+    });
+
+    it('keeps an instance from a surviving checkpoint when a pruned checkpoint forged a log for its address', async () => {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+      });
+      block1.body.txEffects[0].privateLogs = [PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload())];
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+
+      // Claims the same address but with fields that derive a different one, so the store path skips it.
+      const forgedLog = PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload());
+      forgedLog.fields[3] = Fr.random();
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        lastArchive: block1.archive,
+      });
+      block2.body.txEffects[0].privateLogs = [forgedLog];
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block2], CheckpointNumber(2)), 20)]);
+
+      await updater.removeCheckpointsAfter(CheckpointNumber(1));
+
+      const timestamp = block1.header.globalVariables.timestamp + 1n;
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
+      expect(await store.contractInstances.getContractInstanceDeploymentBlockNumber(instanceAddress)).toEqual(
+        BlockNumber(1),
+      );
     });
 
     it('accepts a re-included already-stored checkpoint carrying contract data (A-1350)', async () => {
@@ -776,11 +810,131 @@ describe('ArchiverDataStoreUpdater', () => {
     });
   });
 
+  describe('rollup mana limit', () => {
+    let feeConfigProvider: TestRollupFeeConfigProvider;
+    let manaUpdater: ArchiverDataStoreUpdater;
+
+    /** An L1 checkpoint whose blocks' mana adds up to `totalManaUsed`. */
+    const makeCheckpointUsingMana = async (totalManaUsed: number) => {
+      const block = await L2Block.random(BlockNumber(1), {
+        checkpointNumber: CheckpointNumber(1),
+        slotNumber: SlotNumber(100),
+        totalManaUsed: new Fr(totalManaUsed),
+      });
+      return makePublishedCheckpoint(makeCheckpoint([block]), 10);
+    };
+
+    beforeEach(() => {
+      // The limit the node read at startup.
+      feeConfigProvider = new TestRollupFeeConfigProvider({ manaLimit: 1_000n });
+      manaUpdater = new ArchiverDataStoreUpdater(store, feeConfigProvider);
+    });
+
+    it('ingests a checkpoint over the startup limit once the provider has the raised limit', async () => {
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+
+      await manaUpdater.addCheckpoints([await makeCheckpointUsingMana(1_500)]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+
+    it('rejects a checkpoint over the current limit, and ingests it on a later pass once the limit is raised', async () => {
+      const checkpoint = await makeCheckpointUsingMana(1_500);
+
+      await expect(manaUpdater.addCheckpoints([checkpoint])).rejects.toThrow(CheckpointValidationError);
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(0));
+
+      feeConfigProvider.setFeeConfig({ manaLimit: 2_000n });
+      await manaUpdater.addCheckpoints([checkpoint]);
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+    });
+  });
+
+  describe('repeated tx hashes', () => {
+    it('accepts an L1 checkpoint that replaces a local proposed block and includes the same tx', async () => {
+      const blockOpts = {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      };
+      const localBlock = await randomBlock(1, blockOpts);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
+
+      const l1Block = await randomBlock(1, blockOpts);
+      const shared = localBlock.body.txEffects[0];
+      l1Block.body.txEffects[0] = shared;
+      expect(l1Block.archive.root.equals(localBlock.archive.root)).toBe(false);
+
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([l1Block]), 10)]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.blocks.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(1),
+        blockHash: await l1Block.hash(),
+        txIndexInBlock: 0,
+      });
+    });
+
+    it('accepts an L1 checkpoint that replaces a local proposed block and moves its tx to a later block', async () => {
+      const [chained] = await makeChainedCheckpoints(1, { blocksPerCheckpoint: 2 });
+      const [l1Block1, l1Block2] = chained.checkpoint.blocks;
+      const published = makePublishedCheckpoint(makeCheckpoint([l1Block1, l1Block2]), 10);
+      const localBlock = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: published.checkpoint.slot,
+      });
+      await updater.addProposedBlock(localBlock, emptyPrefix);
+
+      const shared = localBlock.body.txEffects[0];
+      l1Block2.body.txEffects.push(shared);
+      expect(l1Block1.archive.root.equals(localBlock.archive.root)).toBe(false);
+
+      await updater.addCheckpoints([published]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(2));
+      expect(await store.blocks.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(2),
+        blockHash: await l1Block2.hash(),
+        txIndexInBlock: l1Block2.body.txEffects.length - 1,
+      });
+    });
+
+    it('rejects a checkpoint that repeats a tx of an earlier checkpoint and stores nothing from it', async () => {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      });
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(101),
+        lastArchive: block1.archive,
+      });
+      const repeated = block1.body.txEffects[0];
+      block2.body.txEffects.push(repeated);
+      const checkpoint2 = makePublishedCheckpoint(makeCheckpoint([block2], CheckpointNumber(2)), 11);
+
+      await expect(updater.addCheckpoints([checkpoint2])).rejects.toThrow(DuplicateTxHashError);
+
+      expect(await store.blocks.getLatestCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.blocks.getTxLocation(repeated.txHash)).toEqual({
+        blockNumber: BlockNumber(1),
+        blockHash: await block1.hash(),
+        txIndexInBlock: 0,
+      });
+    });
+  });
+
   describe('L2 frontier cache refresh', () => {
     it('does not refresh the cache when the writer transaction aborts', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const tipsBefore = await l2FrontierCache.getL2Tips();
 
@@ -803,7 +957,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('serves tips and the proposed checkpoint from the same instant while a promotion commits', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
       const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, new TestRollupFeeConfigProvider(), l2FrontierCache);
 
       const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
@@ -834,12 +988,7 @@ describe('ArchiverDataStoreUpdater', () => {
       });
 
       const publishedCheckpoint = makePublishedCheckpoint(makeCheckpoint([block]), 10);
-      const promotion = updaterWithCache.addCheckpoints([], undefined, {
-        l1: publishedCheckpoint.l1,
-        attestations: publishedCheckpoint.attestations,
-        verbatimAttestations: publishedCheckpoint.verbatimAttestations,
-        checkpoint: publishedCheckpoint,
-      });
+      const promotion = updaterWithCache.addCheckpoints([], undefined, publishedCheckpoint);
 
       await committed;
       const frontier = await l2FrontierCache.getL2Frontier();

@@ -1,3 +1,4 @@
+import { IpcProcessExitedError } from '@aztec-foundation/ipc-runtime';
 import { AsyncApi, WsdbService } from '@aztec-foundation/wsdb';
 import type {
   WorldStateDBStats as WsdbDBStats,
@@ -21,11 +22,13 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { Buffer } from 'buffer';
 import { cpus } from 'node:os';
 
 import type { WorldStateInstrumentation } from '../instrumentation/instrumentation.js';
@@ -382,7 +385,7 @@ export class IpcWorldState implements NativeWorldStateInstance {
     bindings?: LoggerBindings,
     threads: number = getWsdbThreadCount(),
   ): Promise<IpcWorldState> {
-    const transport = process.env.WSDB_TRANSPORT === 'shm' ? 'shm' : 'uds';
+    const transport = getEnv().WSDB_TRANSPORT === 'shm' ? 'shm' : 'uds';
     const wsdb = await WsdbService.spawn({
       transport,
       extraArgs: getWsdbExtraArgs(dataDir, wsTreeMapSizes, genesis, threads),
@@ -806,10 +809,28 @@ export class IpcWorldState implements NativeWorldStateInstance {
       this.instrumentation.recordRoundTrip(durationMs * 1000, operation);
       return response;
     } catch (error) {
+      if (error instanceof IpcProcessExitedError) {
+        exitOnWsdbDeath(operation, error, this.log);
+      }
       this.log.error(`Call ${operation} failed: ${error}`, error);
       throw error;
     }
   }
+}
+
+/**
+ * Exits the process because wsdb died under it. wsdb holds the forks and uncommitted state every caller depends on,
+ * so a respawn would leave them dangling and nothing can continue: crash like the in-process world state did, and let
+ * the orchestrator restart the node. Every wsdb call funnels through {@link IpcWorldState.send}, so this is the one
+ * place that needs it; it moves to the IPC backend's `exitOnDeath` option once callers use the wsdb API directly.
+ */
+function exitOnWsdbDeath(operation: WorldStateOperationName, error: IpcProcessExitedError, log: Logger): never {
+  log.fatal(`World state database process died during ${operation}; exiting`, error, {
+    code: error.code,
+    signal: error.signal,
+    logPath: error.logPath,
+  });
+  process.exit(1);
 }
 
 /**

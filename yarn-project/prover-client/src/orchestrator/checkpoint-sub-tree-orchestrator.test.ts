@@ -35,6 +35,52 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
     await context.cleanup();
   });
 
+  it.each([
+    ['header', 'Block header hash mismatch.'],
+    ['archive', 'New archive mismatch.'],
+  ])('rejects block completion on %s mismatch after proofs resolve', async (mismatch, expectedError) => {
+    const { constants, blocks, l1ToL2Messages, previousBlockHeader } = await context.makeCheckpoint(1, {
+      numTxsPerBlock: 0,
+    });
+    const proveBlock = context.prover.getBlockRootNoTxsRollupProof.bind(context.prover);
+    jest.spyOn(context.prover, 'getBlockRootNoTxsRollupProof').mockImplementation(async (...args) => {
+      const result = await proveBlock(...args);
+      if (mismatch === 'header') {
+        result.inputs.timestamp += 1n;
+      } else {
+        result.inputs.newArchive.root = Fr.ZERO;
+      }
+      return result;
+    });
+
+    const subTree = await CheckpointSubTreeOrchestrator.start(
+      context.worldState,
+      context.prover,
+      EthAddress.ZERO,
+      chonkCache,
+      EpochNumber(1),
+      false,
+      makeTestDeferredJobQueue(),
+      constants,
+      l1ToL2Messages,
+      Fr.ZERO,
+      1,
+      previousBlockHeader,
+    );
+    try {
+      const block = blocks[0];
+      const { blockNumber, timestamp } = block.header.globalVariables;
+      await subTree.startNewBlock(blockNumber, timestamp, 0, l1ToL2Messages);
+      await subTree.getSubTreeResult();
+
+      await expect(subTree.setBlockCompleted(blockNumber, block.header)).rejects.toThrow(
+        `Block proving failed: ${expectedError}`,
+      );
+    } finally {
+      await subTree.stop();
+    }
+  });
+
   it('resolves the sub-tree result with block-level proofs for a single-block checkpoint', async () => {
     const numBlocks = 1;
     const numTxsPerBlock = 1;

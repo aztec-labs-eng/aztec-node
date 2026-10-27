@@ -1,9 +1,9 @@
 import type { TxBlobData } from '@aztec-labs/blob-lib/encoding';
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { computeUnbalancedMerkleTreeRootAsync } from '@aztec-labs/foundation/trees';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { MAX_TX_EFFECTS_PER_BODY } from '../deserialization/index.js';

@@ -1,6 +1,7 @@
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import type { FileStore } from '@aztec-labs/stdlib/file-store';
+import { Buffer } from 'buffer';
 
 import { type FailedL1Tx, FailedL1TxSchema, type FailedL1TxUri, type L1TxFailedStore } from './failed_tx_store.js';
 

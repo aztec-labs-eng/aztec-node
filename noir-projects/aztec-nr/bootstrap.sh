@@ -9,6 +9,10 @@ export AZTEC_TOOLCHAIN_HASH=${AZTEC_TOOLCHAIN_HASH:-$($ROOT/labs-aztec-toolchain
 
 hash=$(hash_str $AZTEC_TOOLCHAIN_HASH $(cache_content_hash "^noir-projects/aztec-nr"))
 
+# Below the Linux ephemeral range (32768-60999) to avoid conflicts.
+DEFAULT_TXE_PORT=14730
+DEFAULT_RESOLVER_PORT=14830
+
 function build {
   # Being a library, aztec-nr does not technically need to be built. But we can still run nargo check to find any type
   # errors and prevent warnings
@@ -28,35 +32,37 @@ function test_cmds {
   # Tests run against the TXE server (oracle roundtrip tests against the oracle test resolver),
   # so inject those dependencies: key each flavor on its entry point's dependency closure
   # (computed by yarn-project's build). The build hash alone under-covers — a TXE behavior
-  # change must rerun these tests even though no aztec-nr source changed.
-  local txe_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts))
-  local resolver_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/oracle_test_server.ts))
+  # change must rerun these tests even though no aztec-nr source changed. The scripts that select and
+  # run each chunk's tests are inputs too.
+  local scripts_hash
+  scripts_hash=$(cache_content_hash "^noir-projects/scripts/")
+  local test_hash=$(hash_str $hash $scripts_hash)
+  local txe_test_hash=$(hash_str $test_hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts))
+  local resolver_test_hash=$(hash_str $test_hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/oracle_test_server.ts))
 
-  i=0
-  $NARGO test --list-tests --silence-warnings | grep -v __oracle_test__ | sort | while read -r package test; do
-    # We assume there are 8 txe's running.
-    port=$((14730 + (i++ % ${NUM_TXES:-1})))
-    echo "$txe_test_hash noir-projects/scripts/run_test.sh aztec-nr $package $test $port"
-  done
-
-  # Oracle roundtrip tests run against a dedicated resolver instead of TXE
-  local resolver_port=${1:-14830}
-  { $NARGO test --list-tests --silence-warnings | grep __oracle_test__ || true; } | sort | while read -r package test; do
-    echo "$resolver_test_hash noir-projects/scripts/run_test.sh aztec-nr $package $test $resolver_port"
-  done
+  # Oracle roundtrip tests run against a dedicated resolver instead of TXE. The rest spread over the
+  # NUM_TXES TXEs on consecutive ports.
+  local resolver_port=${1:-$DEFAULT_RESOLVER_PORT}
+  $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
+    while read -r package kind chunk; do
+      local cmd="noir-projects/scripts/run_test_chunk.sh aztec-nr $package $kind $chunk"
+      if [ "$kind" == oracle ]; then
+        echo "$resolver_test_hash $cmd $resolver_port"
+      else
+        echo "$txe_test_hash $cmd $DEFAULT_TXE_PORT ${NUM_TXES:-1}"
+      fi
+    done
 }
 
-function test {
-  # Ports are below the Linux ephemeral range (32768-60999) to avoid conflicts.
-  local txe_base_port=14730
-  local resolver_port=14830
+# Starts a TXE and the oracle test resolver, and stops them when the script exits.
+function start_servers {
   trap 'kill $(jobs -p)' EXIT
 
-  check_port $txe_base_port || echo "WARNING: port $txe_base_port is in use, TXE may fail to start"
-  (cd $root/yarn-project/txe && UV_THREADPOOL_SIZE=8 LOG_LEVEL=error TXE_PORT=$txe_base_port yarn start) &
+  check_port $DEFAULT_TXE_PORT || echo "WARNING: port $DEFAULT_TXE_PORT is in use, TXE may fail to start"
+  (cd $root/yarn-project/txe && UV_THREADPOOL_SIZE=8 LOG_LEVEL=error TXE_PORT=$DEFAULT_TXE_PORT yarn start) &
 
-  check_port $resolver_port || echo "WARNING: port $resolver_port is in use, oracle test resolver may fail to start"
-  (cd $root/yarn-project/txe && LOG_LEVEL=error ORACLE_TEST_PORT=$resolver_port yarn start:oracle-test-resolver) &
+  check_port $DEFAULT_RESOLVER_PORT || echo "WARNING: port $DEFAULT_RESOLVER_PORT is in use, oracle test resolver may fail to start"
+  (cd $root/yarn-project/txe && LOG_LEVEL=error ORACLE_TEST_PORT=$DEFAULT_RESOLVER_PORT yarn start:oracle-test-resolver) &
 
   wait_for_port() {
     local port=$1 name=$2 j=0
@@ -71,11 +77,29 @@ function test {
       j=$((j+1))
     done
   }
-  wait_for_port $txe_base_port "TXE"
-  wait_for_port $resolver_port "oracle test resolver"
+  wait_for_port $DEFAULT_TXE_PORT "TXE"
+  wait_for_port $DEFAULT_RESOLVER_PORT "oracle test resolver"
+}
 
+function test {
+  start_servers
   export NARGO_FOREIGN_CALL_TIMEOUT=300000
-  test_cmds $resolver_port | filter_test_cmds | parallelize
+  NUM_TXES=1 test_cmds | filter_test_cmds | parallelize
+}
+
+function test-one {
+  if [ "$#" -ne 2 ]; then
+    echo_stderr "Usage: ./bootstrap.sh test-one <package> <exact_test_name>"
+    return 1
+  fi
+
+  local package=$1
+  local test_name=$2
+  local port=$DEFAULT_TXE_PORT
+  [[ "$test_name" == *__oracle_test__* ]] && port=$DEFAULT_RESOLVER_PORT
+  start_servers
+
+  $root/noir-projects/scripts/run_test.sh aztec-nr "$package" "$test_name" "$port"
 }
 
 function format {

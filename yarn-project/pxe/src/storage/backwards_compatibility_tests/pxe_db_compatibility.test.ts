@@ -5,6 +5,7 @@ import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
+import { Buffer } from 'buffer';
 import { mkdtemp, rm } from 'fs/promises';
 import { toMatchFile } from 'jest-file-snapshot';
 import { tmpdir } from 'os';

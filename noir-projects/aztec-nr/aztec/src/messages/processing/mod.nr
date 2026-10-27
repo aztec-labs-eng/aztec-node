@@ -4,7 +4,7 @@ pub mod offchain;
 pub use crate::oracle::tx_resolution::ResolvedTx;
 
 mod note_validation_request;
-pub(crate) use note_validation_request::NoteValidationRequest;
+pub use note_validation_request::NoteValidationRequest;
 
 pub mod log_retrieval_request;
 pub mod log_retrieval_response;

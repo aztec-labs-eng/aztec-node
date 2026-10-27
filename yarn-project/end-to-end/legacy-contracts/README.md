@@ -5,7 +5,7 @@ Each tarball, holds the contract artifact JSON's of
 a specific version:
 
 ```
-<version>.tar.gz
+<version>.tar.xz
 └── <version>/
     ├── noir-contracts.js/artifacts/*.json
     ├── noir-test-contracts.js/artifacts/*.json
@@ -22,5 +22,5 @@ After a stable release `X.Y.Z` is published to npm, run:
 ./add_version.sh X.Y.Z
 ```
 
-and commit the resulting `X.Y.Z.tar.gz`. The script builds the tarball with deterministic tar/gzip
+and commit the resulting `X.Y.Z.tar.xz`. The script builds the tarball with deterministic tar/xz
 flags, so regenerating from the same npm packages yields a byte-identical file.

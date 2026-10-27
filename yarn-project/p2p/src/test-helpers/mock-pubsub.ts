@@ -4,7 +4,7 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import type { BlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type { RollupFeeConfigProvider, TxAdmissionMinFeesProvider } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { GossipsubEvents, GossipsubMessage } from '@chainsafe/libp2p-gossipsub';
@@ -17,6 +17,7 @@ import {
   TypedEventEmitter,
 } from '@libp2p/interface';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
+import { Buffer } from 'buffer';
 
 import type { P2PConfig } from '../config.js';
 import type { MemPools } from '../mem_pools/interface.js';
@@ -54,7 +55,8 @@ export function getMockPubSubP2PServiceFactory(
       proofVerifier: ClientProtocolCircuitVerifier;
       worldStateSynchronizer: WorldStateSynchronizer;
       peerStore: AztecAsyncKVStore;
-      blockMinFeesProvider: BlockMinFeesProvider;
+      nextBlockMinFeesProvider: TxAdmissionMinFeesProvider;
+      feeConfigProvider: RollupFeeConfigProvider;
       telemetry: TelemetryClient;
       logger: Logger;
     },
@@ -75,7 +77,8 @@ export function getMockPubSubP2PServiceFactory(
       deps.epochCache,
       deps.proofVerifier,
       deps.worldStateSynchronizer,
-      deps.blockMinFeesProvider,
+      deps.nextBlockMinFeesProvider,
+      deps.feeConfigProvider,
       deps.telemetry,
       deps.logger,
     );

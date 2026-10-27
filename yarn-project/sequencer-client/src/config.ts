@@ -63,6 +63,7 @@ export const DefaultSequencerConfig = {
   injectHighSValueAttestation: false,
   injectUnrecoverableSignatureAttestation: false,
   injectYParityAttestation: false,
+  republishAfterFakeAttestation: false,
   fishermanMode: false,
   governanceProposerForcePayloadVote: false,
   shuffleAttestationOrdering: false,
@@ -238,6 +239,12 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
   injectYParityAttestation: {
     description: 'Inject a non-proposer attestation slot in yParity form in the packed L1 tuple (for testing only)',
     ...booleanConfigHelper(DefaultSequencerConfig.injectYParityAttestation),
+  },
+  republishAfterFakeAttestation: {
+    description:
+      'Publish the checkpoint with a fake attestation first, then invalidate it and publish it again with the ' +
+      'collected attestations within the same slot (for testing only)',
+    ...booleanConfigHelper(DefaultSequencerConfig.republishAfterFakeAttestation),
   },
   fishermanMode: {
     env: 'FISHERMAN_MODE',

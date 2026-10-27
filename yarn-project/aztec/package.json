@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./dest/index.js",
+    "./deploy": "./dest/deploy/index.js",
     "./testing": "./dest/testing/index.js"
   },
   "bin": "./scripts/aztec.sh",
@@ -38,6 +39,7 @@
     "@aztec-labs/builder": "workspace:^",
     "@aztec-labs/cli": "workspace:^",
     "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/entrypoints": "workspace:^",
     "@aztec-labs/ethereum": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/kv-store": "workspace:^",
@@ -64,7 +66,8 @@
     "commander": "^12.1.0",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
-    "viem": "npm:@aztec/viem@2.38.3"
+    "viem": "2.57.1",
+    "zod": "~4.4.3"
   },
   "files": [
     "dest",
@@ -120,6 +123,6 @@
     ]
   },
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

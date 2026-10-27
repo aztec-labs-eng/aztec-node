@@ -19,13 +19,14 @@ import { L1RpcError } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
 import { InboxContract, MESSAGE_SENT_SEARCH_WINDOW_BLOCKS, messageSentSearchWindow } from './inbox.js';
 import { RollupContract } from './rollup.js';
 
-describe('InboxContract', () => {
+describeWithAnvil('InboxContract', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let cheatCodes: EthCheatCodes;

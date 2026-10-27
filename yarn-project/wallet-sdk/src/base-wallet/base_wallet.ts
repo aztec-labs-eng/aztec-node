@@ -31,6 +31,7 @@ import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/ac
 import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
 import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { displayDebugLogs } from '@aztec-labs/pxe/client/lazy';
@@ -60,7 +61,6 @@ import {
   type UtilityExecutionResult,
   mergeExecutionPayloads,
 } from '@aztec-labs/stdlib/tx';
-import { inspect } from 'util';
 
 import { assertGasLimitsWithinNetworkLimits } from './get_gas_limits.js';
 import {

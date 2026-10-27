@@ -29,6 +29,7 @@ import {
 import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type FormattedBlock, type Transaction, encodeFunctionData, multicall3Abi, toHex } from 'viem';
 
@@ -80,6 +81,14 @@ type AddCheckpointOptions = {
    * `attestationsHash` the rollup stores at propose time covers.
    */
   spareAttestationsBitmapBit?: boolean;
+  /** Overrides the posted attestations tuple, e.g. to model an escape-hatch proposer's arbitrary tuple. */
+  verbatimAttestations?: ViemCommitteeAttestations;
+  /**
+   * Puts a decoy `propose` call ahead of the real one in the multicall, allowed to fail and identical except that this
+   * key signs its attestations-and-signers bundle. L1 reverts the decoy, yet it matches the CheckpointProposed event's
+   * hashes just as the real call does, since those hashes cover neither the signers nor the bundle signature.
+   */
+  decoyBundleSigner?: Secp256k1Signer;
 };
 
 /** Result from adding a checkpoint. */
@@ -105,6 +114,8 @@ type CheckpointData = {
   verbatimAttestations: ViemCommitteeAttestations;
   /** Payload digest, matching what the L1 event emits. */
   payloadDigest: Buffer32;
+  /** The slot's proposer as L1 sees it: the key that signed the attestations bundle of the executed `propose`. */
+  proposer: EthAddress;
   /** If true, archiveAt will ignore it */
   pruned?: boolean;
 };
@@ -160,6 +171,8 @@ export class FakeL1State {
   // When set, `getMessageSentEvents` rejects for ranges the predicate matches, modelling a provider that cannot
   // serve them (a log-range limit, pruned history or an outage).
   private messageSentEventsFailure: ((fromBlock: bigint, toBlock: bigint) => boolean) | undefined;
+  // When set, `archiveAt` calls without a block tag are answered by a lagging L1 node whose pending tip is this.
+  private untaggedArchiveAtPendingTip: CheckpointNumber | undefined;
 
   // The L1 block number reported as "finalized" (defaults to the start block).
   // `undefined` simulates the startup window on a fresh devnet where
@@ -259,10 +272,12 @@ export class FakeL1State {
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
 
     // Create the transaction, blobs, and event hashes
-    const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
+    const { tx, attestationsHash, payloadDigest, verbatimAttestations, proposer } = await this.makeRollupTx(
       checkpoint,
       signers,
       options.spareAttestationsBitmapBit ?? false,
+      options.verbatimAttestations,
+      options.decoyBundleSigner,
     );
     const blobHashes = await this.makeVersionedBlobHashes(checkpoint);
     const blobs = await this.makeBlobsFromCheckpoint(checkpoint);
@@ -279,6 +294,7 @@ export class FakeL1State {
       attestationsHash,
       payloadDigest,
       verbatimAttestations,
+      proposer,
     });
 
     // Update last archive for auto-chaining
@@ -468,6 +484,15 @@ export class FakeL1State {
   }
 
   /**
+   * Makes `archiveAt` calls without a block tag answer as an L1 node lagging behind the head, whose pending tip is the
+   * given checkpoint: zero above it, as Rollup.archiveAt answers. Calls pinned to a block number keep seeing the current
+   * state. Pass undefined to clear.
+   */
+  setUntaggedArchiveAtPendingTip(pendingTip: CheckpointNumber | undefined): void {
+    this.untaggedArchiveAtPendingTip = pendingTip;
+  }
+
+  /**
    * Simulates a pruned checkpoint by marking all entries with this number as pruned.
    * The event will still be returned, but archiveAt() will return the previous checkpoint's archive
    * (or genesis if no previous checkpoint), causing a mismatch that the archiver will detect.
@@ -478,6 +503,40 @@ export class FakeL1State {
         cpData.pruned = true;
       }
     }
+    this.updatePendingCheckpointNumber();
+  }
+
+  /**
+   * Simulates the latest entry for a checkpoint number being invalidated on L1 and the identical checkpoint being
+   * proposed again at a later L1 block with a different set of signers. Both entries share the same archive root, and
+   * both remain visible as CheckpointProposed events.
+   */
+  async repostCheckpoint(
+    checkpointNumber: CheckpointNumber,
+    opts: { l1BlockNumber: bigint; signers: Secp256k1Signer[] },
+  ): Promise<void> {
+    const previous = this.checkpoints.findLast(cpData => cpData.checkpointNumber === checkpointNumber);
+    if (!previous) {
+      throw new Error(`Checkpoint ${checkpointNumber} not found`);
+    }
+    previous.pruned = true;
+
+    const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
+      previous.checkpoint,
+      opts.signers,
+      false,
+    );
+    this.checkpoints.push({
+      ...previous,
+      pruned: false,
+      l1BlockNumber: opts.l1BlockNumber,
+      // The tx hash defaults to the archive root, which both entries share, so give the repost its own.
+      tx: { ...tx, hash: `0x${opts.l1BlockNumber.toString(16).padStart(64, '0')}` },
+      signers: opts.signers,
+      attestationsHash,
+      payloadDigest,
+      verbatimAttestations,
+    });
     this.updatePendingCheckpointNumber();
   }
 
@@ -538,7 +597,13 @@ export class FakeL1State {
 
     mockRollup.getVersion.mockImplementation(() => Promise.resolve(this.version));
     mockRollup.getTargetCommitteeSize.mockImplementation(() => Promise.resolve(this.targetCommitteeSize));
-    mockRollup.archiveAt.mockImplementation((cpNum: CheckpointNumber) => Promise.resolve(this.getArchiveAt(cpNum)));
+    mockRollup.archiveAt.mockImplementation((cpNum: CheckpointNumber, options?: { blockNumber?: bigint }) => {
+      const laggingTip = options?.blockNumber === undefined ? this.untaggedArchiveAtPendingTip : undefined;
+      if (laggingTip !== undefined && cpNum > laggingTip) {
+        return Promise.resolve(Fr.ZERO);
+      }
+      return Promise.resolve(this.getArchiveAt(cpNum));
+    });
     mockRollup.status.mockImplementation((localCheckpointNum: CheckpointNumber) => {
       const status = this.getRollupStatus();
       return Promise.resolve({
@@ -556,6 +621,14 @@ export class FakeL1State {
     });
 
     mockRollup.canPruneAtTime.mockImplementation(() => Promise.resolve(this.canPruneResult));
+
+    mockRollup.getProposerAt.mockImplementation((timestamp: bigint) => {
+      const slot = getSlotAtTimestamp(timestamp, this.config);
+      const proposer = this.checkpoints.findLast(
+        cp => !cp.pruned && cp.checkpoint.header.slotNumber === slot,
+      )?.proposer;
+      return Promise.resolve(proposer ?? EthAddress.ZERO);
+    });
 
     // Mock the wrapper method for fetching checkpoint events
     mockRollup.getCheckpointProposedEvents.mockImplementation((fromBlock: bigint, toBlock: bigint) =>
@@ -697,6 +770,7 @@ export class FakeL1State {
         l1BlockNumber: cpData.l1BlockNumber,
         l1BlockHash: Buffer32.fromBigInt(cpData.l1BlockNumber),
         l1TransactionHash: cpData.tx.hash as `0x${string}`,
+        ...this.getPositionInL1Block(this.checkpoints, cpData),
         args: {
           checkpointNumber: cpData.checkpointNumber,
           archive: cpData.checkpoint.archive.root,
@@ -719,6 +793,7 @@ export class FakeL1State {
         l1BlockNumber: msg.l1BlockNumber,
         l1BlockHash: this.getL1BlockHash(msg.l1BlockNumber),
         l1TransactionHash: `0x${msg.l1BlockNumber.toString(16)}` as `0x${string}`,
+        ...this.getPositionInL1Block(this.messages, msg),
         args: {
           index: msg.index,
           leaf: msg.leaf,
@@ -750,6 +825,7 @@ export class FakeL1State {
       l1BlockNumber: msg.l1BlockNumber,
       l1BlockHash: this.getL1BlockHash(msg.l1BlockNumber),
       l1TransactionHash: `0x${msg.l1BlockNumber.toString(16)}` as `0x${string}`,
+      ...this.getPositionInL1Block(this.messages, msg),
       args: {
         index: msg.index,
         leaf: msg.leaf,
@@ -758,6 +834,18 @@ export class FakeL1State {
         message: this.makeFakeMessageSentMessage(msg.index),
       },
     };
+  }
+
+  /**
+   * The transaction and log index of an entry's event within its L1 block, following insertion order among the entries
+   * in that block, with one event per transaction.
+   */
+  private getPositionInL1Block<T extends { l1BlockNumber: bigint }>(
+    entries: T[],
+    entry: T,
+  ): { l1TransactionIndex: number; l1LogIndex: number } {
+    const index = entries.filter(e => e.l1BlockNumber === entry.l1BlockNumber).indexOf(entry);
+    return { l1TransactionIndex: index, l1LogIndex: index };
   }
 
   // The fake tracks only leaves, so the emitted message carries placeholder fields; nothing in the archiver
@@ -776,11 +864,14 @@ export class FakeL1State {
     checkpoint: Checkpoint,
     signers: Secp256k1Signer[],
     spareAttestationsBitmapBit: boolean,
+    verbatimAttestationsOverride?: ViemCommitteeAttestations,
+    decoyBundleSigner?: Secp256k1Signer,
   ): Promise<{
     tx: Transaction;
     attestationsHash: Buffer32;
     payloadDigest: Buffer32;
     verbatimAttestations: ViemCommitteeAttestations;
+    proposer: EthAddress;
   }> {
     const signatureContext = this.getSignatureContext();
     const consensusPayload = ConsensusPayload.fromCheckpoint(checkpoint, signatureContext);
@@ -801,45 +892,40 @@ export class FakeL1State {
     // don't care about the proposer identity (e.g. sync tests) still produce a
     // valid-looking signature for the attestationsAndSigners struct.
     const proposerSigner = signers[0] ?? Secp256k1Signer.random();
-    const attestationsAndSignersSignature = proposerSigner.sign(
-      getHashedSignaturePayloadTypedData(attestationsAndSigners),
-    );
 
     const packedAttestations = attestationsAndSigners.getPackedAttestations();
-    const verbatimAttestations = spareAttestationsBitmapBit
-      ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
-      : packedAttestations;
+    const verbatimAttestations =
+      verbatimAttestationsOverride ??
+      (spareAttestationsBitmapBit
+        ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
+        : packedAttestations);
 
-    const rollupInput = encodeFunctionData({
-      abi: RollupAbi,
-      functionName: 'propose',
-      args: [
-        {
-          header,
-          archive,
-          oracleInput: { feeAssetPriceModifier: 0n },
-          bucketHint: 0n,
-        },
-        verbatimAttestations,
-        attestationsAndSigners.getSigners().map(signer => signer.toString()),
-        attestationsAndSignersSignature.toViemSignature(),
-        blobInput,
-      ],
-    });
-
-    const multiCallInput = encodeFunctionData({
-      abi: multicall3Abi,
-      functionName: 'aggregate3',
-      args: [
-        [
+    const makeProposeCall = (bundleSigner: Secp256k1Signer, allowFailure: boolean) => ({
+      target: this.config.rollupAddress.toString(),
+      allowFailure,
+      callData: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'propose',
+        args: [
           {
-            target: this.config.rollupAddress.toString(),
-            callData: rollupInput,
-            allowFailure: false,
+            header,
+            archive,
+            oracleInput: { feeAssetPriceModifier: 0n },
+            bucketHint: 0n,
           },
+          verbatimAttestations,
+          attestationsAndSigners.getSigners().map(signer => signer.toString()),
+          bundleSigner.sign(getHashedSignaturePayloadTypedData(attestationsAndSigners)).toViemSignature(),
+          blobInput,
         ],
-      ],
+      }),
     });
+
+    const calls = [
+      ...(decoyBundleSigner ? [makeProposeCall(decoyBundleSigner, true)] : []),
+      makeProposeCall(proposerSigner, false),
+    ];
+    const multiCallInput = encodeFunctionData({ abi: multicall3Abi, functionName: 'aggregate3', args: [calls] });
 
     const attestationsHash = Buffer32.fromString(computeAttestationsHash(verbatimAttestations));
 
@@ -853,7 +939,7 @@ export class FakeL1State {
       to: MULTI_CALL_3_ADDRESS as `0x${string}`,
     } as Transaction<bigint, number>;
 
-    return { tx, attestationsHash, payloadDigest, verbatimAttestations };
+    return { tx, attestationsHash, payloadDigest, verbatimAttestations, proposer: proposerSigner.address };
   }
 
   private getSignatureContext() {

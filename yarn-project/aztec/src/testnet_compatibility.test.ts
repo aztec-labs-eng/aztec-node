@@ -11,12 +11,12 @@ import { computeExpectedGenesisRoot } from './cli/cmds/standby.js';
  */
 describe('Testnet compatibility', () => {
   it('has expected VK tree root', () => {
-    const expectedRoots = [Fr.fromHexString('0x2d89003cc2dc62b06f07d83d3635c66c63fc43668369d30e7ee516f908ee10e3')];
+    const expectedRoots = [Fr.fromHexString('0x22fff5de6ce590153df4468f7f0b152188a803d91b3c9c648b91d93d5913f219')];
     expect(expectedRoots).toContainEqual(getVKTreeRoot());
   });
   it('has expected Protocol Contracts hash', () => {
     expect(protocolContractsHash).toEqual(
-      Fr.fromHexString('0x0030cdae9792549b9edb5b865f4e10e91bb87565f22ab80d405213f7e991b378'),
+      Fr.fromHexString('0x0f54271c52865841a77aaa66036eed901aff22fdce9f08e123ec8b205c9854d7'),
     );
   });
   // A node computes this at startup from the network's genesis flags, and stays in standby until the rollup's archive
@@ -28,7 +28,7 @@ describe('Testnet compatibility', () => {
     );
 
     expect(genesisArchiveRoot).toEqual(
-      Fr.fromHexString('0x2ef904bbd5edc11a43cf48c4270edbf631d14aeaddafe307f8fa959e8113bfb6'),
+      Fr.fromHexString('0x29eb2c527f8d45276430363214e6c8d709ef3f657a3670ebac3179373d41e5c4'),
     );
   });
 });

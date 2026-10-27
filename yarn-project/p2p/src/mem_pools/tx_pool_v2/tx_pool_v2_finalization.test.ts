@@ -107,7 +107,7 @@ describe('TxPoolV2 finalization stall', () => {
         worldStateSynchronizer: mockWorldState,
         createTxValidator: () => Promise.resolve(alwaysValidValidator),
         checkAllowedSetupCalls: () => Promise.resolve(true),
-        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
       },
       undefined,
       { archivedTxLimit },

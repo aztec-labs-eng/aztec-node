@@ -10,9 +10,12 @@ import { basename, dirname, join } from 'path';
 import { createPublicClient, fallback, http } from 'viem';
 import { generateMnemonic, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
+import { type BlsKeyDerivationOptions, resolveBlsKeyDerivationPolicy } from './bls_key_derivation.js';
 import {
   buildValidatorEntries,
   encryptFundingAccountToFile,
+  getBlsDerivationPaths,
+  getBlsKeyCandidates,
   logValidatorSummaries,
   maybePrintJson,
   resolveFundingAccount,
@@ -21,7 +24,7 @@ import {
   writeEthJsonV3ToFile,
   writeKeystoreFile,
 } from './shared.js';
-import { processAttesterAccounts } from './staker.js';
+import { type StakerOutput, assertWithinProofOfPossessionGasLimit, processAttesterAccounts } from './staker.js';
 import {
   validateBlsPathOptions,
   validateFundingAccountOptions,
@@ -59,7 +62,7 @@ export type NewValidatorKeystoreOptions = {
   gseAddress?: EthAddress;
   l1RpcUrls?: string[];
   l1ChainId?: number;
-};
+} & BlsKeyDerivationOptions;
 
 type PasswordSourceOptions = Pick<
   NewValidatorKeystoreOptions,
@@ -152,6 +155,7 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
   validateRemoteSignerOptions(options);
   // validate funding account option
   validateFundingAccountOptions(options);
+  const blsKeyDerivation = resolveBlsKeyDerivationPolicy(options);
 
   const {
     dataDir,
@@ -192,8 +196,9 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
   });
   const shouldEncryptKeystores = ethPassword !== undefined && blsPassword !== undefined;
   const mnemonic = _mnemonic ?? generateMnemonic(wordlist);
+  const showGeneratedMnemonic = !_mnemonic && !json && !shouldEncryptKeystores;
 
-  if (!_mnemonic && !json && !shouldEncryptKeystores) {
+  if (showGeneratedMnemonic) {
     log('No mnemonic provided, generating new one...');
     log(`Using new mnemonic:`);
     log('');
@@ -217,7 +222,34 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     feeRecipient,
     coinbase,
     remoteSigner,
+    blsKeyDerivation,
+    generatedMnemonic: _mnemonic ? undefined : showGeneratedMnemonic ? 'shown' : 'hidden',
   });
+
+  // Generate staker outputs if requested, from the plaintext keys and before writing anything, so that keys the GSE
+  // would reject leave no files behind.
+  const allStakerOutputs: StakerOutput[] = [];
+  if (stakerOutput && gseAddress && l1RpcUrls && l1ChainId !== undefined) {
+    const chain = createEthereumChain(l1RpcUrls, l1ChainId);
+    const publicClient = createPublicClient({
+      chain: chain.chainInfo,
+      transport: fallback(l1RpcUrls.map(url => http(url, { batch: false }))),
+    });
+    const gse = new GSEContract(publicClient, gseAddress);
+
+    // Process each validator
+    for (let i = 0; i < validators.length; i++) {
+      const validator = validators[i];
+      const outputs = await processAttesterAccounts(validator.attester, gse);
+
+      // Collect all staker outputs
+      for (let j = 0; j < outputs.length; j++) {
+        allStakerOutputs.push(outputs[j]);
+      }
+    }
+
+    await assertWithinProofOfPossessionGasLimit(gse, allStakerOutputs);
+  }
 
   let resolvedFundingAccount = fundingAccount ? resolveFundingAccount(fundingAccount, remoteSigner) : undefined;
 
@@ -226,7 +258,11 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     const encryptedKeystoreOutDir =
       encryptedKeystoreDir && encryptedKeystoreDir.length > 0 ? encryptedKeystoreDir : keystoreOutDir;
     await writeEthJsonV3ToFile(validators, { outDir: encryptedKeystoreOutDir, password: ethPassword });
-    await writeBlsBn254ToFile(validators, { outDir: encryptedKeystoreOutDir, password: blsPassword });
+    await writeBlsBn254ToFile(validators, {
+      outDir: encryptedKeystoreOutDir,
+      password: blsPassword,
+      derivationPaths: getBlsDerivationPaths(summaries),
+    });
     if (resolvedFundingAccount) {
       resolvedFundingAccount = await encryptFundingAccountToFile(resolvedFundingAccount, {
         outDir: encryptedKeystoreOutDir,
@@ -243,38 +279,20 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
 
   await writeKeystoreFile(outputPath, keystore);
 
-  // Generate staker outputs if requested
-  const allStakerOutputs: any[] = [];
-  if (stakerOutput && gseAddress && l1RpcUrls && l1ChainId !== undefined) {
-    const chain = createEthereumChain(l1RpcUrls, l1ChainId);
-    const publicClient = createPublicClient({
-      chain: chain.chainInfo,
-      transport: fallback(l1RpcUrls.map(url => http(url, { batch: false }))),
-    });
-    const gse = new GSEContract(publicClient, gseAddress);
-
+  // Write a single JSON file with all staker outputs
+  if (allStakerOutputs.length > 0) {
     // Extract keystore base name without extension for unique staker output filenames
     const keystoreBaseName = basename(outputPath, '.json');
-
-    // Process each validator
-    for (let i = 0; i < validators.length; i++) {
-      const validator = validators[i];
-      const outputs = await processAttesterAccounts(validator.attester, gse);
-
-      // Collect all staker outputs
-      for (let j = 0; j < outputs.length; j++) {
-        allStakerOutputs.push(outputs[j]);
-      }
-    }
-
-    // Write a single JSON file with all staker outputs
-    if (allStakerOutputs.length > 0) {
-      const stakerOutputPath = join(keystoreOutDir, `${keystoreBaseName}_staker_output.json`);
-      await writeFile(stakerOutputPath, prettyPrintJSON(allStakerOutputs), 'utf-8');
-    }
+    const stakerOutputPath = join(keystoreOutDir, `${keystoreBaseName}_staker_output.json`);
+    await writeFile(stakerOutputPath, prettyPrintJSON(allStakerOutputs), 'utf-8');
   }
 
-  const outputData = !_mnemonic && !shouldEncryptKeystores ? { ...keystore, generatedMnemonic: mnemonic } : keystore;
+  const blsKeyCandidates = getBlsKeyCandidates(summaries);
+  const outputData = {
+    ...keystore,
+    ...(!_mnemonic && !shouldEncryptKeystores ? { generatedMnemonic: mnemonic } : {}),
+    ...(blsKeyCandidates.length > 0 ? { blsKeyCandidates } : {}),
+  };
 
   // Handle JSON output
   if (json) {

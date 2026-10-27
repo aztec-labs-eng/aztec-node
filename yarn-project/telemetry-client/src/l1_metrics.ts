@@ -1,72 +1,52 @@
-import type { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { type Chain, type FallbackTransport, type Hex, type HttpTransport, type PublicClient, formatEther } from 'viem';
+import type { PublicClient } from 'viem';
 
-import { L1_SENDER, L1_TX_SCOPE } from './attributes.js';
-import {
-  L1_BALANCE_ETH,
-  L1_BLOB_BASE_FEE_WEI,
-  L1_BLOCK_HEIGHT,
-  L1_GAS_PRICE_WEI,
-  L1_PUBLISHER_LOADED_COUNT,
-} from './metrics.js';
+import { L1_TX_SCOPE } from './attributes.js';
+import { L1_BLOB_BASE_FEE_WEI, L1_BLOCK_HEIGHT, L1_GAS_PRICE_WEI, L1_PUBLISHER_LOADED_COUNT } from './metrics.js';
 import type { BatchObservableResult, Meter, ObservableGauge } from './telemetry.js';
 
+/** L1 client reads needed by {@link L1Metrics}. */
+export type L1MetricsClient = Pick<PublicClient, 'getBlockNumber' | 'getGasPrice' | 'getBlobBaseFee'>;
+
+/** Reports the L1 block height and fees, and how many publishers a sequencer or prover has loaded. */
 export class L1Metrics {
   private l1BlockHeight: ObservableGauge;
-  private l1BalanceEth: ObservableGauge;
   private gasPriceWei: ObservableGauge;
   private blobBaseFeeWei: ObservableGauge;
-  private addresses: Hex[];
 
   constructor(
     private meter: Meter,
-    private client: PublicClient<FallbackTransport<HttpTransport[]>, Chain>,
-    addresses: EthAddress[],
+    private client: L1MetricsClient,
+    publisherCount: number,
     scope: 'sequencer' | 'prover',
   ) {
     this.l1BlockHeight = meter.createObservableGauge(L1_BLOCK_HEIGHT);
-    this.l1BalanceEth = meter.createObservableGauge(L1_BALANCE_ETH);
     this.gasPriceWei = meter.createObservableGauge(L1_GAS_PRICE_WEI);
     this.blobBaseFeeWei = meter.createObservableGauge(L1_BLOB_BASE_FEE_WEI);
 
-    this.addresses = addresses.map(addr => addr.toString());
-    meter.createGauge(L1_PUBLISHER_LOADED_COUNT).record(addresses.length, { [L1_TX_SCOPE]: scope });
+    meter.createGauge(L1_PUBLISHER_LOADED_COUNT).record(publisherCount, { [L1_TX_SCOPE]: scope });
   }
 
   start() {
-    this.meter.addBatchObservableCallback(this.observe, [this.l1BalanceEth, this.l1BlockHeight]);
+    this.meter.addBatchObservableCallback(this.observe, this.getObservables());
   }
 
   stop() {
-    this.meter.removeBatchObservableCallback(this.observe, [this.l1BalanceEth, this.l1BlockHeight]);
+    this.meter.removeBatchObservableCallback(this.observe, this.getObservables());
+  }
+
+  private getObservables() {
+    return [this.l1BlockHeight, this.gasPriceWei, this.blobBaseFeeWei];
   }
 
   private observe = async (observer: BatchObservableResult) => {
-    const blockNumber = await this.client.getBlockNumber();
-    const ethBalances = await Promise.all(
-      this.addresses.map(address =>
-        this.client.getBalance({
-          address,
-          blockNumber,
-        }),
-      ),
-    );
-
-    const gasPrice = await this.client.getGasPrice();
-    const blobFee = await this.client.getBlobBaseFee();
+    const [blockNumber, gasPrice, blobFee] = await Promise.all([
+      this.client.getBlockNumber(),
+      this.client.getGasPrice(),
+      this.client.getBlobBaseFee(),
+    ]);
 
     observer.observe(this.l1BlockHeight, Number(blockNumber));
     observer.observe(this.gasPriceWei, Number(gasPrice));
     observer.observe(this.blobBaseFeeWei, Number(blobFee));
-
-    for (let i = 0; i < ethBalances.length; i++) {
-      const wei = ethBalances[i];
-      const address = this.addresses[i];
-      const eth = parseFloat(formatEther(wei, 'wei'));
-
-      observer.observe(this.l1BalanceEth, eth, {
-        [L1_SENDER]: address,
-      });
-    }
   };
 }

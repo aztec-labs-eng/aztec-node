@@ -97,7 +97,7 @@ Notes can also be custom types storing any values your application needs. Use th
 
 ### Creating and Destroying Notes
 
-The [lifecycle module](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/aztec-nr/aztec/src/note/lifecycle.nr) contains functions for note management:
+The [lifecycle module](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/aztec-nr/aztec/src/note/lifecycle.nr) contains functions for note management:
 
 - `create_note` - Creates a new note, computing its hash and pushing it to the context
 - `destroy_note` - Nullifies a note by computing and emitting its nullifier
@@ -106,7 +106,7 @@ Notes created and nullified within the same transaction are called **transient n
 
 ### Note Interface
 
-Notes must implement the `NoteHash` trait from [note_interface.nr](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/aztec-nr/aztec/src/note/note_interface.nr):
+Notes must implement the `NoteHash` trait from [note_interface.nr](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/aztec-nr/aztec/src/note/note_interface.nr):
 
 - `compute_note_hash(self, owner, storage_slot, randomness)` - Computes the note's commitment
 - `compute_nullifier(self, context, owner, note_hash_for_nullification)` - Computes the nullifier for consumption

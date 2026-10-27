@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
+source $root/yarn-project/scripts/echo_test_cmd.sh
 
 # Used for build.
 function hash {
@@ -13,7 +14,8 @@ function hash {
 
 # Base folded into every dependency hash: everything an entry can depend on that the
 # dependency closures (scripts/dep-closures.mjs) don't cover — yarn.lock, .swcrc, jest
-# configs, scripts, fixtures — plus the toolchain hash. Unlike the build hash, noir-contracts
+# configs, scripts, fixtures — plus the toolchain hash and the build image Dockerfile, which pins
+# the anvil that tests run their L1 on. Unlike the build hash, noir-contracts
 # is NOT folded in: the generated contract TS and artifact JSONs are closure members and are
 # content-hashed per entry (see compute_package_dep_hashes), so a contract change only
 # invalidates the tests whose closures reach it. Everything under yarn-project is in by
@@ -27,6 +29,7 @@ function hash {
 function hash_deps_base {
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
+    $(cache_content_hash '^build-images/src/Dockerfile$') \
     $(cache_content_hash '^yarn-project/' \
         '!^yarn-project/.*\.(ts|md|tf|svg|png)$' \
         '!^yarn-project/[^/]+/package\.json$')
@@ -278,12 +281,30 @@ function compile_all_projects {
   get_projects | compile_project
 }
 
+# Yarn patches only take effect inside this workspace and the Docker images built from it:
+#  - Published packages never carry a patch: the patch files are in no package tarball. Depending
+#    on where the patch: range is declared, the published manifests either name the upstream
+#    version or carry the patch: range itself.
+#  - aztec-up installs the published packages with npm, which has no patch: protocol: it installs
+#    the upstream code, or refuses a published patch: range outright. No other consumer gets the
+#    patch either.
+# Ship a fix by publishing a fixed version of the dependency instead. Yarn's builtin compat patches
+# are exempt: they are PnP shims, inert under nodeLinker: node-modules.
+function check_no_patches {
+  if grep -E '^  resolution: ".*@patch:' yarn.lock | grep -v 'optional!builtin<compat/'; then
+    echo_stderr "ERROR: yarn.lock resolves the packages above through a Yarn patch, which npm installs never apply."
+    exit 1
+  fi
+}
+
 function compile_all {
   set -euo pipefail
   local hash=$(hash)
   if cache_download yarn-project-$hash.tar.gz; then
     return
   fi
+
+  check_no_patches
 
   # Ensure the pinned version sqlite3mc-wasm upstream artifacts are present before any package builds.
   ./sqlite3mc-wasm/scripts/vendor.sh ensure
@@ -368,7 +389,7 @@ function warm_solc_cache {
 }
 
 export -f compile_project format lint get_projects compile_all hash warm_solc_cache \
-  compute_package_dep_hashes compute_dep_hashes hash_deps_base
+  compute_package_dep_hashes compute_dep_hashes hash_deps_base check_no_patches
 
 function build {
   echo_header "yarn-project build"
@@ -390,11 +411,13 @@ function test_cmds {
     [[ "$test" =~ \.bench\.test\.ts$ ]] && continue
 
     local prefix=$(dep_hash "$test")
+    local name=""
     local cmd_env=""
 
     # These need isolation due to network stack usage (p2p, anvil, etc).
     if [[ "$test" =~ ^(prover-node|p2p|ethereum|aztec|prover-client/src/test|stdlib/src/l1-contracts|ivc-integration/src/chonk_browser|blob-client/src/server) ]]; then
-      prefix+=":ISOLATE=1:NAME=$test"
+      prefix+=":ISOLATE=1"
+      name=$test
     fi
 
     if [[ "$test" =~ ^ivc-integration/src/chonk_browser ]]; then
@@ -429,8 +452,11 @@ function test_cmds {
       fi
     fi
 
-    echo "${prefix}${cmd_env} yarn-project/scripts/run_test.sh $test"
+    local run_cmd="${cmd_env} yarn-project/scripts/run_test.sh $test"
+    echo_test_cmd unit "$prefix" "$name" "$test" "${run_cmd# }"
   done
+
+  echo "$(cache_content_hash '^yarn-project/scripts/echo_test_cmd') yarn-project/scripts/echo_test_cmd.test.sh"
 
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds
@@ -477,34 +503,18 @@ function release_packages {
   export NPM_RELEASE_RESOLUTIONS="$resolutions"
 
   # Validate every manifest before anything is published: deploy_npm applies the same
-  # scoped-release rules per package inside the loop below, where a failure would abort
-  # the release with earlier packages already live on npm.
+  # scoped-release rules per package during the publish below, where a failure would stop
+  # the release with other packages already live on npm.
   echo "Validating package manifests..."
   for package in $packages; do
     (cd $package && release_prep_package_json --check "$1")
   done
 
-  local package_list=()
-  for package in $packages; do
-    (cd $package && retry "deploy_npm $1")
-    local package_name=$(jq -r .name "$package/package.json")
-    package_list+=("$package_name@$1")
-  done
-
-  # Smoke test the deployed packages.
-  # NOTE: Disabled due to npmjs indexing taking too long.
-  # local dir=$(mktemp -d)
-  # cd "$dir"
-  # do_or_dryrun npm init -y
-  # # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
-  # # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
-  # # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
-  # # npm publish is eventually consistent: a just-published version can take a few minutes to
-  # # become installable, so give each install a ~5 minute window instead of the default ~10s.
-  # for package in "${package_list[@]}"; do
-  #   RETRY_ATTEMPTS=10 RETRY_SLEEP=30 retry "do_or_dryrun npm install --no-audit --no-fund $package"
-  # done
-  # rm -rf "$dir"
+  # Packages publish in no dependency order, so a failed publish can leave its dependents live
+  # without it until the release is re-run. --halt soon starts no new publish after a failure and
+  # lets in-flight uploads finish.
+  echo "$packages" | parallel -j 8 --tagstring '{/}' --line-buffer --halt soon,fail=1 \
+    denoise "'cd {} && retry \"deploy_npm $1\"'"
 }
 
 function release {

@@ -33,6 +33,7 @@ describe('multi-node/slashing/validators_sentinel', () => {
 
   beforeAll(async () => {
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
       ...SENTINEL_TIMING,
       aztecTargetCommitteeSize: NUM_VALIDATORS,

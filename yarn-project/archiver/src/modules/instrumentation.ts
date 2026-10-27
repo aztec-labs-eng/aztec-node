@@ -41,6 +41,7 @@ export class ArchiverInstrumentation {
   private syncMessageCount: UpDownCounter;
 
   private blockProposalTxTargetCount: UpDownCounter;
+  private checkpointCalldataUnavailableCount: UpDownCounter;
 
   private checkpointL1InclusionDelay: Histogram;
   private checkpointPromotedCount: UpDownCounter;
@@ -94,6 +95,11 @@ export class ArchiverInstrumentation {
       {
         [Attributes.L1_BLOCK_PROPOSAL_USED_TRACE]: [true, false],
       },
+    );
+
+    this.checkpointCalldataUnavailableCount = createUpDownCounterWithDefault(
+      meter,
+      Metrics.ARCHIVER_CHECKPOINT_CALLDATA_UNAVAILABLE_COUNT,
     );
 
     this.checkpointL1InclusionDelay = meter.createHistogram(Metrics.ARCHIVER_CHECKPOINT_L1_INCLUSION_DELAY);
@@ -159,11 +165,14 @@ export class ArchiverInstrumentation {
   /**
    * Records a pending-chain reorg, where the archiver dropped proposed blocks (and world-state follows by pruning). The
    * type distinguishes the cause: 'uncheckpointed' (slot ended without a checkpoint), 'l1_conflict' (proposed blocks
-   * conflicting with an L1 checkpoint), 'orphan' (no matching proposed checkpoint arrived before the deadline), or
-   * 'l1_mismatch' (the local checkpointed tip diverged from L1 — an L1 reorg or a pruned/missed-proof checkpoint — so
+   * conflicting with an L1 checkpoint), 'orphan' (no matching proposed checkpoint arrived before the deadline),
+   * 'abandoned' (this node's own sequencer gave up the checkpoint before proposing it), or 'l1_mismatch' (the local
+   * checkpointed tip diverged from L1 — an L1 reorg or a pruned/missed-proof checkpoint — so
    * already-checkpointed blocks were rewound).
    */
-  public recordPrune(pruneType: 'uncheckpointed' | 'l1_conflict' | 'orphan' | 'l1_mismatch' | 'inbox_reorg') {
+  public recordPrune(
+    pruneType: 'uncheckpointed' | 'l1_conflict' | 'orphan' | 'abandoned' | 'l1_mismatch' | 'inbox_reorg',
+  ) {
     this.pruneCount.add(1, { [Attributes.PRUNE_TYPE]: pruneType });
   }
 
@@ -195,6 +204,11 @@ export class ArchiverInstrumentation {
       [Attributes.L1_BLOCK_PROPOSAL_TX_TARGET]: target.toLowerCase(),
       [Attributes.L1_BLOCK_PROPOSAL_USED_TRACE]: usedTrace,
     });
+  }
+
+  /** Records a failed attempt to extract a checkpoint's propose calldata because the L1 tx could not be traced. */
+  public recordCheckpointCalldataUnavailable() {
+    this.checkpointCalldataUnavailableCount.add(1);
   }
 
   /** Records a checkpoint promoted from proposed (blob fetch skipped). */

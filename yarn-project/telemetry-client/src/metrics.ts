@@ -399,7 +399,7 @@ export const ARCHIVER_PRUNE_DURATION: MetricDefinition = {
 export const ARCHIVER_PRUNE_COUNT: MetricDefinition = {
   name: 'aztec.archiver.prune_count',
   description:
-    'Number of prunes detected, dimensioned by prune_type: unproven (epoch prune of checkpoints that will not be proven), uncheckpointed (proposed blocks whose slot ended without a checkpoint), l1_conflict (proposed blocks conflicting with an L1 checkpoint), orphan (proposed blocks whose matching proposed checkpoint never arrived before the deadline), and l1_mismatch (the local checkpointed tip diverged from L1 — an L1 reorg or a pruned/missed-proof checkpoint — rewinding already-checkpointed blocks).',
+    "Number of prunes detected, dimensioned by prune_type: unproven (epoch prune of checkpoints that will not be proven), uncheckpointed (proposed blocks whose slot ended without a checkpoint), l1_conflict (proposed blocks conflicting with an L1 checkpoint), orphan (proposed blocks whose matching proposed checkpoint never arrived before the deadline), abandoned (proposed blocks this node's own sequencer gave up before proposing their checkpoint), and l1_mismatch (the local checkpointed tip diverged from L1 — an L1 reorg or a pruned/missed-proof checkpoint — rewinding already-checkpointed blocks).",
   valueType: ValueType.INT,
 };
 
@@ -412,6 +412,15 @@ export const ARCHIVER_TOTAL_TXS: MetricDefinition = {
 export const ARCHIVER_BLOCK_PROPOSAL_TX_TARGET_COUNT: MetricDefinition = {
   name: 'aztec.archiver.block_proposal_tx_target_count',
   description: 'Number of block proposals by tx target',
+  valueType: ValueType.INT,
+};
+
+export const ARCHIVER_CHECKPOINT_CALLDATA_UNAVAILABLE_COUNT: MetricDefinition = {
+  name: 'aztec.archiver.checkpoint_calldata_unavailable_count',
+  description:
+    'Number of attempts to read a checkpoint whose L1 propose calldata could not be extracted because neither ' +
+    'trace_transaction nor debug_traceTransaction succeeded. L1 sync retries the checkpoint, so this keeps rising ' +
+    'while the archiver is stuck on it.',
   valueType: ValueType.INT,
 };
 
@@ -823,9 +832,42 @@ export const L1_PUBLISHER_BLOB_TX_FAILURE: MetricDefinition = {
 };
 export const L1_PUBLISHER_BALANCE: MetricDefinition = {
   name: 'aztec.l1_publisher.balance',
-  description: 'The balance of the sender address',
+  description: 'ETH balance of a publisher, read every minute',
   unit: 'eth',
   valueType: ValueType.DOUBLE,
+};
+export const L1_PUBLISHER_REQUIRED_BALANCE: MetricDefinition = {
+  name: 'aztec.l1_publisher.required_balance',
+  description:
+    'ETH a publisher must hold to afford a reference send at current fees: a first-of-epoch checkpoint proposal ' +
+    'without invalidation for sequencers, an epoch proof submission for provers',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
+export const L1_PUBLISHER_SENDS_AFFORDABLE: MetricDefinition = {
+  name: 'aztec.l1_publisher.sends_affordable',
+  description:
+    'Number of reference sends (see aztec.l1_publisher.required_balance) a publisher balance covers at current fees, ' +
+    '0 while it is backed off after an insufficient funds rejection',
+  valueType: ValueType.INT,
+};
+/** Same values as {@link L1_PUBLISHER_BALANCE}, kept while the docs monitoring installer still alerts on it. */
+export const L1_BALANCE_ETH: MetricDefinition = {
+  name: 'aztec.l1.balance',
+  description: 'Deprecated, use aztec.l1_publisher.balance instead. ETH balance of a publisher, read every minute',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
+export const L1_FUNDER_BALANCE: MetricDefinition = {
+  name: 'aztec.l1_publisher.funder_balance',
+  description: 'ETH balance of the funding account that tops up publishers, read every minute',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
+export const PROVER_NODE_PROOF_SUBMISSION_UNAFFORDABLE_COUNT: MetricDefinition = {
+  name: 'aztec.prover_node.proof_submission_unaffordable_count',
+  description: 'Number of finished epoch proofs held back from submission because no publisher could afford sending it',
+  valueType: ValueType.INT,
 };
 export const L1_PUBLISHER_TX_TOTAL_FEE: MetricDefinition = {
   name: 'aztec.l1_publisher.tx_total_fee',
@@ -856,12 +898,6 @@ export const L1_BLOCK_HEIGHT: MetricDefinition = {
   name: 'aztec.l1.block_height',
   description: 'The current L1 block height',
   valueType: ValueType.INT,
-};
-export const L1_BALANCE_ETH: MetricDefinition = {
-  name: 'aztec.l1.balance',
-  description: 'ETH balance of an address',
-  unit: 'eth',
-  valueType: ValueType.DOUBLE,
 };
 export const L1_GAS_PRICE_WEI: MetricDefinition = {
   name: 'aztec.l1.gas_price',

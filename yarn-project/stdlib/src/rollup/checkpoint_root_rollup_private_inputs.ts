@@ -6,6 +6,7 @@ import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, type Tuple, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 
 import { ParityPublicInputs } from '../parity/parity_public_inputs.js';
 import { ProofData, type RollupHonkProofData, type UltraHonkProofData } from '../proofs/proof_data.js';

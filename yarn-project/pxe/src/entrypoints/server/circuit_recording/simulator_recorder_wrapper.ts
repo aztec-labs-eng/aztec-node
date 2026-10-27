@@ -13,6 +13,7 @@ import type {
 } from '@aztec-labs/simulator/client';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import { Buffer } from 'buffer';
 
 import type { CircuitRecorder } from './circuit_recorder.js';
 

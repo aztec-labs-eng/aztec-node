@@ -1,15 +1,41 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { jest } from '@jest/globals';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { createPublicClient, http, parseAbiItem } from 'viem';
+import { type Hex, createPublicClient, http, parseAbiItem } from 'viem';
 
+import { getPublicClient } from '../client.js';
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { AMSTERDAM_MAX_L1_TX_LIMIT, isAmsterdamBlock } from '../l1_tx_utils/index.js';
+import { dumpAnvilStateWithHistory } from './anvil_hardfork.js';
+import { EthCheatCodes } from './eth_cheat_codes.js';
 import type { Anvil } from './start_anvil.js';
-import { startAnvil } from './start_anvil.js';
+import { startAnvil, syncDateProviderFromAnvilOutput } from './start_anvil.js';
+
+describe('Anvil clock synchronization', () => {
+  const now = Date.parse('2026-10-12T15:42:21Z');
+
+  it('keeps replayed block timestamps from moving the clock backwards', () => {
+    using _now = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const dateProvider = new TestDateProvider();
+    syncDateProviderFromAnvilOutput('Block Time: "Mon, 12 Oct 2026 15:42:05 +0000"', dateProvider);
+    expect(dateProvider.now()).toBe(now);
+  });
+
+  it('uses the newest block timestamp when stdout batches multiple blocks', () => {
+    using _now = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const dateProvider = new TestDateProvider();
+    syncDateProviderFromAnvilOutput(
+      'Block Time: "Mon, 12 Oct 2026 15:41:41 +0000"\nBlock Time: "Mon, 12 Oct 2026 15:42:25 +0000"',
+      dateProvider,
+    );
+    expect(dateProvider.now()).toBe(Date.parse('2026-10-12T15:42:25Z'));
+  });
+});
 
 /**
  * Stands in for an anvil that announces itself, holds its port, and refuses to die on SIGTERM. It holds
@@ -344,4 +370,105 @@ describe('start_anvil', () => {
     const futureTimeMs = futureTimestamp * 1000;
     expect(Math.abs(dateProvider.now() - futureTimeMs)).toBeLessThan(2000);
   });
+});
+
+describe('startAnvil hardfork', () => {
+  let anvil: Anvil | undefined;
+  let prevHardfork: string | undefined;
+
+  beforeEach(() => {
+    prevHardfork = process.env.ANVIL_HARDFORK;
+  });
+
+  afterEach(async () => {
+    await anvil?.stop();
+    anvil = undefined;
+    if (prevHardfork === undefined) {
+      delete process.env.ANVIL_HARDFORK;
+    } else {
+      process.env.ANVIL_HARDFORK = prevHardfork;
+    }
+  });
+
+  /** Starts anvil and returns the first block it mines, since genesis carries no fork-specific header fields. */
+  const startAndMine = async (opts: Parameters<typeof startAnvil>[0] = {}) => {
+    const res = await startAnvil({ port: 0, ...opts });
+    anvil = res.anvil;
+    const publicClient = createPublicClient({ transport: http(res.rpcUrl, { batch: false }) });
+    await publicClient.request({ method: 'evm_mine', params: [] } as any);
+    return publicClient.getBlock({ blockTag: 'latest' });
+  };
+
+  it('starts on the fork named by $ANVIL_HARDFORK', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    expect(isAmsterdamBlock(await startAndMine())).toBe(true);
+  });
+
+  it('starts on a pre-Amsterdam fork when $ANVIL_HARDFORK is unset', async () => {
+    delete process.env.ANVIL_HARDFORK;
+    expect(isAmsterdamBlock(await startAndMine())).toBe(false);
+  });
+
+  it('prefers an explicit hardfork over $ANVIL_HARDFORK', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    expect(isAmsterdamBlock(await startAndMine({ hardfork: 'osaka' }))).toBe(false);
+  });
+
+  it('rejects an unknown $ANVIL_HARDFORK before spawning anvil', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdm';
+    // Well under the spawn retry backoff, so a rejection here cannot have come from failed spawns.
+    await expect(startAnvil({ port: 0 })).rejects.toThrow(/Unknown ANVIL_HARDFORK 'amsterdm'/);
+  }, 5_000);
+
+  it('fits a tx at the Amsterdam gas cap in a block', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    const block = await startAndMine();
+    expect(block.gasLimit).toBeGreaterThanOrEqual(AMSTERDAM_MAX_L1_TX_LIMIT);
+  });
+});
+
+describe('startAnvil from a dumped state', () => {
+  let anvil: Anvil | undefined;
+  let stateDir: string;
+
+  beforeEach(() => {
+    stateDir = mkdtempSync(join(tmpdir(), 'anvil-load-state-'));
+  });
+
+  afterEach(async () => {
+    await anvil?.stop();
+    rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  it('continues the chain with its history on another hardfork and the same port', async () => {
+    const first = await startAnvil({ port: 0, hardfork: 'osaka', pruneHistory: 32 });
+    anvil = first.anvil;
+    const cheat = new EthCheatCodes([first.rpcUrl], new DateProvider());
+    const client = getPublicClient({ l1RpcUrls: [first.rpcUrl], l1ChainId: 31337 });
+    const [sender]: Hex[] = await cheat.rpcCall('eth_accounts', []);
+
+    await cheat.mine(3);
+    const tip = await client.getBlock({ blockTag: 'latest' });
+    const balanceBeforeTip = await client.getBalance({ address: sender, blockNumber: tip.number - 1n });
+    expect(isAmsterdamBlock(tip)).toBe(false);
+
+    const statePath = join(stateDir, 'state.json');
+    await dumpAnvilStateWithHistory(client, statePath);
+    await anvil.stop();
+    const second = await startAnvil({ port: first.anvil.port, hardfork: 'amsterdam', loadState: statePath });
+    anvil = second.anvil;
+
+    expect(second.rpcUrl).toEqual(first.rpcUrl);
+    expect(await client.getBlock({ blockTag: 'latest' })).toMatchObject({
+      number: tip.number,
+      hash: tip.hash,
+      timestamp: tip.timestamp,
+    });
+    expect(await client.getBalance({ address: sender, blockNumber: tip.number - 1n })).toEqual(balanceBeforeTip);
+
+    await cheat.mine(1);
+    const next = await client.getBlock({ blockTag: 'latest' });
+    expect(next).toMatchObject({ number: tip.number + 1n, parentHash: tip.hash });
+    expect(isAmsterdamBlock(next)).toBe(true);
+  }, 60_000);
 });

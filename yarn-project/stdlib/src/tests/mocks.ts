@@ -18,6 +18,7 @@ import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer'
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { Buffer } from 'buffer';
 import { type TypedDataDefinition, hashTypedData } from 'viem';
 
 import type { ContractArtifact } from '../abi/abi.js';

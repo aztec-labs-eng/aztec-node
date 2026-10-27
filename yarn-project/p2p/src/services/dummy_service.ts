@@ -4,6 +4,7 @@ import type { Gossipable, PeerErrorSeverity, TopicType } from '@aztec-labs/stdli
 import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import type { ENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import EventEmitter from 'events';
 
 import type { PeerManagerInterface } from './peer-manager/interface.js';

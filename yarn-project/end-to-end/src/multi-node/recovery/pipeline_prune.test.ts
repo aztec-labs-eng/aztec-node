@@ -50,6 +50,7 @@ describe('multi-node/recovery/pipeline_prune', () => {
     // Same wide-slot prover-backed cluster as block-production, under adverse gossip latency with node 0's
     // checkpoint promotion disabled (see setupBlockProductionWithProver).
     fixture = await setupBlockProductionWithProver({
+      keepEpochsSetUp: true,
       syncChainTip: 'checkpointed',
       minTxsPerBlock: 1,
       maxTxsPerBlock: 2,
@@ -181,8 +182,9 @@ async function findNextProposerIndex(
   validators: { attester: EthAddress }[],
   slotToDisable: SlotNumber,
 ): Promise<{ proposerIndex: number; slot: SlotNumber }> {
-  const proposer = await epochCache.getProposerAttesterAddressInSlot(SlotNumber(slotToDisable));
-  if (proposer) {
+  const proposerLookup = await epochCache.lookupProposer(SlotNumber(slotToDisable));
+  if (proposerLookup.state === 'members') {
+    const { proposer } = proposerLookup;
     const idx = validators.findIndex(v => v.attester.equals(proposer));
     if (idx >= 0) {
       return { proposerIndex: idx, slot: SlotNumber(slotToDisable) };

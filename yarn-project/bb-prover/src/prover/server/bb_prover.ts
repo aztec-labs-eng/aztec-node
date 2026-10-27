@@ -9,6 +9,7 @@ import {
   ULTRA_KECCAK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { createLogger } from '@aztec-labs/foundation/log';
 import {
@@ -71,6 +72,7 @@ import {
 import type { CircuitProvingStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import { ungzip } from 'pako';
 import * as path from 'path';
@@ -449,7 +451,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       );
     } catch (error) {
       // Preserve retryability of the underlying failure (e.g. a transient bb startup error).
-      const retry = error instanceof ProvingError && error.retry;
+      const retry = isRetryableError(error);
       throw new ProvingError(`Failed to generate proof for ${circuitType}: ${error}`, error, retry);
     }
 
@@ -590,7 +592,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       ));
     } catch (error) {
       // Preserve retryability of the underlying failure (e.g. a transient bb startup error).
-      const retry = error instanceof ProvingError && error.retry;
+      const retry = isRetryableError(error);
       throw new ProvingError(`Failed to verify proof for ${circuitType}: ${error}`, error, retry);
     }
 

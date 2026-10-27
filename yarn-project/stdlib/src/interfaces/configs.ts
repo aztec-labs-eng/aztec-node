@@ -102,6 +102,11 @@ export interface SequencerConfig {
   injectUnrecoverableSignatureAttestation?: boolean;
   /** Inject a non-proposer attestation slot in yParity (v ∈ {0, 1}) form in the packed L1 tuple (for testing only) */
   injectYParityAttestation?: boolean;
+  /**
+   * Publish the checkpoint with a fake attestation first, then invalidate it and publish it again with the collected
+   * attestations within the same slot (for testing only)
+   */
+  republishAfterFakeAttestation?: boolean;
   /** Whether to run in fisherman mode: builds blocks on every slot for validation without publishing */
   fishermanMode?: boolean;
   /** Shuffle attestation ordering to create invalid ordering (for testing only) */
@@ -185,6 +190,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     injectHighSValueAttestation: z.boolean().optional(),
     injectUnrecoverableSignatureAttestation: z.boolean().optional(),
     injectYParityAttestation: z.boolean().optional(),
+    republishAfterFakeAttestation: z.boolean().optional(),
     fishermanMode: z.boolean().optional(),
     shuffleAttestationOrdering: z.boolean().optional(),
     blockDurationMs: z.number().positive().optional(),

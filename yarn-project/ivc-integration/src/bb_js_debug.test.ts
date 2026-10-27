@@ -14,6 +14,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
 import { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import * as proc from 'child_process';
 import * as fs from 'fs/promises';
 import { ungzip } from 'pako';

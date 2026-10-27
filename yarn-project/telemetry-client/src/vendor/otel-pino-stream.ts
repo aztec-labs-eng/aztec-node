@@ -16,8 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, SeverityNumber, logs } from '@opentelemetry/api-logs';
 import { millisToHrTime } from '@opentelemetry/core';
+import type { LoggerProvider } from '@opentelemetry/sdk-logs';
 import { Writable } from 'stream';
 
 import { registerOtelLoggerProvider } from '../otel_logger_provider.js';
@@ -126,10 +128,17 @@ export function getTimeConverter(pinoLogger: any, pinoMod: any) {
   }
 }
 
+// [aztec] Upper bound on how long ending the stream waits for buffered records to be exported. pino ends its transport
+// from the process exit hook and blocks the main thread until the stream closes (giving up after 10s), so an
+// unreachable collector must not hold up the exit for that long.
+const FLUSH_ON_END_TIMEOUT_MS = 3_000;
+
 interface OTelPinoStreamOptions {
   messageKey?: string;
   levels: any; // Pino.LevelMapping
   otelTimestampFromTime?: (time: any) => number;
+  // [aztec] Provider shut down when the stream ends, which exports the records it still holds.
+  loggerProvider?: Pick<LoggerProvider, 'shutdown'>;
 }
 
 /**
@@ -143,6 +152,7 @@ export class OTelPinoStream extends Writable {
   private _messageKey: string;
   private _levels;
   private _otelTimestampFromTime;
+  private _loggerProvider?: Pick<LoggerProvider, 'shutdown'>;
 
   constructor(options: OTelPinoStreamOptions) {
     super();
@@ -161,6 +171,35 @@ export class OTelPinoStream extends Writable {
     // https://github.com/open-telemetry/opentelemetry-js/issues/4399
     // [aztec] Use the name of this package
     this._otelLogger = logs.getLogger('@aztec-labs/telemetry-client/otel-pino-stream', '0.1.0');
+    this._loggerProvider = options.loggerProvider;
+  }
+
+  // [aztec] pino ends its transport streams when the process exits and waits for them to close, but the batch
+  // processor only exports on a timer, so without this the records logged right before an exit are dropped. Shutdown
+  // rather than forceFlush, since only shutdown also waits for exports the timer already started. The timeout is hand
+  // rolled because importing foundation here would create a logger, and with it another transport worker.
+  override _final(callback: (error?: Error | null) => void) {
+    const provider = this._loggerProvider;
+    if (!provider) {
+      callback();
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timed out after ${FLUSH_ON_END_TIMEOUT_MS}ms`)),
+        FLUSH_ON_END_TIMEOUT_MS,
+      );
+    });
+    Promise.race([provider.shutdown(), timeout])
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error(`Error exporting logs on OTelPinoStream end: ${err}`);
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        callback();
+      });
   }
 
   override _write(s: string, _encoding: string, callback: Function) {
@@ -271,9 +310,9 @@ export class OTelPinoStream extends Writable {
 // Note that the original open-telemetry/opentelemetry-js-contrib was set up to run on the main
 // nodejs loop, as opposed to in a worker as pino recommends.
 export default function (options: OTelPinoStreamOptions): OTelPinoStream {
-  const url = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
+  const url = getEnv().OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
   const resource = getOtelResource();
   // We re-register here because this runs on a worker thread
-  registerOtelLoggerProvider(resource, url ? new URL(url) : undefined);
-  return new OTelPinoStream(options);
+  const loggerProvider = registerOtelLoggerProvider(resource, url ? new URL(url) : undefined);
+  return new OTelPinoStream({ ...options, loggerProvider });
 }

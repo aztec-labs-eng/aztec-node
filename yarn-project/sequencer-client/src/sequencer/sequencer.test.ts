@@ -1,5 +1,13 @@
-import { type EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET, type ProposerLookup } from '@aztec-labs/epoch-cache';
+import {
+  makeCommitteeLookup,
+  makeEscapeHatchLookup,
+  makeProposerLookup,
+  makeUnstableCommittee,
+} from '@aztec-labs/epoch-cache/test';
+import { type InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -7,6 +15,7 @@ import {
   IndexWithinCheckpoint,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { omit, times, timesParallel } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -33,7 +42,7 @@ import {
 import { Checkpoint, type ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   type MerkleTreeWriteOperations,
   type SequencerConfig,
@@ -53,10 +62,12 @@ import { expect, jest } from '@jest/globals';
 import { type MockProxy, mock, mockDeep, mockFn } from 'jest-mock-extended';
 
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
+import { INVALIDATE_REQUIREMENT, getProposeRequirement } from '../publisher/gas_constants.js';
 import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { MockCheckpointBuilder, MockCheckpointsBuilder } from '../test/utils.js';
 import * as TestUtils from '../test/utils.js';
+import { SequencerMetrics } from './metrics.js';
 import { Sequencer } from './sequencer.js';
 import { SequencerState } from './utils.js';
 
@@ -75,6 +86,7 @@ describe('sequencer', () => {
   let publisherFactory: MockProxy<SequencerPublisherFactory>;
 
   let rollupContract: MockProxy<RollupContract>;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let inboxContract: MockProxy<InboxContract>;
 
   let dateProvider: TestDateProvider;
@@ -87,10 +99,7 @@ describe('sequencer', () => {
 
   let block: L2Block;
   let globalVariables: GlobalVariables;
-  let l1Constants: Pick<
-    L1RollupConstants,
-    'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'rollupManaLimit' | 'epochDuration'
-  >;
+  let l1Constants: Pick<L1RollupConstants, 'l1GenesisTime' | 'slotDuration' | 'ethereumSlotDuration' | 'epochDuration'>;
 
   let sequencer: TestSequencer;
   let config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
@@ -206,11 +215,10 @@ describe('sequencer', () => {
       slotDuration,
       ethereumSlotDuration,
       epochDuration,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     epochCache = mockDeep<EpochCache>();
-    epochCache.isEscapeHatchOpen.mockResolvedValue(false);
+    epochCache.lookupEscapeHatch.mockResolvedValue(makeEscapeHatchLookup(false));
     epochCache.getEpochAndSlotInNextL1Slot.mockImplementation(() => ({
       epoch: EpochNumber(1),
       slot: SlotNumber(1),
@@ -225,13 +233,15 @@ describe('sequencer', () => {
       ts: 1000n,
       nowSeconds: 1000n,
     }));
-    epochCache.getCommittee.mockResolvedValue({
-      committee,
-      seed: 1n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 1n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(undefined));
 
     publisher = mockDeep<SequencerPublisher>({ [Symbol.dispose]: jest.fn() });
     publisher.epochCache = epochCache;
@@ -262,6 +272,7 @@ describe('sequencer', () => {
 
     rollupContract = mockDeep<RollupContract>();
     rollupContract.isEscapeHatchOpen.mockResolvedValue(false);
+    rollupContract.isEpochSetUp.mockResolvedValue(true);
     // Default rollup reads used by pipelined fee-header derivation.
     rollupContract.getCheckpoint.mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
@@ -362,7 +373,7 @@ describe('sequencer', () => {
     l2BlockSource.getL2Frontier.mockImplementation(async () => ({
       tips: await l2BlockSource.getL2Tips(),
       proposedCheckpoint: await l2BlockSource.getProposedCheckpointData(),
-      l1SyncPoint: undefined,
+      l1SyncPoint: { blockNumber: 1n, blockHash: Buffer32.random() },
       latestBlockHeader: undefined,
       checkpointedCheckpoint: undefined,
       pendingChainValidationStatus: await l2BlockSource.getPendingChainValidationStatus(),
@@ -389,6 +400,7 @@ describe('sequencer', () => {
     TestUtils.mockStreamingInbox(l1ToL2MessageSource, inboxContract);
 
     validatorClient = mock<ValidatorClient>();
+    validatorClient.getValidatorAddresses.mockReturnValue([]);
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve(getCheckpointAttestations()));
     validatorClient.createBlockProposal.mockImplementation(() => Promise.resolve(createBlockProposal()));
     validatorClient.createCheckpointProposal.mockImplementation(() => Promise.resolve(createCheckpointProposal()));
@@ -413,6 +425,7 @@ describe('sequencer', () => {
       // One block sub-slot is below the streaming-Inbox catch-up floor; this fixture is not a production profile.
       allowUnsafeInboxCatchupCapacity: true,
     };
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     sequencer = new TestSequencer(
       publisherFactory,
       validatorClient,
@@ -428,6 +441,7 @@ describe('sequencer', () => {
       epochCache,
       rollupContract,
       inboxContract,
+      feeConfigProvider,
       config,
     );
     sequencer.updateConfig(config);
@@ -462,6 +476,7 @@ describe('sequencer', () => {
         epochCache,
         rollupContract,
         inboxContract,
+        new TestRollupFeeConfigProvider(),
         sequencerConfig,
       );
     };
@@ -591,8 +606,8 @@ describe('sequencer', () => {
 
       // Park the in-flight work() at its proposer lookup, so pause finds a live iteration. Once released,
       // we are not the proposer, so the iteration finishes on the cheap non-proposer path.
-      const { promise: proposerHang, resolve: releaseProposer } = promiseWithResolvers<EthAddress | undefined>();
-      epochCache.getProposerAttesterAddressInSlot.mockReturnValueOnce(proposerHang);
+      const { promise: proposerHang, resolve: releaseProposer } = promiseWithResolvers<ProposerLookup>();
+      epochCache.lookupProposer.mockReturnValueOnce(proposerHang);
       validatorClient.getValidatorAddresses.mockReturnValue([]);
 
       sequencer.start();
@@ -605,7 +620,7 @@ describe('sequencer', () => {
       expect(publisherFactory.stopAll).not.toHaveBeenCalled();
       expect(sequencer.status().state).not.toBe(SequencerState.STOPPING);
 
-      releaseProposer(signer.address);
+      releaseProposer(makeProposerLookup(signer.address));
       await pausePromise;
 
       // A clean pause emits no spurious checkpoint-error and, unlike stop(), leaves the sequencer resumable:
@@ -626,7 +641,7 @@ describe('sequencer', () => {
       dateProvider.setTime((startDeadline + 1) * 1000);
       sequencer.updateConfig({ governanceProposerPayload: EthAddress.random() });
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
 
       // The fallback send resolves only when released, and only after the sequencer interrupts it,
@@ -689,6 +704,20 @@ describe('sequencer', () => {
       expectPublisherProposeL2Block();
     });
 
+    it('skips a target slot whose committee is not stable on L1 yet', async () => {
+      await setupSingleTxBlock();
+      // The escape hatch flag lives in the same epoch-cache entry, so it is unstable as well.
+      epochCache.lookupProposer.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+      epochCache.lookupEscapeHatch.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+      const errorSpy = jest.spyOn(sequencer.getLogger(), 'error');
+
+      await sequencer.work();
+
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
     it('does not build a block when targetSlot is in pauseProposingForSlots', async () => {
       await setupSingleTxBlock();
       const targetSlot = block.header.globalVariables.slotNumber;
@@ -737,7 +766,7 @@ describe('sequencer', () => {
       const governancePayload = EthAddress.random();
       sequencer.updateConfig({ governanceProposerPayload: governancePayload });
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
 
       await sequencer.work();
@@ -795,7 +824,7 @@ describe('sequencer', () => {
       const governancePayload = EthAddress.random();
       sequencer.updateConfig({ governanceProposerPayload: governancePayload });
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
 
       await sequencer.work();
@@ -809,6 +838,46 @@ describe('sequencer', () => {
         expect.any(Function),
       );
       expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
+    });
+
+    it('skips the slot without building or broadcasting when no publisher can afford the proposal', async () => {
+      await setupSingleTxBlock();
+      const recordPrecheckFailed = jest.spyOn(SequencerMetrics.prototype, 'recordCheckpointPrecheckFailed');
+      const requirement = getProposeRequirement({ withInvalidate: false, withSetupEpoch: false });
+      const unaffordable = new NoAffordablePublisherError(
+        1000n,
+        requirement,
+        { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n },
+        [{ address: publisher.getSenderAddress().toString(), balance: 1n, state: 'IDLE' }],
+      );
+      publisherFactory.create.mockImplementation((_validator, opts) =>
+        opts?.requirement
+          ? Promise.reject(unaffordable)
+          : Promise.resolve({ attestorAddress: publisher.getSenderAddress(), publisher }),
+      );
+
+      await sequencer.work();
+
+      expect(publisherFactory.create).toHaveBeenCalledWith(undefined, { requirement });
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+      expect(validatorClient.broadcastBlockProposal).not.toHaveBeenCalled();
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+      expect(recordPrecheckFailed).toHaveBeenCalledWith('insufficient_publisher_balance');
+      expect(sequencer.getLastSlotForCheckpointProposalJob()).toEqual(SlotNumber(newSlotNumber));
+    });
+
+    it.each([
+      ['is not set up yet', () => rollupContract.isEpochSetUp.mockResolvedValue(false)],
+      ['cannot be read', () => rollupContract.isEpochSetUp.mockRejectedValue(new Error('rpc down'))],
+    ])('requires a publisher to afford setting up the epoch when the target epoch %s', async (_, setup) => {
+      await setupSingleTxBlock();
+      setup();
+
+      await sequencer.work();
+
+      expect(publisherFactory.create).toHaveBeenCalledWith(undefined, {
+        requirement: getProposeRequirement({ withInvalidate: false, withSetupEpoch: true }),
+      });
     });
 
     it('builds a block with zero peers when p2p is disabled', async () => {
@@ -922,13 +991,15 @@ describe('sequencer', () => {
 
     it('should proceed with block proposal when there is no proposer yet', async () => {
       // Mock that there is no official proposer yet
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValueOnce(undefined);
-      epochCache.getCommittee.mockResolvedValueOnce({
-        committee: [] as EthAddress[],
-        seed: 1n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      } as EpochCommitteeInfo);
+      epochCache.lookupProposer.mockResolvedValueOnce(makeProposerLookup(undefined));
+      epochCache.getCommittee.mockResolvedValueOnce(
+        makeCommitteeLookup({
+          committee: [] as EthAddress[],
+          seed: 1n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       // Mock that we have some pending transactions
       const txs = [await makeTx(1), await makeTx(2)];
@@ -1044,17 +1115,19 @@ describe('sequencer', () => {
 
     it('should vote but not propose checkpoint when escape hatch is open', async () => {
       // Escape hatch is open for the epoch/slot
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 1n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: true,
-      });
-      epochCache.isEscapeHatchOpen.mockResolvedValue(true);
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 1n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: true,
+        }),
+      );
+      epochCache.lookupEscapeHatch.mockResolvedValue(makeEscapeHatchLookup(true));
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // Mock slashing actions and governance payload
       slasherClient.getProposerActions.mockResolvedValue(mockSlashActions);
@@ -1081,16 +1154,18 @@ describe('sequencer', () => {
     });
 
     it('should not attempt to vote twice in the same slot when escape hatch is open', async () => {
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 1n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: true,
-      });
-      epochCache.isEscapeHatchOpen.mockResolvedValue(true);
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 1n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: true,
+        }),
+      );
+      epochCache.lookupEscapeHatch.mockResolvedValue(makeEscapeHatchLookup(true));
 
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       slasherClient.getProposerActions.mockResolvedValue(mockSlashActions);
 
       publisher.enqueueSlashingActions.mockResolvedValue(true);
@@ -1112,13 +1187,15 @@ describe('sequencer', () => {
     it('votes when escape hatch is open even if the sync check would fail', async () => {
       // The escape-hatch vote path now runs before the sync check, so a proposer with the hatch open
       // votes even when the sync check would fail (it no longer has to pass checkSync first).
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 1n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: true,
-      });
-      epochCache.isEscapeHatchOpen.mockResolvedValue(true);
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 1n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: true,
+        }),
+      );
+      epochCache.lookupEscapeHatch.mockResolvedValue(makeEscapeHatchLookup(true));
 
       // Make the sync check fail by diverging the world-state tip from the archiver's.
       worldState.status.mockResolvedValue({
@@ -1130,7 +1207,7 @@ describe('sequencer', () => {
       });
 
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       slasherClient.getProposerActions.mockResolvedValue(mockSlashActions);
       publisher.enqueueSlashingActions.mockResolvedValue(true);
 
@@ -1168,7 +1245,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // Mock governance payload
       const governancePayload = EthAddress.random();
@@ -1206,7 +1283,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       await sequencer.work();
 
@@ -1227,7 +1304,7 @@ describe('sequencer', () => {
 
       // Set us as NOT the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([EthAddress.random()]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address); // Different address
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address)); // Different address
 
       await sequencer.work();
 
@@ -1245,7 +1322,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // Mock publisher methods
       publisher.enqueueSlashingActions.mockResolvedValue(true);
@@ -1279,7 +1356,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // Rollup is prunable, so the fallback should enqueue a prune and still send.
       publisher.enqueuePruneIfPrunable.mockResolvedValue(true);
@@ -1302,7 +1379,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // Rollup is not prunable.
       publisher.enqueuePruneIfPrunable.mockResolvedValue(false);
@@ -1322,7 +1399,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       // The rollup is prunable, but we are still within the build window.
       publisher.enqueuePruneIfPrunable.mockResolvedValue(true);
@@ -1344,7 +1421,7 @@ describe('sequencer', () => {
 
       // Set us as the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
       await sequencer.work();
 
@@ -1384,18 +1461,20 @@ describe('sequencer', () => {
       l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(invalidValidationResult);
 
       // Mock committee to include validator2
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [validator2],
-        seed: 123n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [validator2],
+          seed: 123n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       // Setup validator client
       validatorClient.getValidatorAddresses.mockReturnValue([validator1, validator2, validator3]);
 
       // Make sure we're NOT the proposer so considerInvalidatingCheckpoint is called
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(EthAddress.random());
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(EthAddress.random()));
 
       // Setup publisher factory
       publisherFactory.create.mockImplementation((validatorAddress?: EthAddress) => {
@@ -1423,19 +1502,21 @@ describe('sequencer', () => {
       await sequencer.work();
 
       // Should create publisher with the committee member validator
-      expect(publisherFactory.create).toHaveBeenCalledWith(validator2);
+      expect(publisherFactory.create).toHaveBeenCalledWith(validator2, { requirement: INVALIDATE_REQUIREMENT });
       expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalled();
       expect(publisher.sendRequests).toHaveBeenCalled();
     });
 
     it('should use first validator when invalidating as non-committee member', async () => {
       // Mock committee without any of our validators
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [EthAddress.random()],
-        seed: 123n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [EthAddress.random()],
+          seed: 123n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       // Set time past the non-committee member threshold
       const timePastThreshold = 5; // seconds
@@ -1449,7 +1530,7 @@ describe('sequencer', () => {
       await sequencer.work();
 
       // Should create publisher with the first validator
-      expect(publisherFactory.create).toHaveBeenCalledWith(validator1);
+      expect(publisherFactory.create).toHaveBeenCalledWith(validator1, { requirement: INVALIDATE_REQUIREMENT });
       expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalled();
       expect(publisher.sendRequests).toHaveBeenCalled();
     });
@@ -1596,8 +1677,11 @@ describe('sequencer', () => {
     it('multi block mode', async () => {
       sequencer.updateConfig({ maxTxsPerBlock: 4, blockDurationMs: 500 });
 
-      const txs = await timesParallel(8, i => makeTx(i * 0x10000));
-      block = await makeBlock(txs.slice(0, 4));
+      // Serve a block with its own tx on every build call, since a checkpoint that repeats a tx hash is invalid.
+      const txs = await timesParallel(MAX_BLOCKS_PER_CHECKPOINT, i => makeTx(i * 0x10000));
+      const blocks = await Promise.all(txs.map(tx => TestUtils.makeBlock([tx], globalVariables)));
+      let nextBlock = 0;
+      checkpointBuilder.setBlockProvider(() => (block = blocks[nextBlock++]));
       TestUtils.mockPendingTxs(p2p, txs);
 
       await sequencer.work();
@@ -1659,7 +1743,7 @@ describe('sequencer', () => {
 
       // We are the proposer
       validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     afterEach(() => {
@@ -1690,11 +1774,12 @@ describe('sequencer', () => {
       await sequencer.work();
 
       expect(epochCache.getTargetEpochAndSlotInNextL1Slot).not.toHaveBeenCalled();
-      expect(epochCache.getProposerAttesterAddressInSlot).toHaveBeenCalledWith(SlotNumber(7));
+      expect(epochCache.lookupProposer).toHaveBeenCalledWith(SlotNumber(7));
       expect(p2p.prepareForSlot).toHaveBeenCalledWith(SlotNumber(7));
     });
 
-    it('skips L1 check when proposed checkpoint exists', async () => {
+    /** Sets up a node that builds checkpoint 2 on top of a proposed (not yet checkpointed) checkpoint 1. */
+    async function setupOnProposedCheckpoint() {
       await setupSingleTxBlock();
 
       // Override to non-genesis state so checkSync doesn't take the genesis path.
@@ -1748,12 +1833,49 @@ describe('sequencer', () => {
         feeAssetPriceModifier: 0n,
         inboxMsgTotal: 0n,
       });
+    }
+
+    it('skips L1 check when proposed checkpoint exists', async () => {
+      await setupOnProposedCheckpoint();
 
       await sequencer.work();
 
       const simulationOverridesPlan = publisher.canProposeAt.mock.calls.at(-1)?.[2];
       expect(simulationOverridesPlan?.chainTipsOverride?.pending).toEqual(CheckpointNumber(1));
       // The archive root is passed directly as the first arg to canProposeAt (not inside the plan).
+    });
+
+    it("derives the proposed parent's fee header at the archiver's L1 sync point", async () => {
+      await setupOnProposedCheckpoint();
+      const syncPointBlock = 42n;
+      const frontierWithSyncPoint = l2BlockSource.getL2Frontier.getMockImplementation()!;
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({
+        ...(await frontierWithSyncPoint()),
+        l1SyncPoint: { blockNumber: syncPointBlock, blockHash: Buffer32.random() },
+      }));
+      const grandparentFeeHeader = {
+        manaUsed: 0n,
+        excessMana: 1500n,
+        ethPerFeeAsset: 1n,
+        protocolFee: 0n,
+        proverCost: 0n,
+      };
+      rollupContract.getCheckpoint.mockImplementation((_checkpoint, opts) =>
+        opts?.blockNumber === syncPointBlock
+          ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+          : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+      );
+      // Governance raised the target after the sync point: L1's latest state has 2000, the sync point 1000.
+      rollupContract.getManaTarget.mockImplementation(opts =>
+        Promise.resolve(opts?.blockNumber === syncPointBlock ? 1000n : 2000n),
+      );
+
+      await sequencer.work();
+
+      const plan = publisher.canProposeAt.mock.calls.at(-1)?.[2];
+      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(grandparentFeeHeader, 0n, 0n, 1000n),
+      );
     });
 
     it('skips proposal when checkpoint exceeds pipeline depth', async () => {
@@ -2012,17 +2134,35 @@ describe('sequencer', () => {
       expect(result?.checkpointNumber).toEqual(CheckpointNumber(3));
       expect(result?.checkpointedCheckpointNumber).toEqual(CheckpointNumber(2));
     });
+
+    it('waits for the archiver to have an L1 sync point, and reports its block once it does', async () => {
+      setupSyncedToBlock({
+        blockNumber: BlockNumber(3),
+        blockSlot: SlotNumber(3),
+        blockCheckpointNumber: CheckpointNumber(3),
+        checkpointedCheckpointNumber: CheckpointNumber(3),
+        proposedCheckpoint: undefined,
+      });
+      const frontier = l2BlockSource.getL2Frontier.getMockImplementation()!;
+
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({ ...(await frontier()), l1SyncPoint: undefined }));
+      expect(await sequencer.checkSyncForTest({ ts: 1000n, slot: SlotNumber(2) })).toBeUndefined();
+
+      const l1SyncPoint = { blockNumber: 42n, blockHash: Buffer32.random() };
+      l2BlockSource.getL2Frontier.mockImplementation(async () => ({ ...(await frontier()), l1SyncPoint }));
+      expect((await sequencer.checkSyncForTest({ ts: 1000n, slot: SlotNumber(2) }))?.l1BlockNumber).toEqual(42n);
+    });
   });
 
   describe('view-based proposer lookup', () => {
-    it('passes target slot to getProposerAttesterAddressInSlot', async () => {
+    it('passes target slot to lookupProposer', async () => {
       const proposer = signer.address;
       validatorClient.getValidatorAddresses.mockReturnValue([proposer]);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer));
 
       await sequencer.checkCanProposeForTest(SlotNumber(2));
 
-      expect(epochCache.getProposerAttesterAddressInSlot).toHaveBeenCalledWith(SlotNumber(2));
+      expect(epochCache.lookupProposer).toHaveBeenCalledWith(SlotNumber(2));
     });
   });
 
@@ -2035,13 +2175,12 @@ describe('sequencer', () => {
       ethereumSlotDuration,
       proofSubmissionEpochs: 2,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     beforeEach(() => {
       epochCache.getL1Constants.mockReturnValue(missingCommitteeL1Constants);
       epochCache.getLagInEpochsForValidatorSet.mockReturnValue(2);
-      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new NoCommitteeError());
+      epochCache.lookupProposer.mockResolvedValue({ state: 'none' });
     });
 
     // The diagnosis itself is unit-tested in missing_committee.test.ts; here we only check that the sequencer

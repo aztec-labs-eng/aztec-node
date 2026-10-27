@@ -66,6 +66,10 @@ export class ReExStateMismatchError extends ValidatorError {
   constructor(
     public readonly expectedArchiveRoot: Fr,
     public readonly actualArchiveRoot: Fr,
+    // Which of the two comparisons failed. Only an archive-only mismatch binds a checkpoint that commits to this block
+    // as the committed sequence's last; see checkpointCommitsToRejectedBlock.
+    public readonly headerMismatch: boolean,
+    public readonly archiveMismatch: boolean,
   ) {
     super('Re-execution state mismatch');
   }

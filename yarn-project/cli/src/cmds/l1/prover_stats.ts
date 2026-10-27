@@ -2,6 +2,7 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { retrieveL2ProofVerifiedEvents } from '@aztec-labs/archiver';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { compactArray, mapValues, unique } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -9,7 +10,7 @@ import { type LogFn, type Logger, createLogger } from '@aztec-labs/foundation/lo
 import { createAztecNodeClient } from '@aztec-labs/stdlib/interfaces/client';
 import chunk from 'lodash.chunk';
 import groupBy from 'lodash.groupby';
-import { createPublicClient, fallback, getAbiItem, getAddress, http } from 'viem';
+import { createPublicClient, getAbiItem, getAddress } from 'viem';
 
 export async function proverStats(opts: {
   l1RpcUrls: string[];
@@ -49,7 +50,7 @@ export async function proverStats(opts: {
   const chain = createEthereumChain(l1RpcUrls, chainId).chainInfo;
   const publicClient = createPublicClient({
     chain,
-    transport: fallback(l1RpcUrls.map(url => http(url, { batch: false }))),
+    transport: makeL1HttpTransport(l1RpcUrls),
   });
   const lastBlockNum = endBlock ?? (await publicClient.getBlockNumber());
   debugLog.verbose(`Querying events on rollup at ${rollup.toString()} from ${startBlock} up to ${lastBlockNum}`);

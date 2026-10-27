@@ -2,6 +2,7 @@ import { AztecClientBackend, BackendType, Barretenberg, CircuitKind } from '@azt
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { ungzip } from 'pako';
 
 import {

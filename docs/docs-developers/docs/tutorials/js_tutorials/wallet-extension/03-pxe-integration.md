@@ -27,7 +27,7 @@ The offscreen document initializes PXE lazily on first use with deduplication to
 #include_code pxe-instance docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts typescript
 
 Key configuration:
-- `l1Contracts` - Required for the PXE to verify L1 state
+- `rollupAddress` - The L1 rollup contract address, read from the node, that identifies the rollup instance the PXE tracks
 - `proverEnabled` - Enables client-side proof generation
 
 SponsoredFPC is registered lazily when the wallet's `getDefaultFeePaymentMethod()` is first called, rather than at PXE initialization time.
@@ -154,9 +154,10 @@ async sendTx(executionPayload, opts) {
 
   // 6. Optionally wait for confirmation
   if (opts.wait !== NO_WAIT) {
-    return await waitForTx(this.aztecNode, txHash, waitOpts);
+    const receipt = await waitForTx(this.aztecNode, txHash, waitOpts);
+    return { receipt };
   }
-  return txHash;
+  return { txHash };
 }
 ```
 

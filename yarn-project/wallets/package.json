@@ -36,7 +36,8 @@
     "@aztec-labs/pxe": "workspace:^",
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
-    "@aztec-labs/wallet-sdk": "workspace:^"
+    "@aztec-labs/wallet-sdk": "workspace:^",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "@jest/globals": "^30.0.0",
@@ -60,7 +61,7 @@
     "!*.test.*"
   ],
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   },
   "jest": {
     "extensionsToTreatAsEsm": [

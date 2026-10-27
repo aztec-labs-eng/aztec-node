@@ -33,7 +33,8 @@ A node that has fallen behind the chain tip cannot propose.
 The publisher account pays L1 gas to submit proposals. When it runs dry, the node stops being able to propose. A single missed proposal is not slashable, but if the node misses almost all its duties over a full epoch (about 38 minutes on mainnet) it hits the inactivity threshold, which is slashable. See [Slashing](./slashing#the-inactivity-threshold).
 
 - **Check (no monitoring stack):** query the publisher's L1 balance directly with `cast balance <your-publisher-address> --rpc-url <your-L1-RPC> --ether`. You can also paste the publisher address into a block explorer ([Etherscan](https://etherscan.io) for mainnet, [Sepolia Etherscan](https://sepolia.etherscan.io) for testnet) and read its balance there. If it is near zero, this is your cause.
-- **Check (with monitoring):** `aztec_l1_publisher_balance_eth`.
+- **Check (with monitoring):** `aztec_l1_publisher_balance_eth` is the ETH balance of each publisher, and `aztec_l1_publisher_sends_affordable` is how many proposals it can still pay for at current L1 fees. Both are refreshed every minute. If `sends_affordable` is `0` for every publisher, this is your cause. See [Metrics reference](../monitoring/metrics-reference#l1-publisher-eth-balance).
+- **Check (logs):** search for `No publisher can afford a proposal`, logged at most every 10 minutes while every publisher is short, and `Skipping checkpoint proposal`, logged when the node skips a slot it was due to propose. Both name the publisher to fund and how much ETH it is missing. The `Publisher balances` line at startup lists every publisher's balance.
 - **Fix:** top up the publisher account. Keep enough headroom that a single proposal during an L1 gas spike cannot drain the balance. See [Fund accounts](../solo-sequencer/fund-accounts) and the publisher-funding calculator there.
 
 ## 3. Is the L1 RPC serving everything the node needs?

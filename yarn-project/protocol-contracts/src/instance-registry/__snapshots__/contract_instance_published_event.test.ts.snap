@@ -2,7 +2,7 @@
 
 exports[`ContractInstancePublishedEvent parses an event as emitted by the ClassInstanceRegistry 1`] = `
 ContractInstancePublishedEvent {
-  "address": "0x1349cbddbb61aa5941003e4e355c3527c02ae16bcb4269c94d162c007b1961d8",
+  "address": "0x2d57cbef145287e9831438ccb3f947d2e7fa8facba2c1675be5a56228de8160e",
   "contractClassId": "0x26559968ae400cfc5a5f72fadae08656fa02fc20e64b6c455d1d21fb1dc8d2bc",
   "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",

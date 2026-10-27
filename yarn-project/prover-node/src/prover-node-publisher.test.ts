@@ -7,7 +7,7 @@ import {
   computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxState, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -20,8 +20,9 @@ import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-la
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import { decodeFunctionData, getAddress } from 'viem';
+import { type Hex, type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
 
@@ -61,6 +62,7 @@ describe('prover-node-publisher', () => {
   beforeEach(() => {
     rollup = mock<RollupContract>();
     rollup.getHasSubmittedProof.mockResolvedValue(false);
+    rollup.getHasSubmittedFullEpochProof.mockResolvedValue(false);
     l1Utils = mock<L1TxUtils>();
     postedAttestations = makePackedAttestations(3);
 
@@ -321,13 +323,60 @@ describe('prover-node-publisher', () => {
     },
   );
 
-  it('reports already-submitted without sending when this prover has already submitted for the epoch', async () => {
-    const args = setupPublishData(65, 32, 33, 64);
-    rollup.getHasSubmittedProof.mockResolvedValue(true);
+  describe('when this prover has already registered a proof of the same length', () => {
+    /** Makes L1 report a registration for epoch 2 and length 32 under the prover id in `args`. */
+    const registerProof = (args: { publicInputs: RootRollupPublicInputs }, { fullEpoch }: { fullEpoch: boolean }) => {
+      const proverId = EthAddress.fromField(args.publicInputs.constants.proverId);
+      const isRegistered = (epoch: EpochNumber, length: number, prover: Hex | EthAddress) =>
+        Promise.resolve(
+          epoch === EpochNumber(2) && length === 32 && proverId.equals(EthAddress.fromString(prover.toString())),
+        );
+      rollup.getHasSubmittedProof.mockImplementation(isRegistered);
+      rollup.getHasSubmittedFullEpochProof.mockImplementation((epoch, length, prover) =>
+        fullEpoch ? isRegistered(epoch, length, prover) : Promise.resolve(false),
+      );
+    };
 
-    await expect(publisher.submitEpochProof(args)).resolves.toEqual('already-submitted');
-    expect(rollup.getHasSubmittedProof).toHaveBeenCalledWith(EpochNumber(2), 32, expect.anything());
-    expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+    it('does not send a full proof when L1 holds a full-epoch registration', async () => {
+      const args = setupPublishData(65, 32, 33, 64);
+      registerProof(args, { fullEpoch: true });
+
+      await expect(publisher.submitEpochProof(args)).resolves.toEqual('already-submitted');
+      expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+    });
+
+    it('sends a full proof when L1 only holds a non-full registration', async () => {
+      // A proof of this range submitted while the epoch was still open registers as non-full and does not raise the
+      // activity score. It may be our own partial proof or a third party proving under our prover id. The rollup lets
+      // a full-epoch proof replace that registration.
+      const args = setupPublishData(65, 32, 33, 64);
+      registerProof(args, { fullEpoch: false });
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue({
+        state: mock<L1TxState>(),
+        receipt: mock<TransactionReceipt>({
+          status: 'success',
+          effectiveGasPrice: 1n,
+          gasUsed: 1n,
+          transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        }),
+      });
+      l1Utils.getTransactionStats.mockResolvedValue({
+        calldataGas: 1,
+        calldataSize: 1,
+        sender: EthAddress.random().toString(),
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      });
+
+      await expect(publisher.submitEpochProof(args)).resolves.toEqual('published');
+    });
+
+    it('does not send a partial proof', async () => {
+      const args = { ...setupPublishData(65, 32, 33, 64), kind: 'partial' as const };
+      registerProof(args, { fullEpoch: false });
+
+      await expect(publisher.submitEpochProof(args)).resolves.toEqual('already-submitted');
+      expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('committee attestations', () => {
@@ -493,6 +542,75 @@ describe('prover-node-publisher', () => {
     expect(submission.headers).toEqual(expectedHeaders.slice(prefixLength));
     expect(l1Utils.getFeesPerGas).toHaveBeenCalled();
     expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+  });
+
+  describe('when the proof tx reverts', () => {
+    // L1 state changes between our estimate and inclusion can raise the proof's gas cost, so the proof runs out of
+    // gas though the rollup accepts it with a fresh estimate.
+    const firstGasLimit = 1_000_000n;
+    const deadline = new Date(Date.now() + 60_000);
+
+    const mined = (status: 'success' | 'reverted', gasLimit: bigint = firstGasLimit) => ({
+      state: mock<L1TxState>({ gasLimit }),
+      receipt: mock<TransactionReceipt>({
+        status,
+        effectiveGasPrice: 1n,
+        gasUsed: gasLimit,
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      }),
+    });
+
+    beforeEach(() => {
+      l1Utils.getSenderAddress.mockReturnValue(EthAddress.random());
+      l1Utils.getTransactionStats.mockResolvedValue({
+        calldataGas: 1,
+        calldataSize: 1,
+        sender: EthAddress.random().toString(),
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      });
+    });
+
+    it('resends the same proof with a fresh, larger gas limit after running out of gas', async () => {
+      l1Utils.sendAndMonitorTransaction
+        .mockResolvedValueOnce(mined('reverted'))
+        .mockResolvedValueOnce(mined('success', 1_500_000n));
+      l1Utils.estimateGas.mockResolvedValue(1_500_000n);
+
+      await expect(publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline })).resolves.toEqual(
+        'published',
+      );
+
+      const [[first], [retry, retryConfig]] = l1Utils.sendAndMonitorTransaction.mock.calls;
+      expect(retry).toEqual(first);
+      expect(retryConfig).toEqual({ gasLimit: 1_500_000n, txTimeoutAt: deadline });
+    });
+
+    it('does not resend a proof the rollup would reject again', async () => {
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue(mined('reverted'));
+      l1Utils.estimateGas.mockRejectedValue(new Error('Rollup__InvalidPreviousArchive'));
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resend when a fresh estimate fits within the reverted gas limit', async () => {
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue(mined('reverted'));
+      l1Utils.estimateGas.mockResolvedValue(firstGasLimit);
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops resending after a bounded number of attempts', async () => {
+      l1Utils.sendAndMonitorTransaction.mockImplementation((_request, config) =>
+        Promise.resolve(mined('reverted', config?.gasLimit ?? firstGasLimit)),
+      );
+      let estimate = firstGasLimit;
+      l1Utils.estimateGas.mockImplementation(() => Promise.resolve((estimate += 100_000n)));
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(3);
+    });
   });
 
   it('handles reverted txs correctly', async () => {

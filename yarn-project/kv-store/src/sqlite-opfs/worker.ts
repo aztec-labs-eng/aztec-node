@@ -36,6 +36,9 @@ async function ensurePool(directory: string): Promise<SAHPoolUtil> {
       directory,
       initialCapacity: 8,
     });
+    // initialCapacity only fills an empty pool. A first open cut short by a navigation leaves fewer files, which
+    // fails every later open with SQLITE_CANTOPEN once the journal finds no free slot.
+    await pool.reserveMinimumCapacity(8);
     // Register a sqlite3mc-wrapped VFS pointing at our SAH Pool VFS.
     // Encrypted DBs must be opened through this wrapper so sqlite3mc can
     // intercept file I/O; plain DBs continue using the SAH Pool VFS directly.

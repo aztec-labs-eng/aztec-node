@@ -118,7 +118,7 @@ function build {
       [ -z "${NPM_USERNAME:-}" ] || base_secret+=" --secret id=npmuser,env=NPM_USERNAME"
       [ -z "${NPM_PASSWORD:-}" ] || base_secret+=" --secret id=npmpass,env=NPM_PASSWORD"
     fi
-    denoise "cd .. && DOCKER_BUILDKIT=1 docker build $base_secret -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
+    denoise "cd .. && DOCKER_BUILDKIT=1 docker build --pull $base_secret -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
     docker save azteclabs/release-image-base:latest > release-image-base
     cache_upload release-image-base-$hash.zst release-image-base
   else

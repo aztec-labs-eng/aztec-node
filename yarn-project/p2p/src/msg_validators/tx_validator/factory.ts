@@ -36,7 +36,7 @@ import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree'
 import { ProtocolContractAddress, protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { BlockHash } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import type { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   AllowedElement,
   ClientProtocolCircuitVerifier,
@@ -58,7 +58,7 @@ import { ContractInstanceTxValidator } from './contract_instance_validator.js';
 import { DataTxValidator } from './data_validator.js';
 import { DoubleSpendTxValidator, type NullifierSource } from './double_spend_validator.js';
 import { MaxGasLimitsValidator, MinGasLimitsValidator } from './gas_limits_validator.js';
-import { GasTxValidator, MaxFeePerGasValidator } from './gas_validator.js';
+import { FeePayerBalanceValidator, GasTxValidator, MaxFeePerGasValidator } from './gas_validator.js';
 import { MetadataTxValidator } from './metadata_validator.js';
 import { NullifierCache } from './nullifier_cache.js';
 import { AllowedSetupCallsMetaValidator, PhasesTxValidator } from './phases_validator.js';
@@ -69,22 +69,55 @@ import { TxProofValidator } from './tx_proof_validator.js';
 import { TxValidationCache } from './tx_validation_cache.js';
 
 /**
- * A validator paired with a peer penalty severity.
- * Used for gossip validation where each validator's failure triggers a peer penalization
- * with the associated severity level.
+ * Marks a gossip validator whose failure is not attributable to the sending peer: the tx is dropped without
+ * being added to the pool or propagated, and the peer's score is left alone.
  */
-export interface TransactionValidator {
+export const IgnoreWithoutPenalty = 'ignore-without-penalty';
+
+/**
+ * Consequence of a gossip validator failing: the sending peer is penalized with this severity, unless the
+ * failure is local policy rather than peer misbehavior, in which case it is {@link IgnoreWithoutPenalty}.
+ */
+export type GossipValidationFailure = PeerErrorSeverity | typeof IgnoreWithoutPenalty;
+
+/**
+ * The fees a gossiped tx is checked against. A tx below `admission` is not relayed. A tx below `penaltyFloor` as
+ * well is priced lower than any view of the chain this node considers plausible, so its sender is penalized.
+ * `penaltyFloor` is never above `admission`.
+ */
+export type GossipMinFees = { admission: GasFees; penaltyFloor: GasFees };
+
+/**
+ * Fraction of the lower of the admission and L1-forward fees below which a gossiped tx gets its sender penalized.
+ * A peer can legitimately price the next block below both: one that has seen a checkpoint this node has not can
+ * see the congestion fee drop, and the L1 gas components move with every L1 block. Halving leaves room for
+ * several such steps while still penalizing zero-fee and negligible-fee spam.
+ */
+export const GOSSIP_FEE_PENALTY_FLOOR_FRACTION = 0.5;
+
+/** Derives the gossip fee thresholds from this node's admission fee and its L1-forward fee. */
+export function computeGossipMinFees(admission: GasFees, l1Forward: GasFees): GossipMinFees {
+  return { admission, penaltyFloor: GasFees.min(admission, l1Forward).mul(GOSSIP_FEE_PENALTY_FLOOR_FRACTION) };
+}
+
+/**
+ * A validator paired with the consequence of its failure.
+ * Used for gossip validation where each validator's failure triggers a peer penalization with the associated
+ * severity level. Only stages that can also fail on local policy widen `F` to include
+ * {@link IgnoreWithoutPenalty}.
+ */
+export interface TransactionValidator<F extends GossipValidationFailure = PeerErrorSeverity> {
   validator: {
     validateTx(tx: Tx): Promise<TxValidationResult>;
   };
-  severity: PeerErrorSeverity;
+  severity: F;
 }
 
 /**
  * First stage of gossip validation — fast checks run before the pool pre-check.
  *
- * If any validator fails, the peer is penalized and the tx is rejected immediately,
- * without consulting the pool or running proof verification.
+ * If any validator fails, the tx is rejected immediately, without consulting the pool or running proof
+ * verification. The peer is penalized unless the only failures are marked {@link IgnoreWithoutPenalty}.
  *
  * The `doubleSpendValidator` failure is special-cased by the caller (`handleGossipedTx`)
  * to determine severity based on how recently the nullifier appeared. The caller reports the
@@ -94,7 +127,7 @@ export function createFirstStageTxValidationsForGossipedTransactions(
   timestamp: UInt64,
   blockNumber: BlockNumber,
   worldStateSynchronizer: WorldStateSynchronizer,
-  gasFees: GasFees,
+  gasFees: GossipMinFees,
   l1ChainId: number,
   rollupVersion: number,
   protocolContractsHash: Fr,
@@ -103,7 +136,7 @@ export function createFirstStageTxValidationsForGossipedTransactions(
   allowedInSetup: AllowedElement[] = [],
   bindings?: LoggerBindings,
   gasLimitOpts?: { maxTxL2Gas?: number; maxTxDAGas?: number },
-): Record<string, TransactionValidator> {
+): Record<string, TransactionValidator<GossipValidationFailure>> {
   const merkleTree = worldStateSynchronizer.getCommitted();
 
   return {
@@ -166,11 +199,24 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       validator: new MaxGasLimitsValidator<Tx>({ ...gasLimitOpts, bindings }),
       severity: PeerErrorSeverity.MidToleranceError,
     },
-    gasValidator: {
-      validator: new GasTxValidator(
+    // The max-fee comparisons and the fee-payer balance check are separate entries because their failures mean
+    // different things. A tx below our admission fee is only invalid against a fee this node resolved: a peer
+    // ahead of us may be relaying against a lower checkpoint fee it legitimately sees, so the tx is dropped
+    // without penalizing the sender. That excuse only stretches down to the penalty floor, so a tx below it fails
+    // both entries and the harshest failure wins. An underfunded fee payer is invalid against shared state, so
+    // it stays penalized.
+    maxFeePerGasValidator: {
+      validator: new MaxFeePerGasValidator<Tx>(gasFees.admission, bindings),
+      severity: IgnoreWithoutPenalty,
+    },
+    maxFeePerGasFloorValidator: {
+      validator: new MaxFeePerGasValidator<Tx>(gasFees.penaltyFloor, bindings),
+      severity: PeerErrorSeverity.MidToleranceError,
+    },
+    feePayerBalanceValidator: {
+      validator: new FeePayerBalanceValidator(
         new DatabasePublicStateSource(merkleTree),
         ProtocolContractAddress.FeeJuice,
-        gasFees,
         bindings,
       ),
       severity: PeerErrorSeverity.MidToleranceError,

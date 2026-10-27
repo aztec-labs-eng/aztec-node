@@ -1,9 +1,11 @@
 import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 
 import { toBigIntBE, toBufferBE } from '../../bigint-buffer/index.js';
+import { getEnv } from '../../config/env.js';
 import { randomBytes } from '../../crypto/random/index.js';
+import { inspect } from '../../inspect/index.js';
 import { hexSchemaFor } from '../../schemas/utils.js';
 import { BufferReader } from '../../serialize/buffer_reader.js';
 import type { BufferSink } from '../../serialize/buffer_sink.js';
@@ -507,7 +509,7 @@ export function reduceFn<TInput, TField extends BaseField>(fn: (input: TInput) =
 }
 
 /** If we are in test mode, we register a special equality for fields. */
-if (process.env.NODE_ENV === 'test') {
+if (getEnv().NODE_ENV === 'test') {
   const areFieldsEqual = (a: unknown, b: unknown): boolean | undefined => {
     const isAField = a instanceof BaseField;
     const isBField = b instanceof BaseField;

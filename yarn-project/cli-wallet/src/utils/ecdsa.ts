@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 export function extractECDSAPublicKeyFromBase64String(base64PublicKey: string): Buffer {
   const buffer = Buffer.from(base64PublicKey, 'base64');
   let keyOffset = 0;

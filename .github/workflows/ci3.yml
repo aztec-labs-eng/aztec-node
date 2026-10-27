@@ -54,6 +54,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           # The commit to checkout. We want our actual commit, and not the result of merging the PR to the target.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Fetch all of the PR's commits.
@@ -68,7 +69,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
           role-session-name: ci3-${{ github.run_id }}
-          role-duration-seconds: 7200 # 2h – covers max AWS_SHUTDOWN_TIME (90 min ARM) + 30 min buffer
+          role-duration-seconds: 9000 # 2.5h – covers max AWS_SHUTDOWN_TIME (120 min full) + 30 min buffer
 
       - name: Determine CI Mode
         env:

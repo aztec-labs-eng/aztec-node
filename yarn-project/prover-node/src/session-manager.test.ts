@@ -46,7 +46,12 @@ describe('SessionManager', () => {
     publishingService = mock<ProofPublishingService>();
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
-      { createHistogram: noopMetric, createGauge: noopMetric, createCounter: noopMetric } as any,
+      {
+        createHistogram: noopMetric,
+        createGauge: noopMetric,
+        createCounter: noopMetric,
+        createUpDownCounter: noopMetric,
+      } as any,
       { startActiveSpan: (_n: string, fn: any) => fn({ end: () => {} }) } as any,
     );
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
@@ -198,6 +203,74 @@ describe('SessionManager', () => {
     await manager.onCheckpointAdded(EpochNumber(4));
     expect(stubs.length).toBe(1);
     expect(manager.getFullSession(EpochNumber(4))).toBeUndefined();
+  });
+
+  describe('with full epoch proving disabled', () => {
+    beforeEach(async () => {
+      await manager.stop();
+      manager = new TestSessionManager(
+        {
+          checkpointStore: store,
+          l2BlockSource,
+          proverFactory: mock<SessionManagerDeps['proverFactory']>(),
+          proverId: EthAddress.ZERO,
+          publishingService,
+          metrics,
+          dateProvider: new DateProvider(),
+          config: {
+            maxPendingJobs: 0,
+            tickIntervalMs: 60_000,
+            finalizationDelayMs: undefined,
+            disableFullEpochProving: true,
+          },
+        },
+        (spec, provers) => {
+          const stub = makeStubSession(spec, provers);
+          stubs.push(stub);
+          onConstruct?.(stub);
+          return stub as unknown as EpochSession;
+        },
+      );
+    });
+
+    it('does not open a full session for a complete epoch', async () => {
+      const epoch = EpochNumber(3);
+      l2BlockSource.isEpochComplete.mockResolvedValue(true);
+      l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6), archiverCp(2, 7)]);
+      store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6), proverForCheckpoint(2, 7)]);
+
+      await manager.onCheckpointAdded(epoch);
+      await manager.onPrune([epoch]);
+
+      expect(stubs.length).toBe(0);
+      expect(manager.getFullSession(epoch)).toBeUndefined();
+    });
+
+    it('does not open a full session on tick', async () => {
+      mockNextUnprovenSlot(2, 6);
+      l2BlockSource.isEpochComplete.mockResolvedValue(true);
+      l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+      store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
+
+      await manager.onTick();
+
+      expect(stubs.length).toBe(0);
+      expect(manager.getFullSession(EpochNumber(3))).toBeUndefined();
+    });
+
+    it('still opens a partial session on startProof', async () => {
+      const epoch = EpochNumber(7);
+      const canonical = [proverForCheckpoint(1, 14)];
+      store.listForEpoch.mockResolvedValue(canonical);
+      store.listInSlotRange.mockReturnValue(canonical);
+
+      const jobId = await manager.startProof(epoch);
+
+      expect(stubs.length).toBe(1);
+      expect(stubs[0].spec.kind).toBe('partial');
+      expect(manager.getPartialSession(stubs[0].spec)?.getId()).toBe(jobId);
+      expect(manager.getFullSession(epoch)).toBeUndefined();
+    });
   });
 
   // ---------------- onTick ----------------

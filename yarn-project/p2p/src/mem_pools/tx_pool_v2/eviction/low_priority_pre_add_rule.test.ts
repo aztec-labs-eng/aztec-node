@@ -10,12 +10,12 @@ describe('LowPriorityPreAddRule', () => {
 
   // Mock pool access with configurable behavior
   const createPoolAccess = (pendingCount: number, lowestPriorityTx?: TxMetaData): PreAddPoolAccess => ({
-    getMetadata: () => undefined,
+    getMetadata: txHash => (txHash === lowestPriorityTx?.txHash ? lowestPriorityTx : undefined),
     getTxHashByNullifier: () => undefined,
     getFeePayerBalance: () => Promise.resolve(10n ** 18n),
     getFeePayerPendingTxs: () => [],
     getPendingTxCount: () => pendingCount,
-    getLowestPriorityPendingTx: () => lowestPriorityTx,
+    iteratePendingByPriority: () => (lowestPriorityTx ? [lowestPriorityTx.txHash] : []),
   });
 
   beforeEach(() => {

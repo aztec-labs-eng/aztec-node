@@ -5,10 +5,12 @@ import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
 import { LOCALHOST } from '@aztec-labs/cli/cli-utils';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type LogFn, createConsoleLogger, createLogger } from '@aztec-labs/foundation/log';
 import { openStoreAt } from '@aztec-labs/kv-store/lmdb-v2';
 import type { PXEConfig } from '@aztec-labs/pxe/config';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
+import { Buffer } from 'buffer';
 import { Argument, Command, Option } from 'commander';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -23,7 +25,7 @@ import { registerWellKnownContractAliases } from '../utils/well_known_contracts.
 const userLog = createConsoleLogger();
 const debugLogger = createLogger('wallet');
 
-const { WALLET_DATA_DIRECTORY = join(homedir(), '.aztec/wallet') } = process.env;
+const { WALLET_DATA_DIRECTORY = join(homedir(), '.aztec/wallet') } = getEnv();
 
 // TODO: This function is only used in 1 place so we could just inline this
 function injectInternalCommands(program: Command, log: LogFn, db: WalletDB) {

@@ -27,6 +27,7 @@ import {
   toFunctionSelector,
 } from 'viem';
 
+import { CheckpointCalldataUnavailableError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
 import { CalldataRetriever } from './calldata_retriever.js';
 import {
@@ -59,8 +60,8 @@ class TestCalldataRetriever extends CalldataRetriever {
     return super.tryDecodeDirectPropose(tx, expectedHashes, checkpointNumber, blockHash);
   }
 
-  public override async extractCalldataViaTrace(txHash: Hex): Promise<Hex> {
-    return await super.extractCalldataViaTrace(txHash);
+  public override async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
+    return await super.extractCalldataViaTrace(txHash, checkpointNumber);
   }
 
   public override tryDecodeAndVerifyPropose(
@@ -95,14 +96,7 @@ describe('CalldataRetriever', () => {
     logger = createLogger('test:calldata_retriever');
     instrumentation = mock<ArchiverInstrumentation>();
 
-    retriever = new TestCalldataRetriever(
-      publicClient,
-      debugClient,
-      TARGET_COMMITTEE_SIZE,
-      instrumentation,
-      logger,
-      rollupAddress,
-    );
+    retriever = new TestCalldataRetriever(publicClient, debugClient, instrumentation, logger, rollupAddress);
   });
 
   function makeViemHeader(): ViemHeader {
@@ -190,7 +184,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(tx.blockHash);
       expect(instrumentation.recordBlockProposalTxTarget).toHaveBeenCalledWith(MULTI_CALL_3_ADDRESS, false);
     });
@@ -259,7 +253,67 @@ describe('CalldataRetriever', () => {
       expect(instrumentation.recordBlockProposalTxTarget).toHaveBeenCalledWith(wrongAddress.toString(), true);
     });
 
-    it('should throw when tracing fails', async () => {
+    it('should retrieve the checkpoint via trace_transaction alone when the trace contains a create entry', async () => {
+      const proposeCalldata = makeProposeCalldata();
+      const hashes = mockHashComputation();
+
+      const wrapperAddress = EthAddress.random().toString();
+      const wrapperInput: Hex = '0xabcd0000';
+      const tx = {
+        input: wrapperInput,
+        to: wrapperAddress,
+        blockHash,
+        hash: txHash,
+      } as Transaction;
+
+      publicClient.getTransaction.mockResolvedValue(tx);
+
+      debugClient.request.mockResolvedValueOnce([
+        {
+          type: 'call',
+          action: {
+            from: EthAddress.random().toString(),
+            to: wrapperAddress,
+            callType: 'call',
+            input: wrapperInput,
+            value: '0x0',
+            gas: '0x100000',
+          },
+          result: { output: '0x', gasUsed: '0x50000' },
+          subtraces: 2,
+          traceAddress: [],
+        },
+        {
+          type: 'create',
+          action: { from: wrapperAddress, gas: '0x10000', init: '0x60006000', value: '0x0' },
+          result: { address: EthAddress.random().toString(), code: '0x00', gasUsed: '0x1000' },
+          subtraces: 0,
+          traceAddress: [0],
+        },
+        {
+          type: 'call',
+          action: {
+            from: wrapperAddress,
+            to: rollupAddress.toString(),
+            callType: 'call',
+            input: proposeCalldata,
+            value: '0x0',
+            gas: '0x50000',
+          },
+          result: { output: '0x', gasUsed: '0x5208' },
+          subtraces: 0,
+          traceAddress: [1],
+        },
+      ]);
+      debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
+
+      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes);
+
+      expect(result.checkpointNumber).toBe(checkpointNumber);
+      expect(result.header).toBeInstanceOf(CheckpointHeader);
+    });
+
+    it('should throw a calldata unavailable error and count it when tracing fails', async () => {
       const proposeCalldata = makeProposeCalldata();
       const hashes = mockHashComputation();
 
@@ -277,9 +331,11 @@ describe('CalldataRetriever', () => {
       // Mock both trace methods to fail
       debugClient.request.mockRejectedValue(new Error(`Method not available`));
 
-      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes)).rejects.toThrow(
-        'Failed to trace transaction',
-      );
+      const error = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes).catch(err => err);
+      expect(error).toBeInstanceOf(CheckpointCalldataUnavailableError);
+      expect(error).toMatchObject({ l1TxHash: txHash, checkpointNumber });
+      expect(error.message).toContain('ETHEREUM_DEBUG_HOSTS');
+      expect(instrumentation.recordCheckpointCalldataUnavailable).toHaveBeenCalledTimes(1);
     });
 
     it('should throw when transaction retrieval fails', async () => {
@@ -350,7 +406,7 @@ describe('CalldataRetriever', () => {
           attestationsHash: wrongAttestationsHash,
           payloadDigest: hashes.payloadDigest,
         }),
-      ).rejects.toThrow('Failed to trace');
+      ).rejects.toThrow(CheckpointCalldataUnavailableError);
     });
 
     it('should validate payloadDigest', async () => {
@@ -420,7 +476,7 @@ describe('CalldataRetriever', () => {
           attestationsHash: hashes.attestationsHash,
           payloadDigest: wrongPayloadDigest,
         }),
-      ).rejects.toThrow('Failed to trace');
+      ).rejects.toThrow(CheckpointCalldataUnavailableError);
     });
   });
 
@@ -996,7 +1052,7 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      const result = await retriever.extractCalldataViaTrace(txHash);
+      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
 
       expect(result).toBe(proposeCalldata);
       expect(debugClient.request).toHaveBeenCalledWith({ method: 'trace_transaction', params: [txHash] });
@@ -1034,7 +1090,7 @@ describe('CalldataRetriever', () => {
         ],
       });
 
-      const result = await retriever.extractCalldataViaTrace(txHash);
+      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
 
       expect(result).toBe(proposeCalldata);
       expect(debugClient.request).toHaveBeenCalledTimes(2);
@@ -1052,8 +1108,8 @@ describe('CalldataRetriever', () => {
       // Second call (debug_traceTransaction) also fails
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
 
       expect(debugClient.request).toHaveBeenCalledTimes(2);
@@ -1067,8 +1123,8 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decode L1 tx'));
@@ -1077,10 +1133,35 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(instrumentation.recordCheckpointCalldataUnavailable).toHaveBeenCalledTimes(2);
+
+      warnSpy.mockRestore();
+    });
+
+    it('warns when trace_transaction returns a malformed trace and decodes via debug_traceTransaction', async () => {
+      const warnSpy = jest.spyOn(logger, 'warn');
+      const proposeCalldata = makeProposeCalldata();
+      debugClient.request.mockResolvedValueOnce([{ type: 'call', traceAddress: 'not-an-array' }]);
+      debugClient.request.mockResolvedValueOnce({
+        type: 'CALL',
+        from: EthAddress.random().toString(),
+        to: rollupAddress.toString(),
+        input: proposeCalldata,
+        value: '0x0',
+        gas: '0x50000',
+        gasUsed: '0x5208',
+        output: '0x',
+      });
+
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).resolves.toBe(proposeCalldata);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ txHash, issues: expect.any(Array) }),
+      );
 
       warnSpy.mockRestore();
     });
@@ -1089,7 +1170,7 @@ describe('CalldataRetriever', () => {
       // Mock debug client to return empty trace
       debugClient.request.mockResolvedValueOnce([]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'No successful propose calls found in transaction ' + txHash,
       );
     });
@@ -1136,7 +1217,7 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'Multiple successful propose calls found in transaction ' + txHash + ' (2)',
       );
     });
@@ -1153,11 +1234,11 @@ describe('CalldataRetriever', () => {
       expect(result!.checkpointNumber).toBe(checkpointNumber);
       expect(result!.header).toBeInstanceOf(CheckpointHeader);
       expect(result!.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result!.attestations)).toBe(true);
+      expect(result!.verbatimAttestations).toBeDefined();
       expect(result!.blockHash).toBe(blockHash);
     });
 
-    it('should handle attestations correctly', () => {
+    it('returns the packed attestations tuple verbatim', () => {
       const attestations = makeViemCommitteeAttestations();
       const proposeCalldata = makeProposeCalldata(undefined, attestations);
       const hashes = mockHashComputation();
@@ -1165,7 +1246,31 @@ describe('CalldataRetriever', () => {
       const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
 
       expect(result).toBeDefined();
-      expect(result!.attestations).toHaveLength(TARGET_COMMITTEE_SIZE);
+      expect(result!.verbatimAttestations).toEqual(attestations);
+    });
+
+    it('extracts a checkpoint whose attestations tuple is empty', () => {
+      // An escape-hatch proposer may post an empty tuple.
+      const attestations: ViemCommitteeAttestations = { signatureIndices: '0x', signaturesOrAddresses: '0x' };
+      const proposeCalldata = makeProposeCalldata(undefined, attestations);
+      const hashes = mockHashComputation();
+
+      const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
+
+      expect(result).toBeDefined();
+      expect(result!.verbatimAttestations).toEqual(attestations);
+    });
+
+    it('extracts a checkpoint whose attestations tuple cannot be decoded as a committee', () => {
+      // One signature bit but a single payload byte: undecodable, yet L1 accepts it during an escape hatch.
+      const attestations: ViemCommitteeAttestations = { signatureIndices: '0x80', signaturesOrAddresses: '0xab' };
+      const proposeCalldata = makeProposeCalldata(undefined, attestations);
+      const hashes = mockHashComputation();
+
+      const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
+
+      expect(result).toBeDefined();
+      expect(result!.verbatimAttestations).toEqual(attestations);
     });
 
     it('should return undefined when calldata is not for propose function', () => {
@@ -1244,7 +1349,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(tx.blockHash);
 
       // Verify all components are properly decoded
@@ -1318,7 +1423,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(blockHash);
 
       // Verify all components are properly decoded

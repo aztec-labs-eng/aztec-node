@@ -10,25 +10,27 @@ import { Semaphore } from '@aztec-labs/foundation/queue';
 import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import pickBy from 'lodash.pickby';
 import {
   type Abi,
   type BlockOverrides,
   type Hex,
+  InsufficientFundsError,
   type PrepareTransactionRequestRequest,
   type StateOverride,
   type TransactionReceipt,
   type TransactionSerializable,
   formatGwei,
-  serializeTransaction,
 } from 'viem';
 
+import { serializeSignedTransaction } from '../blob_tx.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
-import { MAX_L1_TX_LIMIT } from './constants.js';
+import { INSUFFICIENT_FUNDS_BACKOFF_MS, MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
-import { type L1SimulationResult, ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
+import { type L1SimulationResult, ReadOnlyL1TxUtils, isInsufficientFundsRpcError } from './readonly_l1_tx_utils.js';
 import { Delayer, createDelayer, wrapClientWithDelayer } from './tx_delayer.js';
 import {
   DroppedTransactionError,
@@ -61,6 +63,11 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   public delayer?: Delayer;
   /** KZG instance for blob operations. */
   protected kzg?: BlobKzgInstance;
+  /**
+   * Sender balance and time when a send was last rejected for insufficient funds. Cleared once the balance rises above
+   * the recorded one or the backoff expires.
+   */
+  private insufficientFunds: { balance: bigint; atMs: number } | undefined;
 
   constructor(
     public override client: ViemClient,
@@ -156,6 +163,47 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     });
   }
 
+  /** Returns the sender balance recorded when a send was last rejected for insufficient funds, if any. */
+  public getInsufficientFundsAtBalance(): bigint | undefined {
+    return this.insufficientFunds?.balance;
+  }
+
+  /**
+   * Returns whether this sender should be skipped because a previous send was rejected for insufficient funds and its
+   * balance has not increased since. Clears the mark once the given current balance is above the recorded one, or once
+   * INSUFFICIENT_FUNDS_BACKOFF_MS have elapsed since the rejection: a rejection can come from a send whose gas limit was
+   * far above what later sends need, so a balance that did not move is not proof the publisher cannot afford them.
+   */
+  public isBackedOffForInsufficientFunds(currentBalance: bigint): boolean {
+    if (this.insufficientFunds === undefined) {
+      return false;
+    }
+    if (this.hasActiveInsufficientFundsBackoff(currentBalance)) {
+      return true;
+    }
+    const { balance } = this.insufficientFunds;
+    this.logger.info(`Clearing insufficient funds backoff for publisher`, {
+      account: this.getSenderAddress().toString(),
+      balance: currentBalance,
+      insufficientFundsAtBalance: balance,
+      reason: currentBalance > balance ? 'balance-increased' : 'expired',
+    });
+    this.insufficientFunds = undefined;
+    return false;
+  }
+
+  /**
+   * Same check as {@link isBackedOffForInsufficientFunds}, but without clearing a lifted backoff or logging, so it can be
+   * used for reporting without affecting publisher selection.
+   */
+  public hasActiveInsufficientFundsBackoff(currentBalance: bigint): boolean {
+    if (this.insufficientFunds === undefined) {
+      return false;
+    }
+    const { balance, atMs } = this.insufficientFunds;
+    return currentBalance <= balance && this.dateProvider.now() - atMs < INSUFFICIENT_FUNDS_BACKOFF_MS;
+  }
+
   /**
    * Rehydrates transaction states from the store and resumes monitoring for pending transactions.
    * This should be called on startup to restore state and resume monitoring of any in-flight transactions.
@@ -220,11 +268,12 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
   private async signTransaction(txRequest: TransactionSerializable): Promise<`0x${string}`> {
     const signature = await this.signer(txRequest, this.getSenderAddress());
-    return serializeTransaction(txRequest, signature);
+    return serializeSignedTransaction(txRequest, signature);
   }
 
   protected async prepareSignedTransaction(txData: PrepareTransactionRequestRequest) {
-    const txRequest = await this.client.prepareTransactionRequest(txData);
+    // Passing the chain id keeps viem from routing a fully specified request through eth_fillTransaction.
+    const txRequest = await this.client.prepareTransactionRequest({ chainId: this.client.chain.id, ...txData });
     return await this.signTransaction(txRequest as TransactionSerializable);
   }
 
@@ -340,11 +389,29 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
       return { txHash, state: l1TxState };
     } catch (err: any) {
+      if (isInsufficientFundsRpcError(err) || getErrorCause(err, InsufficientFundsError)) {
+        await this.recordInsufficientFunds();
+      }
       const viemError = formatViemError(err, request.abi);
       this.logger.error(`Failed to send L1 transaction: ${viemError.message}`, viemError, {
         request: pick(request, 'to', 'value'),
       });
       throw viemError;
+    }
+  }
+
+  /** Records the current sender balance as one that cannot afford a send, so selection skips it for a while. */
+  private async recordInsufficientFunds(): Promise<void> {
+    try {
+      const balance = await this.getSenderBalance();
+      this.insufficientFunds = { balance, atMs: this.dateProvider.now() };
+      this.logger.warn(`L1 send rejected for insufficient funds, backing off publisher until its balance increases`, {
+        account: this.getSenderAddress().toString(),
+        balance,
+        backoffMs: INSUFFICIENT_FUNDS_BACKOFF_MS,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to read balance after an insufficient funds rejection`, { err });
     }
   }
 

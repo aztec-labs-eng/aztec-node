@@ -43,10 +43,28 @@ describe('ContractInstanceStore', () => {
     });
 
     it('returns undefined if previously stored contract instances was deleted', async () => {
-      await contractInstanceStore.deleteContractInstances([contractInstance]);
+      await contractInstanceStore.deleteContractInstances([contractInstance], BlockNumber(blockNum));
       await expect(
         contractInstanceStore.getContractInstance(contractInstance.address, timestamp),
       ).resolves.toBeUndefined();
+    });
+
+    it('does not delete an instance published by a different block', async () => {
+      await contractInstanceStore.deleteContractInstances([contractInstance], BlockNumber(blockNum + 1));
+      await expect(
+        contractInstanceStore.getContractInstance(contractInstance.address, timestamp),
+      ).resolves.toMatchObject(contractInstance);
+      await expect(
+        contractInstanceStore.getContractInstanceDeploymentBlockNumber(contractInstance.address),
+      ).resolves.toEqual(blockNum);
+    });
+
+    it('reports success for batch adds and deletes', async () => {
+      const other = { ...(await SerializableContractInstance.random()), address: await AztecAddress.random() };
+      await expect(contractInstanceStore.addContractInstances([other], BlockNumber(blockNum))).resolves.toBe(true);
+      await expect(
+        contractInstanceStore.deleteContractInstances([contractInstance, other], BlockNumber(blockNum)),
+      ).resolves.toBe(true);
     });
 
     it('throws when adding the same contract instance again at a different block', async () => {
@@ -101,7 +119,7 @@ describe('ContractInstanceStore', () => {
     });
 
     it('does not delete a protocol instance', async () => {
-      await contractInstanceStore.deleteContractInstances([protocolInstance]);
+      await contractInstanceStore.deleteContractInstances([protocolInstance], BlockNumber(preloadBlock));
       await expect(
         contractInstanceStore.getContractInstance(protocolInstance.address, timestamp),
       ).resolves.toMatchObject(protocolInstance);
@@ -296,13 +314,15 @@ describe('ContractInstanceStore', () => {
       const first = Fr.random();
       const second = Fr.random();
       await addUpdate(first, { schedulingTimestamp: 1000n, blockNumber: 5 });
-      await addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 });
+      await expect(addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 })).resolves.toBe(true);
 
-      await contractInstanceStore.deleteContractInstanceUpdates(
-        [{ prevContractClassId: originalClassId, newContractClassId: second, timestampOfChange: 1000n, address }],
-        1000n,
-        BlockNumber(6),
-      );
+      await expect(
+        contractInstanceStore.deleteContractInstanceUpdates(
+          [{ prevContractClassId: originalClassId, newContractClassId: second, timestampOfChange: 1000n, address }],
+          1000n,
+          BlockNumber(6),
+        ),
+      ).resolves.toBe(true);
 
       await expect(
         contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),

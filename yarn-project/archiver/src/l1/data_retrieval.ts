@@ -16,6 +16,7 @@ import {
   type RollupContract,
   type ViemCommitteeAttestations,
   type ViemHeader,
+  compareL1LogPosition,
   fetchLogsBisectingRange,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
@@ -30,6 +31,7 @@ import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { type Hex, decodeFunctionData, getAbiItem, hexToBytes } from 'viem';
 
 import { NoBlobBodiesFoundError } from '../errors.js';
@@ -46,7 +48,6 @@ type RetrievedCheckpointBase = {
   l1: L1PublishedData;
   chainId: Fr;
   version: Fr;
-  attestations: CommitteeAttestation[];
   /**
    * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim: it is what
    * the rollup hashed into `attestationsHash`, and repacking the decoded attestations does not reproduce it.
@@ -55,14 +56,22 @@ type RetrievedCheckpointBase = {
 };
 
 /** Checkpoint data as retrieved from L1 calldata and blob data. */
-export type RetrievedCheckpoint = RetrievedCheckpointBase & { checkpointBlobData: CheckpointBlobData };
+export type RetrievedCheckpoint = RetrievedCheckpointBase & {
+  attestations: CommitteeAttestation[];
+  checkpointBlobData: CheckpointBlobData;
+};
 
-/** Checkpoint data retrieved from L1 calldata only, without blob data. */
+/** Checkpoint data retrieved from L1 calldata only, without blob data or decoded attestations. */
 export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   /** Versioned blob hashes from the checkpoint proposed event. */
   blobHashes: Buffer[];
   /** Parent beacon block root from the L1 block, used for blob fetching. */
   parentBeaconBlockRoot: string | undefined;
+};
+
+/** A calldata-only checkpoint with its attestations decoded for its epoch committee. */
+export type ResolvedCheckpointFromCalldata = RetrievedCheckpointFromCalldata & {
+  attestations: CommitteeAttestation[];
 };
 
 export async function retrievedToPublishedCheckpoint({
@@ -172,6 +181,7 @@ export async function retrievedToPublishedCheckpoint({
  * @param debugClient - The viem debug client to use for trace/debug RPC methods (optional).
  * @param searchStartBlock - The block number to use for starting the search.
  * @param searchEndBlock - The highest block number that we should search up to.
+ * @param l1BlockNumber - The L1 block the rollup is read at to check that each checkpoint is still on the chain.
  * @param instrumentation - The archiver instrumentation instance.
  * @param logger - The logger instance.
  * @returns An array of calldata-only checkpoints.
@@ -182,12 +192,13 @@ export async function retrieveCheckpointCalldataFromRollup(
   debugClient: ViemPublicDebugClient,
   searchStartBlock: bigint,
   searchEndBlock: bigint,
+  l1BlockNumber: bigint,
   instrumentation: ArchiverInstrumentation,
   logger: Logger = createLogger('archiver'),
 ): Promise<RetrievedCheckpointFromCalldata[]> {
-  const retrievedCheckpoints: RetrievedCheckpointFromCalldata[] = [];
+  const retrievedCheckpoints: RetrievedCheckpointWithLog[] = [];
 
-  let rollupConstants: { chainId: Fr; version: Fr; targetCommitteeSize: number } | undefined;
+  let rollupConstants: { chainId: Fr; version: Fr } | undefined;
 
   do {
     if (searchStartBlock > searchEndBlock) {
@@ -205,15 +216,10 @@ export async function retrieveCheckpointCalldataFromRollup(
     );
 
     if (rollupConstants === undefined) {
-      const [chainId, version, targetCommitteeSize] = await Promise.all([
-        publicClient.getChainId(),
-        rollup.getVersion(),
-        rollup.getTargetCommitteeSize(),
-      ]);
+      const [chainId, version] = await Promise.all([publicClient.getChainId(), rollup.getVersion()]);
       rollupConstants = {
         chainId: new Fr(chainId),
         version: new Fr(version),
-        targetCommitteeSize,
       };
     }
 
@@ -223,6 +229,7 @@ export async function retrieveCheckpointCalldataFromRollup(
       debugClient,
       checkpointProposedLogs,
       rollupConstants,
+      l1BlockNumber,
       instrumentation,
       logger,
     );
@@ -230,8 +237,12 @@ export async function retrieveCheckpointCalldataFromRollup(
     searchStartBlock = lastLog.l1BlockNumber + 1n;
   } while (searchStartBlock <= searchEndBlock);
 
-  return retrievedCheckpoints.sort((a, b) => Number(a.l1.blockNumber - b.l1.blockNumber));
+  // Checkpoints are retrieved in parallel and land in completion order, so restore the order of their L1 logs.
+  return retrievedCheckpoints.sort((a, b) => compareL1LogPosition(a.log, b.log)).map(({ checkpoint }) => checkpoint);
 }
+
+/** A checkpoint retrieved from calldata, with the L1 log that announced it. */
+type RetrievedCheckpointWithLog = { log: CheckpointProposedLog; checkpoint: RetrievedCheckpointFromCalldata };
 
 /**
  * Processes CheckpointProposed logs, fetching only calldata (no blobs).
@@ -239,25 +250,26 @@ export async function retrieveCheckpointCalldataFromRollup(
  * @param publicClient - The viem public client to use for transaction retrieval.
  * @param debugClient - The viem debug client to use for trace/debug RPC methods (optional).
  * @param logs - CheckpointProposed logs.
- * @param rollupConstants - The rollup constants (chainId, version, targetCommitteeSize).
+ * @param rollupConstants - The rollup constants (chainId, version).
+ * @param l1BlockNumber - The L1 block the rollup is read at to check that each checkpoint is still on the chain.
  * @param instrumentation - The archiver instrumentation instance.
  * @param logger - The logger instance.
- * @returns An array of calldata-only checkpoints.
+ * @returns The calldata-only checkpoints, each with the log that announced it, in completion order.
  */
 async function processCheckpointProposedLogs(
   rollup: RollupContract,
   publicClient: ViemPublicClient,
   debugClient: ViemPublicDebugClient,
   logs: CheckpointProposedLog[],
-  { chainId, version, targetCommitteeSize }: { chainId: Fr; version: Fr; targetCommitteeSize: number },
+  { chainId, version }: { chainId: Fr; version: Fr },
+  l1BlockNumber: bigint,
   instrumentation: ArchiverInstrumentation,
   logger: Logger,
-): Promise<RetrievedCheckpointFromCalldata[]> {
-  const retrievedCheckpoints: RetrievedCheckpointFromCalldata[] = [];
+): Promise<RetrievedCheckpointWithLog[]> {
+  const retrievedCheckpoints: RetrievedCheckpointWithLog[] = [];
   const calldataRetriever = new CalldataRetriever(
     publicClient,
     debugClient,
-    targetCommitteeSize,
     instrumentation,
     logger,
     EthAddress.fromString(rollup.address),
@@ -266,7 +278,14 @@ async function processCheckpointProposedLogs(
   await asyncPool(10, logs, async log => {
     const checkpointNumber = log.args.checkpointNumber;
     const archive = log.args.archive;
-    const archiveFromChain = await rollup.archiveAt(checkpointNumber);
+    // CheckpointProposed logs stay on L1 after their checkpoint is pruned or replaced, so every re-read of a range
+    // (a sync point rewind, a fresh sync from genesis) sees them. Rollup.archiveAt only answers up to the current
+    // pending tip, so a pruned or replaced checkpoint mismatches here and is dropped before its blobs are fetched or
+    // it is validated. A checkpoint the archiver refuses to ingest therefore blocks sync only while it is still
+    // canonical: the L1 prune is lazy (it runs on the next propose or an explicit prune() call), and until then
+    // archiveAt keeps returning the refused checkpoint's archive. Proposers send prune() from their cannot-build
+    // fallback even when their own sync is stuck, so the refused checkpoint is eventually dropped here.
+    const archiveFromChain = await rollup.archiveAt(checkpointNumber, { blockNumber: l1BlockNumber });
     const blobHashes = log.args.versionedBlobHashes;
 
     if (archive.equals(archiveFromChain)) {
@@ -285,19 +304,15 @@ async function processCheckpointProposedLogs(
       const l1 = new L1PublishedData(log.l1BlockNumber, timestamp, log.l1BlockHash.toString());
 
       retrievedCheckpoints.push({
-        ...checkpoint,
-        l1,
-        chainId,
-        version,
-        blobHashes,
-        parentBeaconBlockRoot,
+        log,
+        checkpoint: { ...checkpoint, l1, chainId, version, blobHashes, parentBeaconBlockRoot },
       });
 
       logger.trace(`Retrieved checkpoint calldata ${checkpointNumber} from L1 tx ${log.l1TransactionHash}`, {
         l1BlockNumber: log.l1BlockNumber,
         checkpointNumber,
         archive: archive.toString(),
-        attestations: checkpoint.attestations,
+        verbatimAttestations: checkpoint.verbatimAttestations,
       });
     } else {
       logger.warn(`Ignoring checkpoint ${checkpointNumber} due to archive root mismatch`, {

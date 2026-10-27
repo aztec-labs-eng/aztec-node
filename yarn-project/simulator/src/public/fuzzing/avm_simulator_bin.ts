@@ -8,6 +8,7 @@ import {
 } from '@aztec-labs/stdlib/avm';
 import { GlobalVariables, TreeSnapshots } from '@aztec-labs/stdlib/tx';
 import { NativeWorldStateService } from '@aztec-labs/world-state';
+import { Buffer } from 'buffer';
 import { createInterface } from 'readline';
 
 import { AvmFuzzerSimulator, FuzzerSimulationRequest } from './avm_fuzzer_simulator.js';

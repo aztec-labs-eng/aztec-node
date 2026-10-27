@@ -8,6 +8,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { Buffer } from 'buffer';
 import {
   type GetContractReturnType,
   type Hex,
@@ -295,15 +296,14 @@ export class RollupCheatCodes {
     );
   }
 
-  public insertOutbox(epoch: EpochNumber, numCheckpointsInEpoch: number, outHash: bigint) {
-    return this.ethCheatCodes.execWithPausedAnvil(async () => {
-      const outboxAddress = await this.rollup.read.getOutbox();
-      const epochRootSlot = OutboxContract.getEpochRootStorageSlot(epoch, numCheckpointsInEpoch);
-      await this.ethCheatCodes.store(EthAddress.fromString(outboxAddress), epochRootSlot, outHash);
-      this.logger.warn(
-        `Advanced outbox to epoch ${epoch} numCheckpointsInEpoch ${numCheckpointsInEpoch} with out hash ${outHash}`,
-      );
-    });
+  public async insertOutbox(epoch: EpochNumber, numCheckpointsInEpoch: number, outHash: bigint) {
+    // A single blind write, so unlike markAsProven it needs no pause to stay atomic against blocks being mined.
+    const outboxAddress = await this.rollup.read.getOutbox();
+    const epochRootSlot = OutboxContract.getEpochRootStorageSlot(epoch, numCheckpointsInEpoch);
+    await this.ethCheatCodes.store(EthAddress.fromString(outboxAddress), epochRootSlot, outHash);
+    this.logger.warn(
+      `Advanced outbox to epoch ${epoch} numCheckpointsInEpoch ${numCheckpointsInEpoch} with out hash ${outHash}`,
+    );
   }
 
   /**
@@ -403,6 +403,26 @@ export class RollupCheatCodes {
         );
       }
       this.logger.warn(`Updated proving cost per mana to ${ethValue}`);
+    });
+  }
+
+  /**
+   * Raises the mana target, which also raises the mana limit (twice the target). Throws if the on-chain tx reverts,
+   * e.g. because L1 only lets the target go up.
+   * @param manaTarget - The new mana target
+   */
+  public async setManaTarget(manaTarget: bigint) {
+    await this.asOwner(async (account, rollup) => {
+      const hash = await rollup.write.updateManaTarget([manaTarget], {
+        account,
+        chain: this.client.chain,
+        gasLimit: 1000000n,
+      });
+      const receipt = await this.client.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') {
+        throw new Error(`updateManaTarget(${manaTarget}) reverted on L1 (tx ${hash})`);
+      }
+      this.logger.warn(`Updated mana target to ${manaTarget}`);
     });
   }
 

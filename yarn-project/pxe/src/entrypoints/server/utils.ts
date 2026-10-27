@@ -1,5 +1,6 @@
 import { BBBundlePrivateKernelProver } from '@aztec-labs/bb-prover/client/bundle';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/bundle';
@@ -30,8 +31,9 @@ export async function createPXE(
 ) {
   const actor = options.loggerActorLabel;
   const recorderLogger = createLogger('simulator:acvm:recording', { actor });
-  const recorder = process.env.CIRCUIT_RECORD_DIR
-    ? new FileCircuitRecorder(process.env.CIRCUIT_RECORD_DIR, recorderLogger)
+  const { CIRCUIT_RECORD_DIR } = getEnv();
+  const recorder = CIRCUIT_RECORD_DIR
+    ? new FileCircuitRecorder(CIRCUIT_RECORD_DIR, recorderLogger)
     : new MemoryCircuitRecorder(recorderLogger);
   const simulatorLogger = createLogger('wasm-simulator', { actor });
   const simulator = new SimulatorRecorderWrapper(new WASMSimulator(simulatorLogger), recorder);

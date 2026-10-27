@@ -1,17 +1,30 @@
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue, getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { Fr } from '@aztec-labs/foundation/schemas';
+import { parse as parseToml } from '@iarna/toml';
 import { bn254 } from '@noble/curves/bn254';
 import type { Abi, Narrow } from 'abitype';
-import { spawn } from 'child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { execFileSync, spawn } from 'child_process';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'os';
-import { dirname, join, resolve } from 'path';
+import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import readline from 'readline';
 import type { Hex } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
@@ -23,6 +36,7 @@ import { deployMulticall3 } from './contracts/multicall.js';
 import { RollupContract } from './contracts/rollup.js';
 import { resolveFoundryBinary } from './foundry_binary.js';
 import type { L1ContractAddresses } from './l1_contract_addresses.js';
+import { isAmsterdamBlock } from './l1_tx_utils/amsterdam.js';
 import type { ExtendedViemWalletClient } from './types.js';
 
 const logger = createLogger('ethereum:deploy_aztec_l1_contracts');
@@ -32,26 +46,95 @@ const require = createRequire(import.meta.url);
 const JSON_DEPLOY_RESULT_PREFIX = 'JSON DEPLOY RESULT:';
 
 /**
+ * Extends a broadcast deadline for a `--slow` broadcast, which waits for each transaction's receipt before sending the
+ * next, so on a chain that mines on an interval it needs at least one block per transaction.
+ */
+export function getSlowBroadcastTimeout(timeout: number | undefined, txCount: number): number | undefined {
+  return timeout === undefined ? undefined : timeout + txCount * SLOW_BROADCAST_ALLOWANCE_PER_TX_MS;
+}
+
+/** One mainnet slot per transaction, which also covers the slowest anvil block intervals the tests use. */
+const SLOW_BROADCAST_ALLOWANCE_PER_TX_MS = 12_000;
+
+/** Returns the broadcast deadline, with an optional environment override in milliseconds. */
+export function getForgeBroadcastTimeout(
+  chainId: number,
+  value = getEnv().FORGE_BROADCAST_TIMEOUT_MS,
+): number | undefined {
+  if (value === undefined || value === '') {
+    return isAnvilTestChain(chainId) ? 120_000 : undefined;
+  }
+  const timeout = Number(value);
+  if (!Number.isSafeInteger(timeout) || timeout < 0 || timeout > 2_147_483_647) {
+    throw new Error('FORGE_BROADCAST_TIMEOUT_MS must be an integer between 0 and 2147483647');
+  }
+  return timeout === 0 ? undefined : timeout;
+}
+
+/** Returns Forge broadcast flags for the target chain and artifact EVM version. */
+export function getForgeBroadcastArgs(l1ContractsPath: string, chainId: number): string[] {
+  const broadcastArgs = ['--broadcast', '--disable-external-identification'];
+  if (chainId !== sepolia.id) {
+    return broadcastArgs;
+  }
+
+  const foundryToml = readFileSync(join(l1ContractsPath, 'foundry.toml'), 'utf-8');
+  const profile = parseToml(foundryToml).profile;
+  const defaultProfile = typeof profile === 'object' && 'default' in profile ? profile.default : undefined;
+  const evmVersion =
+    defaultProfile && typeof defaultProfile === 'object' && 'evm_version' in defaultProfile
+      ? defaultProfile.evm_version
+      : undefined;
+  if (typeof evmVersion !== 'string' || !evmVersion) {
+    throw new Error('L1 deployment artifacts do not specify an EVM version');
+  }
+
+  // Plan with the artifact's EVM target; --skip-simulation makes Forge estimate each send through RPC.
+  return [...broadcastArgs, '--hardfork', evmVersion, '--skip-simulation'];
+}
+
+/**
  * Runs a process and parses JSON deploy results from stdout.
  * Lines starting with JSON_DEPLOY_RESULT_PREFIX are parsed and returned.
  * All other stdout goes to logger.info, stderr goes to logger.warn.
  */
-function runProcess<T>(
+export function runProcess<T>(
   command: string,
   args: string[],
   env: Record<string, string | undefined>,
   cwd: string,
+  timeoutMs?: number,
 ): Promise<T | undefined> {
   const { promise, resolve, reject } = promiseWithResolvers<T | undefined>();
   const proc = spawn(command, args, {
     cwd,
-    env: { ...process.env, ...env },
+    env: { ...getEnv(), ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let result: T | undefined;
   let parseError: Error | undefined;
   let settled = false;
+  let timedOut = false;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutTimer = timeoutMs
+    ? setTimeout(() => {
+        timedOut = true;
+        proc.kill('SIGTERM');
+        killTimer = setTimeout(() => proc.kill('SIGKILL'), 1000);
+      }, timeoutMs)
+    : undefined;
+
+  const clearTimers = () => {
+    clearTimeout(timeoutTimer);
+    clearTimeout(killTimer);
+  };
+  const rejectProcess = (error: Error) => {
+    if (preparedDeployDirs.delete(cwd)) {
+      error.message += `; deployment artifacts preserved at ${cwd}. Transactions may already have been broadcast.`;
+    }
+    reject(error);
+  };
 
   readline.createInterface({ input: proc.stdout }).on('line', line => {
     const trimmedLine = line.trim();
@@ -73,24 +156,172 @@ function runProcess<T>(
       return;
     }
     settled = true;
-    reject(new Error(`Failed to spawn ${command}: ${error.message}`));
+    clearTimers();
+    rejectProcess(new Error(`Failed to spawn ${command}: ${error.message}`));
   });
 
-  proc.on('close', code => {
+  proc.on('close', (code, signal) => {
     if (settled) {
       return;
     }
     settled = true;
-    if (code !== 0) {
-      reject(new Error(`${command} exited with code ${code}`));
+    clearTimers();
+    if (timedOut) {
+      rejectProcess(new Error(`${command} timed out after ${timeoutMs}ms (signal ${signal ?? 'none'})`));
+    } else if (signal) {
+      rejectProcess(new Error(`${command} terminated by signal ${signal}`));
+    } else if (code !== 0) {
+      rejectProcess(new Error(`${command} exited with code ${code}`));
     } else if (parseError) {
-      reject(parseError);
+      rejectProcess(parseError);
     } else {
       resolve(result);
     }
   });
 
   return promise;
+}
+
+/**
+ * Multiplier (in percent) applied to forge's simulated gas when dry-running against a Glamsterdam chain. Forge simulates
+ * with a pre-Glamsterdam gas schedule, which undercounts contract creation by up to ~8x once state growth is repriced.
+ */
+const GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER = 1000;
+
+/** Activates queued initial validators after a deploy. Only present in l1-contracts releases that need it. */
+const FLUSH_ENTRY_QUEUE_SCRIPT = 'script/deploy/FlushEntryQueue.s.sol';
+
+/** Arguments for broadcasting an l1-contracts forge script. */
+type ForgeScriptBroadcastArgs = {
+  forgeBin: string;
+  l1ContractsPath: string;
+  script: string;
+  privateKey: Hex;
+  rpcUrl: string;
+  l1Client: ExtendedViemWalletClient;
+  env: Record<string, string | undefined>;
+  verify?: boolean;
+};
+
+/**
+ * Broadcasts a forge script and returns its parsed deploy result.
+ *
+ * On chains that run Glamsterdam, forge's own gas limits make contract creations run out of gas, and RPC gas estimation
+ * is no fallback since the largest deployments need more gas than RPC nodes allow for eth_estimateGas. Instead we
+ * dry-run the script with an inflated gas multiplier, clamp every gas limit so it fits in a block, and broadcast the
+ * edited sequence with `--resume`.
+ */
+async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
+  args: ForgeScriptBroadcastArgs,
+): Promise<T | undefined> {
+  const { forgeBin, l1ContractsPath, script, privateKey, rpcUrl, l1Client, env } = args;
+  const baseArgs = ['script', script, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
+  const verifyArgs = args.verify ? ['--verify'] : [];
+  const chainId = await l1Client.getChainId();
+  const broadcastArgs = getForgeBroadcastArgs(l1ContractsPath, chainId);
+  const timeout = getForgeBroadcastTimeout(chainId);
+
+  const latestBlock = await l1Client.request({ method: 'eth_getBlockByNumber', params: ['latest', false] });
+  let result: T | undefined;
+  if (!latestBlock || !isAmsterdamBlock(latestBlock)) {
+    result = await runProcess<T>(
+      forgeBin,
+      [...baseArgs, ...broadcastArgs, ...verifyArgs],
+      env,
+      l1ContractsPath,
+      timeout,
+    );
+  } else {
+    logger.info(`Dry-running ${script} to plan Glamsterdam gas limits`);
+    result = await runProcess<T>(
+      forgeBin,
+      [
+        ...baseArgs,
+        ...broadcastArgs.filter(arg => arg !== '--broadcast' && arg !== '--skip-simulation'),
+        '--gas-estimate-multiplier',
+        String(GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER),
+      ],
+      env,
+      l1ContractsPath,
+    );
+
+    // Leave headroom for the block gas limit drifting down before the last tx lands.
+    const maxTxGas = (BigInt(latestBlock.gasLimit) * 99n) / 100n;
+    const sequencePath = join(
+      l1ContractsPath,
+      'broadcast',
+      basename(script),
+      String(chainId),
+      'dry-run',
+      'run-latest.json',
+    );
+    const sequence = JSON.parse(readFileSync(sequencePath, 'utf-8'));
+    for (const tx of sequence.transactions) {
+      const gas = BigInt(tx.transaction.gas);
+      tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
+    }
+    // Forge 1.8 resumes from a recovery snapshot under cache/ (fingerprinted, so it cannot be edited) instead of from the
+    // broadcast file, and would send the unclamped limits, some larger than a block. Dropping the snapshot and the
+    // generation the exported files point at makes it resume from the edited broadcast file, as older forge versions did.
+    delete sequence.recovery_generation;
+    writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
+    const cacheDir = join(l1ContractsPath, 'cache', basename(script), String(chainId), 'dry-run');
+    const sensitivePath = join(cacheDir, 'run-latest.json');
+    if (existsSync(sensitivePath)) {
+      const sensitive = JSON.parse(readFileSync(sensitivePath, 'utf-8'));
+      delete sensitive.recovery_generation;
+      writeFileSync(sensitivePath, JSON.stringify(sensitive, null, 2));
+    }
+    rmSync(join(cacheDir, 'run-latest.json.recovery.json'), { force: true });
+
+    logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
+    // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
+    // time and a block-sized tx is not queued behind others from the same sender.
+    await runProcess(
+      forgeBin,
+      [...baseArgs, ...broadcastArgs, '--resume', '--slow', ...verifyArgs],
+      env,
+      l1ContractsPath,
+      getSlowBroadcastTimeout(timeout, sequence.transactions.length),
+    );
+  }
+
+  // l1-contracts releases that ship this script no longer activate initial validators inside the deploy, and rely on
+  // the broadcast wrapper flushing the entry queue afterwards; we bypassed it, so flush here. Older releases flush inline.
+  if (
+    result &&
+    hasInitialValidators(env.INITIAL_VALIDATORS) &&
+    existsSync(join(l1ContractsPath, FLUSH_ENTRY_QUEUE_SCRIPT))
+  ) {
+    logger.info(`Flushing the entry queue of rollup ${result.rollupAddress}`);
+    // flushEntryQueue needs a gas floor left before every deposit, which forge's simulated gas does not cover, so the
+    // limits come from eth_estimateGas instead. Each flush tx stays well under the RPC estimate cap.
+    await runProcess(
+      forgeBin,
+      [
+        'script',
+        `${FLUSH_ENTRY_QUEUE_SCRIPT}:FlushEntryQueue`,
+        '--sig',
+        'run(address)',
+        result.rollupAddress,
+        '--private-key',
+        privateKey,
+        '--rpc-url',
+        rpcUrl,
+        ...broadcastArgs.filter(arg => arg !== '--skip-simulation'),
+        '--skip-simulation',
+      ],
+      env,
+      l1ContractsPath,
+      timeout,
+    );
+  }
+  return result;
+}
+
+function hasInitialValidators(initialValidatorsJson: string | undefined): boolean {
+  const parsed: unknown = JSON.parse(initialValidatorsJson ?? '[]');
+  return Array.isArray(parsed) && parsed.length > 0;
 }
 
 // Covers an edge where where we may have a cached BlobLib that is not meant for production.
@@ -139,19 +370,20 @@ export function getL1ContractsPath(): string {
   return resolve(dirname(require.resolve('@aztec-foundation/l1-artifacts')), '..', 'l1-contracts');
 }
 
-// Cached deployment directory
-let preparedDeployDir: string | undefined;
+const preparedDeployDirs = new Set<string>();
 
 function cleanupDeployDir() {
-  if (preparedDeployDir) {
+  for (const directory of preparedDeployDirs) {
     try {
-      rmSync(preparedDeployDir, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true });
     } catch {
       // ignore cleanup errors
     }
-    preparedDeployDir = undefined;
   }
+  preparedDeployDirs.clear();
 }
+
+process.once('exit', cleanupDeployDir);
 
 /**
  * Prepares a temp directory for forge deployment.
@@ -159,17 +391,11 @@ function cleanupDeployDir() {
  * A fresh broadcast/ directory is created for deployment outputs.
  */
 export function prepareL1ContractsForDeployment(): string {
-  if (preparedDeployDir && existsSync(preparedDeployDir)) {
-    logger.verbose(`Using cached deployment directory: ${preparedDeployDir}`);
-    return preparedDeployDir;
-  }
-
   const basePath = getL1ContractsPath();
   logger.verbose(`Preparing L1 contracts from: ${basePath}`);
   const tempDir = mkdtempSync(join(tmpdir(), '.foundry-deploy-'));
   logger.verbose(`Created temp directory for deployment: ${tempDir}`);
-  preparedDeployDir = tempDir;
-  process.on('exit', cleanupDeployDir);
+  preparedDeployDirs.add(tempDir);
 
   // Copy all dirs with preserved timestamps (required for forge cache validity)
   const copyOpts = { recursive: true, preserveTimestamps: true };
@@ -196,10 +422,78 @@ export function prepareL1ContractsForDeployment(): string {
     foundryToml = foundryToml.replace(/solc\s*=\s*"\.\/solc-[^"]+"/, `solc = "${absoluteSolcPath}"`);
     logger.verbose(`Updated solc path in foundry.toml to: ${absoluteSolcPath}`);
   }
+
+  const cachePath = join(tempDir, FORGE_CACHE_FILE);
+  const cache: ForgeCache = JSON.parse(readFileSync(cachePath, 'utf-8'));
+  if (!cache.preprocessed) {
+    // A cache written without test preprocessing is only accepted by forge 1.8 if dynamic test linking is off. Test
+    // preprocessing does not affect the contracts and scripts we deploy.
+    foundryToml = foundryToml.replace(/^\[profile\.default\]$/m, '$&\ndynamic_test_linking = false');
+  }
   writeFileSync(join(tempDir, 'foundry.toml'), foundryToml);
+
+  try {
+    patchForgeCache(tempDir, cache);
+  } catch (err) {
+    logger.warn(`Failed to patch the forge cache, forge will recompile the L1 contracts`, { err });
+  }
 
   mkdirSync(join(tempDir, 'broadcast'));
   return tempDir;
+}
+
+const FORGE_CACHE_FILE = join('cache', 'solidity-files-cache.json');
+
+/** The fields of forge's `solidity-files-cache.json` that depend on the forge version or the project location. */
+type ForgeCache = {
+  profiles?: Record<string, { solc?: Record<string, unknown> }>;
+  remappings?: string[];
+  preprocessed?: boolean;
+};
+
+/**
+ * Makes the forge build cache shipped in l1-artifacts valid in a deploy directory, so forge uses the shipped artifacts
+ * instead of recompiling all L1 contracts, which takes ~10s per process and yields bytecode with a different metadata
+ * hash than the published one.
+ *
+ * Since 1.8, forge stores the absolute remappings of the project in its cache, and discards a cache whose remappings do
+ * not match the current project root. So a cache written in the directory where l1-artifacts was built never matches a
+ * copy of it. We regenerate the remappings for the deploy directory in the format forge writes them, which lists every
+ * context remapping twice: once with a relative context and once with an absolute one.
+ *
+ * Caches written by forge before 1.8 also lack the `viaSSACFG` and `experimental` solc settings, and need dynamic test
+ * linking disabled (see `prepareL1ContractsForDeployment`).
+ *
+ * TODO: Once l1-artifacts is built with forge 1.8.5 or later, remove the `viaSSACFG`/`experimental` backfill and the
+ * `dynamic_test_linking = false` override, as such caches already carry both settings and record `preprocessed: true`.
+ * Keep the remappings rewrite: a forge 1.8 cache stays tied to the directory where it was written.
+ */
+function patchForgeCache(deployDir: string, cache: ForgeCache) {
+  const root = realpathSync(deployDir);
+  const remappings = execFileSync(resolveFoundryBinary('forge'), ['remappings'], { cwd: root, encoding: 'utf-8' })
+    .split('\n')
+    .filter(line => line.trim())
+    .flatMap(line => {
+      const separator = line.indexOf('=');
+      const context = line.slice(0, separator).trim();
+      const target = line.slice(separator + 1).trim();
+      const absoluteTarget = isAbsolute(target) ? target : `${root}/${target}`;
+      const remapping = `${context}=${absoluteTarget}`;
+      return context.includes(':') ? [remapping, `${root}/${remapping}`] : [remapping];
+    });
+
+  for (const profile of Object.values(cache.profiles ?? {})) {
+    if (profile.solc) {
+      profile.solc.viaSSACFG ??= false;
+      profile.solc.experimental ??= false;
+    }
+  }
+  cache.remappings = remappings;
+
+  const cachePath = join(deployDir, FORGE_CACHE_FILE);
+  const { atime, mtime } = statSync(cachePath);
+  writeFileSync(cachePath, JSON.stringify(cache));
+  utimesSync(cachePath, atime, mtime);
 }
 
 /**
@@ -331,40 +625,30 @@ export async function deployAztecL1Contracts(
 
   // Verify contracts on Etherscan when on mainnet/sepolia and ETHERSCAN_API_KEY is available.
   const isVerifiableChain = chainId === mainnet.id || chainId === sepolia.id;
-  const shouldVerify = isVerifiableChain && !!process.env.ETHERSCAN_API_KEY;
+  const shouldVerify = isVerifiableChain && !!getEnv().ETHERSCAN_API_KEY;
 
-  if (isVerifiableChain && !process.env.ETHERSCAN_API_KEY) {
+  if (isVerifiableChain && !getEnv().ETHERSCAN_API_KEY) {
     logger.warn(
       `Deploying to chain ${chainId} (${chainId === mainnet.id ? 'mainnet' : 'sepolia'}) without ETHERSCAN_API_KEY. ` +
         `Contracts will NOT be verified on Etherscan. Set ETHERSCAN_API_KEY environment variable to enable verification.`,
     );
   }
 
-  const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
-  const forgeArgs = [
-    FORGE_SCRIPT,
-    '--sig',
-    'run()',
-    '--private-key',
-    privateKey,
-    '--rpc-url',
-    rpcUrl,
-    ...(shouldVerify ? ['--verify'] : []),
-  ];
-  const forgeEnv = {
-    // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-    FORGE_BIN: forgeBin,
-    // Env vars required by l1-contracts/script/deploy/DeploymentConfiguration.sol.
-    NETWORK: getActiveNetworkName(),
-    FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
-    ...getDeployAztecL1ContractsEnvVars(args),
-  };
-  const result = await runProcess<ForgeL1ContractsDeployResult>(
-    process.execPath,
-    [scriptPath, ...forgeArgs],
-    forgeEnv,
+  const result = await runForgeScriptBroadcast<ForgeL1ContractsDeployResult>({
+    forgeBin,
     l1ContractsPath,
-  );
+    script: FORGE_SCRIPT,
+    privateKey,
+    rpcUrl,
+    l1Client,
+    verify: shouldVerify,
+    env: {
+      // Env vars required by l1-contracts/script/deploy/DeploymentConfiguration.sol.
+      NETWORK: getActiveNetworkName(),
+      FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
+      ...getDeployAztecL1ContractsEnvVars(args),
+    },
+  });
   if (!result) {
     throw new Error('Forge script did not output deployment result');
   }
@@ -630,29 +914,25 @@ export const deployRollupForUpgrade = async (
   const FORGE_SCRIPT = 'script/deploy/DeployRollupForUpgrade.s.sol';
   await maybeForgeForceProductionBuild(forgeBin, l1ContractsPath, FORGE_SCRIPT, chainId);
 
-  const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
-  const forgeArgs = [FORGE_SCRIPT, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
-  const forgeEnv = {
-    // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-    FORGE_BIN: forgeBin,
-    FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
-    // Env vars required by l1-contracts/script/deploy/RollupConfiguration.sol.
-    REGISTRY_ADDRESS: registryAddress.toString(),
-    NETWORK: getActiveNetworkName(),
-    ...getDeployRollupForUpgradeEnvVars(args),
-  };
-
-  const result = await runProcess<ForgeRollupUpgradeResult>(
-    process.execPath,
-    [scriptPath, ...forgeArgs],
-    forgeEnv,
+  const extendedClient = createExtendedL1Client([rpcUrl], privateKey);
+  const result = await runForgeScriptBroadcast<ForgeRollupUpgradeResult>({
+    forgeBin,
     l1ContractsPath,
-  );
+    script: FORGE_SCRIPT,
+    privateKey,
+    rpcUrl,
+    l1Client: extendedClient,
+    env: {
+      FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
+      // Env vars required by l1-contracts/script/deploy/RollupConfiguration.sol.
+      REGISTRY_ADDRESS: registryAddress.toString(),
+      NETWORK: getActiveNetworkName(),
+      ...getDeployRollupForUpgradeEnvVars(args),
+    },
+  });
   if (!result) {
     throw new Error('Forge script did not output deployment result');
   }
-
-  const extendedClient = createExtendedL1Client([rpcUrl], privateKey);
 
   // Create RollupContract wrapper for the deployed rollup
   const rollup = new RollupContract(extendedClient, result.rollupAddress);

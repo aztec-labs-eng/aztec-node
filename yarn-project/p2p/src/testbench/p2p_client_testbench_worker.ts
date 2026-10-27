@@ -18,7 +18,7 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { type BlockProposal, P2PMessage, TopicType } from '@aztec-labs/stdlib/p2p';
@@ -29,6 +29,7 @@ import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-
 import type { Message, PeerId } from '@libp2p/interface';
 import { TopicValidatorResult } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
+import { Buffer } from 'buffer';
 
 import type { P2PClient } from '../client/index.js';
 import type { P2PConfig } from '../config.js';
@@ -133,7 +134,12 @@ class TestLibP2PService extends LibP2PService {
       epochCache,
       proofVerifier,
       worldStateSynchronizer,
-      { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      {
+        getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+        getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+        getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
+      },
+      new TestRollupFeeConfigProvider(),
       telemetry,
       logger,
     );
@@ -425,7 +431,12 @@ process.on('message', async msg => {
         proofVerifier as ClientProtocolCircuitVerifier,
         worldState,
         epochCache,
-        { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        {
+          getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+          getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+          getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
+        },
+        new TestRollupFeeConfigProvider(),
         'test-p2p-bench-worker',
         undefined,
         telemetry as TelemetryClient,

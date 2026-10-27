@@ -1,6 +1,7 @@
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
 import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
 import fs from 'fs/promises';
+import { tmpdir } from 'os';
 import path from 'path';
 
 import { AutomineTestContext } from '../automine_test_context.js';
@@ -14,26 +15,45 @@ import { AutomineTestContext } from '../automine_test_context.js';
 // initializerless, so the user circuit recorded is the entrypoint, not a SchnorrAccount constructor.)
 // Uses setup(1, AUTOMINE_E2E_OPTS) with one node, automine sequencer, one account.
 describe('automine/simulation/circuit_recorder', () => {
-  const RECORD_DIR = './circuit_recordings';
+  let recordRoot: string;
+  let recordDir: string;
+  let t: AutomineTestContext | undefined;
+
+  beforeAll(async () => {
+    // CI runs the default and Amsterdam variants of this file at the same time against one shared checkout, so a
+    // fixed path under the cwd lets one run's cleanup delete the other's recordings mid-test. The leaf directory is
+    // left uncreated so the recorder still has to create it.
+    recordRoot = await fs.mkdtemp(path.join(tmpdir(), 'circuit-recorder-'));
+    recordDir = path.join(recordRoot, 'recordings');
+  });
+
+  afterAll(async () => {
+    try {
+      await t?.teardown();
+    } finally {
+      delete process.env.CIRCUIT_RECORD_DIR;
+      await fs.rm(recordRoot, { recursive: true, force: true });
+    }
+  });
 
   // Sets CIRCUIT_RECORD_DIR env var, runs setup + a ChildContract deploy to trigger circuit execution,
   // then asserts recording files exist for SchnorrInitializerlessAccount_entrypoint and a
   // PrivateKernelInit variant.
   it('records circuit execution', async () => {
     // Set recording directory env var - this will activate the circuit recorder
-    process.env.CIRCUIT_RECORD_DIR = RECORD_DIR;
+    process.env.CIRCUIT_RECORD_DIR = recordDir;
 
     // setup creates an initializerless account, which has no deployment tx. Deploying a contract from
     // it exercises the account entrypoint (a user circuit) and the private kernels (protocol circuits)
+    t = await AutomineTestContext.setup({ numberOfAccounts: 1 });
     const {
-      teardown,
       wallet,
       accounts: [accountAddress],
-    } = (await AutomineTestContext.setup({ numberOfAccounts: 1 })).context;
+    } = t.context;
     await ChildContract.deploy(wallet).send({ from: accountAddress });
 
     // Check recording directory exists
-    const dirExists = await fs.stat(RECORD_DIR).then(
+    const dirExists = await fs.stat(recordDir).then(
       stats => stats.isDirectory(),
       () => false,
     );
@@ -41,13 +61,13 @@ describe('automine/simulation/circuit_recorder', () => {
 
     // Check recording file of a user circuit (the account contract entrypoint) exists and has expected content
     {
-      const files = await fs.readdir(RECORD_DIR);
+      const files = await fs.readdir(recordDir);
       expect(files.length).toBeGreaterThan(0);
 
       const recordingFile = files.find(f => f.startsWith('SchnorrInitializerlessAccount_entrypoint'));
       expect(recordingFile).toBeDefined();
 
-      const recordingContent = await fs.readFile(path.join(RECORD_DIR, recordingFile!), 'utf8');
+      const recordingContent = await fs.readFile(path.join(recordDir, recordingFile!), 'utf8');
       const recording = JSON.parse(recordingContent);
 
       expect(recording).toMatchObject({
@@ -72,7 +92,7 @@ describe('automine/simulation/circuit_recorder', () => {
         i === 0 ? 'PrivateKernelInit' : `PrivateKernelInit${i + 1}`,
       );
 
-      const files = await fs.readdir(RECORD_DIR);
+      const files = await fs.readdir(recordDir);
       expect(files.length).toBeGreaterThan(0);
 
       const recordingFile = files.find(f => initVariants.some(name => f.startsWith(`${name}_main`)));
@@ -80,7 +100,7 @@ describe('automine/simulation/circuit_recorder', () => {
 
       const matchedVariant = initVariants.find(name => recordingFile!.startsWith(`${name}_main`));
 
-      const recordingContent = await fs.readFile(path.join(RECORD_DIR, recordingFile!), 'utf8');
+      const recordingContent = await fs.readFile(path.join(recordDir, recordingFile!), 'utf8');
       const recording = JSON.parse(recordingContent);
 
       expect(recording).toMatchObject({
@@ -90,10 +110,5 @@ describe('automine/simulation/circuit_recorder', () => {
         oracleCalls: expect.any(Array),
       });
     }
-
-    // Cleanup
-    await fs.rm(RECORD_DIR, { recursive: true, force: true });
-    delete process.env.CIRCUIT_RECORD_DIR;
-    await teardown();
   }, 120_000);
 });

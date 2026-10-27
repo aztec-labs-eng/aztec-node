@@ -1,4 +1,3 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { merge, pick } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
@@ -20,13 +19,12 @@ type CheckpointEquivocationWatcherConfig = Pick<
 >;
 
 type EquivocationEventSource = Pick<L2BlockSourceEventEmitter, 'events'>;
-type ProposerLookup = Pick<EpochCacheInterface, 'getProposerAttesterAddressInSlot'>;
 
 /**
- * Slashes the slot proposer for DUPLICATE_PROPOSAL when the archiver detects that a
- * locally-stored proposed checkpoint disagrees with the L1-confirmed checkpoint at the
- * same slot. Both are signed by the slot proposer (the proposed one by accepting it via
- * P2P or building it locally; the L1 one by submission), so the proposer equivocated.
+ * Slashes a proposer for DUPLICATE_PROPOSAL when the archiver detects that a locally-stored proposed checkpoint
+ * disagrees with the L1-confirmed checkpoint at the same slot. The archiver only reports this when the same key signed
+ * both checkpoints, and names that key in the event, so the watcher slashes the event's signer rather than whoever the
+ * committee says should have proposed the slot.
  */
 export class CheckpointEquivocationWatcher extends (EventEmitter as new () => WatcherEmitter) implements Watcher {
   private readonly log: Logger = createLogger('checkpoint-equivocation-watcher');
@@ -35,15 +33,16 @@ export class CheckpointEquivocationWatcher extends (EventEmitter as new () => Wa
 
   constructor(
     private readonly l2BlockSource: EquivocationEventSource,
-    private readonly epochCache: ProposerLookup,
     config: CheckpointEquivocationWatcherConfig,
   ) {
     super();
     this.config = pick(config, ...CheckpointEquivocationWatcherConfigKeys);
     this.handler = event => {
-      this.onEquivocationDetected(event).catch(err =>
-        this.log.error('Failed to handle checkpoint equivocation event', err),
-      );
+      try {
+        this.onEquivocationDetected(event);
+      } catch (err) {
+        this.log.error('Failed to handle checkpoint equivocation event', err);
+      }
     };
     this.log.info('CheckpointEquivocationWatcher initialized');
   }
@@ -64,18 +63,9 @@ export class CheckpointEquivocationWatcher extends (EventEmitter as new () => Wa
   }
 
   /** Public for tests. */
-  public async onEquivocationDetected(event: CheckpointEquivocationDetectedEvent): Promise<void> {
-    const proposer = await this.epochCache.getProposerAttesterAddressInSlot(event.slotNumber);
-    if (!proposer) {
-      this.log.warn(`Cannot attribute checkpoint equivocation: no proposer for slot ${event.slotNumber}`, {
-        slotNumber: event.slotNumber,
-        checkpointNumber: event.checkpointNumber,
-      });
-      return;
-    }
-
+  public onEquivocationDetected(event: CheckpointEquivocationDetectedEvent): void {
     const slashArgs: WantToSlashArgs = {
-      validator: proposer,
+      validator: event.signer,
       amount: this.config.slashDuplicateProposalPenalty,
       offenseType: OffenseType.DUPLICATE_PROPOSAL,
       epochOrSlot: BigInt(event.slotNumber),
@@ -88,7 +78,7 @@ export class CheckpointEquivocationWatcher extends (EventEmitter as new () => Wa
       offenseType: getOffenseTypeName(slashArgs.offenseType),
       l1ArchiveRoot: event.l1ArchiveRoot.toString(),
       proposedArchiveRoot: event.proposedArchiveRoot.toString(),
-      validator: proposer.toString(),
+      validator: event.signer.toString(),
     });
     this.emit(WANT_TO_SLASH_EVENT, [slashArgs]);
   }

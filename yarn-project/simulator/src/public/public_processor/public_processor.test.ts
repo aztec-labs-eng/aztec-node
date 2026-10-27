@@ -23,6 +23,7 @@ import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { strict as assert } from 'assert';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import { AvmProcessDiedError } from '../avm_simulator.js';
 import { PublicContractsDB } from '../public_db_sources.js';
 import type { PublicTxSimulatorInterface } from '../public_tx_simulator/index.js';
 import { GuardedMerkleTreeOperations } from './guarded_merkle_tree.js';
@@ -180,6 +181,36 @@ describe('public_processor', () => {
       expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
     });
 
+    describe('when the AVM process dies on every attempt', () => {
+      const processDied = () => new AvmProcessDiedError('AVM simulator process died twice running this simulation');
+
+      it('rethrows when re-executing, leaving the fork state as it was before the tx', async function () {
+        const tx = await mockTxWithPublicCalls();
+        const contractClassId = await mockContractClassForTx(tx);
+        publicTxSimulator.simulate.mockImplementation((simulatedTx: Tx) => {
+          contractsDB.addNewContracts(simulatedTx);
+          return Promise.reject(processDied());
+        });
+
+        await expect(processor.process([tx])).rejects.toBeInstanceOf(AvmProcessDiedError);
+
+        expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
+        expect(merkleTree.commitCheckpoint).not.toHaveBeenCalled();
+        expect(await contractsDB.getContractClass(contractClassId)).toBeUndefined();
+      });
+
+      it('fails the tx when building a proposal, so it is evicted', async function () {
+        publicTxSimulator.simulate.mockImplementation(() => Promise.reject(processDied()));
+
+        const tx = await mockTxWithPublicCalls();
+        const [processed, failed] = await processor.process([tx], { isBuildingProposal: true });
+
+        expect(processed).toEqual([]);
+        expect(failed).toEqual([{ tx, error: expect.any(AvmProcessDiedError) }]);
+        expect(merkleTree.revertAllCheckpointsTo).toHaveBeenCalledWith(0);
+      });
+    });
+
     it('does not attempt to overfill a block', async function () {
       const txs = await Promise.all(Array.from([1, 2, 3], seed => mockPrivateOnlyTx({ seed })));
 
@@ -228,6 +259,42 @@ describe('public_processor', () => {
       expect(processed[0].hash).toEqual(txs[0].getTxHash());
       expect(processed[1].hash).toEqual(txs[1].getTxHash());
       expect(failed).toEqual([]);
+    });
+
+    describe('block gas limit with unused teardown gas', () => {
+      const maxBlockGas = new Gas(150, 150);
+      let txs: Tx[];
+
+      beforeEach(async () => {
+        // Each tx bills its full teardown limit (100) but actually uses far less (10).
+        txs = await timesParallel(2, i =>
+          mockTx(i + 1, {
+            numberOfNonRevertiblePublicCallRequests: 1,
+            numberOfRevertiblePublicCallRequests: 1,
+            gasLimits: new Gas(100, 100),
+          }),
+        );
+        mockedEnqueuedCallsResult.gasUsed = {
+          totalGas: new Gas(10, 10),
+          publicGas: new Gas(10, 10),
+          teardownGas: new Gas(1, 1),
+          billedGas: new Gas(100, 100),
+        };
+      });
+
+      it('accumulates billed gas when building a proposal', async function () {
+        const [processed, failed] = await processor.process(txs, { maxBlockGas, isBuildingProposal: true });
+
+        expect(processed.map(p => p.hash)).toEqual([txs[0].getTxHash()]);
+        expect(failed).toEqual([]);
+      });
+
+      it('accumulates billed gas when re-executing', async function () {
+        const [processed, failed] = await processor.process(txs, { maxBlockGas, isBuildingProposal: false });
+
+        expect(processed.map(p => p.hash)).toEqual([txs[0].getTxHash()]);
+        expect(failed).toEqual([]);
+      });
     });
 
     it('does not send a transaction to the prover if pre validation fails', async function () {

@@ -6,7 +6,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import { type ChainConfig, emptyChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   IVCProofVerificationResult,
@@ -26,6 +26,7 @@ import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 import { tcp } from '@libp2p/tcp';
 import { multiaddr } from '@multiformats/multiaddr';
 import { SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import getPort from 'get-port';
 import { type Libp2p, type Libp2pOptions, createLibp2p } from 'libp2p';
 
@@ -172,7 +173,12 @@ export async function createTestLibP2PService(
     epochCache,
     proofVerifier,
     worldStateSynchronizer,
-    { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+    {
+      getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+      getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+      getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
+    },
+    new TestRollupFeeConfigProvider(),
     telemetry,
   );
 }

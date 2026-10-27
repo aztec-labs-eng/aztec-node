@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { toBigIntBE } from '../bigint-buffer/index.js';
 import { poseidon2Hash } from '../crypto/poseidon/index.js';
 import { Fr } from '../curves/bn254/field.js';

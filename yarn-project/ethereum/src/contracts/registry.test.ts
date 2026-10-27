@@ -16,6 +16,7 @@ import { L1Deployer } from '../deploy_l1_contract.js';
 import type { L1ContractAddresses } from '../l1_contract_addresses.js';
 import { defaultL1TxUtilsConfig } from '../l1_tx_utils/index.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
@@ -24,7 +25,7 @@ import { RollupContract } from './rollup.js';
 
 const originalVersionSalt = 42;
 
-describe('Registry', () => {
+describeAcrossL1Forks('Registry', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let rawPrivateKey: Hex;

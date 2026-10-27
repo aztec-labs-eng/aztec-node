@@ -27,7 +27,6 @@
     "build": "yarn clean && ../scripts/tsc.sh",
     "build:dev": "../scripts/tsc.sh --watch",
     "clean": "rm -rf ./dest .tsbuildinfo",
-    "bb": "node --no-warnings ./dest/bb/index.js",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules ../node_modules/.bin/jest --testTimeout=3500000",
     "test:debug": "LOG_LEVEL=\"debug; info: json-rpc, simulator\" NODE_NO_WARNINGS=1 node --experimental-vm-modules ../node_modules/.bin/jest --testTimeout=1500000 --testNamePattern prover/bb_prover/parity"
   },
@@ -108,6 +107,6 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

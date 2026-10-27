@@ -1,7 +1,8 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ViemTransactionSignature } from '@aztec-labs/foundation/eth-signature';
-import { type TransactionSerializable, type WalletClient, parseTransaction } from 'viem';
+import type { TransactionSerializable, WalletClient } from 'viem';
 
+import { parseSignedTransaction } from '../blob_tx.js';
 import type { SigningCallback } from './types.js';
 
 export function createViemSigner(client: WalletClient) {
@@ -11,7 +12,7 @@ export function createViemSigner(client: WalletClient) {
   ): Promise<ViemTransactionSignature> => {
     const signedTx = await client.signTransaction(tx as any);
 
-    const parsed = parseTransaction(signedTx);
+    const parsed = parseSignedTransaction(signedTx);
 
     if (!parsed.r || !parsed.s || (parsed.yParity !== 0 && parsed.yParity !== 1)) {
       throw new Error('Failed to extract signature from viem signed transaction');

@@ -1,6 +1,12 @@
 import { getKzg } from '@aztec-labs/blob-lib';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import {
+  type EpochCache,
+  PROPOSER_PIPELINING_SLOT_OFFSET,
+  type ProposerLookup,
+  requireStableCommittee,
+} from '@aztec-labs/epoch-cache';
+import type { InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, omit, pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -29,6 +35,7 @@ import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   MIN_PER_BLOCK_ALLOCATION_MULTIPLIER,
   MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER,
+  type RollupFeeConfigProvider,
   computeNetworkTxGasLimits,
 } from '@aztec-labs/stdlib/gas';
 import {
@@ -53,7 +60,8 @@ import EventEmitter from 'node:events';
 
 import { DefaultSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
-import type { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
+import { INVALIDATE_REQUIREMENT, getProposeRequirement } from '../publisher/gas_constants.js';
+import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { CheckpointProposalJobMetrics } from './checkpoint_proposal_job_metrics.js';
@@ -107,6 +115,9 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
   /** The last epoch for which we logged a "no committee" diagnostic, to avoid per-slot log spam. */
   private lastEpochForNoCommitteeLog: EpochNumber | undefined;
 
+  /** The last target slot for which we logged that its committee is not stable on L1 yet, to avoid per-tick log spam. */
+  private lastSlotForCommitteeNotStableLog: SlotNumber | undefined;
+
   /** The last slot for which we triggered a checkpoint proposal job, to prevent duplicate attempts. */
   protected lastSlotForCheckpointProposalJob: SlotNumber | undefined;
 
@@ -152,6 +163,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     protected epochCache: EpochCache,
     protected rollupContract: RollupContract,
     protected inboxContract: InboxContract,
+    protected feeConfigProvider: RollupFeeConfigProvider,
     config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>,
     protected telemetry: TelemetryClient = getTelemetryClient(),
     protected log = createLogger('sequencer'),
@@ -315,7 +327,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // the node simply builds smaller blocks and such txs stay in the pool for other proposers. Warn only.
     const networkLimit = computeNetworkTxGasLimits({
       maxBlocksPerCheckpoint,
-      manaCheckpointBudget: this.l1Constants.rollupManaLimit,
+      manaCheckpointBudget: Number(this.feeConfigProvider.getFeeConfig().manaLimit),
     });
     if (config.maxDABlockGas !== undefined && config.maxDABlockGas < networkLimit.daGas) {
       this.log.warn(
@@ -495,6 +507,19 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
   }
 
   /**
+   * Whether the epoch's committee is already stored on L1, so a proposal in it does not also run setupEpoch. Reads the
+   * latest mined L1 state; returns false if the read fails, so the proposal is costed for the more expensive case.
+   */
+  private async isEpochSetUpOnL1(epoch: EpochNumber): Promise<boolean> {
+    try {
+      return await this.rollupContract.isEpochSetUp(epoch);
+    } catch (err) {
+      this.log.warn(`Failed to read whether epoch ${epoch} is set up on L1, assuming it is not`, { epoch, err });
+      return false;
+    }
+  }
+
+  /**
    * Prepares the checkpoint proposal by performing all necessary checks and setup.
    * This is the initial step in the main loop.
    * @returns CheckpointProposalJob if successful, undefined if we are not yet synced or are not the proposer.
@@ -534,13 +559,18 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Cheap proposer check first: most nodes are not the proposer for most slots, so gate the
     // expensive multi-subsystem checkSync (and the rest of the build path) behind it. Computed once
     // here and reused for the escape-hatch voting path below. No setState/timing gate on this path:
-    // the build-start deadline gate runs only on the proposer build path after a successful checkSync.
-    const [canPropose, proposer] = await this.checkCanPropose(targetSlot);
+    // the build-start deadline gate runs only on the proposer build path, before checkSync.
+    const proposerCheck = await this.checkCanPropose(targetSlot);
+    if (proposerCheck === undefined) {
+      return undefined;
+    }
+    const [canPropose, proposer] = proposerCheck;
 
     // If escape hatch is open for the target epoch, do not start checkpoint proposal work and do not attempt invalidations.
     // Still perform governance/slashing voting (as proposer) once per slot.
     // When pipelining, we check the target epoch (slot+1's epoch) since that's the epoch we're building for.
-    const isEscapeHatchOpen = await this.epochCache.isEscapeHatchOpen(targetEpoch);
+    // checkCanPropose has already skipped the slot if its committee is not stable.
+    const { isEscapeHatchOpen } = requireStableCommittee(await this.epochCache.lookupEscapeHatch(targetEpoch));
 
     if (isEscapeHatchOpen) {
       if (canPropose) {
@@ -574,9 +604,10 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Explicit build-loop entry gate: if we are past the latest useful block-building start for the
     // target slot, abandon building for this slot. The proposer prioritizes the ideal L1-publish path
     // and does not plan around the late consensus-handoff path. This is the proposer build path's
-    // timing gate; it runs only after we know we are the synced proposer, so non-proposer invalidation
-    // and escape-hatch voting (which returned above) are never gated by build timing. Vote-only paths
-    // still run when block building is abandoned.
+    // timing gate; it runs only after we know we are the proposer, so non-proposer invalidation and escape-hatch
+    // voting (which returned above) are never gated by build timing. Vote-only paths still run when block building is
+    // abandoned. This gate deliberately runs before checkSync, so a proposer whose archiver cannot sync still reaches
+    // the prune fallback, which is what un-sticks a network where every archiver refuses the same pending checkpoint.
     const startDeadline = this.timetable.getBuildStartDeadline(targetSlot);
     const nowForStartGate = this.dateProvider.now() / 1000;
     if (nowForStartGate > startDeadline) {
@@ -661,7 +692,34 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Otherwise it will be a valid attestor for the returned publisher.
     // In fisherman mode, pass undefined to use the fisherman's own keystore instead of the actual proposer's
     const proposerForPublisher = this.config.fishermanMode ? undefined : proposer;
-    const { attestorAddress, publisher } = await this.publisherFactory.create(proposerForPublisher);
+    // Only a publisher that can afford the proposal (plus the invalidation bundled with it, see below) is eligible, so
+    // we skip the slot here rather than build and gossip a checkpoint that can never land. Fisherman nodes never send.
+    const needsInvalidation = !syncedTo.hasProposedCheckpoint && !syncedTo.pendingChainValidationStatus.valid;
+    const requirement = this.config.fishermanMode
+      ? undefined
+      : getProposeRequirement({
+          withInvalidate: needsInvalidation,
+          withSetupEpoch: !(await this.isEpochSetUpOnL1(targetEpoch)),
+        });
+    let created: AttestorPublisherPair;
+    try {
+      created = await this.publisherFactory.create(proposerForPublisher, { requirement });
+    } catch (err) {
+      if (!(err instanceof NoAffordablePublisherError)) {
+        throw err;
+      }
+      this.log.error(
+        `Skipping checkpoint proposal for slot ${targetSlot}: no publisher can afford it, ${err.describeFunding()}`,
+        err,
+        { ...logCtx, proposer, ...err.toLogContext() },
+      );
+      this.metrics.recordCheckpointPrecheckFailed('insufficient_publisher_balance');
+      // Mark the slot as attempted so we do not re-check on every tick. Votes are cheaper and optional, so still try.
+      await this.tryVoteAndPruneWhenCannotBuild({ slot, targetSlot });
+      this.lastSlotForCheckpointProposalJob = targetSlot;
+      return undefined;
+    }
+    const { attestorAddress, publisher } = created;
     using cleanup = new DisposableStack();
     cleanup.use(publisher);
     this.log.verbose(`Created publisher at address ${publisher.getSenderAddress()} for attestor ${attestorAddress}`);
@@ -709,6 +767,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       invalidateToPendingCheckpointNumber: invalidateCheckpoint?.forcePendingCheckpointNumber,
       checkpointedCheckpointNumber: syncedTo.checkpointedCheckpointNumber,
       rollup: this.rollupContract,
+      l1BlockNumber: syncedTo.l1BlockNumber,
       signatureContext: this.signatureContext,
       log: this.log,
     });
@@ -801,6 +860,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedTo.blockNumber,
       syncedTo.checkpointedCheckpointNumber,
+      syncedTo.l1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -817,6 +877,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     checkpointNumber: CheckpointNumber,
     syncedToBlockNumber: BlockNumber,
     checkpointedCheckpointNumber: CheckpointNumber,
+    syncedL1BlockNumber: bigint,
     proposer: EthAddress | undefined,
     publisher: SequencerPublisher,
     attestorAddress: EthAddress,
@@ -829,6 +890,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       checkpointNumber,
       syncedToBlockNumber,
       checkpointedCheckpointNumber,
+      syncedL1BlockNumber,
       proposer,
       publisher,
       attestorAddress,
@@ -843,6 +905,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.checkpointsBuilder,
       this.l2BlockSource,
       this.l1Constants,
+      this.feeConfigProvider,
       this.signatureContext,
       this.config,
       this.timetable,
@@ -954,7 +1017,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     ] as const);
 
     const [worldState, frontier, p2p, l1ToL2MessageSourceTips] = syncedBlocks;
-    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus } = frontier;
+    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus, l1SyncPoint } = frontier;
+    if (l1SyncPoint === undefined) {
+      this.log.debug(`Cannot propose block at next L2 slot ${slot}: the archiver has no L1 sync point yet`, { slot });
+      return undefined;
+    }
     const l2Tips = { proposed: frontier.tips.proposed, checkpointed: frontier.tips.checkpointed };
 
     const result =
@@ -1041,20 +1108,36 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       proposedCheckpointData,
       syncedL2Slot,
       pendingChainValidationStatus,
+      l1BlockNumber: l1SyncPoint.blockNumber,
     };
   }
 
   /**
    * Checks if we are the proposer for the next slot.
-   * @returns True if we can propose, and the proposer address (undefined if anyone can propose)
+   * @returns True if we can propose, and the proposer address (undefined if anyone can propose). Undefined if the
+   * target slot's committee is not stable on L1 yet, in which case the slot must be skipped altogether.
    */
-  protected async checkCanPropose(targetSlot: SlotNumber): Promise<[boolean, EthAddress | undefined]> {
-    let proposer: EthAddress | undefined;
-
+  protected async checkCanPropose(targetSlot: SlotNumber): Promise<[boolean, EthAddress | undefined] | undefined> {
+    let lookup: ProposerLookup;
     try {
-      proposer = await this.epochCache.getProposerAttesterAddressInSlot(targetSlot);
+      lookup = await this.epochCache.lookupProposer(targetSlot);
     } catch (e) {
-      if (e instanceof NoCommitteeError) {
+      this.log.error(`Error getting proposer for target slot ${targetSlot}`, e);
+      return [false, undefined];
+    }
+
+    switch (lookup.state) {
+      case 'unstable':
+        if (this.lastSlotForCommitteeNotStableLog !== targetSlot) {
+          this.lastSlotForCommitteeNotStableLog = targetSlot;
+          this.log.verbose(`Skipping target slot ${targetSlot}: its committee is not stable on L1 yet`, {
+            targetSlot,
+            epoch: lookup.epoch,
+            l1BlockNumber: lookup.l1BlockNumber,
+          });
+        }
+        return undefined;
+      case 'none': {
         const targetEpoch = getEpochAtSlot(targetSlot, this.l1Constants);
         if (this.lastEpochForNoCommitteeLog !== targetEpoch) {
           this.lastEpochForNoCommitteeLog = targetEpoch;
@@ -1069,14 +1152,13 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
         }
         return [false, undefined];
       }
-      this.log.error(`Error getting proposer for target slot ${targetSlot}`, e);
-      return [false, undefined];
+      case 'open':
+        return [true, undefined];
+      case 'members':
+        break;
     }
 
-    // If proposer is undefined, then the committee is empty and anyone may propose
-    if (proposer === undefined) {
-      return [true, undefined];
-    }
+    const { proposer } = lookup;
     // In fisherman mode, just return the current proposer
     if (this.config.fishermanMode) {
       return [true, proposer];
@@ -1128,11 +1210,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     });
 
     // Check if we're a proposer or proposal is open
-    const [canPropose, proposer] = await this.checkCanPropose(targetSlot);
-    if (!canPropose) {
-      this.log.trace(`Cannot vote in slot ${slot} since we are not a proposer`, { slot, proposer });
+    const proposerCheck = await this.checkCanPropose(targetSlot);
+    if (!proposerCheck?.[0]) {
+      this.log.trace(`Cannot vote in slot ${slot} since we are not a proposer`, { slot, proposer: proposerCheck?.[1] });
       return;
     }
+    const [, proposer] = proposerCheck;
 
     // Mark this slot as attempted
     this.lastSlotForFallbackAction = slot;
@@ -1324,10 +1407,14 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       currentSlot,
     };
 
-    const inCurrentCommittee = () =>
-      this.epochCache
-        .getCommittee(currentSlot)
-        .then(c => c?.committee?.some(member => ourValidatorAddresses.some(addr => addr.equals(member))));
+    // Only a committee with members can include us. A committee that is not stable on L1 yet cannot tell whether we
+    // are in it, so treat that as not being in it.
+    const getCurrentCommittee = async () => {
+      const lookup = await this.epochCache.getCommittee(currentSlot);
+      return lookup.state === 'members' ? lookup.committee : undefined;
+    };
+    const inCurrentCommittee = async () =>
+      (await getCurrentCommittee())?.some(member => ourValidatorAddresses.some(addr => addr.equals(member)));
 
     const invalidateAsCommitteeMember =
       secondsBeforeInvalidatingBlockAsCommitteeMember !== undefined &&
@@ -1348,7 +1435,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     let validatorToUse: EthAddress;
     if (invalidateAsCommitteeMember) {
       // When invalidating as a committee member, use first validator that's actually in the committee
-      const { committee } = await this.epochCache.getCommittee(currentSlot);
+      const committee = await getCurrentCommittee();
       if (committee) {
         const committeeSet = new Set(committee.map(addr => addr.toString()));
         validatorToUse =
@@ -1361,7 +1448,22 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       validatorToUse = ourValidatorAddresses[0];
     }
 
-    const { publisher: createdPublisher } = await this.publisherFactory.create(validatorToUse);
+    let createdPublisher: SequencerPublisher;
+    try {
+      ({ publisher: createdPublisher } = await this.publisherFactory.create(validatorToUse, {
+        requirement: this.config.fishermanMode ? undefined : INVALIDATE_REQUIREMENT,
+      }));
+    } catch (err) {
+      if (!(err instanceof NoAffordablePublisherError)) {
+        throw err;
+      }
+      this.log.error(`Not invalidating checkpoint ${invalidCheckpointNumber} since no publisher can afford it`, err, {
+        ...logData,
+        ...err.toLogContext(),
+      });
+      this.lastInvalidationAttempt = { slot: currentSlot, checkpointNumber: invalidCheckpointNumber };
+      return;
+    }
     using publisher = createdPublisher;
 
     const invalidateCheckpoint = await publisher.simulateInvalidateCheckpoint(pendingChainValidationStatus);
@@ -1470,4 +1572,6 @@ type SequencerSyncCheckResult = {
   proposedCheckpointData?: ProposedCheckpointData;
   syncedL2Slot: SlotNumber;
   pendingChainValidationStatus: ValidateCheckpointResult;
+  /** L1 block of the archiver sync point the frontier above was read at. */
+  l1BlockNumber: bigint;
 };

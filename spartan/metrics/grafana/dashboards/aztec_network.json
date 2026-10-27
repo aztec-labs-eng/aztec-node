@@ -564,7 +564,7 @@
         "type": "prometheus",
         "uid": "${data_source}"
       },
-      "description": "This panel calculates how much ETH has been consumed in the given time range",
+      "description": "How much ETH publishers spent in the given time range, summed per minute so that top-ups do not offset it",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -621,7 +621,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "-sum(delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[$__range]))",
+          "expr": "sum(sum_over_time(clamp_min(-delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[1m]), 0)[$__range:1m]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -641,7 +641,7 @@
         "type": "prometheus",
         "uid": "${data_source}"
       },
-      "description": "How much eth is used. Accumulated by service type",
+      "description": "How much eth is used. Accumulated by service type. Top-ups are left out",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -728,7 +728,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum by(service_name) (delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[1m]))",
+          "expr": "sum by(service_name) (clamp_min(-delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[1m]), 0))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -843,12 +843,214 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "default": true,
+        "type": "prometheus",
+        "uid": "${data_source}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.6",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${data_source}"
+          },
+          "editorMode": "code",
+          "expr": "min by (k8s_pod_name,aztec_address_sender) (aztec_l1_publisher_sends_affordable{k8s_namespace_name=\"$namespace\"})",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sends affordable per publisher",
+      "type": "timeseries",
+      "description": "How many reference L1 sends each publisher can afford at current fees: a first-of-epoch proposal for sequencers, an epoch proof submission for provers. Below 1, the publisher cannot send."
+    },
+    {
+      "datasource": {
+        "default": true,
+        "type": "prometheus",
+        "uid": "${data_source}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 4,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "Ξ"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "id": 43,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.6",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${data_source}"
+          },
+          "editorMode": "code",
+          "expr": "max by (aztec_l1_tx_scope) (aztec_l1_publisher_required_balance_eth{k8s_namespace_name=\"$namespace\"})",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Required balance per send",
+      "type": "timeseries",
+      "description": "ETH a publisher must hold to afford one reference L1 send at current fees, by sequencer or prover"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "id": 35,
       "panels": [],
@@ -921,7 +1123,7 @@
         "h": 8,
         "w": 9,
         "x": 0,
-        "y": 28
+        "y": 37
       },
       "id": 36,
       "interval": "5m",
@@ -1020,7 +1222,7 @@
         "h": 8,
         "w": 8,
         "x": 9,
-        "y": 28
+        "y": 37
       },
       "id": 37,
       "interval": "5m",
@@ -1120,7 +1322,7 @@
         "h": 8,
         "w": 7,
         "x": 17,
-        "y": 28
+        "y": 37
       },
       "id": 38,
       "interval": "5m",
@@ -1250,7 +1452,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 45
       },
       "id": 40,
       "interval": "5m",
@@ -1310,7 +1512,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 56
       },
       "id": 12,
       "panels": [
@@ -1382,7 +1584,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 57
           },
           "id": 8,
           "interval": "1m",
@@ -1490,7 +1692,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 57
           },
           "id": 9,
           "interval": "1m",
@@ -1593,7 +1795,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 65
           },
           "id": 21,
           "options": {
@@ -1674,7 +1876,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 65
           },
           "id": 33,
           "interval": "1m",
@@ -1728,7 +1930,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 57
       },
       "id": 13,
       "panels": [],
@@ -1767,7 +1969,7 @@
         "h": 8,
         "w": 4,
         "x": 0,
-        "y": 49
+        "y": 58
       },
       "id": 5,
       "interval": "5m",
@@ -1838,7 +2040,7 @@
         "h": 8,
         "w": 4,
         "x": 4,
-        "y": 49
+        "y": 58
       },
       "id": 6,
       "options": {
@@ -1909,7 +2111,7 @@
         "h": 8,
         "w": 4,
         "x": 8,
-        "y": 49
+        "y": 58
       },
       "id": 7,
       "options": {
@@ -2024,7 +2226,7 @@
         "h": 8,
         "w": 4,
         "x": 12,
-        "y": 49
+        "y": 58
       },
       "id": 4,
       "interval": "1m",
@@ -2129,7 +2331,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 49
+        "y": 58
       },
       "id": 29,
       "interval": "5m",
@@ -2171,7 +2373,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 66
       },
       "id": 17,
       "panels": [],
@@ -2243,7 +2445,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 58
+        "y": 67
       },
       "id": 19,
       "options": {
@@ -2307,7 +2509,7 @@
         "h": 16,
         "w": 10,
         "x": 14,
-        "y": 58
+        "y": 67
       },
       "id": 16,
       "options": {
@@ -2424,7 +2626,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 66
+        "y": 75
       },
       "id": 18,
       "options": {
@@ -2468,7 +2670,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 83
       },
       "id": 14,
       "panels": [],
@@ -2542,7 +2744,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 84
       },
       "id": 1,
       "options": {
@@ -2676,7 +2878,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 83
+        "y": 92
       },
       "id": 11,
       "options": {
@@ -2781,7 +2983,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 83
+        "y": 92
       },
       "id": 24,
       "interval": "5m",
@@ -2888,7 +3090,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 84
       },
       "id": 41,
       "options": {

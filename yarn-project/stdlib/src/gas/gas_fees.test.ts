@@ -6,6 +6,12 @@ function oldNumberMulCeil(value: bigint, scalar: number): bigint {
 }
 
 describe('GasFees', () => {
+  describe('min', () => {
+    it('takes the lower fee on each dimension independently', () => {
+      expect(GasFees.min(new GasFees(5, 100), new GasFees(7, 70))).toEqual(new GasFees(5, 70));
+    });
+  });
+
   describe('mul with non-integer scalar', () => {
     it('multiplies with ceiling', () => {
       const fees = new GasFees(10, 7);

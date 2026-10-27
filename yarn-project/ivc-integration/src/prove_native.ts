@@ -13,6 +13,7 @@ import { makeProofAndVerificationKey } from '@aztec-labs/stdlib/interfaces/serve
 import type { NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
 import { Proof, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import { VerificationKeyAsFields, VerificationKeyData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 import { ungzip } from 'pako';
 import * as path from 'path';
 

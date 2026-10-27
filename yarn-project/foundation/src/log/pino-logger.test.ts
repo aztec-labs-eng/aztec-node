@@ -1,15 +1,19 @@
+import { Buffer } from 'buffer';
 import { build as buildPrettyStream } from 'pino-pretty';
 import { Writable } from 'stream';
-import { inspect } from 'util';
 
+import { inspect } from '../inspect/index.js';
+import { createLibp2pComponentLogger } from './libp2p_logger.js';
 import {
   createLogger,
   getActorColor,
+  getLogLevel,
   logger,
   overwriteLoggingStream,
   pinoPrettyOpts,
   registerLoggingStream,
   resetActorColors,
+  setLogLevel,
 } from './pino-logger.js';
 
 /** Set LOG_TEST_LOGS=1 to print captured log output to console when running tests. */
@@ -95,6 +99,17 @@ describe('pino-logger', () => {
       msg: 'An error message',
       level: 50, // error
     });
+  });
+
+  it('logs fatal with the error in the message and the data as structured fields', () => {
+    const testLogger = createLogger('fatal-test');
+    capturingStream.clear();
+
+    testLogger.fatal('Process died', new Error('boom'), { code: 137, signal: 'SIGKILL' });
+
+    const [entry] = capturingStream.getJsonLines();
+    expect(entry).toMatchObject({ module: 'fatal-test', level: 60, code: 137, signal: 'SIGKILL' });
+    expect((entry as { msg: string }).msg).toMatch(/^Process died: Error: boom/);
   });
 
   it('can use overwriteLoggingStream for isolated capture', () => {
@@ -367,6 +382,71 @@ describe('pino-logger', () => {
       const entries = capturingStream.getJsonLines();
       expect(entries).toHaveLength(1);
       expect((entries[0] as { msg: string }).msg).toBe('total failure: [unserializable error]');
+    });
+  });
+
+  describe('setLogLevel', () => {
+    let originalSpec: string;
+
+    beforeEach(() => {
+      originalSpec = getLogLevel();
+    });
+
+    afterEach(() => {
+      setLogLevel(originalSpec);
+      // Restore the suite-wide capture level set in beforeAll.
+      logger.level = 'trace';
+    });
+
+    it('updates the level of existing loggers', () => {
+      const testLogger = createLogger('set-level-existing');
+      expect(testLogger.isLevelEnabled('debug')).toBe(true);
+
+      setLogLevel('warn');
+      expect(testLogger.isLevelEnabled('debug')).toBe(false);
+      expect(testLogger.isLevelEnabled('warn')).toBe(true);
+      expect(testLogger.level).toBe('warn');
+
+      capturingStream.clear();
+      testLogger.debug('should not appear');
+      testLogger.warn('should appear');
+      const entries = capturingStream.getJsonLines();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ msg: 'should appear' });
+    });
+
+    it('applies per-module filters to existing and new loggers', () => {
+      const moduleA = createLogger('filter-module-a');
+      const moduleB = createLogger('filter-module-b');
+
+      setLogLevel('warn;debug:filter-module-a');
+      expect(moduleA.isLevelEnabled('debug')).toBe(true);
+      expect(moduleB.isLevelEnabled('debug')).toBe(false);
+
+      const newMatching = createLogger('filter-module-a:child');
+      const newOther = createLogger('unrelated-module');
+      expect(newMatching.isLevelEnabled('debug')).toBe(true);
+      expect(newOther.isLevelEnabled('debug')).toBe(false);
+    });
+
+    it('updates the level of libp2p loggers', () => {
+      const libp2pLogger = createLibp2pComponentLogger('libp2p-level-test').forComponent('sub');
+      expect(libp2pLogger.enabled).toBe(true);
+
+      setLogLevel('warn');
+      expect(libp2pLogger.enabled).toBe(false);
+    });
+
+    it('round-trips the spec via getLogLevel', () => {
+      setLogLevel('warn;debug:module1;trace:module2');
+      expect(getLogLevel()).toBe('warn;debug:module1;trace:module2');
+    });
+
+    it('throws on an invalid spec leaving levels untouched', () => {
+      const testLogger = createLogger('invalid-spec-test');
+      expect(() => setLogLevel('loud')).toThrow('Invalid log level: loud');
+      expect(getLogLevel()).toBe(originalSpec);
+      expect(testLogger.isLevelEnabled('trace')).toBe(true);
     });
   });
 

@@ -45,8 +45,9 @@ l1-contracts: &l1-contracts-defaults
   AZTEC_TARGET_COMMITTEE_SIZE: 48
   # How many epochs to lag for validator set selection.
   AZTEC_LAG_IN_EPOCHS_FOR_VALIDATOR_SET: 2
-  # How many epochs to lag for RANDAO selection.
-  AZTEC_LAG_IN_EPOCHS_FOR_RANDAO: 2
+  # How many epochs to lag for RANDAO selection. Keep it below the validator set lag: equal lags
+  # put the validator set snapshot and the RANDAO checkpoint in the same L1 block.
+  AZTEC_LAG_IN_EPOCHS_FOR_RANDAO: 1
   # Minimum stake to become a validator (in wei, 100 TST).
   AZTEC_ACTIVATION_THRESHOLD: 100e18
   # Minimum stake before forced ejection (in wei, 50 TST).
@@ -185,6 +186,15 @@ _prodlike: &prodlike
   MAX_BLOCKS_PER_CHECKPOINT: 10
   # Grace period for received checkpoint proposals to materialize locally (2 block durations).
   CHECKPOINT_PROPOSAL_SYNC_GRACE_SECONDS: 12
+  # Maximum txs per checkpoint a proposer builds: 1 TPS at 72s slots. Must not exceed VALIDATOR_MAX_TX_PER_CHECKPOINT.
+  SEQ_MAX_TX_PER_CHECKPOINT: 72
+
+  #---------------------------------------------------------------------------
+  # Validator Configuration
+  #---------------------------------------------------------------------------
+  # Maximum txs per checkpoint a validator accepts from a peer: 2 TPS at 72s slots. Consensus-critical, but
+  # operators may raise it (never lower it): a stricter validator would reject honest proposers' checkpoints.
+  VALIDATOR_MAX_TX_PER_CHECKPOINT: 144
 
   #---------------------------------------------------------------------------
   # Database Map Sizes (in KB)
@@ -247,6 +257,9 @@ networks:
     TRANSACTIONS_DISABLED: false
     # Sequencer
     SEQ_MAX_TX_PER_BLOCK: 18
+    SEQ_MAX_TX_PER_CHECKPOINT: 36 # 1 TPS at 36s slots
+    # Validator
+    VALIDATOR_MAX_TX_PER_CHECKPOINT: 72 # 2 TPS at 36s slots
     # Prover
     PROVER_REAL_PROOFS: false # Use mock proofs
     PXE_PROVER_ENABLED: false # Disable PXE proving
@@ -300,8 +313,6 @@ networks:
     TEST_ACCOUNTS: false
     SPONSORED_FPC: false
     TRANSACTIONS_DISABLED: false
-    # Sequencer
-    SEQ_MAX_TX_PER_CHECKPOINT: 72 # 1 TPS
     # Prover
     PROVER_REAL_PROOFS: true
     # P2P
@@ -354,8 +365,6 @@ networks:
     TEST_ACCOUNTS: false
     SPONSORED_FPC: false
     TRANSACTIONS_DISABLED: false
-    # Sequencer
-    SEQ_MAX_TX_PER_CHECKPOINT: 72
     # Prover
     PROVER_REAL_PROOFS: true
     # Sync

@@ -9,6 +9,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 import noAsyncDispose from './eslint-rules/no-async-dispose.js';
+import noGlobalBuffer from './eslint-rules/no-global-buffer.js';
 import noNonPrimitiveInCollections from './eslint-rules/no-non-primitive-in-collections.js';
 import noUnsafeBrandedTypeConversion from './eslint-rules/no-unsafe-branded-type-conversion.js';
 
@@ -53,6 +54,7 @@ export default [
       'aztec-custom': {
         rules: {
           'no-async-dispose': noAsyncDispose,
+          'no-global-buffer': noGlobalBuffer,
           'no-non-primitive-in-collections': noNonPrimitiveInCollections,
           'no-unsafe-branded-type-conversion': noUnsafeBrandedTypeConversion,
         },
@@ -90,9 +92,30 @@ export default [
       curly: ['error', 'all'],
       camelcase: 'error',
       'import-x/no-relative-packages': 'error',
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message:
+            'Read environment variables with getEnv() from @aztec-labs/foundation/config/env, which also works where there is no `process`.',
+        },
+      ],
       'no-restricted-imports': [
         'error',
         {
+          paths: [
+            {
+              name: 'node:buffer',
+              message:
+                "Import from 'buffer' instead, which a bundler can resolve to the package of that name for a browser.",
+            },
+            ...['util', 'node:util'].map(name => ({
+              name,
+              importNames: ['inspect'],
+              message: "Import inspect from '@aztec-labs/foundation/inspect' instead, which also works in a browser.",
+            })),
+          ],
           patterns: [
             {
               group: ['dest'],
@@ -119,6 +142,7 @@ export default [
       // this unfortunately doesn't block `fit` and `fdescribe`
       'no-only-tests/no-only-tests': ['error'],
       'aztec-custom/no-async-dispose': 'error',
+      'aztec-custom/no-global-buffer': 'error',
       'aztec-custom/no-non-primitive-in-collections': 'error',
       'aztec-custom/no-unsafe-branded-type-conversion': 'error',
     },
@@ -127,6 +151,7 @@ export default [
     files: ['**/*.test.ts'],
     rules: {
       'jsdoc/require-jsdoc': 'off',
+      'no-restricted-properties': 'off',
     },
   },
 ];

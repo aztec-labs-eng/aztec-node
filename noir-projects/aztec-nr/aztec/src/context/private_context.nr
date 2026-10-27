@@ -942,10 +942,11 @@ impl PrivateContext {
     /// filter for relevant logs without scanning all of them.
     /// * `log` - The log data that will be publicly broadcast (so make sure it's already been encrypted before you
     /// call this function). Private logs are bounded in size (`PRIVATE_LOG_CIPHERTEXT_LEN`), to encourage all logs
-    /// from all smart contracts look identical. The protocol's kernel circuits can then append random fields as
-    /// "padding" after the log's length, so that the logs of this smart contract look indistinguishable from (the
-    /// same length as) the logs of all other applications. It's up to wallets how much padding to apply, so
-    /// ideally all wallets should agree on standards for this.
+    /// from all smart contracts look identical. Every field of the emitted log beyond its length must be zero: the
+    /// base rollup rejects a private log with non-zero fields past its length, so padding can never be appended
+    /// inside a log. What the kernel circuits can add is whole padding logs, which hide how many logs a tx
+    /// actually emitted. It's up to wallets how much padding to apply, so ideally all wallets should agree on
+    /// standards for this.
     ///
     /// ## Safety
     ///

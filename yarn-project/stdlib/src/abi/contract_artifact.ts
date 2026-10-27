@@ -1,4 +1,5 @@
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 
 import {
   AZTEC_INITIALIZER_ATTRIBUTE,

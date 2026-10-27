@@ -12,16 +12,20 @@ import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signat
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 import chunk from 'lodash.chunk';
 import {
   type AbiParameter,
   type Account,
+  BaseError,
   ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
   type GetContractReturnType,
   type Hex,
   type Log,
   RpcRequestError,
   type StateOverride,
+  type TransactionReceipt,
   type TypedDataDefinition,
   type WatchContractEventReturnType,
   decodeErrorResult,
@@ -31,6 +35,9 @@ import {
   getContract,
   hexToBigInt,
   keccak256,
+  maxUint256,
+  parseEventLogs,
+  recoverTypedDataAddress,
 } from 'viem';
 
 import { getPublicClient } from '../client.js';
@@ -260,6 +267,15 @@ export type AttesterExitAuthorization = {
   signature: ViemSignature;
 };
 
+/** Receipt and the unprocessed half-open range of a submitted authorization array. */
+export type AttesterExitBatchResult = {
+  receipt: TransactionReceipt;
+  processedCount: number;
+  remainingCount: number;
+  remainingStartIndex: number | undefined;
+  remainingEndIndexExclusive: number | undefined;
+};
+
 function toViemAttesterExitAuthorization(authorization: AttesterExitAuthorization) {
   return {
     attester: authorization.attester.toString(),
@@ -327,15 +343,22 @@ export type CheckpointProposedArgs = {
 export type CheckpointProposedLog = L1EventLog<CheckpointProposedArgs>;
 
 const INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR = 'ValidatorSelection__InsufficientValidatorSetSize';
+const EPOCH_NOT_STABLE_ERROR = 'ValidatorSelection__EpochNotStable';
 
 /** SlasherUpdated events are rare governance operations, so their watcher polls well below the client's interval. */
 const SLASHER_UPDATED_POLLING_INTERVAL_MS = 60_000;
+const SECP256K1_HALF_ORDER = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n;
 
 function isValidatorSelectionError(err: unknown, errorName: string): boolean {
   return (
     getErrorCause(err, ContractFunctionRevertedError)?.data?.errorName === errorName ||
     decodeRpcRequestErrorName(err) === errorName
   );
+}
+
+/** Whether a rollup read reverted because the requested epoch's committee or seed can still change. */
+export function isEpochNotStableError(err: unknown): boolean {
+  return isValidatorSelectionError(err, EPOCH_NOT_STABLE_ERROR);
 }
 
 function decodeRpcRequestErrorName(err: unknown): string | undefined {
@@ -367,6 +390,7 @@ export class RollupContract {
   private readonly logger = createLogger('ethereum:rollup');
 
   private static cachedStfStorageSlot: Hex | undefined;
+  private static cachedValidatorSelectionStorageSlot: Hex | undefined;
   private cachedEscapeHatch?: {
     address: EthAddress;
     contract: GetContractReturnType<typeof EscapeHatchAbi, ViemClient>;
@@ -382,6 +406,13 @@ export class RollupContract {
 
   static get stfStorageSlot(): Hex {
     return (RollupContract.cachedStfStorageSlot ??= keccak256(Buffer.from('aztec.stf.storage', 'utf-8')));
+  }
+
+  /** Base slot of the rollup's validator selection storage struct, whose first field maps epochs to committee commitments. */
+  static get validatorSelectionStorageSlot(): Hex {
+    return (RollupContract.cachedValidatorSelectionStorageSlot ??= keccak256(
+      Buffer.from('aztec.validator_selection.storage', 'utf-8'),
+    ));
   }
 
   static getFromL1ContractsValues(deployL1ContractsValues: DeployAztecL1ContractsReturnType) {
@@ -494,19 +525,16 @@ export class RollupContract {
     return Number(await this.rollup.read.getExitDelay());
   }
 
-  @memoize
-  getManaTarget(): Promise<bigint> {
-    return this.rollup.read.getManaTarget();
+  /** Returns the mana target. Not memoized: governance can raise it. */
+  async getManaTarget(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getManaTarget(options);
   }
 
-  @memoize
-  getProvingCostPerMana(): Promise<bigint> {
-    return this.rollup.read.getProvingCostPerManaInEth();
-  }
-
-  @memoize
-  getProvingCostPerManaInFeeAsset(): Promise<bigint> {
-    return this.rollup.read.getProvingCostPerManaInFeeAsset();
+  /** Returns the proving cost per mana in ETH. Not memoized: governance can change it. */
+  async getProvingCostPerMana(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getProvingCostPerManaInEth(options);
   }
 
   /** Returns the protocol fee margin in basis points. Not memoized: governance can change it. */
@@ -520,9 +548,10 @@ export class RollupContract {
     return EthAddress.fromString(await this.rollup.read.getProtocolFeeRecipient());
   }
 
-  @memoize
-  getManaLimit(): Promise<bigint> {
-    return this.rollup.read.getManaLimit();
+  /** Returns the mana limit per checkpoint (twice the mana target). Not memoized: governance can raise it. */
+  async getManaLimit(options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getManaLimit(options);
   }
 
   @memoize
@@ -558,25 +587,16 @@ export class RollupContract {
     epochDuration: number;
     proofSubmissionEpochs: number;
     targetCommitteeSize: number;
-    rollupManaLimit: number;
   }> {
-    const [
-      l1StartBlock,
-      l1GenesisTime,
-      slotDuration,
-      epochDuration,
-      proofSubmissionEpochs,
-      targetCommitteeSize,
-      rollupManaLimit,
-    ] = await Promise.all([
-      this.getL1StartBlock(),
-      this.getL1GenesisTime(),
-      this.getSlotDuration(),
-      this.getEpochDuration(),
-      this.getProofSubmissionEpochs(),
-      this.getTargetCommitteeSize(),
-      this.getManaLimit(),
-    ]);
+    const [l1StartBlock, l1GenesisTime, slotDuration, epochDuration, proofSubmissionEpochs, targetCommitteeSize] =
+      await Promise.all([
+        this.getL1StartBlock(),
+        this.getL1GenesisTime(),
+        this.getSlotDuration(),
+        this.getEpochDuration(),
+        this.getProofSubmissionEpochs(),
+        this.getTargetCommitteeSize(),
+      ]);
     return {
       l1StartBlock,
       l1GenesisTime,
@@ -584,7 +604,6 @@ export class RollupContract {
       epochDuration: Number(epochDuration),
       proofSubmissionEpochs: Number(proofSubmissionEpochs),
       targetCommitteeSize,
-      rollupManaLimit: Number(rollupManaLimit),
     };
   }
 
@@ -629,15 +648,18 @@ export class RollupContract {
    * This function is intentionally defensive: any failure to query the escape hatch
    * (RPC issues, transient errors, etc.) is treated as "closed" to avoid callers
    * needing to sprinkle try/catch everywhere.
+   *
+   * `options.blockNumber` pins only the hatch's `isHatchOpen` read: the escape hatch address is always resolved at the
+   * latest L1 block.
    */
-  async isEscapeHatchOpen(epoch: EpochNumber): Promise<boolean> {
+  async isEscapeHatchOpen(epoch: EpochNumber, options?: { blockNumber?: bigint }): Promise<boolean> {
     try {
       const escapeHatch = await this.getEscapeHatchContract();
       if (!escapeHatch) {
         return false;
       }
 
-      const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)]);
+      const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)], options);
       return isOpen;
     } catch (err) {
       this.logger.warn('isEscapeHatchOpen failed (treating as closed); RPC or contract error may cause liveness risk', {
@@ -729,13 +751,14 @@ export class RollupContract {
     return this.rollup.read.getEthPerFeeAsset();
   }
 
-  async getCommitteeAt(timestamp: bigint): Promise<EthAddress[] | undefined> {
+  async getCommitteeAt(timestamp: bigint, options?: { blockNumber?: bigint }): Promise<EthAddress[] | undefined> {
     const { result } = await this.client
       .simulateContract({
         address: this.address,
         abi: RollupAbi,
         functionName: 'getCommitteeAt',
         args: [timestamp],
+        blockNumber: options?.blockNumber,
       })
       .catch(e => {
         if (isValidatorSelectionError(e, INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR)) {
@@ -747,8 +770,8 @@ export class RollupContract {
     return result ? result.map(addr => EthAddress.fromString(addr)) : undefined;
   }
 
-  async getSampleSeedAt(timestamp: bigint): Promise<Buffer32> {
-    return Buffer32.fromBigInt(await this.rollup.read.getSampleSeedAt([timestamp]));
+  async getSampleSeedAt(timestamp: bigint, options?: { blockNumber?: bigint }): Promise<Buffer32> {
+    return Buffer32.fromBigInt(await this.rollup.read.getSampleSeedAt([timestamp], options));
   }
 
   async getCurrentSampleSeed(): Promise<Buffer32> {
@@ -757,6 +780,26 @@ export class RollupContract {
 
   async getCurrentEpoch(): Promise<EpochNumber> {
     return EpochNumber.fromBigInt(await this.rollup.read.getCurrentEpoch());
+  }
+
+  /**
+   * Whether `setupEpoch` has already run for the epoch, i.e. its committee commitment is stored, as of
+   * `options.blockNumber` (the latest L1 block by default).
+   * Read straight from storage because `getEpochCommitteeCommitment` computes the commitment when it is not stored.
+   */
+  async isEpochSetUp(epoch: EpochNumber, options?: { blockNumber?: bigint }): Promise<boolean> {
+    const slot = keccak256(
+      encodeAbiParameters(
+        [{ type: 'uint256' }, { type: 'uint256' }],
+        [BigInt(epoch), BigInt(RollupContract.validatorSelectionStorageSlot)],
+      ),
+    );
+    const value = await this.client.getStorageAt(
+      options?.blockNumber === undefined
+        ? { address: this.address, slot, blockTag: 'latest' }
+        : { address: this.address, slot, blockNumber: options.blockNumber },
+    );
+    return value !== undefined && hexToBigInt(value) !== 0n;
   }
 
   async getCurrentEpochCommittee(): Promise<EthAddress[] | undefined> {
@@ -1302,6 +1345,21 @@ export class RollupContract {
   }
 
   /**
+   * Calls getHasSubmittedFullEpoch directly. Returns whether the given prover's proof with the given length for the
+   * given epoch was registered as a full-epoch proof, which is the only kind that raises the prover's activity score.
+   */
+  public getHasSubmittedFullEpochProof(
+    epochNumber: EpochNumber,
+    numberOfCheckpointsInEpoch: number,
+    prover: Hex | EthAddress,
+  ): Promise<boolean> {
+    if (prover instanceof EthAddress) {
+      prover = prover.toString();
+    }
+    return this.rollup.read.getHasSubmittedFullEpoch([BigInt(epochNumber), BigInt(numberOfCheckpointsInEpoch), prover]);
+  }
+
+  /**
    * Returns the minimum mana fee at the given timestamp.
    * @param options - Optional state override to simulate against, and optional L1 block number to pin the call
    * to, so the fee describes a known L1 state rather than whatever the node considers latest.
@@ -1350,8 +1408,9 @@ export class RollupContract {
     return Fr.fromString(await this.rollup.read.archive());
   }
 
-  async archiveAt(checkpointNumber: CheckpointNumber): Promise<Fr> {
-    return Fr.fromString(await this.rollup.read.archiveAt([BigInt(checkpointNumber)]));
+  async archiveAt(checkpointNumber: CheckpointNumber, options?: { blockNumber?: bigint }): Promise<Fr> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return Fr.fromString(await this.rollup.read.archiveAt([BigInt(checkpointNumber)], options));
   }
 
   getSequencerRewards(address: Hex | EthAddress): Promise<bigint> {
@@ -1375,7 +1434,8 @@ export class RollupContract {
     const block = await this.client.getBlock();
     const blockNumber = block.number ?? undefined;
     const ts = timestamp ?? block.timestamp;
-    const attesterSize = await this.getActiveAttesterCount({ blockNumber });
+    // Count at ts, matching the addresses below; the current count would truncate a shrunk set.
+    const attesterSize = await this.getAttesterCountAtTime(ts, { blockNumber });
     const gse = new GSEContract(this.client, await this.getGSE());
     const indices = Array.from({ length: attesterSize }, (_, i) => BigInt(i));
     const chunks = chunk(indices, 1000);
@@ -1437,6 +1497,9 @@ export class RollupContract {
 
   /** Builds the EIP-712 data an attester signs to authorize a relayed exit. */
   public buildAttesterExitTypedData(attester: EthAddress, deadline: bigint): TypedDataDefinition {
+    if (!Number.isSafeInteger(this.client.chain.id) || this.client.chain.id <= 0) {
+      throw new Error('Chain ID must be a positive safe integer');
+    }
     return {
       domain: {
         name: 'Aztec Rollup',
@@ -1461,15 +1524,80 @@ export class RollupContract {
     deadline: bigint,
     signer: (typedData: TypedDataDefinition) => Promise<Hex>,
   ): Promise<AttesterExitAuthorization> {
+    if (deadline <= BigInt(Math.floor(Date.now() / 1000)) || deadline > maxUint256) {
+      throw new Error('Deadline must be a future Unix timestamp within uint256 range');
+    }
     const signature = Signature.fromString(await signer(this.buildAttesterExitTypedData(attester, deadline)));
-    return { attester, deadline, signature: signature.toViemSignature() };
+    const authorization = { attester, deadline, signature: signature.toViemSignature() };
+    await this.validateAttesterExitAuthorizations([authorization]);
+    return authorization;
+  }
+
+  /** Validates uniqueness, deadlines and EIP-712 signatures locally, without checking on-chain eligibility. */
+  public async validateAttesterExitAuthorizations(authorizations: AttesterExitAuthorization[]): Promise<void> {
+    const seen = new Set<string>();
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    for (const [index, authorization] of authorizations.entries()) {
+      const attester = authorization.attester.toString().toLowerCase();
+      if (seen.has(attester)) {
+        throw new Error(`Duplicate attester: ${attester}`);
+      }
+      seen.add(attester);
+      if (authorization.deadline <= now || authorization.deadline > maxUint256) {
+        throw new Error(`Invalid or expired deadline for attester ${attester}`);
+      }
+      await this.validateAttesterExitSignature(authorization, index);
+    }
+  }
+
+  /**
+   * Checks one authorization's signature against this rollup and chain with the rollup's ECDSA rules (v of 27 or 28,
+   * low s), without checking its deadline or other entries. `index` names the entry in errors.
+   */
+  public async validateAttesterExitSignature(authorization: AttesterExitAuthorization, index: number): Promise<void> {
+    const attester = authorization.attester.toString().toLowerCase();
+    if (authorization.signature.v !== 27 && authorization.signature.v !== 28) {
+      throw new Error(`Invalid v in authorization ${index} for attester ${attester}: expected 27 or 28`);
+    }
+    if (BigInt(authorization.signature.s) > SECP256K1_HALF_ORDER) {
+      throw new Error(`High-s signature in authorization ${index} for attester ${attester}`);
+    }
+    const signer = await recoverTypedDataAddress({
+      ...this.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
+      signature: { ...authorization.signature, v: BigInt(authorization.signature.v) },
+    });
+    if (signer.toLowerCase() !== attester) {
+      throw new Error(
+        `Invalid signature in authorization ${index} for attester ${attester} on the selected rollup and chain`,
+      );
+    }
+  }
+
+  /**
+   * The direct and batch exit endpoints return nothing, so calling them on an address without code succeeds silently.
+   * Reading a rollup view first makes a wrong address fail before a simulation or transaction. RPC failures propagate
+   * as is.
+   */
+  private async assertAttesterExitRollup(): Promise<void> {
+    try {
+      await this.getAttesterExitWindow();
+    } catch (err) {
+      if (
+        err instanceof BaseError &&
+        err.walk(e => e instanceof ContractFunctionZeroDataError || e instanceof ContractFunctionRevertedError)
+      ) {
+        throw new Error(`No rollup with attester exits at ${this.address}`, { cause: err });
+      }
+      throw err;
+    }
   }
 
   /** Initiates an attester exit. The transaction signer must be the position's attester. */
-  public initiateWithdrawByAttester(
+  public async initiateWithdrawByAttester(
     l1TxUtils: L1TxUtils,
     attester: EthAddress,
   ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    await this.assertAttesterExitRollup();
     return l1TxUtils.sendAndMonitorTransaction({
       to: this.address,
       abi: RollupAbi,
@@ -1495,6 +1623,31 @@ export class RollupContract {
         args: [toViemAttesterExitAuthorization(authorization)],
       }),
     });
+  }
+
+  /** Simulates the selected batch endpoint without sending a transaction and returns the prefix that fits now. */
+  public async simulateAttesterExitBatch(
+    authorizations: AttesterExitAuthorization[],
+    upToLimit = false,
+  ): Promise<number> {
+    await this.assertAttesterExitRollup();
+    const args = [authorizations.map(toViemAttesterExitAuthorization)] as const;
+    if (upToLimit) {
+      const { result } = await this.client.simulateContract({
+        address: this.address,
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatchUpToLimit',
+        args,
+      });
+      return Number(result);
+    }
+    await this.client.simulateContract({
+      address: this.address,
+      abi: RollupAbi,
+      functionName: 'initiateWithdrawByAttesterBatch',
+      args,
+    });
+    return authorizations.length;
   }
 
   /** Relays a signed attester exit batch that reverts unless every authorization can be processed. */
@@ -1527,6 +1680,48 @@ export class RollupContract {
         args: [authorizations.map(toViemAttesterExitAuthorization)],
       }),
     });
+  }
+
+  /** Submits signed exits and reports the processed prefix and remaining half-open index range from receipt events. */
+  public async submitAttesterExitBatch(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+    upToLimit = false,
+  ): Promise<AttesterExitBatchResult> {
+    await this.assertAttesterExitRollup();
+    const { receipt } = upToLimit
+      ? await this.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
+      : await this.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);
+
+    if (receipt.status !== 'success') {
+      throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
+    }
+
+    const exits = parseEventLogs({
+      abi: RollupAbi,
+      eventName: 'WithdrawInitiatedByAttester',
+      logs: receipt.logs.filter(event => event.address.toLowerCase() === this.address.toLowerCase()),
+    });
+    const processedCount = exits.length;
+    if (
+      processedCount > authorizations.length ||
+      (!upToLimit && processedCount !== authorizations.length) ||
+      exits.some(
+        (event, index) => event.args.attester.toLowerCase() !== authorizations[index].attester.toString().toLowerCase(),
+      )
+    ) {
+      throw new Error(
+        `Transaction ${receipt.transactionHash} succeeded, but its exit events do not match the submitted prefix`,
+      );
+    }
+    const remainingCount = authorizations.length - processedCount;
+    return {
+      receipt,
+      processedCount,
+      remainingCount,
+      remainingStartIndex: remainingCount > 0 ? processedCount : undefined,
+      remainingEndIndexExclusive: remainingCount > 0 ? authorizations.length : undefined,
+    };
   }
 
   async getStakingAsset(): Promise<EthAddress> {
@@ -1671,6 +1866,8 @@ export class RollupContract {
         l1BlockNumber: log.blockNumber!,
         l1BlockHash: Buffer32.fromString(log.blockHash!),
         l1TransactionHash: log.transactionHash!,
+        l1TransactionIndex: log.transactionIndex!,
+        l1LogIndex: log.logIndex!,
         args: {
           checkpointNumber: CheckpointNumber.fromBigInt(log.args.checkpointNumber!),
           archive: Fr.fromString(log.args.archive!),

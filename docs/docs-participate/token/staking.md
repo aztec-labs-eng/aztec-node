@@ -63,11 +63,11 @@ When you want to withdraw your staked tokens, you must go through an unstaking p
 | Delay Type | Alpha (Mainnet) | Testnet |
 |-----------|-----------------|---------|
 | **Staking Exit Delay** | 4 days | 2 days |
-| **Governance Withdrawal Delay** | ~38 days | ~1.6 days |
+| **Governance Withdrawal Delay** | ~9.6 days | ~1.6 days |
 
 The **staking exit delay** is the minimum time after initiating withdrawal before you can claim your tokens. It allows time for pending slashing conditions to be detected.
 
-If your tokens are deposited in the Governance Staking Escrow (GSE) for voting, the **governance withdrawal delay** also applies. This delay is calculated as `votingDelay/5 + votingDuration + executionDelay` to ensure voted-on proposals can be executed before voters exit. On mainnet this is approximately 38 days (0.6 + 7 + 30 days).
+If your tokens are deposited in the Governance Staking Escrow (GSE) for voting, the **governance withdrawal delay** also applies. This delay is calculated as `votingDelay/5 + votingDuration + executionDelay` to ensure voted-on proposals can be executed before voters exit. On mainnet this is approximately 9.6 days (0.6 + 7 + 2 days).
 
 ### How to Unstake
 

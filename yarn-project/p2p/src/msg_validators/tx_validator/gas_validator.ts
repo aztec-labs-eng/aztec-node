@@ -72,52 +72,25 @@ export class MaxFeePerGasValidator<T extends HasMaxFeePerGasData> implements TxV
 }
 
 /**
- * Validates that a transaction can pay its gas fees.
+ * Validates that a transaction's fee payer can cover its fee limit: reads the fee payer's FeeJuice balance from
+ * public state, adds any pending claim from a setup-phase `_increase_public_balance` call, and rejects if the total
+ * is less than the tx's fee limit (gasLimits * maxFeePerGas).
  *
- * Runs two checks in order:
- * 1. **Max fee per gas** (delegates to {@link MaxFeePerGasValidator}) — rejects the tx if its
- *    maxFeesPerGas is below the current block's gas fees.
- * 2. **Fee payer balance** — reads the fee payer's FeeJuice balance from public state,
- *    adds any pending claim from a setup-phase `_increase_public_balance` call, and
- *    rejects if the total is less than the tx's fee limit (gasLimits * maxFeePerGas).
- *
- * Gas limits are deliberately not checked here: they are owned by {@link MinGasLimitsValidator} and
- * {@link MaxGasLimitsValidator}, which factories include separately so that exemptions (e.g. gas estimation)
- * don't change fee enforcement.
- *
- * Used by: gossip (stage 1), RPC, and block building validators.
+ * Does not check max fee per gas against any fee: a tx with zero max fees has a zero fee limit and passes here with
+ * no balance, so every caller must also run a {@link MaxFeePerGasValidator}, as {@link GasTxValidator} does.
  */
-export class GasTxValidator implements TxValidator<Tx> {
+export class FeePayerBalanceValidator implements TxValidator<Tx> {
   #log: Logger;
   #publicDataSource: PublicStateSource;
   #feeJuiceAddress: AztecAddress;
-  #maxFeePerGasValidator: MaxFeePerGasValidator<Tx>;
 
-  constructor(
-    publicDataSource: PublicStateSource,
-    feeJuiceAddress: AztecAddress,
-    gasFees: GasFees,
-    bindings?: LoggerBindings,
-  ) {
+  constructor(publicDataSource: PublicStateSource, feeJuiceAddress: AztecAddress, bindings?: LoggerBindings) {
     this.#log = createLogger('sequencer:tx_validator:tx_gas', bindings);
     this.#publicDataSource = publicDataSource;
     this.#feeJuiceAddress = feeJuiceAddress;
-    this.#maxFeePerGasValidator = new MaxFeePerGasValidator(gasFees, bindings);
   }
 
   async validateTx(tx: Tx): Promise<TxValidationResult> {
-    const maxFeeValidation = this.#maxFeePerGasValidator.validateMaxFeePerGas(tx);
-    if (maxFeeValidation.result === 'invalid') {
-      return maxFeeValidation;
-    }
-    return await this.validateTxFee(tx);
-  }
-
-  /**
-   * Checks the fee payer has enough FeeJuice balance to cover the tx's fee limit.
-   * Accounts for any pending claim from a setup-phase `_increase_public_balance` call.
-   */
-  public async validateTxFee(tx: Tx): Promise<TxValidationResult> {
     const feePayer = tx.data.feePayer;
 
     // Compute the maximum fee that this tx may pay, based on its gasLimits and maxFeePerGas
@@ -145,5 +118,44 @@ export class GasTxValidator implements TxValidator<Tx> {
       };
     }
     return { result: 'valid' };
+  }
+}
+
+/**
+ * Validates that a transaction can pay its gas fees.
+ *
+ * Runs two checks in order:
+ * 1. **Max fee per gas** (delegates to {@link MaxFeePerGasValidator}) — rejects the tx if its
+ *    maxFeesPerGas is below the current block's gas fees.
+ * 2. **Fee payer balance** (delegates to {@link FeePayerBalanceValidator}) — rejects if the fee payer cannot
+ *    cover the tx's fee limit (gasLimits * maxFeePerGas).
+ *
+ * Gas limits are deliberately not checked here: they are owned by {@link MinGasLimitsValidator} and
+ * {@link MaxGasLimitsValidator}, which factories include separately so that exemptions (e.g. gas estimation)
+ * don't change fee enforcement.
+ *
+ * Used by: RPC and block building validators. Gossip runs the two checks as separate entries, since their
+ * failures carry different peer penalties.
+ */
+export class GasTxValidator implements TxValidator<Tx> {
+  #maxFeePerGasValidator: MaxFeePerGasValidator<Tx>;
+  #feePayerBalanceValidator: FeePayerBalanceValidator;
+
+  constructor(
+    publicDataSource: PublicStateSource,
+    feeJuiceAddress: AztecAddress,
+    gasFees: GasFees,
+    bindings?: LoggerBindings,
+  ) {
+    this.#maxFeePerGasValidator = new MaxFeePerGasValidator(gasFees, bindings);
+    this.#feePayerBalanceValidator = new FeePayerBalanceValidator(publicDataSource, feeJuiceAddress, bindings);
+  }
+
+  async validateTx(tx: Tx): Promise<TxValidationResult> {
+    const maxFeeValidation = this.#maxFeePerGasValidator.validateMaxFeePerGas(tx);
+    if (maxFeeValidation.result === 'invalid') {
+      return maxFeeValidation;
+    }
+    return await this.#feePayerBalanceValidator.validateTx(tx);
   }
 }

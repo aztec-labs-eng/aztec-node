@@ -22,10 +22,10 @@ import { AutomineTestContext } from '../automine_test_context.js';
 
 const TIMEOUT = 120_000;
 
-// Exercises the `aztec_utl_getTxEffect` utility oracle end-to-end. The contract hashes the deserialized `TxEffect`
-// field-by-field with poseidon2 and asserts the result matches a hash computed in TS over the same fixed-size flat
-// field layout used by Noir's auto-derived `Serialize<TxEffect>`. Any layout drift between Noir and TS produces a
-// mismatch.
+// Exercises the `aztec_utl_getTxEffect` and `aztec_utl_getTxEffects` utility oracles end-to-end. The contract hashes
+// each deserialized `TxEffect` field-by-field with poseidon2 and asserts the result matches a hash computed in TS over
+// the same fixed-size flat field layout used by Noir's auto-derived `Serialize<TxEffect>`. Any layout drift between
+// Noir and TS produces a mismatch.
 //
 // Note: This would ideally be an integration test as it only tests an oracle implementation but we currently don't
 // have the infrastructure for that. Testing it with TXE is also infeasible as there we would not be able to check the
@@ -58,8 +58,6 @@ describe('automine/effects/tx_effect_oracle', () => {
 
   afterAll(() => teardown());
 
-  // Fetches the deploy tx's TxEffect from the node, computes a poseidon2 hash over the padded field
-  // layout in TS, then simulates the Noir contract's get_tx_effect_hash and compares the two hashes.
   it('tx effect in Noir exactly matches tx effect in TS', async () => {
     const nodeEffect = await aztecNode.getTxEffect(deployTxHash);
     expect(nodeEffect).toBeDefined();
@@ -72,6 +70,19 @@ describe('automine/effects/tx_effect_oracle', () => {
       .simulate({ from: defaultAccountAddress });
 
     expect(actualHash).toEqual(expectedHash.toBigInt());
+  });
+
+  it('batched tx effects in Noir exactly match tx effects in TS', async () => {
+    const nodeEffect = await aztecNode.getTxEffect(deployTxHash);
+    expect(nodeEffect).toBeDefined();
+
+    // The deploy tx hash is requested twice so both batch slots resolve to the same effect.
+    const expectedHash = await hashTxEffect(nodeEffect!.data);
+    const { result: actualHashes } = await contract.methods
+      .get_tx_effects_hashes([deployTxHash.hash, deployTxHash.hash])
+      .simulate({ from: defaultAccountAddress });
+
+    expect(actualHashes).toEqual([expectedHash.toBigInt(), expectedHash.toBigInt()]);
   });
 
   // Passes a random Fr as a tx hash to assert_is_none; asserts the oracle returns None (the tx does

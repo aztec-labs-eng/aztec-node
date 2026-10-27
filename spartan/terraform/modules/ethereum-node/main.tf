@@ -156,8 +156,6 @@ resource "helm_release" "reth" {
   namespace        = var.NAMESPACE
   create_namespace = false
   upgrade_install  = true
-  force_update     = true
-  recreate_pods    = true
   reuse_values     = false
   timeout          = var.HELM_TIMEOUT_SECONDS
   wait             = var.HELM_WAIT
@@ -173,8 +171,6 @@ resource "helm_release" "lighthouse" {
   namespace        = var.NAMESPACE
   create_namespace = false
   upgrade_install  = true
-  force_update     = true
-  recreate_pods    = true
   reuse_values     = false
   timeout          = var.HELM_TIMEOUT_SECONDS
   wait             = var.HELM_WAIT
@@ -224,6 +220,12 @@ resource "kubernetes_service_v1" "reth_internal_load_balancer" {
 
   wait_for_load_balancer = false
 
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["networking.gke.io/backend-service"],
+    ]
+  }
+
   depends_on = [helm_release.reth]
 }
 
@@ -259,6 +261,12 @@ resource "kubernetes_service_v1" "lighthouse_internal_load_balancer" {
   }
 
   wait_for_load_balancer = false
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["networking.gke.io/backend-service"],
+    ]
+  }
 
   depends_on = [helm_release.lighthouse]
 }

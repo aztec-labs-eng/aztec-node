@@ -22,6 +22,7 @@ import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { getL2ToL1MessageLeafId } from '@aztec-labs/stdlib/messaging';
+import { Buffer } from 'buffer';
 import { type Hex, encodeFunctionData, getContract, toFunctionSelector } from 'viem';
 
 /** L1 to L2 message info to claim it on L2. */

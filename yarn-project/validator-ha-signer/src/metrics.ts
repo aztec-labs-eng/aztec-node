@@ -7,7 +7,7 @@ import {
   createUpDownCounterWithDefault,
 } from '@aztec-labs/telemetry-client';
 
-export type HACleanupType = 'stuck' | 'old' | 'outdated_rollup';
+export type HACleanupType = 'stuck' | 'old';
 
 /**
  * Metrics for HA signer tracking signing operations, lock acquisition, and cleanup.
@@ -26,7 +26,6 @@ export class HASignerMetrics {
   // Cleanup metrics
   private cleanupStuckDutiesCount: UpDownCounter;
   private cleanupOldDutiesCount: UpDownCounter;
-  private cleanupOutdatedRollupDutiesCount: UpDownCounter;
 
   constructor(
     client: TelemetryClient,
@@ -48,10 +47,6 @@ export class HASignerMetrics {
     // Cleanup
     this.cleanupStuckDutiesCount = createUpDownCounterWithDefault(meter, Metrics.HA_SIGNER_CLEANUP_STUCK_DUTIES_COUNT);
     this.cleanupOldDutiesCount = createUpDownCounterWithDefault(meter, Metrics.HA_SIGNER_CLEANUP_OLD_DUTIES_COUNT);
-    this.cleanupOutdatedRollupDutiesCount = createUpDownCounterWithDefault(
-      meter,
-      Metrics.HA_SIGNER_CLEANUP_OUTDATED_ROLLUP_DUTIES_COUNT,
-    );
   }
 
   /**
@@ -131,8 +126,6 @@ export class HASignerMetrics {
       this.cleanupStuckDutiesCount.add(count, attributes);
     } else if (type === 'old') {
       this.cleanupOldDutiesCount.add(count, attributes);
-    } else if (type === 'outdated_rollup') {
-      this.cleanupOutdatedRollupDutiesCount.add(count, attributes);
     }
   }
 }

@@ -19,6 +19,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { UniswapContract } from '@aztec-labs/noir-contracts.js/Uniswap';
 import { computeL2ToL1MessageHash } from '@aztec-labs/stdlib/hash';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type GetContractReturnType, getContract, parseEther, toFunctionSelector } from 'viem';
 
 import { type EndToEndContext, ensureAuthRegistryPublished } from '../fixtures/utils.js';

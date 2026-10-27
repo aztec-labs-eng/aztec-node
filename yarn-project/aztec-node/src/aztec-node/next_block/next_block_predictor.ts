@@ -2,7 +2,7 @@ import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
-import type { GasFees } from '@aztec-labs/stdlib/gas';
+import type { GasFees, NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
 import { GlobalVariables } from '@aztec-labs/stdlib/tx';
 
 import { NextBlockFeeCache, type NextBlockFeeCacheDeps } from './next_block_fee_cache.js';
@@ -42,7 +42,7 @@ export interface NextBlockPredictorDeps {
  * Deliberately not used by the sequencer: its slot policy is stricter (it declines to build rather than
  * predicting inclusion) and a stale fee would make L1 reject its checkpoint.
  */
-export class NextBlockPredictor {
+export class NextBlockPredictor implements NextBlockMinFeesProvider {
   private readonly blockSource: L2BlockSource;
   private readonly feeCache: NextBlockFeeCache;
   private readonly epochCache: EpochCacheInterface;
@@ -115,12 +115,40 @@ export class NextBlockPredictor {
    *
    * Returns the L1 block the answer describes so the caller can tag its own fee reads with the same anchor.
    */
-  public async quoteMinFees(): Promise<{ fees: GasFees; l1SyncPoint: L1SyncPoint | undefined } | undefined> {
+  public quoteMinFees(): Promise<{ fees: GasFees; l1SyncPoint: L1SyncPoint | undefined } | undefined> {
+    return this.minFees(QUOTE_MAX_WAIT_MS);
+  }
+
+  /**
+   * The same fee as {@link quoteMinFees}, for transaction admission rather than for a wallet, and answered
+   * from what the cache already holds: this runs per gossiped transaction and per pool revalidation, where
+   * every caller has a policy for an unavailable fee, so waiting on a refresh would only convert a pricing
+   * outage into gossip backpressure. A boundary miss still starts the shared refresh, so a later transaction
+   * is priced from the record it populates. An archiver or L1 failure is reported as undefined rather than
+   * thrown, since no admission caller can act on the exception.
+   */
+  public async getNextBlockMinFees(): Promise<GasFees | undefined> {
+    try {
+      return (await this.minFees(0))?.fees;
+    } catch (err) {
+      this.log.debug(`Failed to resolve the next-block min fee`, err);
+      return undefined;
+    }
+  }
+
+  /**
+   * The fee the next block would carry, with the L1 block that answer describes. Mid-checkpoint it is the
+   * in-progress checkpoint's frozen fee, read straight off the proposed tip's header with no L1 involved; at a
+   * boundary it is the cached L1 price, waited on for at most `maxWaitMs`.
+   */
+  private async minFees(
+    maxWaitMs: number,
+  ): Promise<{ fees: GasFees; l1SyncPoint: L1SyncPoint | undefined } | undefined> {
     const { frontier, plan, key } = await this.planFromFrontier();
     if (!key) {
       const fees = frontier.latestBlockHeader?.globalVariables.gasFees;
       if (!fees) {
-        this.log.warn(`Cannot quote the next block fee: frontier reports no header for its proposed tip`, {
+        this.log.debug(`Cannot price the next block: frontier reports no header for its proposed tip`, {
           blockNumber: plan.latestBlockNumber,
         });
         return undefined;
@@ -128,7 +156,7 @@ export class NextBlockPredictor {
       return { fees, l1SyncPoint: frontier.l1SyncPoint };
     }
 
-    const checkpointGlobals = await this.feeCache.getBoundaryGlobals(key, frontier, { maxWaitMs: QUOTE_MAX_WAIT_MS });
+    const checkpointGlobals = await this.feeCache.getBoundaryGlobals(key, frontier, { maxWaitMs });
     return checkpointGlobals ? { fees: checkpointGlobals.gasFees, l1SyncPoint: frontier.l1SyncPoint } : undefined;
   }
 

@@ -33,6 +33,8 @@ export interface L1TxUtilsConfig {
    * Minimum priority fee per gas in Gwei. Acts as a floor for the computed priority fee.
    */
   minimumPriorityFeePerGas?: number;
+  /** Minimum RPC priority fee estimate in gwei used to calculate the 100x competitive fee sanity cap. */
+  minimumPriorityFeePerGasForCap?: number;
   /**
    * Maximum number of speed-up attempts
    */
@@ -113,6 +115,11 @@ export const l1TxUtilsConfigMappings: ConfigMappingsType<L1TxUtilsConfig> = {
       },
     ],
     ...floatConfigHelper(0),
+  },
+  minimumPriorityFeePerGasForCap: {
+    description: 'Minimum RPC priority fee estimate in gwei used to calculate the 100x competitive fee sanity cap.',
+    env: 'L1_MINIMUM_PRIORITY_FEE_PER_GAS_FOR_CAP_GWEI',
+    ...floatConfigHelper(0.001),
   },
   maxSpeedUpAttempts: {
     description: 'Maximum number of speed-up attempts',

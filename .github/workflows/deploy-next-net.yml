@@ -41,6 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
           fetch-depth: 1
           persist-credentials: false
@@ -78,6 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           fetch-depth: 1
           persist-credentials: false
 
@@ -123,6 +125,7 @@ jobs:
       # since all the teardown reads is next-net.env and network_teardown.sh.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           fetch-depth: 1
           persist-credentials: false
 

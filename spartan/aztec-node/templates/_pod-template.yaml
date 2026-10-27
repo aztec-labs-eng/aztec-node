@@ -2,6 +2,9 @@
 {{- $repo := .Values.node.image.repository | default .Values.global.aztecImage.repository | required ".Values.global.aztecImage.repository is required" }}
 {{- $tag := .Values.node.image.tag | default .Values.global.aztecImage.tag | required ".Values.global.aztecImage.tag is required" }}
 {{- $image := printf "%s:%s" $repo $tag }}
+{{- $extraContainers := list (include "chart.renderExtension" (dict "value" .Values.extraContainers "context" .)) (include "chart.renderExtension" (dict "value" .Values.chartExtensions.extraContainers "context" .)) | join "\n" | trim }}
+{{- $initContainers := list (include "chart.renderExtension" (dict "value" .Values.initContainers "context" .)) (include "chart.renderExtension" (dict "value" .Values.chartExtensions.initContainers "context" .)) | join "\n" | trim }}
+{{- $extraVolumes := list (include "chart.renderExtension" (dict "value" .Values.extraVolumes "context" .)) (include "chart.renderExtension" (dict "value" .Values.chartExtensions.extraVolumes "context" .)) | join "\n" | trim }}
 metadata:
   labels:
     {{- include "chart.selectorLabels" . | nindent 4 }}
@@ -15,7 +18,7 @@ metadata:
     checksum/env-config: {{ toJson .Values | sha256sum | quote }}
     {{- end }}
     {{- with .Values.node.podAnnotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "chart.renderExtension" (dict "value" . "context" $) | nindent 4 }}
     {{- end }}
 spec:
   {{- if .Values.serviceAccount.create }}
@@ -51,11 +54,11 @@ spec:
     {{- toYaml .Values.topologySpreadConstraints | nindent 4 }}
   {{- end }}
 
-  {{- if or .Values.initContainers .Values.service.p2p.nodePortEnabled }}
+  {{- if or $initContainers .Values.service.p2p.nodePortEnabled }}
   initContainers:
-  {{- if .Values.initContainers }}
-    {{- tpl (toYaml .Values.initContainers | nindent 4) $ }}
-  {{- end }}
+    {{- with $initContainers }}
+    {{- . | nindent 4 }}
+    {{- end }}
   {{- if .Values.service.p2p.nodePortEnabled }}
     - name: init-nodeport
       image: registry.suse.com/suse/kubectl:1.33
@@ -407,7 +410,13 @@ spec:
         {{- end }}
       resources:
         {{- toYaml .Values.node.resources | nindent 8 }}
+    {{- with $extraContainers }}
+    {{- . | nindent 4 }}
+    {{- end }}
   volumes:
+    {{- with $extraVolumes }}
+    {{- . | nindent 4 }}
+    {{- end }}
     - name: shared
       emptyDir: {}
     - name: scripts

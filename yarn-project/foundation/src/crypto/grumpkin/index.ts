@@ -3,6 +3,7 @@ import { BarretenbergSync } from '@aztec-foundation/bb.js';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { Buffer } from 'buffer';
 
 /**
  * Grumpkin elliptic curve operations.

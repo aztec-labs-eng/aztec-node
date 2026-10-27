@@ -2,7 +2,7 @@ import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { EthCheatCodes, RollupCheatCodes, describeAcrossL1Forks, startAnvil } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -10,6 +10,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getSlotRangeForEpoch, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -24,7 +25,7 @@ const NUM_VALIDATORS = 4;
  * These tests deploy L1 contracts with validators, then exercise the epoch cache's
  * caching, TTL, finalization, and reorg-resilience behaviour.
  */
-describe('EpochCache integration', () => {
+describeAcrossL1Forks('EpochCache integration', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let dateProvider: TestDateProvider;
@@ -89,7 +90,6 @@ describe('EpochCache integration', () => {
         ethereumSlotDuration: DefaultL1ContractsConfig.ethereumSlotDuration,
         proofSubmissionEpochs: await rollup.getProofSubmissionEpochs(),
         targetCommitteeSize: await rollup.getTargetCommitteeSize(),
-        rollupManaLimit: Number(await rollup.getManaLimit()),
         lagInEpochsForValidatorSet: await rollup.getLagInEpochsForValidatorSet(),
         lagInEpochsForRandao: await rollup.getLagInEpochsForRandao(),
       },
@@ -103,11 +103,13 @@ describe('EpochCache integration', () => {
   });
 
   it('returns committee for a finalized epoch and marks it as finalized', async () => {
-    const lagInEpochsForRandao = await rollup.getLagInEpochsForRandao();
+    const lagInEpochsForValidatorSet = await rollup.getLagInEpochsForValidatorSet();
     const epochDuration = await rollup.getEpochDuration();
+    const currentEpoch = await rollup.getCurrentEpoch();
 
-    // Advance well past the lag so the epoch's sampling data is finalized.
-    const targetEpoch = EpochNumber(lagInEpochsForRandao + 2);
+    // With this Anvil version, deployment and activation can span several epochs, so attesters may not be ready
+    // for epoch 3. Choose an epoch whose validator sample falls after activation instead of assuming they are.
+    const targetEpoch = EpochNumber(currentEpoch + lagInEpochsForValidatorSet + 2);
     await rollupCheatCodes.advanceToEpoch(targetEpoch);
     await rollupCheatCodes.setupEpoch();
     // Mine enough blocks so finalized catches up (finalized = latest - 16 with slotsInAnEpoch=8).
@@ -118,12 +120,20 @@ describe('EpochCache integration', () => {
     // Query the specific target epoch rather than 'now', because auto-mining may have
     // advanced the dateProvider well past the target epoch.
     const slotForEpoch = SlotNumber(Number(targetEpoch) * Number(epochDuration));
-    const { committee, seed, epoch } = await epochCache.getCommittee(slotForEpoch);
+    const lookup = await epochCache.getCommittee(slotForEpoch);
 
-    expect(committee).toBeDefined();
-    expect(committee!.length).toBe(NUM_VALIDATORS);
-    expect(seed).not.toBe(0n);
-    expect(epoch).toBe(targetEpoch);
+    if (lookup.state !== 'members') {
+      throw new Error(`Expected a committee with members, got ${lookup.state}`);
+    }
+    expect(lookup.committee.length).toBe(NUM_VALIDATORS);
+    expect(lookup.seed).not.toBe(0n);
+    expect(lookup.epoch).toBe(targetEpoch);
+
+    // The entry is read at the latest L1 block, so it is finalized only once that block is (finalized = latest - 16).
+    expect(epochCache.isFinalized(targetEpoch)).toBe(false);
+    await cheatCodes.mine(20);
+    dateProvider.advanceTime(DefaultL1ContractsConfig.ethereumSlotDuration);
+    await epochCache.getCommittee(slotForEpoch);
     expect(epochCache.isFinalized(targetEpoch)).toBe(true);
   });
 
@@ -134,7 +144,7 @@ describe('EpochCache integration', () => {
 
     // First fetch — works but may not be finalized (warp only mines one block).
     const result1 = await epochCache.getCommittee('now');
-    expect(result1.committee).toBeDefined();
+    expect(result1.state).toBe('members');
 
     // Mine some blocks to advance finalized, then advance time past TTL.
     await cheatCodes.mine(5);
@@ -142,7 +152,7 @@ describe('EpochCache integration', () => {
 
     // Re-query: cache entry is stale, so it should re-fetch from L1.
     const result2 = await epochCache.getCommittee('now');
-    expect(result2.committee).toBeDefined();
+    expect(result2.state).toBe('members');
     // The entry was successfully re-fetched (we got a result without throwing).
   });
 
@@ -167,7 +177,7 @@ describe('EpochCache integration', () => {
     // Record the epoch and populate the cache.
     const epochBefore = epochCache.getEpochNow();
     const before = await epochCache.getCommittee('now');
-    expect(before.committee).toBeDefined();
+    expect(before.state).toBe('members');
     expect(epochCache.isFinalized(epochBefore)).toBe(false);
 
     // Record the L1 timestamp at which the cache entry was last refreshed.
@@ -194,7 +204,7 @@ describe('EpochCache integration', () => {
     // so we don't accidentally query a different epoch if time advanced.
     const slotForEpoch = SlotNumber(Number(epochBefore) * Number(epochDuration));
     const after = await epochCache.getCommittee(slotForEpoch);
-    expect(after.committee).toBeDefined();
+    expect(after.state).toBe('members');
     expect(after.epoch).toBe(before.epoch);
 
     // The cache was refreshed: the L1 timestamp must have advanced because
@@ -202,5 +212,77 @@ describe('EpochCache integration', () => {
     const l1TsAfter = epochCache.getCachedLastRefreshL1Timestamp(epochBefore);
     expect(l1TsAfter).toBeDefined();
     expect(l1TsAfter).not.toBe(l1TsBefore);
+  });
+
+  describe('seed stability', () => {
+    let lagInEpochsForRandao: number;
+
+    /** Moves the local clock one Ethereum slot past the latest L1 block, so cached markers and entries expire. */
+    const syncClockPastLatestBlock = async () => {
+      const latestBlock = await rollup.client.getBlock();
+      dateProvider.setTime(Number(latestBlock.timestamp) * 1000);
+      dateProvider.advanceTime(DefaultL1ContractsConfig.ethereumSlotDuration);
+    };
+
+    /** Lands on the first block of a fresh epoch S, so nothing has checkpointed its randao yet. */
+    const advanceToFreshSamplingEpoch = async () => {
+      const samplingEpoch = EpochNumber((await rollup.getCurrentEpoch()) + 2);
+      await rollupCheatCodes.advanceToEpoch(samplingEpoch);
+      // The epoch whose seed samples the randao keyed at the start of the sampling epoch.
+      const targetEpoch = EpochNumber(samplingEpoch + lagInEpochsForRandao);
+      const [targetSlot] = getSlotRangeForEpoch(targetEpoch, epochCache.getL1Constants());
+      const targetTs = getTimestampForSlot(targetSlot, epochCache.getL1Constants());
+      return { samplingEpoch, targetSlot, targetTs };
+    };
+
+    beforeAll(async () => {
+      lagInEpochsForRandao = await rollup.getLagInEpochsForRandao();
+      await cheatCodes.setIntervalMining(0);
+      await cheatCodes.setAutomine(true);
+    });
+
+    it('serves a committee only once setupEpoch fixes its seed', async () => {
+      const { samplingEpoch, targetSlot, targetTs } = await advanceToFreshSamplingEpoch();
+      await syncClockPastLatestBlock();
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
+      const blockBeforeSetup = await rollup.client.getBlockNumber({ cacheTime: 0 });
+
+      // A setupEpoch later in the same epoch checkpoints the randao, which changes the target epoch's seed on L1.
+      await rollupCheatCodes.setupEpoch();
+      expect(await rollup.getCurrentEpoch()).toBe(samplingEpoch);
+      const seedOnL1 = (await rollup.getSampleSeedAt(targetTs)).toBigInt();
+      const provisionalSeed = (await rollup.getSampleSeedAt(targetTs, { blockNumber: blockBeforeSetup })).toBigInt();
+      expect(seedOnL1).not.toBe(provisionalSeed);
+
+      await syncClockPastLatestBlock();
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toMatchObject({
+        state: 'members',
+        seed: seedOnL1,
+        committee: await rollup.getCommitteeAt(targetTs),
+      });
+    });
+
+    it('keeps the gate closed after a bare checkpointRandao until the sampling epoch is over', async () => {
+      const { samplingEpoch, targetSlot, targetTs } = await advanceToFreshSamplingEpoch();
+
+      // checkpointRandao fixes the seed but does not store a committee commitment, so the cache cannot see it.
+      await rollupCheatCodes.asOwner(async (account, rollupContract) => {
+        const hash = await rollupContract.write.checkpointRandao({ account });
+        await rollup.client.waitForTransactionReceipt({ hash });
+      });
+      expect(await rollup.getCurrentEpoch()).toBe(samplingEpoch);
+      await syncClockPastLatestBlock();
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
+
+      await rollupCheatCodes.advanceToEpoch(EpochNumber(samplingEpoch + 1));
+      await syncClockPastLatestBlock();
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toMatchObject({
+        state: 'members',
+        seed: (await rollup.getSampleSeedAt(targetTs)).toBigInt(),
+        committee: await rollup.getCommitteeAt(targetTs),
+      });
+    });
   });
 });

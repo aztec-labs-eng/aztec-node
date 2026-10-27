@@ -12,11 +12,11 @@
 # Expected toolchain versions.
 export expected_min_clang_version=20.0.0
 export expected_min_cmake_version=3.24
-export expected_min_node_version=24.12.0
+export expected_min_node_version=26.12.0
 export expected_min_zig_version=0.15.1
 export expected_abs_rust_version=1.89.0
-export expected_abs_wasi_version=27.0
-export expected_abs_foundry_version=1.4.1
+export expected_abs_wasi_version=34.0
+export expected_abs_foundry_version=1.8.5
 export expected_abs_yarn_version=4.13.0
 
 function ensure {
@@ -66,8 +66,8 @@ function install_node {
     curl -s -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
     . "$HOME/.nvm/nvm.sh" --no-use
   fi
-  nvm install --lts
-  nvm alias default lts/*
+  nvm install $expected_min_node_version
+  nvm alias default $expected_min_node_version
 }
 
 function install_node_utils {
@@ -159,6 +159,12 @@ function install_deps {
   fi
 }
 
+# ci3 is a submodule: without it nothing below can be sourced.
+if [ ! -f "$(git rev-parse --show-toplevel)/ci3/source" ]; then
+  echo "ci3 submodule is not initialised. Run: git submodule update --init ci3" >&2
+  exit 1
+fi
+
 # Special case for installing dependencies (can run on older bash).
 if [ "${1:-}" = "install_deps" ]; then
   set -euo pipefail
@@ -174,7 +180,7 @@ source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 export DENOISE=${DENOISE:-1}
 
 # Number of TXE servers to run when testing.
-export NUM_TXES=1
+export NUM_TXES=4
 
 # Number of jobs for make. Defaults to number of CPUs.
 # TODO: We should dial this back on consumer hardware, maybe to just 1.
@@ -539,6 +545,11 @@ function release {
     )
   fi
 
+  # Generates the installer lock that aztec-up's release uploads, before any project publishes.
+  if [[ " ${projects[*]} " == *" aztec-up "* ]]; then
+    aztec-up/bootstrap.sh release_preflight
+  fi
+
   for project in "${projects[@]}"; do
     $project/bootstrap.sh release
   done
@@ -581,7 +592,7 @@ function check_compat_artifacts_tracked {
     ver=${tag#v}
     # Include only versions >= compat_min_version (sort -V puts smaller first).
     [ "$(printf '%s\n%s' "$compat_min_version" "$ver" | sort -V | head -1)" = "$compat_min_version" ] || continue
-    [ -f "yarn-project/end-to-end/legacy-contracts/$ver.tar.gz" ] || missing+=("$ver")
+    [ -f "yarn-project/end-to-end/legacy-contracts/$ver.tar.xz" ] || missing+=("$ver")
   done < <(git tag -l "v${compat_major}.*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V)
 
   if [ ${#missing[@]} -gt 0 ]; then
@@ -933,7 +944,7 @@ case "$cmd" in
   # RELEASES #
   ############
   "ci-release")
-    # Single command that tests and publishes a release.
+    # Single command that builds and publishes a release.
     # DRY_RUN=1 exercises the whole flow without publishing — this is how releases are tested in CI.
     export CI=1
     export USE_TEST_CACHE=1

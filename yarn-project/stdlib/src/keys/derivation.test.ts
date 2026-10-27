@@ -31,7 +31,7 @@ describe('🔑', () => {
     const partialAddress = new Fr(2n);
     const address = await computePreaddress(publicKeysHash, partialAddress);
     expect(address.toString()).toMatchInlineSnapshot(
-      `"0x0fa1c698858df1a99170cd39d5f4bfad6d0d60f1f8afa3dc92281ee60b36f3bb"`,
+      `"0x2e0787752b82b3ab9c28d67b48f24f8a3dac253023bf5136bbcb8ddbf4b1381c"`,
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
@@ -70,7 +70,7 @@ describe('🔑', () => {
     );
     const partialAddress = Fr.fromHexString('0x0a7c585381b10f4666044266a02405bf6e01fa564c8517d4ad5823493abd31de');
     const address = (await computeAddress(publicKeys, partialAddress)).toString();
-    expect(address).toMatchInlineSnapshot(`"0x303ffc8bd456d132463b1fc3a633aeb718a7883c268f3956c05e6fe09b5a5424"`);
+    expect(address).toMatchInlineSnapshot(`"0x23877639c7424d1d2a9f514e59ee662b3154a730b783caf822d196b625ba4355"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
     updateInlineFndTestData(

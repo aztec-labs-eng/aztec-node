@@ -52,6 +52,7 @@ import { join } from 'path';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
+import { EpochSetupKeeper } from '../fixtures/epoch_setup_keeper.js';
 import {
   SCHNORR_HARDCODED_PRIVATE_KEY,
   SchnorrHardcodedKeyAccountContract,
@@ -89,6 +90,11 @@ export type SingleNodeTestOpts = Partial<SetupOptions> & {
    * tests with tight per-block gas budgets that can't fit a full account-deploy tx.
    */
   useHardcodedAccount?: boolean;
+  /**
+   * Run an {@link EpochSetupKeeper} until teardown, so every epoch gets set up on L1 even if nothing proposes in it.
+   * This hides the epoch cache's seed gate from the test; tests that assert propose gas must not set it.
+   */
+  keepEpochsSetUp?: boolean;
 };
 
 export type TrackedSequencerEvent = {
@@ -218,6 +224,8 @@ export class SingleNodeTestContext {
 
   public epochDuration!: number;
 
+  private epochSetupKeeper: EpochSetupKeeper | undefined;
+
   public L1_BLOCK_TIME_IN_S!: number;
   public L2_SLOT_DURATION_IN_S!: number;
 
@@ -276,7 +284,7 @@ export class SingleNodeTestContext {
         startProverNode: true,
         proverTestDelayMs: opts.proverTestDelayMs ?? 0,
         proverId: EthAddress.fromNumber(1),
-        worldStateCheckpointHistory: WORLD_STATE_CHECKPOINT_HISTORY,
+        worldStateHistoryRetention: { type: 'rolling', checkpoints: WORLD_STATE_CHECKPOINT_HISTORY },
         exitDelaySeconds: DefaultL1ContractsConfig.exitDelaySeconds,
         slasherEnabled: false,
         // `inboxLag: 2` is the intended value when running with pipelining (the production config
@@ -296,6 +304,15 @@ export class SingleNodeTestContext {
     }
 
     await this.hydrateFromContext(context);
+
+    if (opts.keepEpochsSetUp) {
+      this.epochSetupKeeper = await new EpochSetupKeeper(
+        this.rollup,
+        context.cheatCodes.eth,
+        ethereumSlotDuration,
+        this.logger,
+      ).start();
+    }
   }
 
   /**
@@ -342,7 +359,6 @@ export class SingleNodeTestContext {
       ethereumSlotDuration,
       proofSubmissionEpochs: Number(await this.rollup.getProofSubmissionEpochs()),
       targetCommitteeSize: await this.rollup.getTargetCommitteeSize(),
-      rollupManaLimit: Number(await this.rollup.getManaLimit()),
     };
 
     this.logger.info(
@@ -351,6 +367,7 @@ export class SingleNodeTestContext {
   }
 
   public async teardown() {
+    await this.epochSetupKeeper?.stop();
     await this.monitor.stop();
     await Promise.all(this.proverNodes.map(node => tryStop(node, this.logger)));
     await Promise.all(this.nodes.map(node => tryStop(node, this.logger)));

@@ -9,6 +9,7 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 import {
@@ -30,6 +31,7 @@ import { foundry } from 'viem/chains';
 
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
@@ -37,6 +39,7 @@ import { formatViemError } from '../utils.js';
 import {
   type IL1TxMetrics,
   type IL1TxStore,
+  INSUFFICIENT_FUNDS_BACKOFF_MS,
   type L1TxRequest,
   type L1TxState,
   type L1TxUtilsConfig,
@@ -64,7 +67,7 @@ export type PendingTransaction = {
   maxPriorityFeePerGas: bigint;
 };
 
-describe('L1TxUtils', () => {
+describeAcrossL1Forks('L1TxUtils', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;
@@ -168,6 +171,46 @@ describe('L1TxUtils', () => {
 
       expect(recoveryState.nonce).toBe(expectedNonce);
       expect((await l1Client.getTransaction({ hash: txHash })).nonce).toBe(expectedNonce);
+    }, 30_000);
+
+    it('backs off a sender rejected for insufficient funds until its balance increases', async () => {
+      const sender = EthAddress.fromString(l1Client.account.address);
+      const dust = 1000n;
+      await cheatCodes.setBalance(sender, dust);
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).rejects.toThrow();
+
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      // The side-effect free check reports the lifted backoff without clearing it.
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(dust)).toBe(true);
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(10n ** 18n)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
+
+      await cheatCodes.setBalance(sender, 10n ** 18n);
+      expect(gasUtils.isBackedOffForInsufficientFunds(10n ** 18n)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).resolves.toBeDefined();
+    }, 30_000);
+
+    it('lifts the insufficient funds backoff after it expires even if the balance did not increase', async () => {
+      const sender = EthAddress.fromString(l1Client.account.address);
+      const dust = 1000n;
+      await cheatCodes.setBalance(sender, dust);
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).rejects.toThrow();
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      dateProvider.setTime(dateProvider.now() + INSUFFICIENT_FUNDS_BACKOFF_MS - 1000);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      dateProvider.setTime(dateProvider.now() + 1000);
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(dust)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
     }, 30_000);
 
     it('bumps nonce when getTransactionCount returns a stale value after a successful send', async () => {
@@ -842,8 +885,8 @@ describe('L1TxUtils', () => {
         value: 0n,
       };
 
-      const baseEstimate = await l1Client.estimateGas(request);
-      const bufferedEstimate = await gasUtils.estimateGas(l1Client.account!, request);
+      const baseEstimate = await l1Client.estimateGas({ ...request, account: l1Client.account.address });
+      const bufferedEstimate = await gasUtils.estimateGas(l1Client.account.address, request);
 
       // adds 20% buffer
       const expectedEstimate = baseEstimate + (baseEstimate * 20n) / 100n;
@@ -886,10 +929,10 @@ describe('L1TxUtils', () => {
       };
 
       // Estimate gas without blobs first
-      const baseEstimate = await gasUtils.estimateGas(l1Client.account!, request);
+      const baseEstimate = await gasUtils.estimateGas(l1Client.account.address, request);
 
       // Estimate gas with blobs
-      const blobEstimate = await gasUtils.estimateGas(l1Client.account!, request, undefined, {
+      const blobEstimate = await gasUtils.estimateGas(l1Client.account.address, request, undefined, {
         blobs: [blobData],
         kzg,
         maxFeePerBlobGas: 10000000000n,

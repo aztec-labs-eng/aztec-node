@@ -13,6 +13,8 @@ import type {
 export const ValidatorStatusInSlotSchema = zodFor<ValidatorStatusInSlot>()(
   z.enum([
     'checkpoint-mined',
+    'checkpoint-unpublished',
+    'checkpoint-orphaned',
     'checkpoint-valid',
     'checkpoint-invalid',
     'checkpoint-unvalidated',

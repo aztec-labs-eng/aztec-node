@@ -53,16 +53,7 @@ locals {
     RPC_MAX_BODY_SIZE = "10mb"
   }
 
-  rpcs = {
-    v5 = merge(local.l1_secret_names, {
-      aztec_docker_image = var.CANONICAL_AZTEC_DOCKER_IMAGE
-      hosts              = ["v5.testnet.rpc.aztec-labs.com", "canonical.testnet.rpc.aztec-labs.com"]
-      storage_size       = "8Gi"
-      env = merge(local.env, {
-        ROLLUP_VERSION = ""
-      })
-    })
-  }
+  rpcs = {}
 
   # Consumers listed here get no per-minute cap (rate_limit_minute = 0). Consumers that need a
   # finite cap go in rate_limited_consumers instead, since this loop hardcodes 0 for every entry.

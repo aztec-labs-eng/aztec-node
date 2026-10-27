@@ -92,7 +92,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
       worldStateSynchronizer: mockWorldState,
       createTxValidator: () => Promise.resolve(alwaysValidValidator),
       checkAllowedSetupCalls: () => Promise.resolve(true),
-      blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
     });
     await pool.start();
   });
@@ -334,7 +334,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
         worldStateSynchronizer: mockWorldState,
         createTxValidator: () => Promise.resolve(alwaysValidValidator),
         checkAllowedSetupCalls: () => Promise.resolve(true),
-        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
       },
       undefined, // telemetry
       { archivedTxLimit: 2 },
@@ -377,7 +377,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
         worldStateSynchronizer: mockWorldState,
         createTxValidator: () => Promise.resolve(alwaysValidValidator),
         checkAllowedSetupCalls: () => Promise.resolve(true),
-        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
       },
       undefined, // telemetry
       { maxPendingTxCount: 3 },
@@ -435,7 +435,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
         worldStateSynchronizer: mockWorldState,
         createTxValidator: () => Promise.resolve(alwaysValidValidator),
         checkAllowedSetupCalls: () => Promise.resolve(true),
-        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
       },
       undefined, // telemetry
       { maxPendingTxCount: 10 },
@@ -480,7 +480,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
         worldStateSynchronizer: mockWorldState,
         createTxValidator: () => Promise.resolve(alwaysValidValidator),
         checkAllowedSetupCalls: () => Promise.resolve(true),
-        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
       },
       undefined, // telemetry
       { maxPendingTxCount: 10 },
@@ -654,7 +654,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
           worldStateSynchronizer: mockWorldState,
           createTxValidator: () => Promise.resolve(alwaysValidValidator),
           checkAllowedSetupCalls: () => Promise.resolve(true),
-          blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+          nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
         },
         undefined, // telemetry
         { maxPendingTxCount: 0 },

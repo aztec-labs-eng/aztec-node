@@ -6,6 +6,7 @@ import { BlockProposal, MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { makeBlockHeader, makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
 import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
+import { Buffer } from 'buffer';
 
 import { BitVector } from './bitvector.js';
 import { BlockTxsRequest, BlockTxsResponse, calculateBlockTxsResponseSize } from './block_txs_reqresp.js';

@@ -1,22 +1,14 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { PRIVATE_CONTEXT_INPUTS_LENGTH } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { KeyStore } from '@aztec-labs/key-store';
 import { OracleVersionCheckContractArtifact } from '@aztec-labs/noir-test-contracts.js/OracleVersionCheck';
-import { WASMSimulator } from '@aztec-labs/simulator/client';
-import {
-  FunctionCall,
-  FunctionSelector,
-  FunctionType,
-  encodeArguments,
-  getFunctionReturnType,
-} from '@aztec-labs/stdlib/abi';
+import { type ACIRCallback, WASMSimulator, toACVMWitness } from '@aztec-labs/simulator/client';
+import { FunctionSelector, FunctionType, countArgumentsSize } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
-import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { BlockHeader, CallContext, HashedValues, TxContext, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
-import { jest } from '@jest/globals';
+import { BlockHeader, CallContext } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import type { ContractClassService } from '../../contract/contract_class_service.js';
@@ -32,10 +24,8 @@ import type { FactStore } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
-import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
 import type { TaggingSecretSourcesStore } from '../../storage/tagging_store/tagging_secret_sources_store.js';
 import { AnchoredContractData } from '../anchored_contract_data.js';
-import { ContractFunctionSimulator } from '../contract_function_simulator.js';
 import { TransientArrayService } from '../transient_array_service.js';
 import { buildACIRCallback } from './acir_callback.js';
 import { UtilityExecutionOracle } from './utility_execution_oracle.js';
@@ -49,7 +39,6 @@ describe('Oracle Version Check test suite', () => {
   let keyStore: ReturnType<typeof mock<KeyStore>>;
   let addressStore: ReturnType<typeof mock<AddressStore>>;
   let aztecNode: ReturnType<typeof mock<AztecNode>>;
-  let senderTaggingStore: ReturnType<typeof mock<SenderTaggingStore>>;
   let recipientTaggingStore: ReturnType<typeof mock<RecipientTaggingStore>>;
   let taggingSecretSourcesStore: ReturnType<typeof mock<TaggingSecretSourcesStore>>;
   let capsuleStore: ReturnType<typeof mock<CapsuleStore>>;
@@ -58,12 +47,8 @@ describe('Oracle Version Check test suite', () => {
   let contractSyncService: ReturnType<typeof mock<ContractSyncService>>;
   let txResolver: ReturnType<typeof mock<TxResolverService>>;
   let l2TipsStore: ReturnType<typeof mock<L2TipsProvider>>;
-  let acirSimulator: ContractFunctionSimulator;
   let contractAddress: AztecAddress;
   let anchorBlockHeader: BlockHeader;
-  let assertCompatibleOracleVersionSpy: jest.SpiedFunction<
-    typeof UtilityExecutionOracle.prototype.assertCompatibleOracleVersion
-  >;
 
   beforeEach(async () => {
     contractStore = mock<ContractStore>();
@@ -71,7 +56,6 @@ describe('Oracle Version Check test suite', () => {
     keyStore = mock<KeyStore>();
     addressStore = mock<AddressStore>();
     aztecNode = mock<AztecNode>();
-    senderTaggingStore = mock<SenderTaggingStore>();
     recipientTaggingStore = mock<RecipientTaggingStore>();
     taggingSecretSourcesStore = mock<TaggingSecretSourcesStore>();
     capsuleStore = mock<CapsuleStore>();
@@ -80,134 +64,48 @@ describe('Oracle Version Check test suite', () => {
     contractSyncService = mock<ContractSyncService>();
     txResolver = mock<TxResolverService>();
     l2TipsStore = mock<L2TipsProvider>();
-    assertCompatibleOracleVersionSpy = jest.spyOn(UtilityExecutionOracle.prototype, 'assertCompatibleOracleVersion');
-    assertCompatibleOracleVersionSpy.mockClear();
 
-    aztecNode.getPublicStorageAt.mockResolvedValue(Fr.ZERO);
     anchorBlockHeader = BlockHeader.random();
-    capsuleStore.getCapsule.mockImplementation((_, __) => Promise.resolve(null));
-    capsuleStore.readCapsuleArray.mockResolvedValue([]);
-    senderTaggingStore.getLastFinalizedIndex.mockResolvedValue(undefined);
-    senderTaggingStore.getLastUsedIndex.mockResolvedValue(undefined);
-    senderTaggingStore.getPendingTxs.mockResolvedValue([]);
-    senderTaggingStore.storePendingIndexes.mockResolvedValue();
-
-    noteStore.getNotes.mockResolvedValue([]);
-    keyStore.getAccounts.mockResolvedValue([]);
-
     contractAddress = await AztecAddress.random();
-
-    contractStore.getContractInstance.mockResolvedValue({
-      currentContractClassId: new Fr(42),
-      originalContractClassId: new Fr(42),
-      address: contractAddress,
-    } as ContractInstanceWithAddress);
-    contractStore.getFunctionArtifactWithDebugMetadata.mockImplementation(async (classId, selector) => {
-      const artifact = await contractStore.getFunctionArtifact(classId, selector);
-      if (!artifact) {
-        throw new Error(`Function not found: ${selector.toString()} in contract class ${classId}`);
-      }
-      return { ...artifact, debug: undefined };
-    });
-
     contractClassService = mock<ContractClassService>();
-    contractClassService.getCurrentClassId.mockResolvedValue(new Fr(42));
-
-    acirSimulator = new ContractFunctionSimulator({
-      contractStore,
-      contractClassService,
-      noteStore,
-      keyStore,
-      addressStore,
-      aztecNode,
-      l2TipsStore: mock(),
-      senderTaggingStore,
-      recipientTaggingStore,
-      taggingSecretSourcesStore,
-      capsuleStore,
-      factStore,
-      privateEventStore,
-      simulator,
-      contractSyncService,
-      txResolver,
-    });
   });
 
-  describe('private function execution', () => {
-    it('should call assertCompatibleOracleVersion oracle when private function is called', async () => {
-      // Load the artifact of the OracleVersionCheck::private_function contract function and set up the relevant oracle handler
-      const privateFunctionArtifact = {
-        ...OracleVersionCheckContractArtifact.functions.find(f => f.name === 'private_function')!,
-        contractName: OracleVersionCheckContractArtifact.name,
-      };
-      contractStore.getFunctionArtifact.mockResolvedValue(privateFunctionArtifact);
+  describe('private and utility functions', () => {
+    // Enumerated from the artifact rather than listed by name: it also holds functions the contract does not declare.
+    const functions = OracleVersionCheckContractArtifact.functions.filter(
+      fn => fn.functionType === FunctionType.PRIVATE || fn.functionType === FunctionType.UTILITY,
+    );
 
-      // Form the execution request for the private function
-      const selector = await FunctionSelector.fromNameAndParameters(
-        'private_function',
-        privateFunctionArtifact.parameters,
+    it.each(functions)('$name checks the oracle version before calling any other oracle', async fn => {
+      const oracleCalls: string[] = [];
+      // Halting at the first oracle call keeps the test independent of what the function does after it.
+      const callback = new Proxy<ACIRCallback>(
+        {},
+        {
+          get: (_target, oracleName: string) => () => {
+            oracleCalls.push(oracleName);
+            return Promise.reject(new Error(`Halted at oracle ${oracleName}`));
+          },
+        },
       );
-      const hashedArguments = await HashedValues.fromArgs(encodeArguments(privateFunctionArtifact, []));
-      const txRequest = TxExecutionRequest.from({
-        origin: contractAddress,
-        firstCallArgsHash: hashedArguments.hash,
-        functionSelector: selector,
-        txContext: TxContext.from({
-          chainId: new Fr(10),
-          version: new Fr(20),
-          gasSettings: GasSettings.fallback({
-            gasLimits: new Gas(MAX_TX_DA_GAS, MAX_PROCESSABLE_L2_GAS),
-            maxFeesPerGas: new GasFees(10, 10),
-          }),
-        }),
-        argsOfCalls: [hashedArguments],
-        authWitnesses: [],
-        capsules: [],
-        salt: Fr.random(),
-      });
 
-      // Call the private function with arbitrary message sender and sender for tags
-      const msgSender = await AztecAddress.random();
-      const senderForTags = await AztecAddress.random();
-      await acirSimulator.run(txRequest, {
-        msgSender,
-        anchorBlockHeader,
-        senderForTags,
-        changeSetId: 'test',
-        scopes: [],
-      });
+      // Private functions take the private context inputs ahead of their arguments.
+      const privateContextInputsSize = fn.functionType === FunctionType.PRIVATE ? PRIVATE_CONTEXT_INPUTS_LENGTH : 0;
+      const initialWitness = toACVMWitness(
+        0,
+        times(privateContextInputsSize + countArgumentsSize(fn), () => Fr.ZERO),
+      );
 
-      expect(assertCompatibleOracleVersionSpy).toHaveBeenCalledTimes(1);
-    }, 30_000);
-  });
+      await expect(
+        simulator.executeUserCircuit(
+          initialWitness,
+          { ...fn, contractName: OracleVersionCheckContractArtifact.name },
+          callback,
+        ),
+      ).rejects.toThrow();
 
-  describe('utility function execution', () => {
-    it('should call assertCompatibleOracleVersion oracle when utility function is called', async () => {
-      // Load the artifact of the OracleVersionCheck::utility_function contract function and set up the relevant oracle
-      // handler
-      const utilityFunctionArtifact = {
-        ...OracleVersionCheckContractArtifact.functions.find(f => f.name === 'utility_function')!,
-        contractName: OracleVersionCheckContractArtifact.name,
-      };
-      contractStore.getFunctionArtifact.mockResolvedValue(utilityFunctionArtifact);
-
-      // Form the execution request for the utility function
-      const execRequest = FunctionCall.from({
-        name: utilityFunctionArtifact.name,
-        to: contractAddress,
-        selector: FunctionSelector.empty(),
-        type: FunctionType.UTILITY,
-        hideMsgSender: false,
-        isStatic: false,
-        args: encodeArguments(utilityFunctionArtifact, []),
-        returnType: getFunctionReturnType(utilityFunctionArtifact),
-      });
-
-      // Call the utility function
-      await acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], 'test');
-
-      expect(assertCompatibleOracleVersionSpy).toHaveBeenCalledTimes(1);
-    }, 30_000);
+      expect(oracleCalls).toEqual(['aztec_misc_assertCompatibleOracleVersion']);
+    });
   });
 
   describe('oracle version mismatch error messages', () => {

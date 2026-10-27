@@ -1,4 +1,5 @@
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Buffer } from 'buffer';
 import { generatePrivateKey } from 'viem/accounts';
 
 import type { EthAddress } from '../../eth-address/index.js';

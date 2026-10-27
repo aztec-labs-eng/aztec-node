@@ -64,6 +64,7 @@ describe('multi-node/recovery/equivocation_recovery', () => {
     // - Total: 0.5 + 15 + 5 + 2.5 = 23s => use 24s
     const slashingUnit = BigInt(1e14);
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...MOCK_GOSSIP_MULTI_VALIDATOR_OPTS,
       ...MULTI_VALIDATOR_REORG_TIMING,
       initialValidators: validators,
@@ -154,10 +155,11 @@ describe('multi-node/recovery/equivocation_recovery', () => {
     });
     logger.warn('Validator-to-node assignment', { A: 'V1,V2,V3,V4', B: 'V1,V2', C: 'V3,V4', D: 'none' });
 
-    const proposerAttester = await test.epochCache.getProposerAttesterAddressInSlot(submissionSlot);
-    if (!proposerAttester) {
+    const proposerLookup = await test.epochCache.lookupProposer(submissionSlot);
+    if (proposerLookup.state !== 'members') {
       throw new Error(`No proposer found for slot ${submissionSlot}`);
     }
+    const proposerAttester = proposerLookup.proposer;
     logger.warn(`Expected proposer for submission slot`, { submissionSlot, proposerAttester });
 
     // Warp to one L1 slot before the target L2 slot so pipelining's build window engages.

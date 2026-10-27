@@ -294,6 +294,7 @@ comptime fn generate_sync_state(
 
         #[aztec::macros::internals_functions_generation::abi_attributes::abi_utility]
         unconstrained fn sync_state(scope: aztec::protocol::address::AztecAddress) {
+            aztec::oracle::version::assert_compatible_oracle_version();
             let address = aztec::context::UtilityContext::new().this_address();
             $body
         }
@@ -327,6 +328,7 @@ comptime fn generate_offchain_receive() -> Quoted {
         /// This function is automatically injected by the `#[aztec]` macro.
         #[aztec::macros::internals_functions_generation::abi_attributes::abi_utility]
         unconstrained fn $OFFCHAIN_RECEIVE_FN_NAME($OFFCHAIN_RECEIVE_PARAM_NAME: $param_type) -> $OFFCHAIN_RECEIVE_RETURN_TYPE {
+            aztec::oracle::version::assert_compatible_oracle_version();
             let address = aztec::context::UtilityContext::new().this_address();
             aztec::messages::processing::offchain::receive(address, $OFFCHAIN_RECEIVE_PARAM_NAME);
         }

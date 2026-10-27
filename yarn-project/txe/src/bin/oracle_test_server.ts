@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --no-warnings
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
 import { createLogger } from '@aztec-labs/foundation/log';
 
@@ -10,7 +11,7 @@ import { createOracleTestRpcServer } from '../oracle/test-resolver/index.js';
  * Logs fixture coverage on shutdown.
  */
 async function main() {
-  const { ORACLE_TEST_PORT = 14830 } = process.env;
+  const { ORACLE_TEST_PORT = 14830 } = getEnv();
 
   const logger = createLogger('txe:oracle-test');
 

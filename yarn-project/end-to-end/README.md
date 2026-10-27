@@ -202,6 +202,14 @@ Tests with **no Aztec node** that exercise one package belong in that package, n
 
 These run in their own package's test lane (both packages already run anvil-backed integration tests).
 
+### L1 block spacing while validators run
+
+The epoch cache treats a committee as final once the latest L1 block is in the last L1 slot of the epoch
+its seed is sampled from, which assumes L1 blocks are at least one Ethereum slot apart. Once validators are
+running, don't call `ethCheatCodes.mine(n)` (blocks one second apart) or `warp` without
+`resetBlockInterval`: a randao written by a block that lands too soon after can leave nodes on a wrong
+committee. See the epoch cache README's "Cache Behaviour" section.
+
 ### Support directories (not test categories)
 
 - `fixtures/` — the shared `setup()`, option presets (`fixtures.ts`), the named node-level waiters
@@ -215,14 +223,30 @@ These run in their own package's test lane (both packages already run anvil-back
 - `test-wallet/`, `bench/`, `spartan/`, `quality_of_service/`, `forward-compatibility/` — helpers,
   benchmarks, and network/ops tests outside the topology categories.
 
+### Running tests against an Amsterdam L1
+
+Anvil starts on Osaka unless `ANVIL_HARDFORK` names another fork (`osaka` or `amsterdam`). The variable reaches
+every anvil a test starts through `startAnvil`, including the one `setup()` spawns:
+
+```bash
+ANVIL_HARDFORK=amsterdam yarn test:e2e src/single-node/block-building/debug_trace.test.ts
+```
+
+In CI, a test file whose top-level `describe` is `describeAcrossL1Forks` (from `@aztec-labs/ethereum/test`) also
+runs on Amsterdam on every run, as a second command with `ANVIL_HARDFORK=amsterdam` and `_amsterdam` appended to its
+`NAME`. Full CI does the same for every simple test, except those under `single-node/l1-hardfork/`, which switch
+forks themselves, and for every unit or integration test outside this package whose top-level `describe` is
+`describeWithAnvil`. `test_cmds` emits each command through `echo_test_cmd` from `../scripts/echo_test_cmd.sh`,
+and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole suite. Inside a test,
+`isAmsterdamTestRun()` tells which fork the run asked for.
+
 ### Running tests against legacy contract artifacts
 
 To verify that contracts deployed from a previous release still work against the current stack, set
-`CONTRACT_ARTIFACTS_VERSION` to a published version of `@aztec-labs/noir-contracts.js` /
-`@aztec-labs/noir-test-contracts.js`:
+`CONTRACT_ARTIFACTS_VERSION` to a stable release with a committed tarball in `legacy-contracts/` (see its README):
 
 ```bash
-CONTRACT_ARTIFACTS_VERSION=4.1.3 yarn test:e2e src/automine/token/access_control.parallel.test.ts
+CONTRACT_ARTIFACTS_VERSION=6.0.0 yarn test:e2e src/automine/token/access_control.parallel.test.ts
 ```
 
 Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeScript wrapper classes
@@ -230,14 +254,14 @@ Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeSc
 so this exercises whether a deployed contract's ABI / bytecode / notes still work through the *new* client,
 not whether the legacy wrapper code still imports cleanly.
 
-The first run downloads the pinned packages into `.legacy-contracts/<version>/node_modules/` (cached across
+The first run unpacks `legacy-contracts/<version>.tar.xz` into `.legacy-contracts/<version>/` (cached across
 runs). A startup banner and a per-redirect line are printed to stderr so you can confirm the legacy
 artifacts were actually loaded:
 
 ```
-[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=4.1.3
-[legacy-contracts][jest] redirecting @aztec-labs/noir-contracts.js/artifacts/*.json -> .legacy-contracts/4.1.3/...
-[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/4.1.3/.../token_contract-Token.json
+[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=6.0.0
+[legacy-contracts][jest] redirecting noir-contracts.js/artifacts/*.json -> .legacy-contracts/6.0.0/...
+[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/6.0.0/.../token_contract-Token.json
 ```
 
 When `CONTRACT_ARTIFACTS_VERSION` is unset the test run is byte-identical to the default behaviour. The

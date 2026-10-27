@@ -1,6 +1,7 @@
 import { fromEntries, getEntries, maxBy } from '@aztec-labs/foundation/collection';
 import { jsonParseWithSchema } from '@aztec-labs/foundation/json-rpc';
 import type { ReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import { Buffer } from 'buffer';
 import { createReadStream, createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import pathMod from 'path';
@@ -94,29 +95,37 @@ export async function downloadSnapshot(
   snapshot: Pick<SnapshotMetadata, 'dataUrls'>,
   localPaths: Record<SnapshotDataKeys, string>,
   store: ReadOnlyFileStore,
+  keys: readonly SnapshotDataKeys[] = SnapshotDataKeys,
 ): Promise<void> {
-  await Promise.all(
-    getEntries(localPaths).map(async ([key, path]) => {
-      await fs.mkdir(pathMod.dirname(path), { recursive: true });
+  const results = await Promise.allSettled(
+    getEntries(localPaths)
+      .filter(([key]) => keys.includes(key))
+      .map(async ([key, path]) => {
+        await fs.mkdir(pathMod.dirname(path), { recursive: true });
 
-      const tmpPath = `${path}.download`;
-      try {
-        const url = snapshot.dataUrls[key];
-        await store.download(url, tmpPath);
+        const tmpPath = `${path}.download`;
+        try {
+          const url = snapshot.dataUrls[key];
+          await store.download(url, tmpPath);
 
-        const isGzip = await detectGzip(tmpPath);
+          const isGzip = await detectGzip(tmpPath);
 
-        const read = createReadStream(tmpPath);
-        const write = createWriteStream(path);
-        if (isGzip) {
-          const gunzip = createGunzip();
-          await pipeline(read, gunzip, write);
-        } else {
-          await pipeline(read, write);
+          const read = createReadStream(tmpPath);
+          const write = createWriteStream(path);
+          if (isGzip) {
+            const gunzip = createGunzip();
+            await pipeline(read, gunzip, write);
+          } else {
+            await pipeline(read, write);
+          }
+        } finally {
+          await fs.unlink(tmpPath).catch(() => undefined);
         }
-      } finally {
-        await fs.unlink(tmpPath).catch(() => undefined);
-      }
-    }),
+      }),
   );
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      throw result.reason;
+    }
+  }
 }

@@ -6,4 +6,4 @@ type = "contract"
 
 [dependencies]
 aztec = { path = "../../../../aztec-nr/aztec" }
-ecdsa_public_key_note = { path = "../../libs/ecdsa_public_key_note" }
+ecdsa_public_key_note = { path = "../../../../aztec-nr/ecdsa-public-key-note" }

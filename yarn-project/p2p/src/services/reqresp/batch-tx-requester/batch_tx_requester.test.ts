@@ -13,6 +13,7 @@ import { makeBlockHeader, makeBlockProposal } from '@aztec-labs/stdlib/testing';
 import { Tx, TxArray, TxHash, type TxValidationResult, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it, jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { createSecp256k1PeerId } from '../../../index.js';

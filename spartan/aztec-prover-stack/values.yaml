@@ -23,7 +23,14 @@ node:
 
   replicaCount: 1
 
+  chartExtensions:
+    extraContainers: '{{ include "prover.oxideSidecar.container" . }}'
+    initContainers: '{{ include "prover.oxideSidecar.initContainer" . }}'
+    extraVolumes: '{{ include "prover.oxideSidecar.volumes" . }}'
+
   node:
+    podAnnotations:
+      checksum/oxide-startup: '{{ list (.Files.Get "scripts/oxide-wait.mjs") (.Files.Get "scripts/derive-prover-identity.sh") | toJson | sha256sum }}'
     env:
       OTEL_SERVICE_NAME: "prover-node"
       PROVER_AGENT_COUNT: 0
@@ -32,6 +39,24 @@ node:
       # Derivation for publisher addresses when using web3signer
       PUBLISHERS_PER_PROVER: "1"
       PUBLISHER_KEY_INDEX_START: "8000"
+    oxideSidecar:
+      enabled: false
+      image: ""
+      manifestUrl: ""
+      portal: ""
+      proofSubmissionTarget: ""
+      provingCostPerCheckpoint: ""
+      minProfit: ""
+      minProfitMarginBps: ""
+      startupTimeoutSeconds: 1200
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+
     web3signerUrl: ""
 
     preStartScript: |

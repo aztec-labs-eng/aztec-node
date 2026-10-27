@@ -1,7 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 
 import { AztecAddress } from '../aztec-address/index.js';
 

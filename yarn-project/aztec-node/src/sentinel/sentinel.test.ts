@@ -1,7 +1,11 @@
+import { INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
+import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { P2PClient } from '@aztec-labs/p2p';
@@ -16,6 +20,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
+  type CheckpointData,
   CheckpointReexecutionTracker,
   L1PublishedData,
   PublishedCheckpoint,
@@ -30,6 +35,7 @@ import {
 import type {
   ValidatorStats,
   ValidatorStatusHistory,
+  ValidatorStatusInSlot,
   ValidatorsEpochPerformance,
   ValidatorsStats,
 } from '@aztec-labs/stdlib/validators';
@@ -84,7 +90,6 @@ describe('sentinel', () => {
       ethereumSlotDuration: 12,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     epochCache.getEpochAndSlotNow.mockReturnValue({
@@ -403,6 +408,175 @@ describe('sentinel', () => {
       expect(activity[proposer.toString()]).toEqual('checkpoint-invalid');
       expect(activity[committee[3].toString()]).not.toBe('attestation-missed');
     });
+
+    describe('valid proposal that never reached L1 (cases 5a and 5b)', () => {
+      const checkpointNumber = CheckpointNumber(5);
+      let parent: Checkpoint;
+      let confirmedByNumber: Map<CheckpointNumber, Checkpoint>;
+
+      const toCheckpointData = (checkpoint: Checkpoint): CheckpointData => ({
+        checkpointNumber: checkpoint.number,
+        header: checkpoint.header,
+        startBlock: checkpoint.blocks[0].number,
+        blockCount: checkpoint.blocks.length,
+        archive: checkpoint.archive,
+        checkpointOutHash: checkpoint.getCheckpointOutHash(),
+        feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
+        attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
+        l1: L1PublishedData.random(),
+      });
+
+      /** Records a valid outcome for the slot's proposal, built on the given parent archive root. */
+      const recordValidProposal = (number: CheckpointNumber, lastArchiveRoot: Fr | undefined) =>
+        reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', number, {
+          lastArchiveRoot,
+          payloadHash: attestations[0].getPayloadHash(),
+        });
+
+      beforeEach(async () => {
+        parent = await Checkpoint.random(CheckpointNumber(checkpointNumber - 1), {
+          numBlocks: 1,
+          slotNumber: SlotNumber(slot - 2),
+        });
+        confirmedByNumber = new Map([[parent.number, parent]]);
+        // Nothing landed on L1 for the slot itself; only lookups by checkpoint number can hit.
+        archiver.getCheckpointData.mockImplementation(query => {
+          const confirmed = 'number' in query ? confirmedByNumber.get(query.number) : undefined;
+          return Promise.resolve(confirmed && toCheckpointData(confirmed));
+        });
+        recordValidProposal(checkpointNumber, parent.archive.root);
+      });
+
+      it('flags checkpoint-unpublished when the parent landed and quorum was reached (case 5a)', async () => {
+        // Proposer plus validators 1 and 2 attested: 3 of 4 meets the quorum of 3.
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-unpublished');
+        expect(activity[committee[1].toString()]).toEqual('attestation-sent');
+        expect(activity[committee[2].toString()]).toEqual('attestation-sent');
+        expect(activity[committee[3].toString()]).toEqual('attestation-missed');
+      });
+
+      it('flags checkpoint-orphaned when the parent never landed on L1 (case 5b)', async () => {
+        confirmedByNumber.delete(parent.number);
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
+        expect(activity[committee[3].toString()]).toEqual('attestation-missed');
+      });
+
+      it('flags checkpoint-orphaned when the landed parent has a different archive root (case 5b)', async () => {
+        recordValidProposal(checkpointNumber, Fr.random());
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
+        // Validators holding the checkpoint that landed in the parent's place rightly refused to attest.
+        expect(activity[committee[3].toString()]).toBeUndefined();
+      });
+
+      // An earlier slot landing the same checkpoint number means the proposer built on the previous checkpoint before
+      // that slot's proposal reached it, and once it landed this one could not.
+      describe('when an earlier slot landed the proposal checkpoint number', () => {
+        beforeEach(async () => {
+          const sibling = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot - 1) });
+          confirmedByNumber.set(checkpointNumber, sibling);
+        });
+
+        it('flags checkpoint-orphaned when quorum was reached (case 5b)', async () => {
+          p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
+
+          const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+          expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
+          // Validators holding the earlier slot's blocks rightly refused to attest a conflicting proposal.
+          expect(activity[committee[3].toString()]).toBeUndefined();
+        });
+
+        it('stays checkpoint-valid without tagging missed attestations when below quorum', async () => {
+          p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 2));
+
+          const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+          expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+          expect(activity[committee[1].toString()]).toEqual('attestation-sent');
+          expect(activity[committee[2].toString()]).toBeUndefined();
+          expect(activity[committee[3].toString()]).toBeUndefined();
+        });
+      });
+
+      // A later slot can only take the number because this proposer failed to land its own checkpoint.
+      it('flags checkpoint-unpublished when a later slot landed its checkpoint number (case 5a)', async () => {
+        const successor = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot + 1) });
+        confirmedByNumber.set(checkpointNumber, successor);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-unpublished');
+      });
+
+      it('treats the genesis parent as landed for the first checkpoint (case 5a)', async () => {
+        // No checkpoint precedes the first one, so the archiver has nothing to return for its parent.
+        confirmedByNumber.clear();
+        recordValidProposal(INITIAL_CHECKPOINT_NUMBER, Fr.random());
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-unpublished');
+      });
+
+      it('stays checkpoint-valid when attestations are below quorum', async () => {
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 2));
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+        expect(activity[committee[2].toString()]).toEqual('attestation-missed');
+        expect(activity[committee[3].toString()]).toEqual('attestation-missed');
+      });
+
+      // The pool holds the first attestation each signer sent for the slot, whatever it signed, and the proposer can
+      // only publish attestations for its own payload.
+      it('counts only attestations for the evaluated proposal toward quorum', async () => {
+        const otherProposalAttestation = makeCheckpointAttestation({ signer: signers[2], archive: Fr.random() });
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue([...attestations.slice(0, 2), otherProposalAttestation]);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+      });
+
+      it('counts each committee member once toward quorum', async () => {
+        const outsider = Secp256k1Signer.random();
+        p2p.getCheckpointAttestationsForSlot.mockResolvedValue([
+          ...attestations.slice(0, 2),
+          attestations[1],
+          makeCheckpointAttestation({ signer: outsider, archive: block.archive.root }),
+        ]);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+      });
+
+      it('stays checkpoint-valid when the slot had a proposal equivocation', async () => {
+        reexecutionTracker.recordEquivocation(slot);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+      });
+
+      it('stays checkpoint-valid when the tracker record has no parent archive root', async () => {
+        recordValidProposal(checkpointNumber, undefined);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+      });
+
+      it('prefers L1-mined over an unpublished or orphaned classification', async () => {
+        const checkpoint = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: slot });
+        mineCheckpointForSlot(checkpoint);
+
+        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+        expect(activity[proposer.toString()]).toEqual('checkpoint-mined');
+      });
+    });
   });
 
   describe('computeStatsForValidator', () => {
@@ -444,6 +618,23 @@ describe('sentinel', () => {
       ]);
       expect(stats.missedProposals.count).toEqual(4);
       expect(stats.missedProposals.total).toEqual(5);
+    });
+
+    it('does not count unpublished or orphaned proposals as missed, but tracks them as the last proposal', () => {
+      const stats = sentinel.computeStatsForValidator(validator, [
+        { slot: SlotNumber(1), status: 'checkpoint-mined' },
+        { slot: SlotNumber(2), status: 'checkpoint-orphaned' },
+        { slot: SlotNumber(3), status: 'checkpoint-unpublished' },
+      ]);
+      expect(stats.missedProposals.count).toEqual(0);
+      expect(stats.missedProposals.total).toEqual(3);
+      expect(stats.lastProposal?.slot).toEqual(SlotNumber(3));
+
+      const orphanedLast = sentinel.computeStatsForValidator(validator, [
+        { slot: SlotNumber(1), status: 'checkpoint-mined' },
+        { slot: SlotNumber(2), status: 'checkpoint-orphaned' },
+      ]);
+      expect(orphanedLast.lastProposal?.slot).toEqual(SlotNumber(2));
     });
 
     it('resets streaks correctly', () => {
@@ -576,6 +767,58 @@ describe('sentinel', () => {
       await expect(sentinel.getValidatorStatsBatch([validator], SlotNumber(0), SlotNumber(11))).rejects.toThrow(
         'exceeds history length',
       );
+    });
+  });
+
+  describe('computeStats default window cache', () => {
+    let validator: EthAddress;
+
+    beforeEach(async () => {
+      validator = EthAddress.random();
+      await sentinel.doUpdateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      sentinel.setLastProcessedSlot(SlotNumber(5));
+    });
+
+    it('serves repeated and concurrent calls from a single history scan', async () => {
+      const scans = jest.spyOn(store, 'getHistories');
+
+      const [first, second] = await Promise.all([sentinel.computeStats(), sentinel.computeStats()]);
+      const third = await sentinel.computeStats();
+
+      expect(second).toEqual(first);
+      expect(third).toEqual(first);
+      expect(first.stats[validator.toString()].totalSlots).toBe(1);
+      expect(scans).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes history written after the previous call', async () => {
+      await sentinel.computeStats();
+
+      await sentinel.doUpdateValidators(SlotNumber(2), { [validator.toString()]: 'attestation-missed' });
+      const result = await sentinel.computeStats();
+
+      expect(result.stats[validator.toString()].totalSlots).toBe(2);
+      expect(result.stats[validator.toString()].missedAttestations.count).toBe(1);
+    });
+
+    it('moves the window when a new slot is processed', async () => {
+      await sentinel.computeStats();
+
+      sentinel.setLastProcessedSlot(SlotNumber(20));
+      const result = await sentinel.computeStats();
+
+      expect(result.lastProcessedSlot).toEqual(SlotNumber(20));
+      // Slot 1 is now outside the 10-slot window ending at slot 20.
+      expect(result.stats[validator.toString()].totalSlots).toBe(0);
+    });
+
+    it('retries after a failed computation', async () => {
+      jest.spyOn(store, 'getHistories').mockRejectedValueOnce(new Error('store unavailable'));
+
+      await expect(sentinel.computeStats()).rejects.toThrow('store unavailable');
+      const result = await sentinel.computeStats();
+
+      expect(result.stats[validator.toString()].totalSlots).toBe(1);
     });
   });
 
@@ -818,12 +1061,14 @@ describe('sentinel', () => {
       const validator3 = EthAddress.random();
       const [fromSlot, toSlot] = getSlotRangeForEpoch(epochNumber, l1Constants);
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [validator1, validator2, validator3],
-        seed: 0n,
-        epoch: epochNumber,
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [validator1, validator2, validator3],
+          seed: 0n,
+          epoch: epochNumber,
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       const statsResult: ValidatorsStats = {
         stats: {
@@ -888,12 +1133,14 @@ describe('sentinel', () => {
       const validator2 = EthAddress.random();
       const committee = [validator1, validator2];
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 0n,
-        epoch,
-        isEscapeHatchOpen: true,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 0n,
+          epoch,
+          isEscapeHatchOpen: true,
+        }),
+      );
 
       const updateSpy = jest.spyOn(store, 'updateValidators');
 
@@ -905,17 +1152,42 @@ describe('sentinel', () => {
       expect(sentinel.getLastProcessedSlot()).toEqual(slot);
     });
 
+    it.each([
+      ['open', []],
+      ['none', undefined],
+    ] as const)('processSlot skips tracking but advances when the committee is %s', async (_, committee) => {
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({ committee: committee && [...committee], epoch, isEscapeHatchOpen: false }),
+      );
+      const updateSpy = jest.spyOn(store, 'updateValidators');
+
+      await sentinel.doProcessSlot(slot);
+
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(sentinel.getLastProcessedSlot()).toEqual(slot);
+    });
+
+    it('processSlot throws without advancing when the committee is not stable, so the slot is retried', async () => {
+      epochCache.getCommittee.mockResolvedValue(makeUnstableCommittee(epoch, 100n));
+      const lastProcessedSlot = sentinel.getLastProcessedSlot();
+
+      await expect(sentinel.doProcessSlot(slot)).rejects.toThrow(CommitteeNotStableError);
+      expect(sentinel.getLastProcessedSlot()).toEqual(lastProcessedSlot);
+    });
+
     it('processSlot tracks normally when escape hatch is closed', async () => {
       const signers = times(4, Secp256k1Signer.random);
       const validators = signers.map(s => s.address);
       const committee = [...validators];
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee,
-        seed: 0n,
-        epoch,
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 0n,
+          epoch,
+          isEscapeHatchOpen: false,
+        }),
+      );
       epochCache.computeProposerIndex.mockReturnValue(0n);
       p2p.getCheckpointAttestationsForSlot.mockResolvedValue([]);
 
@@ -932,12 +1204,14 @@ describe('sentinel', () => {
       const epochNumber = EpochNumber(2);
       const validator1 = EthAddress.random();
 
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [validator1],
-        seed: 0n,
-        epoch: epochNumber,
-        isEscapeHatchOpen: true,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [validator1],
+          seed: 0n,
+          epoch: epochNumber,
+          isEscapeHatchOpen: true,
+        }),
+      );
 
       const emitSpy = jest.spyOn(sentinel, 'emit');
       const updateEpochSpy = jest.spyOn(store, 'updateEpochPerformance');
@@ -1192,8 +1466,12 @@ class TestSentinel extends Sentinel {
     return super.handleEpochEnd(epoch);
   }
 
-  public override computeStats(opts: { fromSlot?: SlotNumber; toSlot?: SlotNumber }) {
+  public override computeStats(opts?: { fromSlot?: SlotNumber; toSlot?: SlotNumber }) {
     return super.computeStats(opts);
+  }
+
+  public doUpdateValidators(slot: SlotNumber, stats: Record<`0x${string}`, ValidatorStatusInSlot | undefined>) {
+    return super.updateValidators(slot, stats);
   }
 
   public override handleEpochPerformance(epoch: EpochNumber, performance: ValidatorsEpochPerformance) {

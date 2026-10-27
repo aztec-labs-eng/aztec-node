@@ -1,6 +1,7 @@
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type BaseSignerConfig, DutyType } from '@aztec-labs/stdlib/ha-signing';
@@ -863,94 +864,44 @@ describe('SlashingProtectionService', () => {
   });
 
   describe('cleanup methods', () => {
-    describe('cleanupOutdatedRollupDuties', () => {
-      it('cleans up outdated rollup duties at startup', async () => {
-        const oldRollupAddress = EthAddress.random();
-        const newRollupAddress = EthAddress.random();
+    it.each([DutyType.BLOCK_PROPOSAL, DutyType.ATTESTATION])(
+      'preserves %s signing history when a replica starts on another rollup',
+      async dutyType => {
+        const params: CheckAndRecordParams = {
+          rollupAddress: ROLLUP_ADDRESS,
+          validatorAddress: VALIDATOR_ADDRESS,
+          slot: SLOT,
+          blockNumber: BLOCK_NUMBER,
+          checkpointNumber: CHECKPOINT_NUMBER,
+          blockIndexWithinCheckpoint: BLOCK_INDEX_WITHIN_CHECKPOINT,
+          dutyType,
+          messageHash: MESSAGE_HASH,
+          nodeId: NODE_ID,
+        };
+        const signature = Signature.random();
+        const lockToken = await service.checkAndRecord(params);
+        await service.recordSuccess({ ...params, signature, lockToken });
 
-        // Create duties for old rollup
-        for (let i = 0; i < 3; i++) {
-          const params: CheckAndRecordParams = {
-            rollupAddress: oldRollupAddress,
-            validatorAddress: VALIDATOR_ADDRESS,
-            slot: SlotNumber(100 + i),
-            blockNumber: BlockNumber(50 + i),
-            checkpointNumber: CHECKPOINT_NUMBER,
-            blockIndexWithinCheckpoint: BLOCK_INDEX_WITHIN_CHECKPOINT,
-            dutyType: DUTY_TYPE,
-            messageHash: MESSAGE_HASH,
-            nodeId: NODE_ID,
-          };
-          await service.checkAndRecord(params);
-        }
+        const replicaConfig = { ...config, rollupAddress: EthAddress.random(), nodeId: NODE_ID_2 };
+        const replica = new SlashingProtectionService(db, replicaConfig, {
+          metrics: new HASignerMetrics(telemetryClient, NODE_ID_2),
+          dateProvider,
+        });
+        await replica.start();
+        await replica.stop();
 
-        // Create duties for new rollup
-        for (let i = 0; i < 2; i++) {
-          const params: CheckAndRecordParams = {
-            rollupAddress: newRollupAddress,
-            validatorAddress: VALIDATOR_ADDRESS,
-            slot: SlotNumber(200 + i),
-            blockNumber: BlockNumber(150 + i),
-            checkpointNumber: CHECKPOINT_NUMBER,
-            blockIndexWithinCheckpoint: BLOCK_INDEX_WITHIN_CHECKPOINT,
-            dutyType: DUTY_TYPE,
-            messageHash: MESSAGE_HASH,
-            nodeId: NODE_ID,
-          };
-          await service.checkAndRecord(params);
-        }
-
-        // Create a new service with the new rollup address.
-        // Use default maxStuckDutiesAgeMs so background cleanup does not remove the new rollup duties
-        // (they are in 'signing' and would be treated as stuck if maxStuckDutiesAgeMs were 1ms).
-        const newService = new SlashingProtectionService(
-          db,
-          {
-            ...config,
-            rollupAddress: newRollupAddress,
-          },
-          { metrics: new HASignerMetrics(telemetryClient, config.nodeId), dateProvider },
-        );
-
-        // Start the service - this should trigger cleanup at startup
-        await newService.start();
-        await newService.stop();
-
-        // Old rollup duties should be gone
-        for (let i = 0; i < 3; i++) {
-          const params: CheckAndRecordParams = {
-            rollupAddress: oldRollupAddress,
-            validatorAddress: VALIDATOR_ADDRESS,
-            slot: SlotNumber(100 + i),
-            blockNumber: BlockNumber(50 + i),
-            checkpointNumber: CHECKPOINT_NUMBER,
-            blockIndexWithinCheckpoint: BLOCK_INDEX_WITHIN_CHECKPOINT,
-            dutyType: DUTY_TYPE,
-            messageHash: MESSAGE_HASH,
-            nodeId: NODE_ID,
-          };
-          const result = await db.tryInsertOrGetExisting(params);
-          expect(result.isNew).toBe(true);
-        }
-
-        // New rollup duties should still exist
-        for (let i = 0; i < 2; i++) {
-          const params: CheckAndRecordParams = {
-            rollupAddress: newRollupAddress,
-            validatorAddress: VALIDATOR_ADDRESS,
-            slot: SlotNumber(200 + i),
-            blockNumber: BlockNumber(150 + i),
-            checkpointNumber: CHECKPOINT_NUMBER,
-            blockIndexWithinCheckpoint: BLOCK_INDEX_WITHIN_CHECKPOINT,
-            dutyType: DUTY_TYPE,
-            messageHash: MESSAGE_HASH,
-            nodeId: NODE_ID,
-          };
-          const result = await db.tryInsertOrGetExisting(params);
-          expect(result.isNew).toBe(false);
-        }
-      });
-    });
+        await service.start();
+        await expect(
+          service.checkAndRecord({ ...params, nodeId: NODE_ID_2, messageHash: MESSAGE_HASH_2 }),
+        ).rejects.toThrow(SlashingProtectionError);
+        await expect(service.checkAndRecord(params)).rejects.toThrow(DutyAlreadySignedError);
+        const record = await db.tryInsertOrGetExisting(params);
+        expect(record.isNew).toBe(false);
+        expect(record.record.status).toBe(DutyStatus.SIGNED);
+        expect(record.record.messageHash).toBe(MESSAGE_HASH);
+        expect(record.record.signature).toBe(signature.toString());
+      },
+    );
 
     describe('cleanupOldDuties', () => {
       it('should only clean up old signed duties', async () => {
@@ -1069,7 +1020,7 @@ describe('SlashingProtectionService', () => {
         expect(signingResult.record.status).toBe(DutyStatus.SIGNING);
       });
 
-      it('should be called during cleanup cycle when configured', async () => {
+      it('should remove old duties during a cleanup cycle', async () => {
         // Create and sign a duty at current time
         const params: CheckAndRecordParams = {
           rollupAddress: ROLLUP_ADDRESS,
@@ -1094,8 +1045,7 @@ describe('SlashingProtectionService', () => {
           lockToken,
         });
 
-        // Advance time to make the duty "old" (older than cleanup threshold)
-        dateProvider.advanceTime(1); // Advance 10 seconds to ensure duty is old enough
+        await pool.query(`UPDATE validator_duties SET started_at = CURRENT_TIMESTAMP - INTERVAL '3 minutes'`);
 
         // Create a new service with cleanupOldDutiesAfterHours configured
         const newService = new SlashingProtectionService(
@@ -1118,7 +1068,7 @@ describe('SlashingProtectionService', () => {
         expect(result.isNew).toBe(true);
       });
 
-      it('should not run cleanupOldDuties more often than its max age', async () => {
+      it('should not run old duties cleanup more often than hourly', async () => {
         const cleanupSpy = jest.spyOn(db, 'cleanupOldDuties');
 
         const newService = new SlashingProtectionService(
@@ -1138,7 +1088,7 @@ describe('SlashingProtectionService', () => {
         expect(cleanupSpy).toHaveBeenCalledTimes(1);
       });
 
-      it('should not cleanup when cleanupOldDutiesAfterHours is not configured', async () => {
+      it('should still reclaim stuck duties without a retention setting', async () => {
         // Create a duty
         const params: CheckAndRecordParams = {
           rollupAddress: ROLLUP_ADDRESS,
@@ -1172,8 +1122,6 @@ describe('SlashingProtectionService', () => {
         await sleep(100);
         await newService.stop();
 
-        // Duty should still exist (not cleaned up by old duties cleanup)
-        // But it should be cleaned up by stuck duties cleanup since maxStuckDutiesAgeMs is 1ms
         const result = await db.tryInsertOrGetExisting(params);
         expect(result.isNew).toBe(true); // Cleaned by stuck duties cleanup
       });

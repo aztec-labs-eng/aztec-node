@@ -176,15 +176,24 @@ All signing operations require a `SigningContext` that includes:
 
 Note: `AUTH_REQUEST` duties bypass HA protection since signing multiple times is safe for authentication requests.
 
-## Important Limitations
+## Rollup Upgrades
 
-### Database Isolation Per Rollup Version
+The shared PostgreSQL database isolates duties by rollup address. Replicas serving different rollups can share it during
+an upgrade: starting a replica preserves signing history for every rollup, including rollups still served by other replicas.
 
-**You cannot use the same database to provide slashing protection for validator nodes running on different rollup versions** (e.g., current rollup and old rollup simultaneously).
+Duties are retained for 24 hours by default, measured from when signing started. Override this with a positive
+`VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H` value, using the same value on every replica sharing the database. Configuration
+changes apply to existing records as well as new ones. The validator clamps retention to at least two full slot durations
+using the rollup's on-chain timing, covering the rest of the current slot and the next slot. Signers also enforce a
+minimum of 144 seconds for callers that construct them directly.
 
-When the HA signer performs background cleanup via `cleanupOutdatedRollupDuties()`, it removes all duties where the rollup address doesn't match the current rollup address. If two validators running on different rollup versions share the same database, they will delete each other's duties during cleanup.
+Cleanup runs at startup and approximately hourly, removing old duties across all rollups, including retired rollups.
+This includes unfinished duties abandoned by nodes that never return. Cleanup of the node's own stuck signing duties
+remains separate.
+No additional schema migration is required for this retention policy.
 
-**Solution**: Use separate databases for validators running on different rollup versions. Each rollup version requires its own isolated slashing protection database.
+Every replica sharing the database must include this fix before a rollup transition: older versions still delete
+other rollups' signing history on startup.
 
 ## Development
 

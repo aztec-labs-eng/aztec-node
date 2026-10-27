@@ -38,7 +38,7 @@ L1 to L2 messages are not available immediately. The proposer batches messages f
 
 Call `consume_l1_to_l2_message` on the context. The `content` must match the hash sent from L1, and the `secret` must be the pre-image of the `secretHash`. Consuming a message emits a nullifier to prevent double-spending.
 
-The content hash must be computed identically on both L1 and L2. Create a shared library for your content hash functions—see [`token_portal_content_hash_lib`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/noir-contracts/contracts/libs/token_portal_content_hash_lib) for an example.
+The content hash must be computed identically on both L1 and L2. Create a shared library for your content hash functions—see [`token_portal_content_hash_lib`](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/noir-contracts/contracts/libs/token_portal_content_hash_lib) for an example.
 
 #include_code claim_public noir-projects/noir-contracts/contracts/app/token_bridge_contract/src/main.nr rust
 
@@ -91,8 +91,8 @@ const witness = await aztecNode.getL2ToL1MembershipWitness(
 
 ## Example implementations
 
-- [Token Portal (L1)](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/docs/examples/solidity/example_swap/ExampleTokenPortal.sol)
-- [Token Bridge (L2)](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/noir-projects/noir-contracts/contracts/app/token_bridge_contract/src/main.nr)
+- [Token Portal (L1)](https://github.com/aztec-labs-eng/aztec-node/blob/#include_aztec_version/docs/examples/solidity/example_swap/ExampleTokenPortal.sol)
+- [Token Bridge (L2)](https://github.com/aztec-labs-eng/aztec-node/blob/#include_aztec_version/noir-projects/noir-contracts/contracts/app/token_bridge_contract/src/main.nr)
 
 ## Next steps
 

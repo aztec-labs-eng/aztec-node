@@ -1,4 +1,5 @@
 import type { Logger } from '@aztec-labs/foundation/log';
+import { Buffer } from 'buffer';
 import { execSync, spawn } from 'child_process';
 import path from 'path';
 

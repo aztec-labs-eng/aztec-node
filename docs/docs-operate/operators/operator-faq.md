@@ -227,9 +227,14 @@ Error: insufficient funds for gas * price + value
    cast balance [YOUR_PUBLISHER_ADDRESS] --rpc-url [YOUR_RPC_URL]
    ```
 
-3. **Set a refill threshold and an alert**:
-   - Use `aztec_l1_publisher_balance` from your Prometheus stack
+3. **Check the node logs**:
+   - `No publisher can afford a proposal` (or `an epoch proof` on a prover node) and `Skipping checkpoint proposal` name the publisher to fund and how much ETH it is missing
+   - The `Publisher balances` line logged at startup lists every publisher's balance
+
+4. **Set a refill threshold and an alert**:
+   - Use `aztec_l1_publisher_balance_eth` and `aztec_l1_publisher_sends_affordable` from your Prometheus stack (see [Metrics reference](./monitoring/metrics-reference#l1-publisher-eth-balance) for example alert rules)
    - The threshold should leave enough headroom to refill before the publisher dries up at the worst-case gas price you expect
+   - Or let the node refill it with [automatic top-ups](./solo-sequencer/fund-accounts#optional-automatic-top-ups)
 
 :::warning Slashing risk
 A publisher that runs out of ETH cannot submit proposals. A single missed proposal is not slashable, but staying out of ETH long enough for the attester to miss almost all its duties over a full epoch hits the inactivity threshold, which is slashable. Set a refill threshold that leaves time to act under realistic L1 gas conditions.

@@ -177,6 +177,29 @@ describe('AttestedInvalidProposalWatcher', () => {
     ]);
   });
 
+  it('retries a slot whose attestation-pool read failed, then slashes on the next scan', async () => {
+    const slot = SlotNumber(9);
+    invalidProposalSlots = new Set([slot, SlotNumber(10)]);
+    const attestation = await makeAttestation(slot);
+    invalidCheckpointHashes.set(slot, [attestation.getPayloadHash()]);
+    p2pClient.getCheckpointAttestationsForSlot.mockImplementation((s: SlotNumber) =>
+      Promise.resolve(s === slot ? [attestation] : []),
+    );
+    // Fail the pool read on the first call (slot 9, the oldest scanned this tick).
+    p2pClient.getCheckpointAttestationsForSlot.mockImplementationOnce(() =>
+      Promise.reject(new Error('attestation pool read failed')),
+    );
+
+    await watcher.scan();
+    // The failed read must not mark the slot scanned, so nothing is slashed yet.
+    expect(handler).not.toHaveBeenCalled();
+
+    await watcher.scan();
+    // The next scan retries the slot, reads the attestation, and slashes.
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith([expect.objectContaining({ epochOrSlot: BigInt(slot), amount: 13n })]);
+  });
+
   it('does not slash attestations once proposal equivocation has been detected for the slot', async () => {
     const slot = SlotNumber(10);
     invalidProposalSlots.add(slot);

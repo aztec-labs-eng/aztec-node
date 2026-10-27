@@ -1,4 +1,4 @@
-import { EpochCache } from '@aztec-labs/epoch-cache';
+import { EpochCache, toCommitteeLookup } from '@aztec-labs/epoch-cache';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, pick } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
@@ -118,18 +118,21 @@ export class AttestationsBlockWatcher extends (EventEmitter as new () => Watcher
     });
 
     const { checkpointNumber, slotNumber: slot } = checkpoint;
-    const epochCommitteeInfo = { ...validationResult, isEscapeHatchOpen: false };
-    const proposer = this.epochCache.getProposerFromEpochCommittee(epochCommitteeInfo, slot);
+    const { committee, epoch, seed } = validationResult;
+    const lookup = toCommitteeLookup(committee, { epoch, seed, isEscapeHatchOpen: false });
+    const proposer = this.epochCache.proposerFromCommitteeLookup(lookup, slot);
 
-    if (!proposer) {
-      this.log.warn(`No proposer found for checkpoint ${checkpointNumber} at slot ${slot}`);
+    if (proposer.state !== 'members') {
+      this.log.warn(`No proposer found for checkpoint ${checkpointNumber} at slot ${slot}`, {
+        committeeState: proposer.state,
+      });
       return;
     }
 
     const offense = this.getOffenseFromInvalidationReason(reason);
     const amount = this.config.slashProposeInvalidAttestationsPenalty;
     const args: WantToSlashArgs = {
-      validator: proposer,
+      validator: proposer.proposer,
       amount,
       offenseType: offense,
       epochOrSlot: BigInt(slot),
@@ -158,12 +161,19 @@ export class AttestationsBlockWatcher extends (EventEmitter as new () => Watcher
 
     const slot = checkpoint.slotNumber;
     const epoch = EpochNumber(getEpochAtSlot(slot, this.epochCache.getL1Constants()));
-    const epochCommitteeInfo = await this.epochCache.getCommitteeForEpoch(epoch);
+    const lookup = await this.epochCache.getCommitteeForEpoch(epoch);
+    if (lookup.state === 'unstable') {
+      this.log.warn(
+        `Not attributing invalid descendant checkpoint ${checkpoint.checkpointNumber}: committee for epoch ${epoch} is not stable on L1`,
+        { ...checkpoint, slot, epoch, l1BlockNumber: lookup.l1BlockNumber },
+      );
+      return;
+    }
 
     // While the escape hatch is open, checkpoints are published outside the committee's proposer rotation, so
     // the committee member that rotation yields for this slot did not necessarily publish the checkpoint and
     // must not be attributed the offense. We have no way to identify the actual publisher here, so we skip.
-    if (epochCommitteeInfo.isEscapeHatchOpen) {
+    if (lookup.isEscapeHatchOpen) {
       this.log.verbose(
         `Skipping descendant-of-invalid attribution for checkpoint ${checkpoint.checkpointNumber} as the escape hatch is open`,
         {
@@ -177,17 +187,18 @@ export class AttestationsBlockWatcher extends (EventEmitter as new () => Watcher
       return;
     }
 
-    const proposer = this.epochCache.getProposerFromEpochCommittee({ ...epochCommitteeInfo, epoch }, slot);
+    const proposer = this.epochCache.proposerFromCommitteeLookup(lookup, slot);
 
-    if (!proposer) {
+    if (proposer.state !== 'members') {
       this.log.warn(
         `No proposer found for invalid descendant checkpoint ${checkpoint.checkpointNumber} at slot ${slot}`,
+        { committeeState: proposer.state },
       );
       return;
     }
 
     const args: WantToSlashArgs = {
-      validator: proposer,
+      validator: proposer.proposer,
       amount: this.config.slashProposeDescendantOfCheckpointWithInvalidAttestationsPenalty,
       offenseType: OffenseType.PROPOSED_DESCENDANT_OF_CHECKPOINT_WITH_INVALID_ATTESTATIONS,
       epochOrSlot: BigInt(slot),

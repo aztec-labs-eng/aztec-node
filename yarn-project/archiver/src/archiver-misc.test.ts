@@ -12,6 +12,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { GENESIS_BLOCK_HEADER_HASH, type L2Tips } from '@aztec-labs/stdlib/block';
 import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -46,7 +47,6 @@ describe('Archiver misc', () => {
       ethereumSlotDuration: ETH_SLOT_DURATION,
       proofSubmissionEpochs: 1,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
       genesisArchiveRoot: new Fr(GENESIS_ARCHIVE_ROOT),
     };
 
@@ -94,6 +94,7 @@ describe('Archiver misc', () => {
       initialHeader,
       initialBlockHash,
       l2FrontierCache,
+      new TestRollupFeeConfigProvider(),
       new DateProvider(),
     );
   });

@@ -3,7 +3,7 @@ export type { PublicContractsDBInterface } from './db_interfaces.js';
 export { PublicContractsDB } from './public_db_sources.js';
 export { GuardedMerkleTreeOperations } from './public_processor/guarded_merkle_tree.js';
 export { PublicProcessor, PublicProcessorFactory } from './public_processor/public_processor.js';
-export type { AvmContractsDBContext, AvmSimulator } from './avm_simulator.js';
+export { AvmProcessDiedError, type AvmContractsDBContext, type AvmSimulator } from './avm_simulator.js';
 export {
   PublicTxSimulator,
   MeasuredPublicTxSimulator,

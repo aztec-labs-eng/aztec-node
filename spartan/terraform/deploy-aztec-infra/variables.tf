@@ -217,6 +217,13 @@ variable "VALIDATOR_COINBASE" {
   default     = null
 }
 
+variable "VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE" {
+  description = "Override for validator L1 gas limit buffer percentage"
+  type        = string
+  nullable    = true
+  default     = null
+}
+
 variable "VALIDATOR_L1_PRIORITY_FEE_BUMP_PERCENTAGE" {
   description = "Override for validator L1 priority fee bump percentage"
   type        = string
@@ -599,7 +606,7 @@ variable "STORE_SNAPSHOT_URL" {
 }
 
 variable "SNAPSHOT_CRON" {
-  description = "Location to store snapshots in"
+  description = "Cron schedule for snapshot uploads"
   type        = string
   default     = "0 */12 * * *"
 }
@@ -1181,8 +1188,8 @@ variable "P2P_DROP_TX_CHANCE" {
   default     = 0
 }
 
-variable "WS_NUM_HISTORIC_CHECKPOINTS" {
-  description = "Number of historic checkpoints for world state"
+variable "WS_HISTORY_RETENTION" {
+  description = "World-state history retention policy: rolling:N, pinned:N, or archive"
   type        = string
   nullable    = true
   default     = null
@@ -1218,4 +1225,28 @@ variable "WAIT_FOR_PROVER_DEPLOY" {
   description = "Whether to wait for the prover helm installation. You might want to turn this off if a large number of prover agents should start"
   type        = bool
   default     = true
+}
+
+variable "PROVER_OXIDE_SIDECAR" {
+  description = "Optional epoch-proof sidecar."
+  type = object({
+    enabled                     = optional(bool, false)
+    image                       = optional(string, "")
+    manifest_url                = optional(string, "")
+    portal                      = optional(string, "")
+    proof_submission_target     = optional(string, "")
+    proving_cost_per_checkpoint = optional(string, "")
+    min_profit                  = optional(string, "")
+    min_profit_margin_bps       = optional(string, "")
+    startup_timeout_seconds     = optional(number, 1200)
+  })
+  default = {}
+}
+
+
+
+variable "PROVER_ID_MNEMONIC_INDEX" {
+  description = "Mnemonic index for prover identity. Unset preserves the existing publisher-start index fallback."
+  type        = number
+  default     = null
 }

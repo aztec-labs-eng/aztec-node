@@ -115,12 +115,21 @@ The proposer always builds for the *next* slot rather than the current one
 lead time to assemble and propagate the block. The "target slot" methods on the
 epoch cache apply this offset automatically.
 
-### Empty Committees
+### Committee Lookups
 
-If the committee is empty (i.e., `targetCommitteeSize` is 0), anyone can propose.
-The proposer methods return `undefined` in this case rather than throwing. If the
-committee should exist but doesn't (insufficient validators registered), a
-`NoCommitteeError` is thrown.
+Every committee getter returns a lookup with a `state` that callers match on:
+
+- `members`: the epoch has a non-empty committee, and the lookup carries it (or the
+  proposer, or the membership asked for).
+- `open`: `targetCommitteeSize` is 0, so anyone can propose and nobody attests.
+- `none`: the committee should exist but doesn't, because too few validators are
+  registered.
+- `unstable`: the epoch's sample seed can still change on L1, so the committee is not
+  known yet. Never treat it as `open` or `none`: p2p, for one, accepts any signer in
+  `open` and penalizes the peer in `none`, but must ignore without a penalty here.
+
+Callers that cannot act without a known committee and rely on a thrown error to retry
+use `requireStableCommittee`, which throws `CommitteeNotStableError` for `unstable`.
 
 ## Escape Hatch
 
@@ -144,7 +153,7 @@ The escape hatch has its own candidate pool, separate from the main validator se
 
 The epoch cache queries `isHatchOpen(epoch)` on the escape hatch contract and
 caches the result alongside the committee info for each epoch. This flag is
-exposed via `isEscapeHatchOpen(epoch)` and `isEscapeHatchOpenAtSlot(slot)`,
+exposed via `lookupEscapeHatch(epoch)` and `lookupEscapeHatchAtSlot(slot)`,
 used by the sequencer to decide whether to require committee attestations.
 
 ## TTL-based Caching with Finalization Tracking
@@ -173,12 +182,25 @@ entry is marked as **finalized**.
   (typically 12 seconds). After this TTL, the next request triggers a re-fetch
   from L1. On re-fetch, if the data is now finalized, the entry gets promoted
   to permanent.
-- **Unstable epochs** (sampling timestamp beyond the latest L1 block) cause an
-  error, since the L1 contract itself would revert.
+- **Unstable epochs** throw `CommitteeNotStableError`. Epoch E's seed comes from
+  the randao that L1 checkpoints in epoch S = E - `lagInEpochsForRandao`, and the
+  v6 rollup views return a provisional seed until that randao is written. The
+  cache serves E's committee only once `setupEpoch` has stored S's commitment, or
+  once the latest L1 block is in S's last L1 slot. A marker per epoch limits the
+  re-checks to one per Ethereum slot.
 
 This approach preserves **safety** (stale data from L1 reorgs gets refreshed
-within one Ethereum slot) while maintaining **liveness** (the cache never refuses
-to serve data that L1 accepts, even if L1 finalization stalls).
+within one Ethereum slot) while maintaining **liveness** (the cache serves any
+committee whose seed L1 can no longer change, even if L1 finalization stalls).
+
+The last-L1-slot rule assumes consecutive L1 blocks are at least one Ethereum
+slot apart, so no later block can land in S. Ethereum guarantees this; anvil does
+not. `EthCheatCodes.mine(n)` spaces blocks one second apart, and a `warp` without
+`resetBlockInterval` lets the next interval block land less than a slot later. A
+randao written by such a block after the cache has served E's committee is never
+seen, because the refresh only rechecks the block hash the entry was read at.
+Tests that run validators should only mine or warp before the nodes start, or
+warp with `resetBlockInterval`.
 
 ### Concurrency
 

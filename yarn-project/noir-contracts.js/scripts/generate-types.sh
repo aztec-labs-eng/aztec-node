@@ -17,7 +17,6 @@ mkdir -p $OUT_DIR
 CONTRACTS=$(grep "contracts/" ../../noir-projects/noir-contracts/Nargo.toml \
   | grep -v "contracts/test/" \
   | grep -v "contracts/protocol/" \
-  | grep -v "contracts/protocol_interface/" \
   | sed 's/.*\/\([^/"]*\)_contract.*/\1/')
 
 # Check for .json files existence

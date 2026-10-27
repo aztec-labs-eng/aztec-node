@@ -182,9 +182,10 @@ export type IVCProofVerificationResult = {
  */
 export interface ClientProtocolCircuitVerifier {
   /**
-   * Verifies the private protocol circuit's proof.
+   * Verifies the private protocol circuit's proof. Rejects, instead of reporting the proof invalid, when the proof
+   * could not be checked (for example, when the proving backend is unavailable).
    * @param tx - The tx to verify the proof of
-   * @returns True if the proof is valid, false otherwise
+   * @returns Whether the proof is valid, with verification timings
    */
   verifyProof(tx: Tx): Promise<IVCProofVerificationResult>;
 

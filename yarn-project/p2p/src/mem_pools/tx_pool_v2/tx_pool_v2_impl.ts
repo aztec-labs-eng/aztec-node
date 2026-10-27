@@ -131,6 +131,8 @@ export class TxPoolV2Impl {
     this.#evictionManager = new EvictionManager(this.#createPoolOperations(), log);
 
     // Pre-add rules (run during addPendingTxs) - work with TxMetaData
+    // Order matters: each rule sees the pool without the txs that earlier rules picked for eviction.
+    // Each eviction pick is final: later rules cannot roll back an eviction.
     this.#evictionManager.registerPreAddRule(new NullifierConflictRule());
     this.#evictionManager.registerPreAddRule(new FeePayerBalancePreAddRule());
     this.#evictionManager.registerPreAddRule(
@@ -139,7 +141,7 @@ export class TxPoolV2Impl {
 
     // Post-event eviction rules (run after events to check ALL pending txs)
     this.#evictionManager.registerRule(new InvalidTxsAfterMiningRule());
-    this.#evictionManager.registerRule(new InsufficientFeePerGasEvictionRule(deps.blockMinFeesProvider));
+    this.#evictionManager.registerRule(new InsufficientFeePerGasEvictionRule(deps.nextBlockMinFeesProvider));
     this.#evictionManager.registerRule(new InvalidTxsAfterReorgRule(deps.worldStateSynchronizer));
     this.#evictionManager.registerRule(new FeePayerBalanceEvictionRule(deps.worldStateSynchronizer));
     // LowPriorityEvictionRule handles cases where txs become pending via prepareForSlot (unprotect)
@@ -240,11 +242,17 @@ export class TxPoolV2Impl {
     const ignored: TxHash[] = [];
     const rejected: TxHash[] = [];
     const errors = new Map<string, TxPoolRejectionError>();
+    // Per-rejected-tx failure reasons, kept so receiver-local state drift can be told apart from a
+    // sender-attributable rejection: a tx that went stale against local state is not the relayer's fault.
+    const rejectionReasons = new Map<string, string[]>();
     const acceptedPending = new Set<string>();
 
     // Phase 1: Pre-compute all throwable I/O outside the transaction.
     // If any pre-computation throws, the entire call fails before mutations happen.
-    const precomputed = new Map<string, { meta: TxMetaData; minedBlockId: L2BlockId | undefined; isValid: boolean }>();
+    const precomputed = new Map<
+      string,
+      { meta: TxMetaData; minedBlockId: L2BlockId | undefined; isValid: boolean; reason?: string[] }
+    >();
 
     const validator = await this.#createTxValidator();
 
@@ -257,11 +265,14 @@ export class TxPoolV2Impl {
 
       // Validate non-mined txs (mined and pre-protected txs bypass validation inside the transaction)
       let isValid = true;
+      let reason: string[] | undefined;
       if (!minedBlockId) {
-        isValid = await this.#validateMeta(meta, validator);
+        const validation = await this.#validateMeta(meta, validator);
+        isValid = validation.valid;
+        reason = validation.reason;
       }
 
-      precomputed.set(txHashStr, { meta, minedBlockId, isValid });
+      precomputed.set(txHashStr, { meta, minedBlockId, isValid, reason });
     }
 
     // Phase 2: Apply mutations inside the transaction using only pre-computed results,
@@ -283,7 +294,7 @@ export class TxPoolV2Impl {
           continue;
         }
 
-        const { meta, minedBlockId, isValid } = precomputed.get(txHashStr)!;
+        const { meta, minedBlockId, isValid, reason } = precomputed.get(txHashStr)!;
         const preProtectedSlot = this.#indices.getProtectionSlot(txHashStr);
 
         if (minedBlockId) {
@@ -297,6 +308,9 @@ export class TxPoolV2Impl {
         } else if (!isValid) {
           // Failed pre-computed validation
           rejected.push(txHash);
+          if (reason && reason.length > 0) {
+            rejectionReasons.set(txHashStr, reason);
+          }
         } else {
           // Regular pending tx - run pre-add rules using pre-computed metadata
           const result = await this.#tryAddRegularPendingTx(
@@ -338,7 +352,13 @@ export class TxPoolV2Impl {
       this.#instrumentation.recordRejected(rejected.length);
     }
 
-    return { accepted, ignored, rejected, ...(errors.size > 0 ? { errors } : {}) };
+    return {
+      accepted,
+      ignored,
+      rejected,
+      ...(errors.size > 0 ? { errors } : {}),
+      ...(rejectionReasons.size > 0 ? { rejectionReasons } : {}),
+    };
   }
 
   /** Adds a validated pending tx, running pre-add rules and evicting conflicts. */
@@ -607,11 +627,14 @@ export class TxPoolV2Impl {
       const txsToRestore = this.#indices.filterRestorable(expiredProtected);
       if (txsToRestore.length === 0) {
         this.#log.debug(`Preparing for slot ${slotNumber}, no txs to unprotect`);
-        return;
+      } else {
+        this.#log.info(`Preparing for slot ${slotNumber}: unprotecting ${txsToRestore.length} txs`);
+        await this.#restoreUnprotectedToPending(txsToRestore, 'during prepareForSlot');
       }
 
-      this.#log.info(`Preparing for slot ${slotNumber}: unprotecting ${txsToRestore.length} txs`);
-      await this.#restoreUnprotectedToPending(txsToRestore, 'during prepareForSlot');
+      // Step 4: Sweep pending txs that can no longer pay the next block's fee. The fee is stable
+      // across the slot, so this runs here instead of after every mined block.
+      await this.#evictionManager.evictAfterSlotPrepared(slotNumber);
     });
   }
 
@@ -860,7 +883,18 @@ export class TxPoolV2Impl {
     if (!buffer) {
       return undefined;
     }
-    return opts.includeProof === false ? Tx.fromBuffer(buffer) : this.#loadTxWithProof(txHashStr, buffer);
+    if (opts.includeProof === false) {
+      return Tx.fromBuffer(buffer);
+    }
+    // The body and its separately-stored proof are read in two steps, not atomically: an eviction
+    // can delete the proof row after the body read. Serving a proofless tx makes the honest requester
+    // penalise us, so drop it. A present-but-empty proof is a valid sentinel; only a missing row is
+    // the evicted case.
+    const proofBuffer = await this.#proofsDB.getAsync(txHashStr);
+    if (!proofBuffer) {
+      return undefined;
+    }
+    return Tx.fromBuffers(buffer, proofBuffer);
   }
 
   async getTxsByHash(txHashes: TxHash[], opts: { includeProof?: boolean } = {}): Promise<(Tx | undefined)[]> {
@@ -1119,15 +1153,19 @@ export class TxPoolV2Impl {
   // ============================================================================
 
   /** Validates transaction metadata, returning true if valid */
-  async #validateMeta(meta: TxMetaData, validator?: TxValidator<TxMetaData>, context?: string): Promise<boolean> {
+  async #validateMeta(
+    meta: TxMetaData,
+    validator?: TxValidator<TxMetaData>,
+    context?: string,
+  ): Promise<{ valid: boolean; reason?: string[] }> {
     const txValidator = validator ?? (await this.#createTxValidator());
     const result = await txValidator.validateTx(meta);
     if (result.result !== 'valid') {
       const contextStr = context ? ` ${context}` : '';
       this.#log.info(`Tx ${meta.txHash}${contextStr} failed validation: ${result.reason?.join(', ')}`);
-      return false;
+      return { valid: false, reason: result.reason };
     }
-    return true;
+    return { valid: true };
   }
 
   /** Validates metadata directly */
@@ -1139,7 +1177,7 @@ export class TxPoolV2Impl {
     const invalid: string[] = [];
     const validator = await this.#createTxValidator();
     for (const meta of metas) {
-      if (await this.#validateMeta(meta, validator, context)) {
+      if ((await this.#validateMeta(meta, validator, context)).valid) {
         valid.push(meta);
       } else {
         invalid.push(meta.txHash);
@@ -1288,7 +1326,7 @@ export class TxPoolV2Impl {
       },
       getFeePayerPendingTxs: (feePayer: string) => this.#indices.getFeePayerPendingTxs(feePayer),
       getPendingTxCount: () => this.#indices.getPendingTxCount(),
-      getLowestPriorityPendingTx: () => this.#indices.getLowestPriorityPendingTx(),
+      iteratePendingByPriority: (order: 'asc' | 'desc') => this.#indices.iteratePendingByPriority(order),
     };
   }
 }

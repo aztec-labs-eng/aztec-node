@@ -58,14 +58,14 @@ The [`@aztec-foundation/l1-artifacts`](https://www.npmjs.com/package/@aztec-foun
 ```bash
 npm pack @aztec-foundation/l1-artifacts@#release_version
 mkdir l1-contracts
-tar xzf aztec-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
+tar xzf aztec-foundation-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
 cd l1-contracts
 ```
 
 No further setup is needed: the bundle includes the library dependencies and the generated verifier, and forge downloads the matching solc version automatically on first use.
 
 :::note
-The Aztec installer ships Foundry as `aztec-forge`, `aztec-cast`, and `aztec-anvil`. Substitute your own `forge` and `cast` installs in the commands below if you have them.
+The Aztec installer ships Foundry as `aztec-forge`, `aztec-cast`, and `aztec-anvil`. The commands below use `aztec-forge` and plain `cast`: if you only have the installer's Foundry, use `aztec-cast` wherever a command says `cast`, and if you have your own Foundry, `forge` works in place of `aztec-forge`.
 :::
 
 ---
@@ -89,7 +89,7 @@ export AZTEC_SLOT_DURATION=36
 export AZTEC_EPOCH_DURATION=16
 export AZTEC_TARGET_COMMITTEE_SIZE=48
 export AZTEC_LAG_IN_EPOCHS_FOR_VALIDATOR_SET=2
-export AZTEC_LAG_IN_EPOCHS_FOR_RANDAO=2
+export AZTEC_LAG_IN_EPOCHS_FOR_RANDAO=1
 export AZTEC_PROOF_SUBMISSION_EPOCHS=2
 export AZTEC_LOCAL_EJECTION_THRESHOLD=0
 export AZTEC_SLASHING_ROUND_SIZE_IN_EPOCHS=1
@@ -100,13 +100,29 @@ export AZTEC_SLASHER_ENABLED=false
 export AZTEC_SLASHING_VETOER=0x0000000000000000000000000000000000000000
 export AZTEC_SLASHING_DISABLE_DURATION=0
 export AZTEC_MANA_TARGET=100000000
-export AZTEC_EXIT_DELAY_SECONDS=0
+export AZTEC_EXIT_DELAY_SECONDS=172800
 export AZTEC_PROVING_COST_PER_MANA=100
 export AZTEC_SLASH_AMOUNT_SMALL=0
 export AZTEC_SLASH_AMOUNT_MEDIUM=0
 export AZTEC_SLASH_AMOUNT_LARGE=0
 export AZTEC_INITIAL_ETH_PER_FEE_ASSET=10000000
+export ETHEREUM_SLOT_DURATION=12
+
+# Validator entry queue (local network defaults)
+export AZTEC_ENTRY_QUEUE_BOOTSTRAP_VALIDATOR_SET_SIZE=0
+export AZTEC_ENTRY_QUEUE_BOOTSTRAP_FLUSH_SIZE=0
+export AZTEC_ENTRY_QUEUE_FLUSH_SIZE_MIN=48
+export AZTEC_ENTRY_QUEUE_FLUSH_SIZE_QUOTIENT=2
+export AZTEC_ENTRY_QUEUE_MAX_FLUSH_SIZE=48
+
+# Genesis state: reuse the current rollup's, since the new rollup runs the same circuits
+export CURRENT_ROLLUP=$(cast call $REGISTRY_ADDRESS "getCanonicalRollup()(address)" --rpc-url $L1_RPC_URL)
+export VK_TREE_ROOT=$(cast call $CURRENT_ROLLUP "getVkTreeRoot()(bytes32)" --rpc-url $L1_RPC_URL)
+export PROTOCOL_CONTRACTS_HASH=$(cast call $CURRENT_ROLLUP "getProtocolContractsHash()(bytes32)" --rpc-url $L1_RPC_URL)
+export GENESIS_ARCHIVE_ROOT=$(cast call $CURRENT_ROLLUP "archiveAt(uint256)(bytes32)" 0 --rpc-url $L1_RPC_URL)
 ```
+
+`AZTEC_EXIT_DELAY_SECONDS` must be non-zero: the deploy script rejects a zero exit delay.
 
 ---
 
@@ -136,8 +152,6 @@ The deploy script in Step 4 also deploys this payload and prints it as `payloadA
 **Important:** Place flags before the contract path to avoid argument parsing issues.
 
 ```bash
-cd l1-contracts
-
 aztec-forge create \
   --rpc-url $L1_RPC_URL \
   --private-key $PRIVATE_KEY \
@@ -360,8 +374,6 @@ The `--rollup` flag is required; without it the command may fail trying to resol
 If you just want to test the governance flow without deploying a real rollup:
 
 ```bash
-cd l1-contracts
-
 # Deploy empty payload (no constructor args needed)
 aztec-forge create \
   --rpc-url $L1_RPC_URL \

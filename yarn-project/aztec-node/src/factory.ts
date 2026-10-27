@@ -1,5 +1,5 @@
 import { createArchiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { BBCircuitVerifier, QueuedIVCVerifier, SelfHealingChonkVerifier } from '@aztec-labs/bb-prover';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 import { Blob, getKzg } from '@aztec-labs/blob-lib';
@@ -10,6 +10,7 @@ import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/eth
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { compactArray } from '@aztec-labs/foundation/collection';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
@@ -30,7 +31,7 @@ import { AvmSimulatorPool } from '@aztec-labs/simulator/server';
 import {
   AttestationsBlockWatcher,
   AttestedInvalidProposalWatcher,
-  BroadcastedInvalidCheckpointProposalWatcher,
+  BroadcastedProposalWatcher,
   CheckpointEquivocationWatcher,
   DataWithholdingWatcher,
   type SlasherClientInterface,
@@ -38,6 +39,7 @@ import {
   createSlasher,
 } from '@aztec-labs/slasher';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { RollupFeeConfigTracker } from '@aztec-labs/stdlib/gas';
 import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
@@ -58,7 +60,7 @@ import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/worl
 import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
-import { NextBlockPredictor } from './aztec-node/next_block/index.js';
+import { AdmissionMinFeesProvider, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
@@ -153,7 +155,7 @@ export async function createAztecNodeService(
     if (keyStoreManager === undefined) {
       throw new Error('Failed to create key store, a requirement for running a validator');
     }
-    if (!keyStoreProvided && process.env.NODE_ENV !== 'test') {
+    if (!keyStoreProvided && getEnv().NODE_ENV !== 'test') {
       log.warn("Keystore created from env: it's recommended to use a file-based key store for production");
     }
     ValidatorClient.validateKeyStoreConfiguration(keyStoreManager, log);
@@ -184,12 +186,11 @@ export async function createAztecNodeService(
   // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
   // bucket ring before accepting it, so every node needs one, validator or not.
   const inboxContract = new InboxContract(publicClient, config.inboxAddress);
-  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup, rollupManaLimit] = await Promise.all([
+  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
     rollupContract.getL1GenesisTime(),
     rollupContract.getSlotDuration(),
     rollupContract.getEpochDuration(),
     rollupContract.getVersion(),
-    rollupContract.getManaLimit().then(Number),
   ] as const);
 
   config.rollupVersion ??= Number(rollupVersionFromRollup);
@@ -203,13 +204,21 @@ export async function createAztecNodeService(
   const blobClient = await createBlobClientWithFileStores(config, log.createChild('blob-client'));
 
   // attempt snapshot sync if possible
-  await trySnapshotSync(config, log);
+  await trySnapshotSync(config, log, options.genesis);
 
   const epochCache = await EpochCache.create(config.rollupAddress, config, { dateProvider });
 
   // Track started resources so we can clean up on partial failure during node creation.
   const started: { stop?(): Promise<void> | void }[] = [];
   try {
+    // Governance can change the rollup's fee settings (the mana target and limit among them) at any time, so every
+    // component that needs them reads them from this tracker rather than from a copy taken at startup.
+    const feeConfigTracker = await RollupFeeConfigTracker.create(rollupContract, {
+      logger: log.createChild('rollup-fee-config'),
+    });
+    feeConfigTracker.start();
+    started.push(feeConfigTracker);
+
     config.skipOrphanProposedBlockPruning ||= !!config.useAutomineSequencer;
 
     checkConfigMatchesRollup(config, {
@@ -233,7 +242,7 @@ export async function createAztecNodeService(
     started.push({ stop: () => avmSimulator[Symbol.asyncDispose]() });
     const archiver = await createArchiver(
       config,
-      { blobClient, epochCache, telemetry, dateProvider },
+      { blobClient, epochCache, telemetry, dateProvider, feeConfigProvider: feeConfigTracker },
       { blockUntilSync: !config.skipArchiverInitialSync },
       initialHeader,
       initialBlockHash,
@@ -247,7 +256,7 @@ export async function createAztecNodeService(
     let peerProofVerifier: ClientProtocolCircuitVerifier;
     let rpcProofVerifier: ClientProtocolCircuitVerifier;
     if (useRealVerifiers) {
-      peerProofVerifier = await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
+      peerProofVerifier = await SelfHealingChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
       const rpcVerifier = await BBCircuitVerifier.new(config);
       rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers);
     } else {
@@ -319,7 +328,8 @@ export async function createAztecNodeService(
       peerProofVerifier,
       worldStateSynchronizer,
       epochCache,
-      feeProvider,
+      new AdmissionMinFeesProvider(nextBlockPredictor, feeProvider),
+      feeConfigTracker,
       packageVersion,
       dateProvider,
       telemetry,
@@ -339,13 +349,13 @@ export async function createAztecNodeService(
         ...config,
         l1GenesisTime,
         slotDuration: Number(slotDuration),
-        rollupManaLimit,
         maxTxsPerCheckpoint: config.validateMaxTxsPerCheckpoint,
       },
       worldStateSynchronizer,
       archiver,
       dateProvider,
       avmSimulator,
+      feeConfigTracker,
       telemetry,
     );
 
@@ -427,7 +437,7 @@ export async function createAztecNodeService(
     let dataWithholdingWatcher: DataWithholdingWatcher | undefined;
     let attestationsBlockWatcher: AttestationsBlockWatcher | undefined;
     let attestedInvalidProposalWatcher: AttestedInvalidProposalWatcher | undefined;
-    let broadcastedInvalidCheckpointProposalWatcher: BroadcastedInvalidCheckpointProposalWatcher | undefined;
+    let broadcastedProposalWatcher: BroadcastedProposalWatcher | undefined;
     let checkpointEquivocationWatcher: CheckpointEquivocationWatcher | undefined;
 
     const validatorsSentinel = await createSentinel(epochCache, archiver, p2pClient, reexecutionTracker, config);
@@ -453,13 +463,8 @@ export async function createAztecNodeService(
         log.verbose('Skipping data-withholding watcher since p2p is disabled');
       }
 
-      broadcastedInvalidCheckpointProposalWatcher = new BroadcastedInvalidCheckpointProposalWatcher(
-        p2pClient,
-        archiver,
-        epochCache,
-        config,
-      );
-      watchers.push(broadcastedInvalidCheckpointProposalWatcher);
+      broadcastedProposalWatcher = new BroadcastedProposalWatcher(p2pClient, archiver, epochCache, config);
+      watchers.push(broadcastedProposalWatcher);
 
       // The proposal handler (validator-owned or standalone) is the source of invalid-proposal/equivocation
       // slots, so the watcher runs on non-validator offense collectors too.
@@ -475,7 +480,7 @@ export async function createAztecNodeService(
         watchers.push(attestedInvalidProposalWatcher);
       }
 
-      checkpointEquivocationWatcher = new CheckpointEquivocationWatcher(archiver, epochCache, config);
+      checkpointEquivocationWatcher = new CheckpointEquivocationWatcher(archiver, config);
       watchers.push(checkpointEquivocationWatcher);
 
       attestationsBlockWatcher = new AttestationsBlockWatcher(archiver, epochCache, config, log.getBindings());
@@ -486,7 +491,7 @@ export async function createAztecNodeService(
       validatorsSentinel,
       dataWithholdingWatcher,
       attestationsBlockWatcher,
-      broadcastedInvalidCheckpointProposalWatcher,
+      broadcastedProposalWatcher,
       attestedInvalidProposalWatcher,
       checkpointEquivocationWatcher,
     ]);
@@ -567,11 +572,12 @@ export async function createAztecNodeService(
 
       // Create and start the sequencer client
       const checkpointsBuilder = new CheckpointsBuilder(
-        { ...config, l1GenesisTime, slotDuration: Number(slotDuration), rollupManaLimit },
+        { ...config, l1GenesisTime, slotDuration: Number(slotDuration) },
         worldStateSynchronizer,
         archiver,
         dateProvider,
         avmSimulator,
+        feeConfigTracker,
         telemetry,
         debugLogStore,
       );
@@ -600,7 +606,6 @@ export async function createAztecNodeService(
             l1GenesisTime,
             slotDuration: Number(slotDuration),
             ethereumSlotDuration: config.ethereumSlotDuration,
-            rollupManaLimit,
           },
           autoSettle: config.automineEnableProveEpoch,
           log,
@@ -616,6 +621,7 @@ export async function createAztecNodeService(
           worldStateSynchronizer,
           slasherClient,
           checkpointsBuilder,
+          feeConfigProvider: feeConfigTracker,
           l2BlockSource: archiver,
           l1ToL2MessageSource: archiver,
           telemetry,
@@ -687,6 +693,7 @@ export async function createAztecNodeService(
       rollupContract,
       feeProvider,
       nextBlockPredictor,
+      feeConfigProvider: feeConfigTracker,
       epochCache,
       packageVersion,
       peerProofVerifier,

@@ -1,5 +1,6 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
-import type { InboxContract } from '@aztec-labs/ethereum/contracts';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
+import { type InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   BlockNumber,
@@ -26,7 +27,7 @@ import {
   type BlockHash,
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
-  L2Block,
+  type L2Block,
   type L2BlockSink,
   type L2BlockSource,
   type ProposedCheckpointSink,
@@ -39,7 +40,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import {
   InsufficientValidTxsError,
   type MerkleTreeWriteOperations,
@@ -94,6 +95,7 @@ describe('CheckpointProposalJob', () => {
   let epochCache: MockProxy<EpochCache>;
   let validatorClient: MockProxy<ValidatorClient>;
   let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
+  let feeConfigProvider: TestRollupFeeConfigProvider;
   let p2p: MockProxy<P2P>;
   let worldState: MockProxy<WorldStateSynchronizer>;
   let checkpointsBuilder: MockCheckpointsBuilder;
@@ -177,7 +179,6 @@ describe('CheckpointProposalJob', () => {
       epochDuration: 16,
       proofSubmissionEpochs: 4,
       targetCommitteeSize: 48,
-      rollupManaLimit: Number.MAX_SAFE_INTEGER,
     };
 
     // ManualDateProvider freezes time (it does not track real wall-clock progression), so timing-sensitive
@@ -188,12 +189,14 @@ describe('CheckpointProposalJob', () => {
     dateProvider.setTime(slotStartTime * 1000); // Convert to milliseconds
 
     epochCache = mockDeep<EpochCache>();
-    epochCache.getCommittee.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
     epochCache.getL1Constants.mockImplementation(() => l1Constants);
 
     publisher = mockDeep<SequencerPublisher>();
@@ -202,6 +205,7 @@ describe('CheckpointProposalJob', () => {
     publisher.enqueueProposeCheckpoint.mockResolvedValue(undefined);
     publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
     publisher.enqueueSlashingActions.mockResolvedValue(true);
+    publisher.getFeeAssetPriceModifier.mockResolvedValue(0n);
 
     // Default rollup contract reads used by pipelined fee-header derivation. Tests that exercise
     // the failure modes override these via jest.spyOn.
@@ -218,6 +222,7 @@ describe('CheckpointProposalJob', () => {
     });
 
     globalVariableBuilder = mock<GlobalVariableBuilder>();
+    feeConfigProvider = new TestRollupFeeConfigProvider();
     globalVariableBuilder.buildCheckpointGlobalVariables.mockResolvedValue({
       slotNumber: globalVariables.slotNumber,
       timestamp: globalVariables.timestamp,
@@ -308,6 +313,7 @@ describe('CheckpointProposalJob', () => {
     blockSink = mock<L2BlockSink & ProposedCheckpointSink>();
     blockSink.addBlock.mockResolvedValue(undefined);
     blockSink.addProposedCheckpoint.mockResolvedValue(undefined);
+    blockSink.pruneAbandonedProposedBlocks.mockResolvedValue([]);
 
     validatorClient = mock<ValidatorClient>();
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve([]));
@@ -815,6 +821,7 @@ describe('CheckpointProposalJob', () => {
     targetEpoch?: EpochNumber;
     proposedCheckpointData?: ProposedCheckpointData;
     testHooks?: CheckpointProposalJobTestHooks;
+    syncedL1BlockNumber?: bigint;
   }): TestCheckpointProposalJob {
     const setStateFn = jest.fn();
     const eventEmitter = new EventEmitter() as TypedEventEmitter<SequencerEvents>;
@@ -825,6 +832,7 @@ describe('CheckpointProposalJob', () => {
       checkpointNumber,
       lastBlockNumber,
       CheckpointNumber(checkpointNumber - 1),
+      overrides?.syncedL1BlockNumber ?? 1n,
       proposer,
       publisher,
       attestorAddress,
@@ -839,6 +847,7 @@ describe('CheckpointProposalJob', () => {
       checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
       blockSink,
       l1Constants,
+      feeConfigProvider,
       signatureContext,
       config,
       timetable,
@@ -878,12 +887,14 @@ describe('CheckpointProposalJob', () => {
     /** Creates a pipelined job for checkpoint 2, builds one block, and returns the job ready for executeAndAwait. */
     async function createPipelinedJobWithBlock(
       proposedCheckpointData?: ProposedCheckpointData,
+      opts: { syncedL1BlockNumber?: bigint } = {},
     ): Promise<TestCheckpointProposalJob> {
       checkpointNumber = CheckpointNumber(2);
 
       const pipelinedJob = createCheckpointProposalJob({
         targetSlot: SlotNumber(newSlotNumber + 1),
         proposedCheckpointData,
+        syncedL1BlockNumber: opts.syncedL1BlockNumber,
       });
       pipelinedJob.setTimetable(makeSingleBlockTimetable());
       dateProvider.setTime(pipelinedJob.getTimetable().getBuildFrameStart(SlotNumber(newSlotNumber + 1)) * 1000);
@@ -953,6 +964,45 @@ describe('CheckpointProposalJob', () => {
       expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
       expect(publisher.sendRequestsAt).toHaveBeenCalled();
       expect(mismatchEvents).toHaveLength(0);
+    });
+
+    it("derives the parent's fee header and the fee at the archiver's L1 sync point", async () => {
+      const syncPointBlock = 77n;
+      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent, { syncedL1BlockNumber: syncPointBlock });
+      mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
+      const grandparentFeeHeader = {
+        manaUsed: 0n,
+        excessMana: 15_000n,
+        ethPerFeeAsset: 1n,
+        protocolFee: 0n,
+        proverCost: 0n,
+      };
+      jest
+        .spyOn(publisher.rollupContract, 'getCheckpoint')
+        .mockImplementation((_checkpoint, opts) =>
+          opts?.blockNumber === syncPointBlock
+            ? Promise.resolve({ feeHeader: grandparentFeeHeader } as any)
+            : Promise.reject(new Error(`Unexpected read at L1 block ${opts?.blockNumber}`)),
+        );
+      // L1's head has moved past the sync point; the job must not price against it.
+      jest.spyOn(publisher.rollupContract.client, 'getBlockNumber').mockResolvedValue(syncPointBlock + 2n);
+      // Governance raised the target after the sync point: L1's latest state has 20000, the sync point 10000.
+      jest
+        .spyOn(publisher.rollupContract, 'getManaTarget')
+        .mockImplementation(opts => Promise.resolve(opts?.blockNumber === syncPointBlock ? 10_000n : 20_000n));
+
+      await pipelinedJob.executeAndAwait();
+
+      const [, , , plan, options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
+      expect(options).toEqual({ blockNumber: syncPointBlock });
+      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(
+        RollupContract.computeChildFeeHeader(
+          grandparentFeeHeader,
+          proposedParent.totalManaUsed,
+          proposedParent.feeAssetPriceModifier,
+          10_000n,
+        ),
+      );
     });
 
     // The build pins the proven tip on the standing assumption that the epoch proof lands by the target slot; the
@@ -1026,16 +1076,27 @@ describe('CheckpointProposalJob', () => {
       const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
       mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
 
+      // The tests sign proposals with a random signature, so pin the address the proposal recovers to.
+      const signer = EthAddress.random();
+      const createProposal = validatorClient.createCheckpointProposal.getMockImplementation()!;
+      validatorClient.createCheckpointProposal.mockImplementation(async (...args) => {
+        const proposal = await createProposal(...args);
+        jest.spyOn(proposal, 'getSender').mockReturnValue(signer);
+        return proposal;
+      });
+
       await pipelinedJob.executeAndAwait();
 
       // Built from local checkpoint data: startBlock = syncedToBlockNumber + 1, blockCount = blocks built,
       // checkpointNumber from the job — never derived from the (possibly corrupted) broadcast proposal archive.
+      // The signer is whoever signed the proposal, so equivocation can later be attributed to that key.
       expect(blockSink.addProposedCheckpoint).toHaveBeenCalledTimes(1);
       expect(blockSink.addProposedCheckpoint).toHaveBeenCalledWith(
         expect.objectContaining({
           checkpointNumber: CheckpointNumber(2),
           startBlock: BlockNumber(lastBlockNumber + 1),
           blockCount: 1,
+          signer,
         }),
       );
       // The proposed checkpoint must be pushed locally before the proposal is gossiped.
@@ -1950,6 +2011,29 @@ describe('CheckpointProposalJob', () => {
       expect(preflightTotals()).toEqual([868n, 868n]);
     });
 
+    it('gossips the cap block standalone when the operator cap is below the timetable capacity', async () => {
+      // Three sub-slots on the timetable but only two blocks allowed: block two ends the checkpoint's Inbox
+      // consumption, yet the schedule does not flag it as last, so it is gossiped on its own and nothing is held.
+      mockSubslots(3);
+      job.updateConfig({ maxBlocksPerCheckpoint: 2 });
+      streamingInbox.set(leaves(300), [256n, 300n]);
+
+      const { lastBlock } = await setupMultipleBlocks(2, [1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(bundleLengths()).toEqual([256, 44]);
+      expect(inbox.getBucketAtOrBeforeTotal).toHaveBeenCalledWith(300n);
+      expect(p2p.broadcastProposal).toHaveBeenCalledTimes(2);
+      expect(validatorClient.createCheckpointProposal.mock.calls[0][4]).toBeUndefined();
+      expect(checkpointMetrics.noteCheckpointBlockBuilt).toHaveBeenLastCalledWith(expect.any(Number), {
+        isFirstBlock: false,
+        isLastBlock: false,
+      });
+    });
+
     it('builds a forced tx-less block to end the checkpoint when the timetable runs out', async () => {
       // Three sub-slots are configured but only two can start: the second block's completion overruns, so the
       // cursor is left at 512 with no block having landed on a live bucket end.
@@ -1975,6 +2059,24 @@ describe('CheckpointProposalJob', () => {
       expect(forcedDeadline!.getTime()).toBeLessThan(
         job.getTimetable().getAttestationDeadline(SlotNumber(newSlotNumber)) * 1000,
       );
+    });
+
+    it('signs the forced block with the same proposal options as every other block', async () => {
+      mockSubslotsRunningOut(2, 3);
+      job.updateConfig({ invalidBlockProposalIndexWithinCheckpoint: IndexWithinCheckpoint(2) });
+      streamingInbox.set(leaves(700), [256n, 512n, 700n]);
+
+      const { blocks, lastBlock } = await setupMultipleBlocks(3, [1, 1, 0]);
+      blocks.forEach((block, i) => (block.indexWithinCheckpoint = IndexWithinCheckpoint(i)));
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await job.executeAndAwait();
+
+      expect(bundleLengths()).toEqual([256, 256, 188]);
+      // The forced tail block is the one at the configured index, so it is the only one flagged invalid.
+      expect(
+        validatorClient.createBlockProposal.mock.calls.map(call => call[7]?.broadcastInvalidBlockProposal),
+      ).toEqual([false, false, true]);
     });
 
     it('builds the forced block after a block that consulted L1 and ended inside a bucket', async () => {
@@ -2609,7 +2711,7 @@ describe('CheckpointProposalJob', () => {
         l1ToL2Messages: [],
       });
 
-      expect(result).toEqual({ failure: 'insufficient-valid-txs' });
+      expect(result).toEqual({ kind: 'skipped', reason: 'insufficient-valid-txs' });
       expect(p2p.handleFailedExecution).toHaveBeenCalledWith(failedTxs.map(ftx => ftx.tx.txHash));
     });
 
@@ -2631,7 +2733,7 @@ describe('CheckpointProposalJob', () => {
         l1ToL2Messages: [],
       });
 
-      expect(result).toEqual({ failure: 'insufficient-valid-txs' });
+      expect(result).toEqual({ kind: 'skipped', reason: 'insufficient-valid-txs' });
       expect(p2p.handleFailedExecution).toHaveBeenCalledWith(failedTxs.map(ftx => ftx.tx.txHash));
     });
   });
@@ -2892,12 +2994,14 @@ describe('CheckpointProposalJob', () => {
 
     it('handles empty committee gracefully', async () => {
       // Mock empty committee
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [],
-        seed: 0n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [],
+          seed: 0n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       const { txs, block } = await setupTxsAndBlock(p2p, globalVariables, 1, chainId);
       checkpointBuilder.seedBlocks([block], [txs]);
@@ -2939,6 +3043,190 @@ describe('CheckpointProposalJob', () => {
 
       // Should handle timeout gracefully (in background pipeline)
       expect(validatorClient.collectAttestations).toHaveBeenCalled();
+    });
+  });
+
+  describe('blocks of an abandoned checkpoint', () => {
+    /** The proposer's local chain past the parent block, as the archiver behind the block sink holds it. */
+    let localBlocks: L2Block[];
+
+    const localBlockNumbers = () => localBlocks.map(block => block.number);
+    const proposedTip = () => localBlocks.at(-1)?.number ?? lastBlockNumber;
+    const mockSubslots = (count: number) => {
+      const spy = jest.spyOn(job.getTimetable(), 'selectNextSubslot');
+      for (let i = 0; i < count; i++) {
+        spy.mockReturnValueOnce(subslot(10 + 8 * i, i, i === count - 1));
+      }
+      spy.mockReturnValue(noSubslot());
+      jest.spyOn(job.getTimetable(), 'getMaxBlocksPerCheckpoint').mockReturnValue(count);
+    };
+
+    beforeEach(() => {
+      job.setTimetable(makeProposerTimetable({ l1Constants, blockDurationMs: 3000 }));
+      localBlocks = [];
+      blockSink.addBlock.mockImplementation(block => {
+        localBlocks.push(block);
+        return Promise.resolve();
+      });
+      // Prunes whenever asked for the job's own blocks, without the archiver's checkpoint guard, so a test that keeps
+      // the blocks shows the job never asked rather than the archiver refusing.
+      blockSink.pruneAbandonedProposedBlocks.mockImplementation(async (afterBlockNumber, firstBlockHash) => {
+        const first = localBlocks.find(block => block.number === afterBlockNumber + 1);
+        if (first === undefined || !(await first.hash()).equals(firstBlockHash)) {
+          return [];
+        }
+        const pruned = localBlocks.filter(block => block.number > afterBlockNumber).map(block => block.number);
+        localBlocks = localBlocks.filter(block => block.number <= afterBlockNumber);
+        return pruned;
+      });
+    });
+
+    it('prunes every block of the checkpoint when the pre-broadcast preflight rejects it', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValue(new Error('Rollup__UnconsumedInboxMessages(6)'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(p2p.broadcastCheckpointProposal).not.toHaveBeenCalled();
+      expect(localBlockNumbers()).toEqual([]);
+      expect(proposedTip()).toEqual(lastBlockNumber);
+    });
+
+    it('prunes the blocks already pushed when the streaming Inbox abandons the checkpoint mid-way', async () => {
+      mockSubslots(2);
+      streamingInbox.set([new Fr(1), new Fr(2)]);
+      // A content-changing L1 reorg replaces the messages the first block consumed before the second block builds.
+      jest.spyOn(job, 'waitUntilNextSubslot').mockImplementation(() => {
+        streamingInbox.set([new Fr(1000), new Fr(1001)]);
+        return Promise.resolve();
+      });
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(metrics.recordCheckpointProposalFailed).toHaveBeenCalledWith('inbox_prefix_reorged');
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(1);
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('prunes the blocks when the archiver refuses the proposed checkpoint', async () => {
+      mockSubslots(2);
+      blockSink.addProposedCheckpoint.mockRejectedValue(new Error('proposed checkpoint slot expired'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(p2p.broadcastCheckpointProposal).not.toHaveBeenCalled();
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('prunes the blocks when the checkpoint has fewer blocks than the configured minimum', async () => {
+      mockSubslots(2);
+      job.updateConfig({ minBlocksForCheckpoint: 3 });
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(localBlockNumbers()).toEqual([]);
+    });
+
+    it('keeps the blocks of a checkpoint handed to the archiver and broadcast', async () => {
+      mockSubslots(2);
+      const { blocks, lastBlock } = await setupMultipleBlocks(2, [1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+    });
+
+    it('keeps the blocks of a checkpoint handed to the archiver even when its broadcast fails', async () => {
+      mockSubslots(2);
+      p2p.broadcastCheckpointProposal.mockRejectedValue(new Error('gossipsub publish failed'));
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+    });
+
+    it('still gives up the slot when the prune itself fails', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValue(new Error('Rollup__UnconsumedInboxMessages(6)'));
+      blockSink.pruneAbandonedProposedBlocks.mockRejectedValue(new Error('Archiver stopped'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
+    });
+
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])('leaves the blocks to the orphan prune when an HA peer holds the slot (%s)', async (_, makeError) => {
+      mockSubslots(2);
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+      const sign = validatorClient.createBlockProposal.getMockImplementation()!;
+      let signed = 0;
+      validatorClient.createBlockProposal.mockImplementation((...args) => {
+        if (++signed === 2) {
+          throw makeError();
+        }
+        return sign(...args);
+      });
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual([blocks[0].number]);
+    });
+
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.CHECKPOINT_PROPOSAL, -1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])(
+      'leaves the blocks to the orphan prune when an HA peer signed the checkpoint proposal (%s)',
+      async (_, makeError) => {
+        mockSubslots(2);
+        validatorClient.createCheckpointProposal.mockRejectedValue(makeError());
+        const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+        const checkpoint = await job.executeAndAwait();
+
+        expect(checkpoint).toBeUndefined();
+        expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+      },
+    );
+
+    it('leaves the blocks to the orphan prune when the job is interrupted', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockImplementation(() => {
+        job.interrupt();
+        return Promise.resolve(0n);
+      });
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
     });
   });
 
@@ -3069,9 +3357,7 @@ class TestCheckpointProposalJob extends CheckpointProposalJob {
       txHashesAlreadyIncluded: Set<string>;
       l1ToL2Messages: Fr[];
     },
-  ): Promise<
-    { block: L2Block; usedTxs: Tx[] } | { failure: 'insufficient-txs' | 'insufficient-valid-txs' } | { error: Error }
-  > {
+  ): ReturnType<CheckpointProposalJob['buildSingleBlock']> {
     return super.buildSingleBlock(checkpointBuilder, opts);
   }
 }

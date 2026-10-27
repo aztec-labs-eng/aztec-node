@@ -1,9 +1,12 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { resetAnvilMiningState } from './eth_cheat_codes.js';
+import { getL1Hardfork } from './l1_hardfork.js';
 
 /** Minimal interface matching the @viem/anvil Anvil shape used by callers. */
 export interface Anvil {
@@ -61,7 +64,10 @@ export async function startAnvil(
     captureMethodCalls?: boolean;
     accounts?: number;
     chainId?: number;
-    /** The hardfork to use (e.g. 'cancun', 'latest'). */
+    /**
+     * The hardfork to start on (e.g. 'osaka', 'amsterdam'). Defaults to `$ANVIL_HARDFORK`, else 'osaka'. Anvil's
+     * own default moves with each foundry release, so it is never relied on.
+     */
     hardfork?: string;
     /**
      * Number of slots per epoch used by anvil to compute the 'finalized' and 'safe' block tags.
@@ -76,6 +82,13 @@ export async function startAnvil(
      * the wall clock and the L1 chain when computing L1 slot timestamps.
      */
     dateProvider?: TestDateProvider;
+    /** Plain JSON state file to start from (`--load-state`), i.e. the gunzipped output of `anvil_dumpState`. */
+    loadState?: string;
+    /**
+     * Number of historical states anvil keeps (`--prune-history`). Each kept state is a full snapshot in a state dump
+     * with history, so this bounds how long a dump and reload take.
+     */
+    pruneHistory?: number;
   } = {},
 ): Promise<{ anvil: Anvil; methodCalls?: string[]; rpcUrl: string; stop: () => Promise<void> }> {
   const anvilBinary = resolveFoundryBinary('anvil');
@@ -84,12 +97,16 @@ export async function startAnvil(
 
   let detectedPort: number | undefined;
 
+  // Resolved before the retry loop so an unknown $ANVIL_HARDFORK fails at once rather than after every spawn attempt.
+  const hardfork = opts.hardfork ?? getL1Hardfork() ?? 'osaka';
+
   const anvil = await retry(
     async () => {
       // `--port 0` lets anvil bind an OS-assigned ephemeral port; the actual port is read back from
       // its "Listening on host:port" stdout below, so independent suites can spawn their own anvil
       // in parallel without fighting over a fixed port.
-      const port = opts.port ?? (process.env.ANVIL_PORT ? parseInt(process.env.ANVIL_PORT) : 8545);
+      const { ANVIL_PORT } = getEnv();
+      const port = opts.port ?? (ANVIL_PORT ? parseInt(ANVIL_PORT) : 8545);
       const args: string[] = [
         '--host',
         '127.0.0.1',
@@ -97,18 +114,23 @@ export async function startAnvil(
         String(port),
         '--accounts',
         String(opts.accounts ?? 20),
+        // Above the 50M Amsterdam per-tx cap (AMSTERDAM_MAX_L1_TX_LIMIT), so a bundle sized up to that cap fits a block.
         '--gas-limit',
-        String(45_000_000),
+        String(60_000_000),
         '--chain-id',
         String(opts.chainId ?? 31337),
       ];
       if (opts.l1BlockTime !== undefined) {
         args.push('--block-time', String(opts.l1BlockTime));
       }
-      if (opts.hardfork !== undefined) {
-        args.push('--hardfork', opts.hardfork);
-      }
+      args.push('--hardfork', hardfork);
       args.push('--slots-in-an-epoch', String(opts.slotsInAnEpoch ?? 1));
+      if (opts.pruneHistory !== undefined) {
+        args.push('--prune-history', String(opts.pruneHistory));
+      }
+      if (opts.loadState !== undefined) {
+        args.push('--load-state', opts.loadState);
+      }
 
       // Spawn the watchdog (see ANVIL_WATCHDOG). It launches anvil with these args and reaps it if we
       // die; `$0` is 'bash' and `$@` is the anvil argv.
@@ -117,7 +139,7 @@ export async function startAnvil(
       const child = spawn('bash', ['-c', ANVIL_WATCHDOG, 'bash', ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
-        env: { ...process.env, ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
+        env: { ...getEnv(), ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
       });
 
       // Wait for "Listening on", an early exit, or the startup budget running out. Both streams are
@@ -215,6 +237,7 @@ export async function startAnvil(
 
   anvil.once('close', () => {
     status = 'idle';
+    resetAnvilMiningState(port);
   });
 
   let stopping: Promise<void> | undefined;
@@ -222,6 +245,7 @@ export async function startAnvil(
     if (status === 'idle') {
       return;
     }
+    resetAnvilMiningState(port);
     await (stopping ??= killChild(anvil));
   };
 
@@ -237,16 +261,20 @@ export async function startAnvil(
   return { anvil: anvilObj, methodCalls, stop, rpcUrl: `http://127.0.0.1:${port}` };
 }
 
-/** Extracts block time from anvil stdout and syncs the dateProvider. */
-function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDateProvider): void {
+/** Advances the test clock from mined-block output without rewinding it when Anvil replays a reorg. */
+export function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDateProvider): void {
   // Anvil logs mined blocks as:
   //   Block Time: "Fri, 20 Mar 2026 02:10:46 +0000"
-  const match = text.match(/Block Time:\s*"([^"]+)"/);
-  if (match) {
+  const currentTimeMs = dateProvider.now();
+  let newestTimeMs = currentTimeMs;
+  for (const match of text.matchAll(/Block Time:\s*"([^"]+)"/g)) {
     const blockTimeMs = new Date(match[1]).getTime();
-    if (!isNaN(blockTimeMs)) {
-      dateProvider.setTime(blockTimeMs);
+    if (!Number.isNaN(blockTimeMs)) {
+      newestTimeMs = Math.max(newestTimeMs, blockTimeMs);
     }
+  }
+  if (newestTimeMs > currentTimeMs) {
+    dateProvider.setTime(newestTimeMs);
   }
 }
 

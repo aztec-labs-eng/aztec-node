@@ -1,5 +1,6 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Buffer } from 'buffer';
 
 import type { BlobStore } from './interface.js';
 

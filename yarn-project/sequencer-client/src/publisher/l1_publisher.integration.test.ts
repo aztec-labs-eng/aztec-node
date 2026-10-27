@@ -17,7 +17,7 @@ import {
   MAX_PROCESSABLE_L2_GAS,
   MAX_TX_DA_GAS,
 } from '@aztec-labs/constants';
-import { EpochCache } from '@aztec-labs/epoch-cache';
+import { type CommitteeLookup, EpochCache, type ProposerLookup } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
@@ -32,8 +32,14 @@ import {
   deployAztecL1Contracts,
 } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import { TxUtilsState, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
-import { EthCheatCodesWithState, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { MAX_L1_TX_LIMIT, TxUtilsState, createL1TxUtils, isAmsterdamBlock } from '@aztec-labs/ethereum/l1-tx-utils';
+import {
+  EthCheatCodesWithState,
+  RollupCheatCodes,
+  describeAcrossL1Forks,
+  isAmsterdamTestRun,
+  startAnvil,
+} from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
@@ -76,6 +82,7 @@ import {
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
+  getEpochAtSlot,
   getNextL1SlotTimestamp,
   getSlotStartBuildTimestamp,
 } from '@aztec-labs/stdlib/epoch-helpers';
@@ -100,7 +107,7 @@ import {
 import { NativeWorldStateService, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec-labs/world-state';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import { type Address, encodeFunctionData, getAbiItem, getAddress, multicall3Abi } from 'viem';
+import { type Address, encodeFunctionData, getAbiItem, getAddress, multicall3Abi, numberToHex } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
@@ -110,9 +117,10 @@ import {
   getEndpointUpperBound,
   resolveEndpoint,
 } from '../sequencer/inbox_message_selection.js';
+import { INVALIDATE_GAS, PROPOSE_GAS, PROPOSE_WITH_SETUP_EPOCH_GAS } from './gas_constants.js';
 import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
-import { SequencerPublisher } from './sequencer-publisher.js';
+import { type RequestWithExpiry, type SendRequestsResult, SequencerPublisher } from './sequencer-publisher.js';
 import { writeJson } from './write_json.js';
 
 // To update the test data, run "export AZTEC_GENERATE_TEST_DATA=1" in shell and run the tests again
@@ -136,13 +144,36 @@ const numberOfConsecutiveBlocks = 3;
 
 jest.setTimeout(1000000);
 
+/**
+ * Asserts a sent tx's gas limit stays within the affordability gas constant, except on Amsterdam anvil. Anvil 1.8.5
+ * prices storage writes under `--hardfork amsterdam` with the Amsterdam repricing in `eth_simulateV1` only, while
+ * `eth_estimateGas` and execution charge the pre-fork cost, so the limit the bundle simulator derives is several
+ * times the gas the receipt reports (ten fresh SSTOREs simulate at 1.1M gas and mine at 242k). The gas used
+ * assertions still apply on both forks.
+ */
+function expectGasLimitWithin(gasLimit: bigint, max: bigint) {
+  if (!isAmsterdamTestRun()) {
+    expect(gasLimit).toBeLessThanOrEqual(max);
+  }
+}
+
+/** A lookup's committee, or undefined when it has no members. */
+function membersOf(lookup: CommitteeLookup): EthAddress[] | undefined {
+  return lookup.state === 'members' ? lookup.committee : undefined;
+}
+
+/** A lookup's proposer, or undefined when its committee has no members. */
+function proposerOf(lookup: ProposerLookup): EthAddress | undefined {
+  return lookup.state === 'members' ? lookup.proposer : undefined;
+}
+
 // Low-level integration tests for SequencerPublisher: building checkpoints, publishing with and
 // without attestations, handling L1 tx cancellation/speedup, and invalidating bad checkpoints.
 // Custom wiring: starts its own anvil directly via startAnvil(), deploys L1 contracts, builds a
 // real NativeWorldStateService + ServerWorldStateSynchronizer, and creates a SequencerPublisher
 // directly — no AztecNodeService, no PXE. EthCheatCodesWithState drives time. Each describe block
 // has its own beforeEach calling the local setup() function.
-describe('L1Publisher integration', () => {
+describeAcrossL1Forks('L1Publisher integration', () => {
   let l1Client: ExtendedViemWalletClient;
   let l1ContractAddresses: L1ContractAddresses;
   let deployerAccount: PrivateKeyAccount;
@@ -386,7 +417,7 @@ describe('L1Publisher integration', () => {
     const worldStateConfig: WorldStateConfig = {
       worldStateBlockCheckIntervalMS: 10000,
       worldStateDbMapSizeKb: 10 * 1024 * 1024,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' },
     };
     worldStateSynchronizer = new ServerWorldStateSynchronizer(builderDb, blockSource, worldStateConfig);
     await worldStateSynchronizer.start();
@@ -444,9 +475,9 @@ describe('L1Publisher integration', () => {
     await rollupCheatCodes.advanceToEpoch(EpochNumber(config.lagInEpochsForValidatorSet + 1));
     await rollupCheatCodes.setupEpoch();
 
-    ({ committee } = await epochCache.getCommittee());
+    committee = membersOf(await epochCache.getCommittee());
     const { currentSlot } = epochCache.getCurrentAndNextSlot();
-    proposer = await epochCache.getProposerAttesterAddressInSlot(currentSlot);
+    proposer = proposerOf(await epochCache.lookupProposer(currentSlot));
     logger.warn(`Current epoch committee and proposer`, { committee, proposer });
   };
 
@@ -551,7 +582,7 @@ describe('L1Publisher integration', () => {
     opts: { l1ToL2Messages?: Fr[]; blockNumber?: BlockNumber } = {},
   ) => {
     const slot = await getPipelinedProposalSlot();
-    proposer = await epochCache.getProposerAttesterAddressInSlot(slot);
+    proposer = proposerOf(await epochCache.lookupProposer(slot));
     return buildSingleCheckpoint({ ...opts, slot });
   };
 
@@ -660,7 +691,7 @@ describe('L1Publisher integration', () => {
         const checkpointBlobFields = checkpoint.toBlobFields();
         const blockBlobs = await getBlobsPerL1Block(checkpointBlobFields);
 
-        let prevBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
+        const prevBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
 
         blocks.push(block);
         blobFieldsPerCheckpoint.push(checkpointBlobFields);
@@ -705,20 +736,29 @@ describe('L1Publisher integration', () => {
           thisCheckpointNumber == CheckpointNumber(1) ||
           (await rollup.getEpochNumberForCheckpoint(thisCheckpointNumber)) >
             (await rollup.getEpochNumberForCheckpoint(prevCheckpointNumber));
-        // If we are at the first blob of the epoch, we must initialize the hash:
-        prevBlobAccumulatorHash = isFirstCheckpointOfEpoch ? Buffer.alloc(0) : prevBlobAccumulatorHash;
         const currentBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
+        // The first blob of the epoch initializes the hash, and each step hashes a flag byte marking the first blob of
+        // its checkpoint (true, i.e. 0x01, for the epoch's first blob; j === 0 afterwards, 0x01 or 0x00), which binds
+        // how the blobs split into checkpoints.
         let expectedBlobAccumulatorHash = prevBlobAccumulatorHash;
         blockBlobs
           .map(b => b.commitment)
-          .forEach(c => {
-            expectedBlobAccumulatorHash = sha256ToField([expectedBlobAccumulatorHash, c]).toBuffer();
+          .forEach((c, j) => {
+            expectedBlobAccumulatorHash = (
+              isFirstCheckpointOfEpoch && j === 0
+                ? sha256ToField([true, c])
+                : sha256ToField([expectedBlobAccumulatorHash, j === 0, c])
+            ).toBuffer();
           });
         expect(currentBlobAccumulatorHash).toEqual(expectedBlobAccumulatorHash);
 
         const ethTx = await l1Client.getTransaction({
           hash: logs[i].transactionHash!,
         });
+        const receipt = await l1Client.getTransactionReceipt({ hash: logs[i].transactionHash! });
+        logger.info(`Propose gas for checkpoint ${i + 1}`, { gasUsed: receipt.gasUsed, gasLimit: ethTx.gas, numTxs });
+        expect(receipt.gasUsed).toBeLessThanOrEqual(PROPOSE_GAS);
+        expectGasLimitWithin(ethTx.gas, PROPOSE_GAS);
         const expectedRollupData = encodeFunctionData({
           abi: RollupAbi,
           functionName: 'propose',
@@ -800,6 +840,16 @@ describe('L1Publisher integration', () => {
       const result = await publisher.sendRequests();
       expect(result!.successfulActions).toEqual(['propose']);
       expect(result!.failedActions).toEqual([]);
+      return result!;
+    };
+
+    /** Asserts the gas used and gas limit of a sent bundle stay within the affordability gas constant. */
+    const expectWithinGas = async (result: SendRequestsResult, max: bigint) => {
+      const { gasUsed, transactionHash } = result.result.receipt;
+      const { gas: gasLimit } = await l1Client.getTransaction({ hash: transactionHash });
+      logger.info(`Bundle gas`, { gasUsed, gasLimit, max });
+      expect(gasUsed).toBeLessThanOrEqual(max);
+      expectGasLimitWithin(gasLimit, max);
     };
 
     it('publishes a block with attestations', async () => {
@@ -818,7 +868,32 @@ describe('L1Publisher integration', () => {
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
       const attestationsAndSignersSignature = signAttestationsAndSigners(attestationsAndSigners, proposerSigner!);
 
-      await expectPublishCheckpoint(checkpoint, attestations, attestationsAndSignersSignature);
+      // The epoch is already set up, so this is an ordinary proposal that does not also run setupEpoch.
+      expect(await rollup.isEpochSetUp(getEpochAtSlot(block.header.getSlot(), l1Constants))).toBe(true);
+      const result = await expectPublishCheckpoint(checkpoint, attestations, attestationsAndSignersSignature);
+      await expectWithinGas(result, PROPOSE_GAS);
+    });
+
+    it('publishes the first checkpoint of an epoch, which also sets up the epoch, within the setup gas', async () => {
+      // Move to an epoch whose committee has not been set up yet, so the proposal itself runs setupEpoch.
+      const nextEpoch = EpochNumber((await rollup.getCurrentEpoch()) + 1);
+      await rollupCheatCodes.advanceToEpoch(nextEpoch);
+      await ethCheatCodes.syncDateProvider();
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(false);
+      committee = membersOf(await epochCache.getCommittee(await getPipelinedProposalSlot()));
+
+      const { checkpoint } = await buildSingleCheckpointForPipelinedProposer();
+      const checkpointAttestations = validators.map(v => makeCheckpointAttestationForCurrentContext(checkpoint, v));
+      const attestations = orderAttestations(checkpointAttestations, committee!);
+      const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
+      const signature = signAttestationsAndSigners(
+        attestationsAndSigners,
+        validators.find(v => v.address.equals(proposer!))!,
+      );
+
+      const result = await expectPublishCheckpoint(checkpoint, attestations, signature);
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(true);
+      await expectWithinGas(result, PROPOSE_WITH_SETUP_EPOCH_GAS);
     });
 
     it('fails to publish a block without the proposer attestation', async () => {
@@ -972,6 +1047,8 @@ describe('L1Publisher integration', () => {
         reason: 'insufficient-attestations',
       });
       expect(invalidateRequest).toBeDefined();
+      logger.info(`Invalidate gas`, { gasUsed: invalidateRequest!.gasUsed });
+      expect(invalidateRequest!.gasUsed).toBeLessThanOrEqual(INVALIDATE_GAS);
       const forcePendingCheckpointNumber = invalidateRequest?.forcePendingCheckpointNumber;
       expect(forcePendingCheckpointNumber).toEqual(0);
       const invalidationSimulationOverridesPlan = new SimulationOverridesBuilder()
@@ -1012,6 +1089,7 @@ describe('L1Publisher integration', () => {
       const result = await publisher.sendRequests();
       expect(result!.successfulActions).toEqual(['invalidate-by-insufficient-attestations', 'propose']);
       expect(result!.failedActions).toEqual([]);
+      await expectWithinGas(result!, PROPOSE_GAS + INVALIDATE_GAS);
     });
   });
 
@@ -1069,6 +1147,59 @@ describe('L1Publisher integration', () => {
           returnData: expect.stringMatching(/^0xed1f7bb5/),
         }),
       );
+    });
+  });
+
+  describe('bundle gas limit', () => {
+    // Runtime code that loops for the iteration count in its first calldata word, at 40 gas per iteration, then emits
+    // an empty LOG0 so a mined bundle shows whether the call ran to completion.
+    const GAS_BURNER_CODE = '0x5f355b8015600f57600190036002565b5f5fa000';
+    const BURN_ITERATIONS = 500_000n;
+
+    beforeEach(async () => {
+      await setup();
+    });
+
+    it('sends a bundle above the Osaka tx gas cap only once Amsterdam is active', async () => {
+      expect(isAmsterdamBlock(await l1Client.getBlock())).toBe(isAmsterdamTestRun());
+
+      const burner = EthAddress.random();
+      await ethCheatCodes.etch(burner, GAS_BURNER_CODE);
+      const { checkpoint } = await buildSingleCheckpoint();
+
+      await publisher.enqueueProposeCheckpoint(
+        checkpoint,
+        CommitteeAttestationsAndSigners.empty(getSignatureContext()),
+        Signature.empty(),
+        0n,
+      );
+      // Rides along as a slash execution, the action expected to need more than the Osaka cap under Amsterdam.
+      const burnRequest: RequestWithExpiry = {
+        action: 'execute-slash',
+        request: { to: burner.toString(), data: numberToHex(BURN_ITERATIONS, { size: 32 }) },
+        lastValidL2Slot: checkpoint.header.slotNumber,
+        checkSuccess: (_request, result) =>
+          !!result?.receipt.logs.some(log => burner.equals(EthAddress.fromString(log.address))),
+      };
+      publisher.addRequest(burnRequest);
+
+      await progressToSlot(BigInt(checkpoint.header.slotNumber));
+      const result = await publisher.sendRequests();
+
+      expect(result!.result.receipt.status).toEqual('success');
+      const sentTx = await l1Client.getTransaction({ hash: result!.result.receipt.transactionHash });
+      if (isAmsterdamTestRun()) {
+        expect(result!.successfulActions).toEqual(['propose', 'execute-slash']);
+        expect(result!.failedActions).toEqual([]);
+        expect(sentTx.gas).toBeGreaterThan(MAX_L1_TX_LIMIT);
+        expect(result!.result.receipt.gasUsed).toBeGreaterThan(MAX_L1_TX_LIMIT);
+      } else {
+        // Before Amsterdam the bundle is simulated within the Osaka cap, where the burn runs out of gas and is dropped.
+        expect(result!.successfulActions).toEqual(['propose']);
+        expect(result!.failedActions).toEqual(['execute-slash']);
+        expect(sentTx.gas).toBeLessThanOrEqual(MAX_L1_TX_LIMIT);
+      }
+      expect(await rollup.getCheckpointNumber()).toEqual(checkpoint.number);
     });
   });
 

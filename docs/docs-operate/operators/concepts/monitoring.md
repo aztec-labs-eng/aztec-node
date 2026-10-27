@@ -24,7 +24,8 @@ Aztec emits OpenTelemetry metrics, which Prometheus scrapes as snake-cased names
 | `aztec_archiver_block_height` | Your local view of the L2 chain tip | No advance for 15 minutes |
 | `aztec_archiver_l1_block_height` | Your local view of L1 progression | No advance for 5 minutes (likely your L1 RPC is down) |
 | `aztec_peer_manager_peer_count_peers` | P2P connectivity to other nodes | Drops below 5 |
-| `aztec_l1_publisher_balance_eth` | ETH in your publisher account for paying L1 gas | Drops below 0.1 ETH |
+| `aztec_l1_publisher_balance_eth` | ETH in your publisher account for paying L1 gas, read every minute | Drops below 0.1 ETH |
+| `aztec_l1_publisher_sends_affordable` | How many proposals your publisher can still pay for at current L1 fees | Below 1 (alert right away) |
 | `aztec_mempool_tx_count` | Transactions waiting to be included | Sustained growth or sudden spike |
 
 Plus standard system metrics (`process_cpu_utilization`, `process_memory_usage`) for the underlying host.
@@ -36,7 +37,7 @@ To confirm the sequencer is producing, watch `aztec_sequencer_block_count` (see 
 In priority order:
 
 1. **No L2 blocks processed in the last 15 minutes** (critical). Your node is stuck or the network has stalled. Either way, you need to know immediately.
-2. **Publisher balance below 0.1 ETH** (critical). When the publisher runs dry, you stop being able to publish proposals. Stay dry for a full epoch and the missed duties hit the inactivity threshold, which is slashable. Keep enough headroom that an L1 gas spike cannot drain the balance in a single proposal.
+2. **Publisher balance below 0.1 ETH, or no publisher able to afford a proposal** (critical). When the publisher runs dry, you stop being able to publish proposals. Stay dry for a full epoch and the missed duties hit the inactivity threshold, which is slashable. Keep enough headroom that an L1 gas spike cannot drain the balance in a single proposal. `aztec_l1_publisher_sends_affordable` below 1 means no publisher can pay for a proposal at current fees; see [Metrics reference](/operate/operators/monitoring/metrics-reference#l1-publisher-eth-balance) for alert rules.
 3. **Peer count below 5** (warning). Network reachability problem. Check port forwarding and firewall.
 4. **L1 block height stalled for 5+ minutes** (warning). Your L1 RPC is degraded. See [L1 RPC](./l1-rpc) for common causes.
 5. **CPU sustained above 70% of cores** (warning). May indicate the node is struggling to keep up; check disk IOPS and RAM headroom.

@@ -86,6 +86,7 @@ module "rpc_gateway" {
 
   KONG_TRUSTED_IP_RANGES = ["35.191.0.0/16", "130.211.0.0/22"] # Google LB IP ranges https://docs.cloud.google.com/load-balancing/docs/firewall-rules
 
+  FRONTEND_ENABLED             = length(local.rpc_routes) > 0
   ROUTES                       = local.rpc_routes
   CONSUMERS                    = var.CONSUMERS
   KONG_METRICS_SERVICE_ENABLED = local.rpc_gateway_metrics_enabled

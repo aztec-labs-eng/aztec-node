@@ -1,26 +1,51 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { makeMembershipLookup, makeProposerLookup } from '@aztec-labs/epoch-cache/test';
 import { BlockNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { getDefaultConfig } from '@aztec-labs/foundation/config';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees } from '@aztec-labs/stdlib/gas';
-import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
-import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import {
+  Gas,
+  GasFees,
+  GasSettings,
+  TestRollupFeeConfigProvider,
+  type TxAdmissionMinFeesProvider,
+} from '@aztec-labs/stdlib/gas';
+import type {
+  ClientProtocolCircuitVerifier,
+  MerkleTreeReadOperations,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
+import {
+  BlockProposal,
+  type CheckpointAttestation,
+  CheckpointProposal,
+  PeerErrorSeverity,
+} from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointAttestation,
+  makeCheckpointAttestationFromProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
   mockTx,
 } from '@aztec-labs/stdlib/testing';
-import { TX_ERROR_INCORRECT_VK_TREE_ROOT, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
+import {
+  TX_ERROR_INCORRECT_VK_TREE_ROOT,
+  TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
+  TX_ERROR_INVALID_PROOF,
+  TxArray,
+  TxHash,
+  TxHashArray,
+} from '@aztec-labs/stdlib/tx';
 import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { ServerWorldStateSynchronizer } from '@aztec-labs/world-state';
@@ -40,7 +65,13 @@ import {
 } from '../../mem_pools/attestation_pool/attestation_pool.js';
 import type { MemPools } from '../../mem_pools/interface.js';
 import type { TxPoolV2 } from '../../mem_pools/tx_pool_v2/interfaces.js';
-import type { TransactionValidator } from '../../msg_validators/tx_validator/factory.js';
+import {
+  type GossipMinFees,
+  type GossipValidationFailure,
+  type TransactionValidator,
+  computeGossipMinFees,
+  createFirstStageTxValidationsForGossipedTransactions,
+} from '../../msg_validators/tx_validator/factory.js';
 import type { PubSubLibp2p } from '../../util.js';
 import type { PeerManagerInterface } from '../peer-manager/interface.js';
 import type { ReqRespInterface } from '../reqresp/interface.js';
@@ -240,6 +271,60 @@ describe('LibP2PService', () => {
       expect(txPool.addPendingTxs).toHaveBeenCalled();
     });
 
+    it('should NOT penalize the relayer (Ignore) when the pool rejects on receiver-local state drift', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      // The tx passed the earlier checks + proof, then the fresh pool validator rejected it because
+      // the receiver's own state advanced (here: the tx expired). The relayer is not at fault.
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([[txHash.toString(), [TX_ERROR_INVALID_EXPIRATION_TIMESTAMP]]]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('should still Reject when a pool rejection is sender-attributable', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([[txHash.toString(), [TX_ERROR_INVALID_PROOF]]]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+    });
+
+    it('should Reject when a pool rejection mixes state drift with a sender-attributable reason', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      // A single blameable reason keeps the whole rejection blameable - do not let a drift reason mask it.
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([
+          [txHash.toString(), [TX_ERROR_INVALID_EXPIRATION_TIMESTAMP, TX_ERROR_INVALID_PROOF]],
+        ]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+    });
+
     it('should NOT propagate (Reject) when gossip validation fails', async () => {
       const tx = await mockTx();
 
@@ -330,6 +415,132 @@ describe('LibP2PService', () => {
         source: 'gossip',
       });
       expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Accept);
+    });
+
+    describe('local next-block fee policy', () => {
+      const localMinFees = new GasFees(10, 10);
+
+      /**
+       * The real first-stage fee validators for a node whose admission and L1-forward fees are both `localMinFees`,
+       * which puts the penalty floor at (5, 5). Only the fee entries are injected, so the gossip outcome is decided
+       * by the fee checks alone.
+       */
+      function createGossipFeeValidators(): Record<string, TransactionValidator<GossipValidationFailure>> {
+        const worldState = mock<WorldStateSynchronizer>();
+        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
+        const validators = createFirstStageTxValidationsForGossipedTransactions(
+          0n,
+          BlockNumber(2),
+          worldState,
+          computeGossipMinFees(localMinFees, localMinFees),
+          1,
+          1,
+          Fr.ZERO,
+          mock<ContractDataSource>(),
+          true,
+        );
+        return Object.fromEntries(
+          Object.entries(validators).filter(
+            ([name]) =>
+              name === 'maxFeePerGasValidator' ||
+              name === 'maxFeePerGasFloorValidator' ||
+              name === 'feePayerBalanceValidator',
+          ),
+        );
+      }
+
+      /**
+       * A tx paying `maxFeesPerGas` over `gasLimits`. An empty gas limit means a zero fee limit, which the
+       * mock fee payer covers despite reading as unfunded.
+       */
+      async function mockTxPaying(gasLimits: Gas, maxFeesPerGas: GasFees) {
+        const tx = await mockTx();
+        tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas });
+        await tx.recomputeHash();
+        return tx;
+      }
+
+      beforeEach(() => {
+        txService.firstStageValidatorsOverride = createGossipFeeValidators();
+      });
+
+      it('ignores a tx priced between the penalty floor and the admission fee without penalizing the peer', async () => {
+        const tx = await mockTxPaying(Gas.empty(), new GasFees(6, 6));
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+        expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+        expect(txPool.canAddPendingTx).not.toHaveBeenCalled();
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes a zero-fee tx, whose zero fee limit passes the balance check', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), GasFees.empty());
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes a tx whose fee payer cannot cover its fee limit', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), localMinFees);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes an unfunded fee payer even when its fee alone would only be ignored', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), new GasFees(6, 6));
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+      });
+    });
+  });
+
+  describe('gossip min fee resolution', () => {
+    const feesProvider = (
+      nextBlock: GasFees | undefined,
+      admission: GasFees,
+      l1Forward: GasFees,
+    ): TxAdmissionMinFeesProvider => ({
+      getNextBlockMinFees: () => Promise.resolve(nextBlock),
+      getAdmissionMinFees: () => Promise.resolve(admission),
+      getL1ForwardMinFees: () => Promise.resolve(l1Forward),
+    });
+
+    it('admits against the admission fee and penalizes below half the lower of it and the L1-forward fee', async () => {
+      const feeService = createTestLibP2PService({
+        peerManager: mockPeerManager,
+        node: mockNode,
+        nextBlockMinFeesProvider: feesProvider(new GasFees(8, 80), new GasFees(8, 80), new GasFees(6, 100)),
+      });
+
+      await expect(feeService.getGasFees()).resolves.toEqual({
+        admission: new GasFees(8, 80),
+        penaltyFloor: new GasFees(3, 40),
+      });
+    });
+
+    it('still enforces a min fee when the next block cannot be priced', async () => {
+      const feeService = createTestLibP2PService({
+        peerManager: mockPeerManager,
+        node: mockNode,
+        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(4, 40), new GasFees(4, 40)),
+      });
+
+      await expect(feeService.getGasFees()).resolves.toEqual({
+        admission: new GasFees(4, 40),
+        penaltyFloor: new GasFees(2, 20),
+      });
     });
   });
 
@@ -623,7 +834,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot: targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -759,7 +970,7 @@ describe('LibP2PService', () => {
       // Add MAX_BLOCK_PROPOSALS_PER_POSITION proposals
       for (let i = 0; i < MAX_BLOCK_PROPOSALS_PER_POSITION; i++) {
         const individualSigner = Secp256k1Signer.random();
-        mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(individualSigner.address);
+        mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(individualSigner.address));
         const proposal = await makeBlockProposal({
           signer: individualSigner,
           blockHeader: header,
@@ -776,7 +987,7 @@ describe('LibP2PService', () => {
 
       // Create a proposal that would exceed the cap
       const extraSigner = Secp256k1Signer.random();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(extraSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(extraSigner.address));
       const extraProposal = await makeBlockProposal({
         signer: extraSigner,
         blockHeader: header,
@@ -847,7 +1058,7 @@ describe('LibP2PService', () => {
       // same slot/position look like equivocation. There is no expected proposer to attribute the
       // offense to, so the duplicate callback must not fire (mirrors the checkpoint equivocation
       // watcher, which refuses to slash when the slot has no proposer).
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(undefined));
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(0);
 
@@ -982,7 +1193,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -1022,6 +1233,163 @@ describe('LibP2PService', () => {
         TopicValidatorResult.Ignore,
       );
       expect(addSpy).not.toHaveBeenCalled();
+    });
+
+    /** A checkpoint proposal with an embedded final block, plus a copy of the same signed payload without it. */
+    const makeFullAndWithoutFinalBlock = async () => {
+      const checkpointHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });
+      const blockHeader = makeBlockHeader(1, { slotNumber: targetSlot });
+      const full = await makeCheckpointProposal({ signer, checkpointHeader, lastBlock: { blockHeader } });
+      const withoutFinalBlock = new CheckpointProposal(
+        full.checkpointHeader,
+        full.archive,
+        full.feeAssetPriceModifier,
+        full.signature,
+        full.signatureContext,
+      );
+      expect(withoutFinalBlock.getPayloadHash()).toEqual(full.getPayloadHash());
+      expect(withoutFinalBlock.toBuffer().equals(full.toBuffer())).toBe(false);
+      return { full, withoutFinalBlock };
+    };
+
+    it('a checkpoint copy without its final block does not shadow the full copy', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+      const finalBlockArchive = full.getBlockProposal()!.archive.toString();
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-without-block',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(blockReceivedCallback).not.toHaveBeenCalled();
+
+      // The full copy delivers the final block from the already-stored checkpoint and is forwarded, but the
+      // checkpoint itself is not processed again.
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect((blockReceivedCallback.mock.calls[0][0] as BlockProposal).archive.toString()).toBe(finalBlockArchive);
+      expect(await attestationPool.getBlockProposalByArchive(finalBlockArchive)).toBeDefined();
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+
+      // Another full copy carries nothing new.
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full-again', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full-again',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('skipCheckpointProposalValidation: a copy without its final block does not shadow the full copy', async () => {
+      service = createTestLibP2PServiceWithPools(
+        mockPeerManager,
+        reportMessageValidationResultSpy,
+        attestationPool,
+        mockTxPool,
+        mockEpochCache,
+        { skipCheckpointProposalValidation: true },
+      );
+      service.registerBlockReceivedCallback(blockReceivedCallback as any);
+      service.registerValidatorCheckpointReceivedCallback(validatorCheckpointReceivedCallback as any);
+      service.registerAllNodesCheckpointReceivedCallback(allNodesCheckpointReceivedCallback as any);
+
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('a full copy delivers the final block while the checkpoint from a copy without it is in flight', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+      const attestation = makeCheckpointAttestationFromProposal(full, Secp256k1Signer.random());
+      const addOwnAttestationsSpy = jest.spyOn(attestationPool, 'addOwnCheckpointAttestations');
+      const propagateSpy = jest.spyOn(service, 'propagate').mockResolvedValue();
+
+      let firstHandlerSettled = false;
+      let blockReceivedWhileFirstHandlerPending = false;
+      const finalBlockReceived = promiseWithResolvers<void>();
+      blockReceivedCallback.mockImplementation(() => {
+        blockReceivedWhileFirstHandlerPending = !firstHandlerSettled;
+        finalBlockReceived.resolve();
+        return Promise.resolve(true);
+      });
+
+      // The validator waits for the final block before attesting, as it does when re-executing the checkpoint.
+      const checkpointWaiting = promiseWithResolvers<void>();
+      validatorCheckpointReceivedCallback.mockImplementation(async () => {
+        checkpointWaiting.resolve();
+        await finalBlockReceived.promise;
+        return [attestation];
+      });
+
+      const firstHandled = service
+        .handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId)
+        .then(() => {
+          firstHandlerSettled = true;
+        });
+      await checkpointWaiting.promise;
+
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(blockReceivedWhileFirstHandlerPending).toBe(true);
+
+      await firstHandled;
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(addOwnAttestationsSpy).toHaveBeenCalledTimes(1);
+      expect(addOwnAttestationsSpy).toHaveBeenCalledWith([attestation]);
+      expect(propagateSpy).toHaveBeenCalledTimes(1);
+      expect(propagateSpy).toHaveBeenCalledWith(attestation);
+      expect(await attestationPool.getCheckpointAttestationsForSlot(targetSlot)).toHaveLength(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('ignores a checkpoint copy without its final block after the full copy', async () => {
+      const { full, withoutFinalBlock } = await makeFullAndWithoutFinalBlock();
+
+      await service.handleGossipedCheckpointProposal(full.toBuffer(), 'msg-full', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-full',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Accept,
+      );
+
+      await service.handleGossipedCheckpointProposal(withoutFinalBlock.toBuffer(), 'msg-without-block', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-without-block',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(1);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
     it('processes valid checkpoint: invokes callback and propagates attestations', async () => {
@@ -1209,7 +1577,7 @@ describe('LibP2PService', () => {
       // Fill checkpoint slot to MAX_CHECKPOINT_PROPOSALS_PER_SLOT
       for (let i = 0; i < MAX_CHECKPOINT_PROPOSALS_PER_SLOT; i++) {
         const individualSigner = Secp256k1Signer.random();
-        mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(individualSigner.address);
+        mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(individualSigner.address));
         const proposal = await makeCheckpointProposal({
           signer: individualSigner,
           checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
@@ -1228,7 +1596,7 @@ describe('LibP2PService', () => {
 
       // Create checkpoint with lastBlock that would exceed the cap
       const extraSigner = Secp256k1Signer.random();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(extraSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(extraSigner.address));
       const extraProposal = await makeCheckpointProposal({
         signer: extraSigner,
         checkpointHeader,
@@ -1390,7 +1758,7 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
 
@@ -1707,10 +2075,10 @@ describe('LibP2PService', () => {
       mockTxPool.protectTxs.mockResolvedValue([]);
 
       mockEpochCache = mock<EpochCacheInterface>();
-      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposerSigner.address);
+      mockEpochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposerSigner.address));
       mockEpochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot, nextSlot });
       mockEpochCache.getTargetSlot.mockReturnValue(targetSlot);
-      mockEpochCache.isInCommittee.mockResolvedValue(true);
+      mockEpochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
       mockPeerManager = mock<PeerManagerInterface>();
       reportMessageValidationResultSpy = jest.fn();
@@ -1993,6 +2361,7 @@ interface CreateTestLibP2PServiceOptions {
   peerManager: MockProxy<PeerManagerInterface>;
   node: MockProxy<PubSubLibp2p>;
   archiver?: MockProxy<L2BlockSource & ContractDataSource>;
+  nextBlockMinFeesProvider?: TxAdmissionMinFeesProvider;
   attestationPool?: AttestationPool;
   txPool?: MockProxy<TxPoolV2>;
   epochCache?: MockProxy<EpochCacheInterface>;
@@ -2017,6 +2386,9 @@ class TestLibP2PService extends LibP2PService {
   /** Controls the severity returned by the failing first-stage validator. */
   public firstStageSeverity: PeerErrorSeverity = PeerErrorSeverity.LowToleranceError;
 
+  /** First-stage validators to run instead of the test flags, used to exercise real validators end to end. */
+  public firstStageValidatorsOverride?: Record<string, TransactionValidator<GossipValidationFailure>>;
+
   /** Exposed epoch cache for test configuration. */
   public testEpochCache: MockProxy<EpochCacheInterface>;
 
@@ -2032,6 +2404,11 @@ class TestLibP2PService extends LibP2PService {
     logger: Logger,
     configOverrides?: Partial<P2PConfig>,
     peerDiscoveryService?: PeerDiscoveryService,
+    nextBlockMinFeesProvider: TxAdmissionMinFeesProvider = {
+      getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+      getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+      getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
+    },
   ) {
     // Create minimal mock dependencies for the base class
     const mockConfig: P2PConfig = {
@@ -2063,7 +2440,8 @@ class TestLibP2PService extends LibP2PService {
       epochCache,
       mockProofVerifier,
       mockWorldStateSynchronizer,
-      { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      nextBlockMinFeesProvider,
+      new TestRollupFeeConfigProvider(),
       telemetry,
       logger,
     );
@@ -2083,8 +2461,18 @@ class TestLibP2PService extends LibP2PService {
     return super.handleGossipedTx(payloadData, msgId, source);
   }
 
+  /** Exposes the protected getGasFees for testing. */
+  public override getGasFees(): Promise<GossipMinFees> {
+    return super.getGasFees();
+  }
+
   /** Override to use test flag for first-stage validators. Returns a failing validator when firstStageValidationPasses is false. */
-  protected override createFirstStageMessageValidators(): Promise<Record<string, TransactionValidator>> {
+  protected override createFirstStageMessageValidators(): Promise<
+    Record<string, TransactionValidator<GossipValidationFailure>>
+  > {
+    if (this.firstStageValidatorsOverride) {
+      return Promise.resolve(this.firstStageValidatorsOverride);
+    }
     if (this.firstStageValidationPasses) {
       return Promise.resolve({});
     }
@@ -2159,6 +2547,7 @@ function createTestLibP2PService(options: CreateTestLibP2PServiceOptions): TestL
     epochCache = mock<EpochCacheInterface>(),
     configOverrides,
     peerDiscoveryService,
+    nextBlockMinFeesProvider,
   } = options;
 
   epochCache.getL1Constants.mockReturnValue({
@@ -2190,6 +2579,7 @@ function createTestLibP2PService(options: CreateTestLibP2PServiceOptions): TestL
     logger,
     configOverrides,
     peerDiscoveryService,
+    nextBlockMinFeesProvider,
   );
 }
 

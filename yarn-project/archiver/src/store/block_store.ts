@@ -2,6 +2,7 @@ import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/con
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
@@ -41,6 +42,7 @@ import {
   deserializeIndexedTxEffect,
   serializeIndexedTxEffect,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import {
   BlockArchiveNotConsistentError,
@@ -51,6 +53,7 @@ import {
   CannotOverwriteCheckpointedBlockError,
   CheckpointNotFoundError,
   CheckpointNumberNotSequentialError,
+  DuplicateTxHashError,
   InitialCheckpointNumberNotSequentialError,
   NoProposedCheckpointToPromoteError,
   ProposedCheckpointArchiveRootMismatchError,
@@ -145,6 +148,8 @@ type ProposedCheckpointStorage = CommonCheckpointStorage & {
   totalManaUsed: string;
   feeAssetPriceModifier: string;
   inboxMsgTotal: string;
+  /** Absent when the signer is unknown, including on records written before signers were stored. */
+  signer?: string;
 };
 
 export type RemoveCheckpointsResult = { blocksRemoved: L2Block[] | undefined };
@@ -569,6 +574,10 @@ export class BlockStore {
       indexWithinCheckpoint,
     });
 
+    await this.assertTxsNotInAncestors(
+      block.body.txEffects.map(tx => tx.txHash),
+      block.number,
+    );
     for (let i = 0; i < block.body.txEffects.length; i++) {
       const txEffect: IndexedTxEffect = {
         data: block.body.txEffects[i],
@@ -585,6 +594,28 @@ export class BlockStore {
     // Update indices for block hash and archive
     await this.#blockHashIndex.set(blockHash.toString(), block.number);
     await this.#blockArchiveIndex.set(block.archive.root.toString(), block.number);
+  }
+
+  /**
+   * Throws if any of the txs is already owned by a stored block below `blockNumber`. Stored blocks below the one being
+   * inserted are its ancestors (archive chaining is enforced on insert), so the tx would be included twice and the new
+   * block would take over the ancestor's tx effect entry. An owner at the same or a higher height is a block being
+   * replaced (a losing local proposal, a re-presented checkpoint), so its entry is overwritten. This relies on replaced
+   * blocks at lower heights having been removed via deleteBlock first (as the updater does before inserting
+   * checkpoints), which also deletes their tx effect entries.
+   */
+  private async assertTxsNotInAncestors(txHashes: TxHash[], blockNumber: BlockNumber): Promise<void> {
+    const existing = await this.#txEffects.getManyAsync(txHashes.map(txHash => txHash.toString()));
+    for (let i = 0; i < txHashes.length; i++) {
+      const stored = existing[i];
+      if (stored === undefined) {
+        continue;
+      }
+      const owner = readTxLocation(stored).blockNumber;
+      if (owner < blockNumber) {
+        throw new DuplicateTxHashError(txHashes[i], blockNumber, owner);
+      }
+    }
   }
 
   /** Deletes a block and all associated data (tx effects, indices). */
@@ -1062,6 +1093,7 @@ export class BlockStore {
       totalManaUsed: BigInt(stored.totalManaUsed),
       feeAssetPriceModifier: BigInt(stored.feeAssetPriceModifier),
       inboxMsgTotal: BigInt(stored.inboxMsgTotal),
+      signer: stored.signer ? EthAddress.fromString(stored.signer) : undefined,
     };
   }
 
@@ -1283,19 +1315,7 @@ export class BlockStore {
    */
   public async getTxLocation(txHash: TxHash): Promise<TxLocation | undefined> {
     const txEffect = await this.#txEffects.getAsync(txHash.toString());
-    if (!txEffect) {
-      return undefined;
-    }
-    // Read only the IndexedTxEffect header (`blockHash(32) + l2BlockNumber(4) + txIndexInBlock(4)`); the
-    // large tail (the full TxEffect with logs etc.) is irrelevant here.
-    const view = Buffer.from(txEffect.buffer, txEffect.byteOffset, txEffect.byteLength);
-    const l2BlockNumber = view.readUInt32BE(32);
-    const txIndexInBlock = view.readUInt32BE(36);
-    return {
-      blockNumber: BlockNumber(l2BlockNumber),
-      blockHash: BlockHash.fromBuffer(view.subarray(0, 32)),
-      txIndexInBlock,
-    };
+    return txEffect ? readTxLocation(txEffect) : undefined;
   }
 
   /**
@@ -1591,6 +1611,7 @@ export class BlockStore {
         totalManaUsed: proposed.totalManaUsed.toString(),
         feeAssetPriceModifier: proposed.feeAssetPriceModifier.toString(),
         inboxMsgTotal: inboxMsgTotal.toString(),
+        ...(proposed.signer && { signer: proposed.signer.toString() }),
       });
     });
   }
@@ -1713,4 +1734,17 @@ export class BlockStore {
       reason: stored.reason,
     };
   }
+}
+
+/**
+ * Reads only the header of a serialized IndexedTxEffect (`blockHash(32) + l2BlockNumber(4) + txIndexInBlock(4)`),
+ * skipping the large tail (the full TxEffect with logs etc.).
+ */
+function readTxLocation(txEffect: Buffer): TxLocation {
+  const view = Buffer.from(txEffect.buffer, txEffect.byteOffset, txEffect.byteLength);
+  return {
+    blockNumber: BlockNumber(view.readUInt32BE(32)),
+    blockHash: BlockHash.fromBuffer(view.subarray(0, 32)),
+    txIndexInBlock: view.readUInt32BE(36),
+  };
 }

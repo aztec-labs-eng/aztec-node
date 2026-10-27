@@ -207,12 +207,11 @@ WHERE status = 'signed'
 
 /**
  * Query to clean up old duties (for maintenance)
- * Removes SIGNED duties older than a specified age (in milliseconds)
+ * Removes duties across all rollups whose signing started more than the specified age ago (in milliseconds)
  */
 export const CLEANUP_OLD_DUTIES = `
 DELETE FROM validator_duties
-WHERE status = 'signed'
-  AND started_at < CURRENT_TIMESTAMP - ($1 || ' milliseconds')::INTERVAL;
+WHERE started_at < CURRENT_TIMESTAMP - ($1 || ' milliseconds')::INTERVAL;
 `;
 
 /**
@@ -225,16 +224,6 @@ DELETE FROM validator_duties
 WHERE node_id = $1
   AND status = 'signing'
   AND started_at < CURRENT_TIMESTAMP - ($2 || ' milliseconds')::INTERVAL;
-`;
-
-/**
- * Query to cleanup duties with outdated rollup address
- * Removes all duties where the rollup address doesn't match the current one
- * Used after a rollup upgrade to clean up duties for the old rollup
- */
-export const CLEANUP_OUTDATED_ROLLUP_DUTIES = `
-DELETE FROM validator_duties
-WHERE rollup_address != $1;
 `;
 
 /**

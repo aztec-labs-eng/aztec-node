@@ -3,6 +3,7 @@ import { compactArray } from '@aztec-labs/foundation/collection';
 import { makeEthSignDigest, tryRecoverAddress } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -13,7 +14,7 @@ import type { Connection, PeerId } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
 import type { Multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 
 import type { P2PConfig } from '../../config.js';
 import { PeerEvent } from '../../types/index.js';
@@ -424,6 +425,9 @@ export class PeerManager implements PeerManagerInterface {
       this.authenticatedPeerIdToValidatorAddress.delete(peerIdStr);
     }
 
+    // Keep a disconnected non-healthy peer's score so a reconnect resumes its penalty rather than starting
+    // clean. The score and ban maps are bounded (PeerScoring retention caps), so retaining them cannot grow
+    // the heartbeat-scanned state without limit under identity churn. A healthy peer carries no penalty to keep.
     if (this.peerScoring.getScoreState(peerIdStr) === PeerScoreState.Healthy) {
       this.peerScoring.removePeer(peerIdStr);
     }

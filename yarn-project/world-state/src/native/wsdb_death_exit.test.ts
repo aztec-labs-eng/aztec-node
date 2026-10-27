@@ -1,0 +1,115 @@
+import { MockPrefilledArchiver } from '@aztec-labs/archiver/test';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { logger, registerLoggingStream } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { jest } from '@jest/globals';
+import { execFileSync } from 'node:child_process';
+import { Writable } from 'node:stream';
+
+import { ServerWorldStateSynchronizer } from '../synchronizer/server_world_state_synchronizer.js';
+import { NativeWorldStateService } from './native_world_state.js';
+
+// wsdb holds the forks and uncommitted state every world-state caller depends on, so the node cannot carry on
+// without it: its death must take the node down, as a crash of the in-process world state used to.
+
+jest.setTimeout(60_000);
+
+class ProcessExit extends Error {
+  constructor(public readonly code: string | number | null | undefined) {
+    super(`process.exit(${code})`);
+  }
+}
+
+/** The pid of the wsdb serving `ipcPath`, which it receives on its command line. */
+function wsdbPid(ipcPath: string): number {
+  const pids = execFileSync('pgrep', ['-f', ipcPath], { encoding: 'utf8' }).trim().split('\n').map(Number);
+  const others = pids.filter(pid => pid !== process.pid);
+  if (others.length !== 1) {
+    throw new Error(`Expected one wsdb process for ${ipcPath}, found ${others.join(', ') || 'none'}`);
+  }
+  return others[0];
+}
+
+describe('wsdb death', () => {
+  let ws: NativeWorldStateService;
+  let exit: jest.SpiedFunction<typeof process.exit>;
+  let originalLogLevel: typeof logger.level;
+
+  beforeAll(() => {
+    // Loggers take their level when created, so the fatal line is only captured if this runs before the world state.
+    originalLogLevel = logger.level;
+    logger.level = 'fatal';
+  });
+
+  afterAll(() => {
+    logger.level = originalLogLevel;
+  });
+
+  beforeEach(async () => {
+    ws = await NativeWorldStateService.tmp();
+    exit = jest.spyOn(process, 'exit').mockImplementation(code => {
+      throw new ProcessExit(code);
+    });
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await ws.close().catch(() => {});
+  });
+
+  it('exits the process on the next world state call', async () => {
+    await ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE);
+
+    process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
+
+    await expect(ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE)).rejects.toEqual(new ProcessExit(1));
+  });
+
+  it('exits an idle node still at genesis', async () => {
+    const archiver = new MockPrefilledArchiver([]);
+    await archiver.setInitialHeader(ws.getInitialHeader());
+    const synchronizer = new ServerWorldStateSynchronizer(ws, archiver, {
+      worldStateBlockCheckIntervalMS: 20,
+      worldStateHistoryRetention: { type: 'archive' },
+    });
+    try {
+      await synchronizer.start();
+      expect(await synchronizer.getL2BlockHash(BlockNumber.ZERO)).toEqual(
+        (await ws.getInitialHeader().hash()).toString(),
+      );
+
+      process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
+
+      await retryUntil(() => exit.mock.calls.length > 0, 'process exit', 5, 0.05);
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      await synchronizer.stop().catch(() => {});
+    }
+  });
+
+  it('logs the cause of the death as structured fields', async () => {
+    const entries: Record<string, unknown>[] = [];
+    registerLoggingStream(
+      new Writable({
+        write(chunk, _encoding, callback) {
+          entries.push(JSON.parse(chunk.toString()));
+          callback();
+        },
+      }),
+    );
+
+    process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
+    await expect(ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE)).rejects.toEqual(new ProcessExit(1));
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        module: 'world-state:ipc-database',
+        level: 60,
+        signal: 'SIGKILL',
+        code: null,
+        logPath: expect.any(String),
+      }),
+    );
+  });
+});

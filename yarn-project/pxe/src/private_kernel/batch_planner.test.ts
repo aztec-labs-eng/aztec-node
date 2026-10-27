@@ -6,6 +6,7 @@ import {
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { PrivateCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import times from 'lodash.times';
 
 import { BatchPlanner } from './batch_planner.js';

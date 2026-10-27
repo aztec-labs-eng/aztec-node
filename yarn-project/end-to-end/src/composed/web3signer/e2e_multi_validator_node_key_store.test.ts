@@ -21,7 +21,7 @@ import type { BlockProposalOptions } from '@aztec-labs/stdlib/p2p';
 import type { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
 import { NodeKeystoreAdapter, ValidatorClient } from '@aztec-labs/validator-client';
 import { jest } from '@jest/globals';
-import { mkdtemp, rmdir } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -332,7 +332,7 @@ describe('e2e_multi_validator_node', () => {
 
   afterEach(async () => {
     await teardown();
-    await rmdir(keyStoreDirectory, { recursive: true });
+    await rm(keyStoreDirectory, { recursive: true, force: true });
   });
 
   const sendTx = (salt: Fr) => {

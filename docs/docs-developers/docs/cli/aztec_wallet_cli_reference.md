@@ -10,7 +10,7 @@ sidebar_position: 2
 *This documentation is auto-generated from the `aztec-wallet` CLI help output.*
 
 
-*Generated: Tue 18 Aug 2026 18:00:41 UTC*
+*Generated: Thu 22 Oct 2026 18:35:43 UTC*
 
 *Command: `aztec-wallet`*
 
@@ -67,9 +67,9 @@ aztec-wallet [options] [command]
 **Options:**
 
 - `-V --version` - output the version number
-- `-d --data-dir <string>` - Storage directory for wallet data (default: "/home/aztec-dev/.aztec/wallet")
+- `-d --data-dir <string>` - Storage directory for wallet data (default: "~/.aztec/wallet")
 - `-p --prover <string>` - The type of prover the wallet uses (choices: "wasm", "native", "none", default: "native", env: PXE_PROVER)
-- `-n --node-url <string>` - URL of the Aztec node to connect to (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
+- `-n --node-url <string>` - URL of the Aztec node to connect to (default: "http://localhost:8080", env: AZTEC_NODE_URL)
 - `-h --help` - display help for command
 
 ### Subcommands
@@ -115,10 +115,10 @@ aztec-wallet bridge-fee-juice [options] <amount> <recipient>
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"])
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"])
 - `-m, --mnemonic <string>` - The mnemonic to use for deriving the Ethereum address that will mint and bridge (default: "test test test test test test test test test test test junk")
 - `--mint` - Mint the tokens on L1 (default: false)
-- `--l1-private-key <string>` - The private key to the eth account bridging
+- `--l1-private-key <string>` - The private key to the eth account bridging (default: "0xdce4e6c97b5d06ce98145fb303455027c83ac0190e50a8e72d85b7e4039e6a13")
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--json` - Output the claim in JSON format
 - `--no-wait` - Wait for the bridged funds to be available in L2, polling every 60 seconds

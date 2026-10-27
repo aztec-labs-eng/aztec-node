@@ -1,3 +1,5 @@
+import { toArray } from '@aztec-labs/foundation/iterable';
+
 import { mockLogger } from '../interfaces/utils.js';
 import { AztecSQLiteOPFSStore, SqlitePoolBusyError, SqliteWebLocksUnavailableError } from './index.js';
 import { deleteStore, listStores, storePoolDirectory } from './manage.js';
@@ -114,6 +116,64 @@ describe('sqlite-opfs store management', () => {
       await deleteStore(name).catch(() => {});
       await root.removeEntry(OPFS_QUARANTINE_ROOT_DIRECTORY, { recursive: true }).catch(() => {});
     }
+  });
+
+  it('opens a store whose pool a cut-short first open left without free slots', async () => {
+    const name = 'mech_short_pool';
+    const root = await navigator.storage.getDirectory();
+    const pool = await root.getDirectoryHandle(storePoolDirectory(name), { create: true });
+    const opaque = await pool.getDirectoryHandle('.opaque', { create: true });
+    await opaque.getFileHandle('cut-short', { create: true });
+
+    const store = await openByName(name);
+    await store.openSingleton<string>('payload').set('data');
+    expect(await store.openSingleton<string>('payload').getAsync()).toEqual('data');
+    await store.close();
+    await deleteStore(name);
+  });
+
+  it('rolls back a commit cut short by a killed worker', async () => {
+    const name = 'mech_cut_commit';
+    const entries = 3000;
+    const store = await openByName(name);
+    const map = store.openMap<number, string>('m');
+    await store.transactionAsync(async () => {
+      for (let i = 0; i < entries; i++) {
+        await map.set(i, `v${i}`);
+      }
+    });
+    await store.close();
+
+    // @dependency ./cut_commit_test_worker.ts
+    const worker = new Worker(new URL('./cut_commit_test_worker.js', import.meta.url), { type: 'module' });
+    try {
+      const hanging = new Promise((resolve, reject) => {
+        worker.onmessage = resolve;
+        worker.onerror = event => {
+          event.preventDefault();
+          reject(new Error(event.message));
+        };
+      });
+      worker.postMessage({ directory: storePoolDirectory(name), dbPath: `/${name}`, hangAfter: entries - 500 });
+      await hanging;
+    } finally {
+      worker.terminate();
+    }
+
+    // The terminated worker frees its access handles asynchronously, as after a navigation.
+    let reopened: AztecSQLiteOPFSStore | undefined;
+    for (let attempt = 0; !reopened; attempt++) {
+      reopened = await openByName(name).catch(err => {
+        if (attempt >= 40) {
+          throw err;
+        }
+        return new Promise<undefined>(resolve => setTimeout(resolve, 250));
+      });
+    }
+    const values = await toArray(reopened.openMap<number, string>('m').valuesAsync());
+    expect(values).toEqual(Array.from({ length: entries }, (_, i) => `v${i}`));
+    await reopened.close();
+    await deleteStore(name);
   });
 
   it('fails clearly when Web Locks are unavailable', async () => {

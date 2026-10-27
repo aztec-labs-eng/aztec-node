@@ -7,7 +7,13 @@ import {
   TempCheckpointLogField,
 } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import {
+  type Anvil,
+  EthCheatCodes,
+  RollupCheatCodes,
+  describeAcrossL1Forks,
+  startAnvil,
+} from '@aztec-labs/ethereum/test';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -19,7 +25,7 @@ import { foundry } from 'viem/chains';
 
 import { FeePredictor } from './fee_predictor.js';
 
-describe('FeePredictor', () => {
+describeAcrossL1Forks('FeePredictor', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let publicClient: ViemClient;
@@ -375,5 +381,17 @@ describe('FeePredictor', () => {
     const state = await predictor.computeState(pinnedBlock);
 
     expect(state.protocolFeeMarginBps).toBe(1000n);
+  }, 60_000);
+
+  it('reads the mana target and limit at the pinned snapshot block', async () => {
+    const initialTarget = await rollup.getManaTarget();
+    const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+    await rollupCheatCodes.setManaTarget(initialTarget + initialTarget / 2n);
+
+    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const state = await predictor.computeState(pinnedBlock);
+
+    expect(state.manaTarget).toBe(initialTarget);
+    expect(state.manaLimit).toBe(initialTarget * 2n);
   }, 60_000);
 });

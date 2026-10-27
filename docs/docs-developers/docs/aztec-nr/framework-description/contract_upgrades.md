@@ -3,7 +3,7 @@ title: Contract Upgrades
 sidebar_position: 14
 tags: [contracts]
 description: Understand contract upgrade patterns in Aztec and how to implement upgradeable contracts.
-references: ["noir-projects/noir-contracts/contracts/protocol_interface/contract_instance_registry_interface/*", "yarn-project/aztec.js/src/deployment/publish_class.ts"]
+references: ["noir-projects/aztec-nr/contract-instance-registry-interface/*", "yarn-project/aztec.js/src/deployment/publish_class.ts"]
 ---
 
 :::warning[Upgrades are not yet well supported by the framework]
@@ -56,7 +56,7 @@ fn update_to(new_class_id: ContractClassId) {
 :::info
 To use the `ContractInstanceRegistry`, add this dependency to your `Nargo.toml`:
 ```toml
-contract_instance_registry = { git="https://github.com/AztecProtocol/aztec-packages/", tag="#include_aztec_version", directory="noir-projects/noir-contracts/contracts/protocol_interface/contract_instance_registry_interface" }
+contract_instance_registry = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="contract-instance-registry-interface" }
 ```
 :::
 

@@ -1,5 +1,6 @@
 import { BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { BufferReader, numToUInt32BE } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { schemas } from '../schemas/schemas.js';

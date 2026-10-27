@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { mapValues } from '../collection/object.js';
 
 type Deserializable = { fromString(str: string): object };

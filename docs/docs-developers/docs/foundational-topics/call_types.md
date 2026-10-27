@@ -164,7 +164,7 @@ To add it as a dependency, point to the aztec-packages repository:
 
 ```toml
 [dependencies]
-public_checks = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "#include_aztec_version", directory = "noir-projects/noir-contracts/contracts/standard/public_checks_contract" }
+public_checks = { git = "https://github.com/aztec-labs-eng/aztec-node/", tag = "#include_aztec_version", directory = "noir-projects/noir-contracts/contracts/standard/public_checks_contract" }
 ```
 
 :::

@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { makeProposerLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
 import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -45,15 +45,15 @@ describe('ProposalValidator', () => {
   let validator: ProposalValidator;
 
   function mockGetProposer(currentProposer: EthAddress, nextProposer: EthAddress, previousProposer?: EthAddress) {
-    epochCache.getProposerAttesterAddressInSlot.mockImplementation(slot => {
+    epochCache.lookupProposer.mockImplementation(slot => {
       if (slot === currentSlot) {
-        return Promise.resolve(currentProposer);
+        return Promise.resolve(makeProposerLookup(currentProposer));
       }
       if (slot === nextSlot) {
-        return Promise.resolve(nextProposer);
+        return Promise.resolve(makeProposerLookup(nextProposer));
       }
       if (slot === previousSlot && previousProposer) {
-        return Promise.resolve(previousProposer);
+        return Promise.resolve(makeProposerLookup(previousProposer));
       }
       throw new Error('Unexpected argument');
     });
@@ -142,10 +142,10 @@ describe('ProposalValidator', () => {
         nowMs: 7177_000n,
       });
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(EthAddress.random());
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(EthAddress.random()));
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
-      expect(epochCache.getProposerAttesterAddressInSlot).not.toHaveBeenCalled();
+      expect(epochCache.lookupProposer).not.toHaveBeenCalled();
     });
 
     it('accepts a previous-slot proposal that is still within its receive window', async () => {
@@ -175,7 +175,7 @@ describe('ProposalValidator', () => {
       mockGetProposer(signer.address, EthAddress.random());
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
-      expect(epochCache.getProposerAttesterAddressInSlot).not.toHaveBeenCalled();
+      expect(epochCache.lookupProposer).not.toHaveBeenCalled();
     });
 
     it('rejects with mid tolerance error if proposer is wrong for current slot', async () => {
@@ -218,20 +218,29 @@ describe('ProposalValidator', () => {
     });
 
     it('accepts a valid proposal when the committee is empty (anyone may propose)', async () => {
-      // undefined proposer = empty committee (anyone may propose), so a valid proposal is accepted.
+      // An open committee lets anyone propose, so a valid proposal is accepted whoever signed it.
       const proposal = await factory(currentSlot, Secp256k1Signer.random());
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
+      epochCache.lookupProposer.mockResolvedValue({ state: 'open' });
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'accept' });
     });
 
-    it('rejects with low tolerance error on NoCommitteeError', async () => {
+    it('rejects with low tolerance error when L1 has no committee', async () => {
       const proposal = await factory(currentSlot, Secp256k1Signer.random());
 
-      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new NoCommitteeError());
+      epochCache.lookupProposer.mockResolvedValue({ state: 'none' });
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
+    });
+
+    it('ignores a proposal when its committee is not stable on L1 yet', async () => {
+      const proposal = await factory(currentSlot, Secp256k1Signer.random());
+
+      // The seed is not fixed yet, so the expected proposer is unknown: not the relaying peer's fault.
+      epochCache.lookupProposer.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'ignore' });
     });
 
     it('ignores a proposal when the local proposer lookup fails for a non-committee reason', async () => {
@@ -239,7 +248,7 @@ describe('ProposalValidator', () => {
 
       // A receiver-local lookup failure (e.g. an L1 RPC outage or sync lag) is not the relaying peer's
       // fault, so it must not penalize the sender: ignore rather than reject.
-      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      epochCache.lookupProposer.mockRejectedValue(new Error('l1 rpc unavailable'));
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'ignore' });
     });
@@ -289,7 +298,7 @@ describe('ProposalValidator', () => {
       const signer = Secp256k1Signer.random();
       const proposal = await factory(currentSlot, signer);
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'accept' });
     });
@@ -314,7 +323,7 @@ describe('ProposalValidator', () => {
       const signer = Secp256k1Signer.random();
       const proposal = await factory(currentSlot, signer);
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
     });
@@ -327,7 +336,7 @@ describe('ProposalValidator', () => {
 
     beforeEach(() => {
       epochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot: currentSlot, nextSlot });
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     it('ignores a checkpoint proposal for the target slot arriving after the receive deadline', async () => {
@@ -395,7 +404,7 @@ describe('ProposalValidator', () => {
     const deltaSeconds = TEST_CLOCK_DISPARITY_MS / 1000;
 
     beforeEach(() => {
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     async function validateAt(nowSeconds: number) {
@@ -575,7 +584,7 @@ describe('ProposalValidator', () => {
           signatureContext: TEST_COORDINATION_SIGNATURE_CONTEXT,
           clockDisparityMs: TEST_CLOCK_DISPARITY_MS,
         };
-        epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+        epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
 
         for (const count of [MAX_TXS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT + 1]) {
           const block = {
@@ -620,7 +629,7 @@ describe('ProposalValidator', () => {
         },
         'test',
       );
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     it('accepts a block proposal whose indexWithinCheckpoint equals the consensus cap (5 >= 5) as slashing evidence', async () => {
@@ -668,7 +677,7 @@ describe('ProposalValidator', () => {
     it('rejects a structurally-invalid index even when the proposer lookup fails (structural check runs first)', async () => {
       // A local proposer-lookup failure alone would ignore the proposal; the structural check must run
       // before the lookup so a peer's structurally-impossible index is still rejected during an L1 outage.
-      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      epochCache.lookupProposer.mockRejectedValue(new Error('l1 rpc unavailable'));
       const proposal = await makeBlockProposal({
         blockHeader: makeBlockHeader(0, { slotNumber: currentSlot }),
         indexWithinCheckpoint: IndexWithinCheckpoint(MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT),
@@ -694,7 +703,7 @@ describe('ProposalValidator', () => {
         },
         'test',
       );
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     it('rejects the block past the attestable limit even when maxBlocksPerCheckpoint is unset', async () => {
@@ -731,7 +740,7 @@ describe('ProposalValidator', () => {
         signatureContext: TEST_COORDINATION_SIGNATURE_CONTEXT,
         clockDisparityMs: TEST_CLOCK_DISPARITY_MS,
       });
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
     });
 
     it('rejects when the embedded last block is past the attestable limit', async () => {

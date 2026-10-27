@@ -4,6 +4,7 @@ import { shuffle } from '@aztec-labs/foundation/array';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 import { type RpcBlock, createPublicClient } from 'viem';
 
 import { createBlobArchiveClient } from '../archive/factory.js';

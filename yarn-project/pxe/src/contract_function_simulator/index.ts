@@ -21,6 +21,7 @@ export {
   EPHEMERAL_ARRAY,
   ETH_ADDRESS,
   EVENT_VALIDATION_REQUEST,
+  FACT_SCOPE,
   FIELD,
   FIXED_ARRAY,
   FIXED_BOUNDED_VEC,
@@ -80,6 +81,7 @@ export type { IMiscOracle, IUtilityExecutionOracle, IPrivateExecutionOracle } fr
 export type { FactCollection } from './noir-structs/fact_collection.js';
 export type { NoteData } from './noir-structs/note_data.js';
 export type { NullifierStatus } from './noir-structs/nullifier_status.js';
+export type { NoteOrigin } from './noir-structs/note_origin.js';
 export type { ResolvedTaggingStrategy } from './noir-structs/resolved_tagging_strategy.js';
 export { TxResolverService } from '../messages/tx_resolver_service.js';
 export { UtilityExecutionOracle } from './oracle/utility_execution_oracle.js';
@@ -102,6 +104,7 @@ export type { LogRetrievalResponse } from './noir-structs/log_retrieval_response
 export { NoteValidationRequest } from './noir-structs/note_validation_request.js';
 export type { PendingTaggedLog } from './noir-structs/pending_tagged_log.js';
 export type { TxEffectData } from './noir-structs/tx_effect_data.js';
+export type { TxEffectWithBlockData } from './noir-structs/tx_effect_with_block_data.js';
 export type { ProvidedSecret } from './noir-structs/provided_secret.js';
 export type { ResolvedTx } from './noir-structs/resolved_tx.js';
 export type { NullifierMembershipWitnessData } from './noir-structs/nullifier_membership_witness_data.js';

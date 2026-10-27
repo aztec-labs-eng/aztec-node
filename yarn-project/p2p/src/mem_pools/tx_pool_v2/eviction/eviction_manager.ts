@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
@@ -48,6 +48,7 @@ export class EvictionManager {
 
   /**
    * Runs all pre-add rules for an incoming transaction.
+   * Each rule sees the pool without the txs that earlier rules picked for eviction.
    * Returns combined result of all rules.
    */
   async runPreAddRules(
@@ -57,10 +58,11 @@ export class EvictionManager {
   ): Promise<PreAddResult> {
     const evictions: TaggedEviction[] = [];
     const seen = new Set<string>();
+    const remainingPool = withoutTxs(poolAccess, seen);
 
     for (const rule of this.preAddRules) {
       try {
-        const result = await rule.check(incomingMeta, poolAccess, context);
+        const result = await rule.check(incomingMeta, remainingPool, context);
 
         if (result.shouldIgnore) {
           return result;
@@ -134,6 +136,18 @@ export class EvictionManager {
   }
 
   /**
+   * Runs post-event eviction when the pool is prepared for a new slot.
+   */
+  async evictAfterSlotPrepared(slotNumber: SlotNumber): Promise<void> {
+    const context: EvictionContext = {
+      event: EvictionEvent.SLOT_PREPARED,
+      slotNumber,
+    };
+
+    await this.runPostEventRules(context);
+  }
+
+  /**
    * Updates configuration for all rules.
    */
   updateConfig(config: EvictionConfig): void {
@@ -157,4 +171,29 @@ export class EvictionManager {
       }
     }
   }
+}
+
+/**
+ * Returns a view of the pending pool without the `excluded` txs. Reads `excluded` live, so later additions apply.
+ * Every excluded tx must be pending in `poolAccess`, which holds for picks made through the view.
+ */
+function withoutTxs(poolAccess: PreAddPoolAccess, excluded: ReadonlySet<string>): PreAddPoolAccess {
+  return {
+    getMetadata: txHash => (excluded.has(txHash) ? undefined : poolAccess.getMetadata(txHash)),
+    getTxHashByNullifier: nullifier => {
+      const txHash = poolAccess.getTxHashByNullifier(nullifier);
+      return txHash !== undefined && excluded.has(txHash) ? undefined : txHash;
+    },
+    getFeePayerBalance: feePayer => poolAccess.getFeePayerBalance(feePayer),
+    getFeePayerPendingTxs: feePayer =>
+      poolAccess.getFeePayerPendingTxs(feePayer).filter(meta => !excluded.has(meta.txHash)),
+    getPendingTxCount: () => poolAccess.getPendingTxCount() - excluded.size,
+    *iteratePendingByPriority(order) {
+      for (const txHash of poolAccess.iteratePendingByPriority(order)) {
+        if (!excluded.has(txHash)) {
+          yield txHash;
+        }
+      }
+    },
+  };
 }

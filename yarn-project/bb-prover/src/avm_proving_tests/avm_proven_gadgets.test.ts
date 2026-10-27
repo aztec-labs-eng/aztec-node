@@ -5,6 +5,7 @@ import { TestExecutorMetrics, defaultGlobals } from '@aztec-labs/simulator/publi
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { NativeWorldStateService } from '@aztec-labs/world-state';
+import { Buffer } from 'buffer';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 

@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fr } from '../curves/bn254/index.js';
 import { jsonStringify } from '../json-rpc/index.js';
 import { type MerkleTree, MerkleTreeCalculator } from '../trees/index.js';

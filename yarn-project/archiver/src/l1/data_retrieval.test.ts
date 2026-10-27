@@ -1,8 +1,11 @@
 import { type BlockBlobData, type CheckpointBlobData, makeBlockEndBlobData } from '@aztec-labs/blob-lib/encoding';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
 import type { InboxContract, MessageSentLog } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { Body, CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
@@ -10,7 +13,14 @@ import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { computeTxEffectsTreeData } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
-import { type RetrievedCheckpoint, retrieveL1ToL2Messages, retrievedToPublishedCheckpoint } from './data_retrieval.js';
+import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
+import { FakeL1State } from '../test/fake_l1_state.js';
+import {
+  type RetrievedCheckpoint,
+  retrieveCheckpointCalldataFromRollup,
+  retrieveL1ToL2Messages,
+  retrievedToPublishedCheckpoint,
+} from './data_retrieval.js';
 
 describe('data_retrieval', () => {
   describe('retrievedToPublishedCheckpoint', () => {
@@ -145,6 +155,56 @@ describe('data_retrieval', () => {
       );
     });
   });
+  describe('retrieveCheckpointCalldataFromRollup', () => {
+    it('returns checkpoints proposed in the same L1 block in log order when a later one is fetched first', async () => {
+      const fake = new FakeL1State({
+        genesisArchiveRoot: new Fr(GENESIS_ARCHIVE_ROOT),
+        l1StartBlock: 0n,
+        l1GenesisTime: BigInt(Math.floor(Date.now() / 1000)),
+        ethereumSlotDuration: 12,
+        slotDuration: 24,
+        rollupAddress: EthAddress.random(),
+        inboxAddress: EthAddress.random(),
+      });
+      await fake.addCheckpoint(CheckpointNumber(1), { l1BlockNumber: 10n, numL1ToL2Messages: 0 });
+      await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 10n, numL1ToL2Messages: 0 });
+      fake.setL1BlockNumber(12n);
+
+      const publicClient = fake.createMockPublicClient();
+      const rollup = fake.createMockRollupContract(publicClient);
+      const [firstLog] = await rollup.getCheckpointProposedEvents(10n, 10n);
+
+      // Hold the first checkpoint's calldata fetch until the second checkpoint has been fully retrieved. Its L1 block
+      // read is its last await, and a timer fires only once the continuation that records it has run.
+      const secondRetrieved = promiseWithResolvers<void>();
+      const getTransaction = publicClient.getTransaction.getMockImplementation()!;
+      publicClient.getTransaction.mockImplementation(async args => {
+        if (args.hash === firstLog.l1TransactionHash) {
+          await secondRetrieved.promise;
+        }
+        return getTransaction(args);
+      });
+      const getBlock = publicClient.getBlock.getMockImplementation()!;
+      publicClient.getBlock.mockImplementation(async args => {
+        const block = await getBlock(args);
+        setTimeout(() => secondRetrieved.resolve(), 0);
+        return block;
+      });
+
+      const checkpoints = await retrieveCheckpointCalldataFromRollup(
+        rollup,
+        publicClient,
+        publicClient,
+        10n,
+        12n,
+        12n,
+        mock<ArchiverInstrumentation>(),
+      );
+
+      expect(checkpoints.map(c => c.checkpointNumber)).toEqual([CheckpointNumber(1), CheckpointNumber(2)]);
+    });
+  });
+
   describe('retrieveL1ToL2Messages', () => {
     /** One MessageSent log per L1 block in `l1Blocks`, chained by index and rolling hash. */
     const makeLogs = (l1Blocks: bigint[]): MessageSentLog[] => {
@@ -156,6 +216,8 @@ describe('data_retrieval', () => {
           l1BlockNumber,
           l1BlockHash: Buffer32.fromBigInt(l1BlockNumber),
           l1TransactionHash: `0x${l1BlockNumber.toString(16)}`,
+          l1TransactionIndex: 0,
+          l1LogIndex: 0,
           args: { index: BigInt(i), leaf, inboxRollingHash: rollingHash, bucketSeq: 0n },
         } as MessageSentLog;
       });

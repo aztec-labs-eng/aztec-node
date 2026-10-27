@@ -1,4 +1,4 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { CommitteeMembershipLookup, EpochCacheInterface, ProposerLookup } from '@aztec-labs/epoch-cache';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   type CheckpointAttestation,
@@ -10,7 +10,7 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
-import { mapEpochCacheLookupFailure } from '../epoch_cache_lookup.js';
+import { ignoreUnstableCommittee, mapEpochCacheLookupFailure, rejectNoCommittee } from '../epoch_cache_lookup.js';
 import { classifyReceiveWindowArrival } from '../receive_window.js';
 
 export class CheckpointAttestationValidator implements P2PValidator<CheckpointAttestation> {
@@ -84,13 +84,17 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
     }
 
     // Verify the attester is in the committee for this slot
-    let inCommittee: boolean;
+    let membership: CommitteeMembershipLookup<boolean>;
     try {
-      inCommittee = await this.epochCache.isInCommittee(slotNumber, attester);
+      membership = await this.epochCache.lookupMembership(slotNumber, attester);
     } catch (e) {
       return mapEpochCacheLookupFailure(e, this.logger, 'checkpoint attestation', slotNumber);
     }
-    if (!inCommittee) {
+    if (membership.state === 'unstable') {
+      return ignoreUnstableCommittee(membership, this.logger, 'checkpoint attestation', slotNumber);
+    }
+    // An open committee and a missing one have no members, so the attester cannot be one.
+    if (membership.state !== 'members' || !membership.inCommittee) {
       this.logger.warn(`Attester ${attester.toString()} is not in committee for slot ${slotNumber}`);
       return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
     }
@@ -99,16 +103,24 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
     // We look up the proposer for the specific slot rather than using currentSlot/nextSlot
     // since timing differences could cause mismatches
     const proposer = message.getProposer();
-    let expectedProposer;
+    let proposerLookup: ProposerLookup;
     try {
-      expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
+      proposerLookup = await this.epochCache.lookupProposer(slotNumber);
     } catch (e) {
       return mapEpochCacheLookupFailure(e, this.logger, 'checkpoint attestation', slotNumber);
     }
-    if (!expectedProposer) {
-      this.logger.warn(`No proposer defined for slot ${slotNumber}`);
-      return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
+    switch (proposerLookup.state) {
+      case 'unstable':
+        return ignoreUnstableCommittee(proposerLookup, this.logger, 'checkpoint attestation', slotNumber);
+      case 'none':
+        return rejectNoCommittee();
+      case 'open':
+        this.logger.warn(`No proposer defined for slot ${slotNumber}`);
+        return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
+      case 'members':
+        break;
     }
+    const expectedProposer = proposerLookup.proposer;
     if (!proposer) {
       this.logger.warn(`Invalid proposer signature in checkpoint attestation for slot ${slotNumber}`);
       return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
@@ -116,7 +128,7 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
     if (!proposer.equals(expectedProposer)) {
       this.logger.warn(
         `Proposer signature mismatch in checkpoint attestation. ` +
-          `Expected ${expectedProposer?.toString() ?? 'none'} but got ${proposer.toString()} for slot ${slotNumber}`,
+          `Expected ${expectedProposer.toString()} but got ${proposer.toString()} for slot ${slotNumber}`,
       );
       return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
     }

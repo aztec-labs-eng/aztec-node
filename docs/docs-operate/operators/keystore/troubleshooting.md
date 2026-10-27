@@ -56,6 +56,38 @@ chmod 755 ~/.aztec/keystore
 - Check that publisher is an array: `["0x..."]` not `"0x..."`
 - Verify private keys are 64-character hex strings (with or without `0x` prefix)
 
+### BLS Key Proof-of-Possession Check Over the Gas Budget
+
+**Error:** `The proof-of-possession check of the BLS key derived at m/12381/3600/0/0/<n> is estimated at <gas> gas, above the 270000 budget of BLS key derivation v6, so it could exceed the L1 gas cap.` With `--bls-key-derivation-max-gas`, the error names that budget instead.
+
+**Cause:** The proof-of-possession check of this BLS key could cost more gas than the L1 cap allows, so its registration
+could fail.
+
+**Solutions:**
+- For a new key, re-run with `--bls-key-derivation-v6`. The command derives a replacement BLS key from the same mnemonic
+  for that validator and prints its derivation path. Keep using `--bls-key-derivation-v6` (and the same
+  `--bls-key-derivation-max-gas`, if you set one) whenever you regenerate these keys.
+- To regenerate a key you already registered with an earlier CLI version, re-run with `--skip-bls-key-gas-check`. It
+  keeps the original key without checking it.
+- If you did not pass `--mnemonic`, the command generated a new mnemonic, and re-running generates another one. If the
+  command printed it, pass it back with `--mnemonic` to keep it.
+
+See [BLS Keys and the Proof-of-Possession Gas Cap](./creating-keystores.md#bls-keys-and-the-proof-of-possession-gas-cap).
+
+### BLS Key Over the GSE Proof-of-Possession Gas Limit
+
+**Error:** `Registering these validators could fail: the GSE at <address> gives each proof-of-possession check <limit> gas, and the BLS keys of these attesters are estimated to need more: ...`
+
+**Cause:** `aztec validator-keys staker` or `aztec validator-keys new --staker-output` read the GSE's current
+`proofOfPossessionGasLimit`, and some BLS keys are estimated to need more gas than that, so their registration could
+fail. This happens when governance set a limit below the one the keys were checked against, or for keys created with
+`--skip-bls-key-gas-check`.
+
+**Solution:** Regenerate the listed validators with `aztec validator-keys new`, the same mnemonic or IKM and indices,
+and the flags the error names: `--bls-key-derivation-v6`, plus `--bls-key-derivation-max-gas` at 10% below the limit when
+that is below 270,000. This replaces their BLS keys and keeps their ETH keys. `aztec validator-keys add` appends new
+validators instead, so it does not replace these keys.
+
 ### Legacy BLS Key Derivation (2.1.4 Users)
 
 **Issue:** Need to regenerate keys that were created with CLI version 2.1.4 or earlier
@@ -372,6 +404,9 @@ aztec validator-keys new [options]
 | `--gse-address <address>` | GSE contract address (required with --staker-output) | None |
 | `--l1-rpc-urls <urls>` | L1 RPC endpoints (required with --staker-output) | None |
 | `--legacy` | Use 2.1.4 BLS derivation path (only for regenerating old keys) | `false` |
+| `--bls-key-derivation-v6` | Replace a BLS key whose proof-of-possession check could exceed the L1 gas cap with the next deterministic candidate | Keep the key, fail if over the budget |
+| `--bls-key-derivation-max-gas <gas>` | Stricter budget for the estimated proof-of-possession gas (137,790 to 270,000; the L1 cap is 300,000 from the v6 upgrade) | 270,000 |
+| `--skip-bls-key-gas-check` | Keep the first derived BLS key without checking its proof-of-possession gas | `false` |
 | `--password <str>` | Shared password for encrypted ETH and BLS keystore files | `AZTEC_KEYSTORE_PASSWORD` if set |
 | `--password-file <path>` | File containing the shared encrypted-keystore password | None |
 | `--eth-password <str>` | Password for encrypted ETH keystore files | `AZTEC_ETH_KEYSTORE_PASSWORD`, then shared password |

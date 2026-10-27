@@ -9,7 +9,11 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { type BlockMinFeesProvider, GasFees, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import {
+  type RollupFeeConfigProvider,
+  type TxAdmissionMinFeesProvider,
+  getNetworkTxGasLimits,
+} from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   P2PConnectivity,
@@ -33,7 +37,7 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import { ConsensusTimetable, getDefaultCheckpointProposalSyncGrace } from '@aztec-labs/stdlib/timetable';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
-import { Tx, type TxValidationResult } from '@aztec-labs/stdlib/tx';
+import { Tx, type TxValidationResult, isReceiverLocalStateDrift } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { compressComponentVersions } from '@aztec-labs/stdlib/versioning';
@@ -62,6 +66,7 @@ import type { AddressManager, ConnectionManager } from '@libp2p/interface-intern
 import { tcp } from '@libp2p/tcp';
 import { multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import { createLibp2p } from 'libp2p';
 
 import type { P2PConfig } from '../../config.js';
@@ -77,7 +82,11 @@ import {
 } from '../../msg_validators/index.js';
 import { MessageSeenValidator } from '../../msg_validators/msg_seen_validator/msg_seen_validator.js';
 import {
+  type GossipMinFees,
+  type GossipValidationFailure,
+  IgnoreWithoutPenalty,
   type TransactionValidator,
+  computeGossipMinFees,
   createFirstStageTxValidationsForGossipedTransactions,
   createSecondStageTxValidationsForGossipedTransactions,
   createTxValidatorForBlockProposalReceivedTxs,
@@ -143,18 +152,39 @@ function buildConsensusTimetable(
   });
 }
 
-interface ValidationResult {
+interface ValidationResult<F extends GossipValidationFailure> {
   name: string;
   isValid: TxValidationResult;
-  severity: PeerErrorSeverity;
+  severity: F;
 }
 
-type ValidationOutcome = { allPassed: true } | { allPassed: false; failure: ValidationResult };
+/**
+ * Failure consequences ordered from mildest to harshest, so the outcome of a stage is the harshest failure it
+ * produced. A penalty-free ignore is the mildest: any penalized failure on the same tx wins over it.
+ */
+const GossipValidationFailureByHarshness = [IgnoreWithoutPenalty, ...PeerErrorSeverityByHarshness] as const;
+
+type ValidationOutcome<F extends GossipValidationFailure> =
+  | { allPassed: true }
+  | { allPassed: false; failure: ValidationResult<F> };
 
 // REFACTOR: Unify with the type above
 type ReceivedMessageValidationResult<T, M = undefined> =
   | { obj: T; result: Exclude<TopicValidatorResult, TopicValidatorResult.Reject>; metadata?: M }
   | { obj?: T; result: TopicValidatorResult.Reject; metadata?: M; severity: PeerErrorSeverity };
+
+/** Outcome details of validating and storing a gossiped checkpoint proposal. */
+type CheckpointProposalValidationMetadata = {
+  isEquivocated: boolean;
+  /** The embedded final block was stored and should be handed to block processing. */
+  processBlock: boolean;
+  isOversized: boolean;
+  /**
+   * The checkpoint was already stored from an earlier copy and this copy only delivered its final block, so it must
+   * not trigger another processing attempt.
+   */
+  checkpointAlreadyStored?: boolean;
+};
 
 /**
  * Lib P2P implementation of the P2PService interface.
@@ -171,7 +201,10 @@ export class LibP2PService extends WithTracer implements P2PService {
   private protocolVersion = '';
   private topicStrings: Record<TopicType, string> = {} as Record<TopicType, string>;
 
-  /** Callback invoked when a duplicate proposal is detected (triggers slashing). */
+  /**
+   * Callback invoked when a second proposal is seen at one position, so the slot is marked as equivocated. It does not
+   * slash: the slasher attributes DUPLICATE_PROPOSAL per signer from the retained proposals.
+   */
   private duplicateProposalCallback?: (info: {
     slot: SlotNumber;
     proposer: EthAddress;
@@ -229,7 +262,8 @@ export class LibP2PService extends WithTracer implements P2PService {
     private epochCache: EpochCacheInterface,
     private proofVerifier: ClientProtocolCircuitVerifier,
     private worldStateSynchronizer: WorldStateSynchronizer,
-    private blockMinFeesProvider: BlockMinFeesProvider,
+    private nextBlockMinFeesProvider: TxAdmissionMinFeesProvider,
+    private feeConfigProvider: RollupFeeConfigProvider,
     telemetry: TelemetryClient,
     logger: Logger = createLogger('p2p:libp2p_service'),
     private txValidationCache?: TxValidationCache,
@@ -345,7 +379,8 @@ export class LibP2PService extends WithTracer implements P2PService {
       proofVerifier: ClientProtocolCircuitVerifier;
       worldStateSynchronizer: WorldStateSynchronizer;
       peerStore: AztecAsyncKVStore;
-      blockMinFeesProvider: BlockMinFeesProvider;
+      nextBlockMinFeesProvider: TxAdmissionMinFeesProvider;
+      feeConfigProvider: RollupFeeConfigProvider;
       telemetry: TelemetryClient;
       logger: Logger;
       packageVersion: string;
@@ -359,7 +394,8 @@ export class LibP2PService extends WithTracer implements P2PService {
       mempools,
       proofVerifier,
       peerStore,
-      blockMinFeesProvider,
+      nextBlockMinFeesProvider,
+      feeConfigProvider,
       telemetry,
       logger,
       packageVersion,
@@ -587,7 +623,8 @@ export class LibP2PService extends WithTracer implements P2PService {
       epochCache,
       proofVerifier,
       worldStateSynchronizer,
-      blockMinFeesProvider,
+      nextBlockMinFeesProvider,
+      feeConfigProvider,
       telemetry,
       logger,
       txValidationCache,
@@ -806,15 +843,25 @@ export class LibP2PService extends WithTracer implements P2PService {
    * empty committee every signer is accepted, so two distinct honest proposers for the same slot look
    * like equivocation; without an expected proposer there is no one to attribute the offense to.
    * Mirrors the guard in checkpoint_equivocation_watcher, which refuses to slash when the slot has no
-   * proposer.
+   * proposer. While the slot's committee is not stable on L1 there is no expected proposer yet either.
    */
   private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
-    const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
-    if (expectedProposer === undefined) {
-      this.logger.warn(`Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty committee)`);
-      return false;
+    const expectedProposer = await this.epochCache.lookupProposer(slot);
+    switch (expectedProposer.state) {
+      case 'members':
+        return true;
+      case 'open':
+      case 'unstable':
+        this.logger.warn(
+          `Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty or not yet stable committee)`,
+          { slot, committeeState: expectedProposer.state },
+        );
+        return false;
+      case 'none':
+        // The proposal validator rejects a slot without a committee before duplicates are counted, so this needs the
+        // committee to vanish in between. Throwing makes the gossip validator reject the message, as it does for that.
+        throw new Error(`No committee on L1 for slot ${slot}`);
     }
-    return true;
   }
 
   /**
@@ -1144,6 +1191,16 @@ export class LibP2PService extends WithTracer implements P2PService {
         const { name } = firstStageOutcome.failure;
         let { severity } = firstStageOutcome.failure;
 
+        // The tx failed a check that only holds against this node's own view (it pays less than the fee we
+        // resolved for the next block). Drop it without propagating, but leave the sender's score alone.
+        if (severity === IgnoreWithoutPenalty) {
+          this.logger.verbose(`Ignoring gossiped tx ${tx.getTxHash().toString()}: stage 1 local check failed`, {
+            validator: name,
+            source: source.toString(),
+          });
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
+
         // Double spend validator has a special case handler. We perform more detailed examination
         // as to how recently the nullifier was entered into the tree and if the transaction should
         // have 'known' the nullifier existed. This determines the severity of the penalty applied to the peer.
@@ -1200,9 +1257,24 @@ export class LibP2PService extends WithTracer implements P2PService {
       } else if (wasIgnored) {
         return { result: TopicValidatorResult.Ignore, obj: tx };
       } else {
+        // The final pool insert rebuilt a fresh validator and rejected a tx that passed the earlier
+        // checks and proof. If the rejection is receiver-local state drift, the relayer forwarded a tx
+        // valid from its own view - ignore without penalizing it; only a sender-attributable reject penalizes.
+        const rejectionReasons = addResult.rejectionReasons?.get(txHash.toString()) ?? [];
+        if (isReceiverLocalStateDrift(rejectionReasons)) {
+          this.logger.verbose(
+            `Ignoring gossiped tx ${txHash.toString()}: pool rejected on receiver-local state drift`,
+            {
+              source: source.toString(),
+              reasons: rejectionReasons,
+            },
+          );
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
         this.logger.warn(`Gossiped tx ${txHash.toString()} unexpectedly rejected by pool`, {
           source: source.toString(),
           txHash: txHash.toString(),
+          reasons: rejectionReasons,
         });
         return { result: TopicValidatorResult.Reject, severity: PeerErrorSeverity.HighToleranceError };
       }
@@ -1562,11 +1634,8 @@ export class LibP2PService extends WithTracer implements P2PService {
     const {
       result,
       obj: checkpoint,
-      metadata: { isEquivocated, processBlock, isOversized } = {},
-    } = await this.validateReceivedMessage<
-      CheckpointProposal,
-      { isEquivocated: boolean; processBlock: boolean; isOversized: boolean }
-    >(
+      metadata: { isEquivocated, processBlock, isOversized, checkpointAlreadyStored } = {},
+    } = await this.validateReceivedMessage<CheckpointProposal, CheckpointProposalValidationMetadata>(
       () => this.validateAndStoreCheckpointProposal(source, CheckpointProposal.fromBuffer(payloadData)),
       msgId,
       source,
@@ -1574,9 +1643,11 @@ export class LibP2PService extends WithTracer implements P2PService {
     );
 
     // An oversized checkpoint is re-broadcast as slashing evidence but never attested or processed.
-    // Process checkpoint proposal if valid and neither equivocated nor oversized.
+    // Process checkpoint proposal if valid and neither equivocated nor oversized. A copy accepted only for
+    // the final block it delivers carries a checkpoint already stored from an earlier copy, so it must not
+    // trigger another processing attempt.
     const processCheckpointFn = () =>
-      result === TopicValidatorResult.Accept && checkpoint && !isEquivocated && !isOversized
+      result === TopicValidatorResult.Accept && checkpoint && !isEquivocated && !isOversized && !checkpointAlreadyStored
         ? this.processValidCheckpointProposal(ValidatedCheckpointProposalCore(checkpoint.toCore()), source)
         : Promise.resolve();
 
@@ -1613,16 +1684,22 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async validateAndStoreCheckpointProposal(
     peerId: PeerId,
     checkpoint: CheckpointProposal,
-  ): Promise<
-    ReceivedMessageValidationResult<
-      CheckpointProposal,
-      { isEquivocated: boolean; processBlock: boolean; isOversized: boolean }
-    >
-  > {
+  ): Promise<ReceivedMessageValidationResult<CheckpointProposal, CheckpointProposalValidationMetadata>> {
     // Dedup on already-accepted content before validation: an exact signed checkpoint payload already
-    // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. A
-    // different payload hash at the same slot is not stored, so equivocation still takes the full path.
-    if (await this.mempools.attestationPool.hasCheckpointProposal(checkpoint.slotNumber, checkpoint.getPayloadHash())) {
+    // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. An
+    // unseen payload hash at the same slot is not stored, so equivocation still takes the full path.
+    // The payload hash does not cover the embedded final block, and one signed payload can travel with or
+    // without it, so a copy whose final block is not stored yet takes the full path to deliver that block.
+    const embeddedBlock = checkpoint.getBlockProposal();
+    if (
+      (await this.mempools.attestationPool.hasCheckpointProposal(checkpoint.slotNumber, checkpoint.getPayloadHash())) &&
+      (!embeddedBlock ||
+        (await this.mempools.attestationPool.hasBlockProposal(
+          embeddedBlock.slotNumber,
+          embeddedBlock.indexWithinCheckpoint,
+          embeddedBlock.getPayloadHash(),
+        )))
+    ) {
       return { result: TopicValidatorResult.Ignore, obj: checkpoint };
     }
 
@@ -1682,6 +1759,20 @@ export class LibP2PService extends WithTracer implements P2PService {
     const tryAddResult = await this.mempools.attestationPool.tryAddCheckpointProposal(checkpointCore);
     const { added, alreadyExists, count } = tryAddResult;
     const isEquivocated = count !== undefined && count > 1;
+
+    // Already-stored checkpoint whose copy delivered a new final block: re-broadcast it so peers that only
+    // saw a copy without that block receive it too, but do not trigger another checkpoint processing attempt.
+    if (alreadyExists && processBlock) {
+      this.logger.debug(`Accepting already-stored checkpoint proposal that delivered its final block`, {
+        ...checkpoint.toCheckpointInfo(),
+        source: peerId.toString(),
+      });
+      return {
+        result: TopicValidatorResult.Accept,
+        obj: checkpoint,
+        metadata: { isEquivocated, processBlock, isOversized, checkpointAlreadyStored: true },
+      };
+    }
 
     // Duplicate proposal received, do not re-broadcast
     if (alreadyExists) {
@@ -1882,8 +1973,13 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
   }
 
-  private getGasFees(): Promise<GasFees> {
-    return this.blockMinFeesProvider.getCurrentMinFees();
+  /** The fees a gossiped transaction is checked against (see {@link computeGossipMinFees}). */
+  protected async getGasFees(): Promise<GossipMinFees> {
+    const [admission, l1Forward] = await Promise.all([
+      this.nextBlockMinFeesProvider.getAdmissionMinFees(),
+      this.nextBlockMinFeesProvider.getL1ForwardMinFees(),
+    ]);
+    return computeGossipMinFees(admission, l1Forward);
   }
 
   /**
@@ -1929,7 +2025,7 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async createFirstStageMessageValidators(
     currentBlockNumber: BlockNumber,
     nextSlotTimestamp: UInt64,
-  ): Promise<Record<string, TransactionValidator>> {
+  ): Promise<Record<string, TransactionValidator<GossipValidationFailure>>> {
     const gasFees = await this.getGasFees();
     const allowedInSetup = [
       ...(await getDefaultAllowedSetupFunctions()),
@@ -1937,7 +2033,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     ];
     const blockNumber = BlockNumber(currentBlockNumber + 1);
     const l1Constants = await this.archiver.getL1Constants();
-    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
+    const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
 
     return createFirstStageTxValidationsForGossipedTransactions(
       nextSlotTimestamp,
@@ -1969,10 +2065,10 @@ export class LibP2PService extends WithTracer implements P2PService {
    * @param messageValidators - The message validators to run.
    * @returns The validation outcome.
    */
-  private async runValidations(
+  private async runValidations<F extends GossipValidationFailure>(
     tx: Tx,
-    messageValidators: Record<string, TransactionValidator>,
-  ): Promise<ValidationOutcome> {
+    messageValidators: Record<string, TransactionValidator<F>>,
+  ): Promise<ValidationOutcome<F>> {
     // Gossip validation stays exhaustive within each stage because peer scoring uses the harshest failure severity;
     // failing fast would make the penalty depend on validator order. The stage boundaries themselves fail fast.
     const validationPromises = Object.entries(messageValidators).map(async ([name, { validator, severity }]) => {
@@ -1985,7 +2081,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     const failures = allValidations.filter(x => !x.isValid);
     if (failures.length > 0) {
       // Pick the most severe failure (lowest tolerance = harshest penalty)
-      const failed = maxBy(failures, f => PeerErrorSeverityByHarshness.indexOf(f.severity))!;
+      const failed = maxBy(failures, f => GossipValidationFailureByHarshness.indexOf(f.severity))!;
       return {
         allPassed: false,
         failure: {
