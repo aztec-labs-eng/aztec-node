@@ -4,7 +4,9 @@ import { Writable } from 'stream';
 
 import { inspect } from '../inspect/index.js';
 import { createLibp2pComponentLogger } from './libp2p_logger.js';
+import type { LogData } from './log_fn.js';
 import {
+  addLogDataHandler,
   createLogger,
   getActorColor,
   getLogLevel,
@@ -12,6 +14,7 @@ import {
   overwriteLoggingStream,
   pinoPrettyOpts,
   registerLoggingStream,
+  removeLogDataHandler,
   resetActorColors,
   setLogLevel,
 } from './pino-logger.js';
@@ -383,6 +386,26 @@ describe('pino-logger', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       err: { type: 'Error', message: 'frozen failure', stack: expect.stringContaining('frozen failure') },
+    });
+  });
+
+  it('serializes errors passed as the log data itself', () => {
+    const testLogger = createLogger('bare-error-test');
+    capturingStream.clear();
+
+    // Handlers that add fields copy the data into a new object.
+    const copyData = (data: LogData) => ({ ...data });
+    addLogDataHandler(copyData);
+    try {
+      testLogger.warn('error as data', new Error('bare failure'));
+    } finally {
+      removeLogDataHandler(copyData);
+    }
+
+    const entries = capturingStream.getJsonLines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      err: { type: 'Error', message: 'bare failure', stack: expect.stringContaining('bare failure') },
     });
   });
 

@@ -64,7 +64,9 @@ export function createLogger(module: string, bindings?: LoggerBindings): Logger 
   // Note that isLevelEnabled is missing from the browser version of pino.
   const logFn = (level: LogLevel, msg: string, data?: unknown) => {
     const pinoLogger = getPinoLogger();
-    return isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData((data as LogData) ?? {}), msg);
+    // Data handlers copy the data into a new object, which would drop a bare error's message and stack.
+    const logData = data instanceof Error ? { err: data } : ((data as LogData) ?? {});
+    return isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData(logData), msg);
   };
 
   return {
@@ -117,6 +119,13 @@ const logDataHandlers: LogDataHandler[] = [];
 
 export function addLogDataHandler(handler: LogDataHandler): void {
   logDataHandlers.push(handler);
+}
+
+export function removeLogDataHandler(handler: LogDataHandler): void {
+  const index = logDataHandlers.indexOf(handler);
+  if (index !== -1) {
+    logDataHandlers.splice(index, 1);
+  }
 }
 
 function processLogData(data: LogData): LogData {
