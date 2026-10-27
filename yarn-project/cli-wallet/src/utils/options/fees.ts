@@ -6,7 +6,6 @@ import type { LogFn } from '@aztec-labs/foundation/log';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
-import type { FeeOptions } from '@aztec-labs/wallet-sdk/base-wallet';
 import { Option } from 'commander';
 
 import type { WalletDB } from '../../storage/wallet_db.js';
@@ -306,12 +305,12 @@ export class CLIFeeArgs {
 // Printing
 
 export function printGasEstimates(
-  feeOpts: FeeOptions,
+  gasSettings: GasSettings,
   gasEstimates: Pick<GasSettings, 'gasLimits' | 'teardownGasLimits'>,
   log: LogFn,
 ) {
   log(`Estimated gas usage:    ${formatGasEstimate(gasEstimates)}`);
-  log(`Maximum total tx fee:   ${getEstimatedCost(gasEstimates, feeOpts.gasSettings.maxFeesPerGas)}`);
+  log(`Maximum total tx fee:   ${getEstimatedCost(gasEstimates, gasSettings.maxFeesPerGas)}`);
 }
 
 function formatGasEstimate(estimate: Pick<GasSettings, 'gasLimits' | 'teardownGasLimits'>) {

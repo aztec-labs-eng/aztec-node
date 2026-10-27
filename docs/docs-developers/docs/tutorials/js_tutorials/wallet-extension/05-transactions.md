@@ -210,38 +210,36 @@ The actual implementation uses `WalletSchema` to parse arguments in a type-safe 
 
 ## BaseWallet.sendTx
 
-For details on how `BaseWallet.sendTx` works with `completeFeeOptions`, see [PXE Integration](./03-pxe-integration.md#sponsoredfpc-fee-payment).
+For details on how `BaseWallet.sendTx` works with `getDefaultFeePaymentMethod`, see [PXE Integration](./03-pxe-integration.md#sponsoredfpc-fee-payment).
 
 The inherited `sendTx` method does the heavy lifting:
 
 ```typescript
 // In BaseWallet (inherited by OffscreenWallet)
 async sendTx(executionPayload, opts) {
-  // 1. Get fee options (our override uses SponsoredFPC!)
-  const feeOptions = await this.completeFeeOptions({
-    from: opts.from,
-    feePayer: executionPayload.feePayer,
+  // 1. Fill in gas settings from the network's current fees and limits
+  const gasSettings = await this.calculateGasSettings({
     gasSettings: opts.fee?.gasSettings,
   });
 
-  // 2. Create execution request
-  const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(
-    executionPayload,
-    opts.from,
-    feeOptions
-  );
+  // 2. If the payload doesn't pay its own fee, add the wallet's default fee payment
+  //    (our override uses SponsoredFPC!)
+  const txPayload = await this.addDefaultFeePayment(executionPayload, opts.from, gasSettings);
 
-  // 3. Generate proof (this is the slow part)
+  // 3. Create execution request
+  const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, gasSettings);
+
+  // 4. Generate proof (this is the slow part)
   const provenTx = await this.pxe.proveTx(txRequest);
 
-  // 4. Convert to onchain transaction
+  // 5. Convert to onchain transaction
   const tx = await provenTx.toTx();
   const txHash = tx.getTxHash();
 
-  // 5. Submit to node
+  // 6. Submit to node
   await this.aztecNode.sendTx(tx);
 
-  // 6. Optionally wait for confirmation
+  // 7. Optionally wait for confirmation
   if (opts.wait !== NO_WAIT) {
     const receipt = await waitForTx(this.aztecNode, txHash, opts.wait);
     return { receipt };
@@ -252,7 +250,7 @@ async sendTx(executionPayload, opts) {
 
 ## SponsoredFPC Integration
 
-Our `completeFeeOptions` override in `OffscreenWallet` ensures SponsoredFPC is used, as shown in [PXE Integration](./03-pxe-integration.md#sponsoredfpc-fee-payment).
+Our `getDefaultFeePaymentMethod` override in `OffscreenWallet` ensures SponsoredFPC is used, as shown in [PXE Integration](./03-pxe-integration.md#sponsoredfpc-fee-payment).
 
 The `SponsoredFeePaymentMethod`:
 1. Creates a fee payment execution payload

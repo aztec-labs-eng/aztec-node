@@ -124,19 +124,12 @@ test-extension/
 
 ### SponsoredFPC Fee Payment
 
-The wallet overrides `completeFeeOptions()` to use SponsoredFPC by default:
+The wallet overrides `getDefaultFeePaymentMethod()` to use SponsoredFPC by default. `BaseWallet` adds it to every transaction whose payload doesn't already pay for itself:
 
 ```typescript
-override async completeFeeOptions(config) {
-  if (!config.feePayer) {
-    const sponsoredFPC = await getSponsoredFPCContract();
-    return {
-      walletFeePaymentMethod: new SponsoredFeePaymentMethod(sponsoredFPC.address),
-      accountFeePaymentMethodOptions: AccountFeePaymentMethodOptions.EXTERNAL,
-      // ...
-    };
-  }
-  return super.completeFeeOptions(config);
+protected async getDefaultFeePaymentMethod() {
+  const address = await this.ensureSponsoredFPC();
+  return new SponsoredFeePaymentMethod(address);
 }
 ```
 

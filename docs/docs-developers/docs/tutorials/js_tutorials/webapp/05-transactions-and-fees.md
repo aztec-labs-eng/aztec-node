@@ -80,7 +80,7 @@ await contract.methods
   });
 ```
 
-The `EmbeddedWallet` handles this automatically via `completeFeeOptions` — you don't need to pass `fee` options manually when using it.
+The `EmbeddedWallet` handles this automatically via its `getDefaultFeePaymentMethod` override — you don't need to pass `fee` options manually when using it.
 
 :::info
 SponsoredFPC is for development. Production apps use their own fee payment strategy.

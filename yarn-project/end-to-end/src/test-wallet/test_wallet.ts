@@ -36,8 +36,8 @@ import {
   type TxHash,
   type TxReceipt,
 } from '@aztec-labs/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions } from '@aztec-labs/wallet-sdk/base-wallet';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
+import { BaseWallet, type SimulateViaEntrypointOptions, getAppCallOffset } from '@aztec-labs/wallet-sdk/base-wallet';
 import type { AccountType } from '@aztec-labs/wallets/embedded';
 
 import { DEFAULT_MIN_FEE_PADDING } from '../fixtures/fixtures.js';
@@ -317,15 +317,12 @@ export class TestWallet extends BaseWallet {
     executionPayload: ExecutionPayload,
     opts: SimulateViaEntrypointOptions,
   ): Promise<TxSimulationResultWithAppOffset> {
-    const { from, feeOptions, additionalScopes, skipTxValidation, skipFeeEnforcement, sendMessagesAs } = opts;
+    const { from, gasSettings, additionalScopes, skipTxValidation, skipFeeEnforcement, sendMessagesAs } = opts;
     const scopes = this.scopesFrom(from, additionalScopes ?? [], sendMessagesAs);
     const skipKernels = this.simulationMode !== 'full';
     const useOverride = this.simulationMode === 'kernelless-override';
 
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
-    const finalExecutionPayload = feeExecutionPayload
-      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
-      : executionPayload;
+    const txPayload = await this.addDefaultFeePayment(executionPayload, from, gasSettings);
     const chainInfo = await this.getChainInfo();
 
     let overrides = opts.overrides;
@@ -340,7 +337,7 @@ export class TestWallet extends BaseWallet {
 
     if (from === NO_FROM) {
       const entrypoint = new DefaultEntrypoint();
-      txRequest = await entrypoint.createTxExecutionRequest(finalExecutionPayload, feeOptions.gasSettings, chainInfo);
+      txRequest = await entrypoint.createTxExecutionRequest(txPayload, gasSettings, chainInfo);
     } else {
       let fromAccount: Account;
       if (useOverride) {
@@ -352,15 +349,8 @@ export class TestWallet extends BaseWallet {
       const executionOptions: DefaultAccountEntrypointOptions = {
         txNonce: Fr.random(),
         cancellable: this.cancellableTransactions,
-        // If from is an address, feeOptions include the way the account contract should handle the fee payment
-        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
       };
-      txRequest = await fromAccount.createTxExecutionRequest(
-        finalExecutionPayload,
-        feeOptions.gasSettings,
-        chainInfo,
-        executionOptions,
-      );
+      txRequest = await fromAccount.createTxExecutionRequest(txPayload, gasSettings, chainInfo, executionOptions);
     }
 
     const result = await this.pxe.simulateTx(txRequest, {
@@ -372,17 +362,16 @@ export class TestWallet extends BaseWallet {
       scopes,
       senderForTags: this.senderForTagsFrom(from, sendMessagesAs),
     });
-    const appCallOffset = await this.computeAppCallOffset(from, feeOptions);
-    return TxSimulationResultWithAppOffset.fromResultAndOffset(result, appCallOffset);
+    return TxSimulationResultWithAppOffset.fromResultAndOffset(
+      result,
+      getAppCallOffset(from, executionPayload, txPayload),
+    );
   }
 
   async proveTx(exec: ExecutionPayload, opts: Omit<SendOptions, 'wait'>): Promise<ProvenTx> {
-    const fee = await this.completeFeeOptions({
-      from: opts.from,
-      feePayer: exec.feePayer,
-      gasSettings: opts.fee?.gasSettings,
-    });
-    const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(exec, opts.from, fee);
+    const gasSettings = await this.calculateGasSettings({ gasSettings: opts.fee?.gasSettings });
+    const txPayload = await this.addDefaultFeePayment(exec, opts.from, gasSettings);
+    const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, gasSettings);
     const txProvingResult = await this.pxe.proveTx(txRequest, {
       scopes: this.scopesFrom(opts.from, opts.additionalScopes ?? [], opts.sendMessagesAs),
       senderForTags: this.senderForTagsFrom(opts.from, opts.sendMessagesAs),
