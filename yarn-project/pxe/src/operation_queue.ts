@@ -160,8 +160,8 @@ export class OperationQueue {
     if (err instanceof SimulationError) {
       err.setAztecContext(contextStr);
     } else {
-      this.log.error(err.name, err);
-      this.log.debug(contextStr);
+      this.log.error('PXE operation failed', err);
+      this.log.debug('Context of failed PXE operation', { context });
     }
     return err;
   }

@@ -618,7 +618,7 @@ export class PXE {
             this.log,
           );
         } catch (enrichErr) {
-          this.log.error(`Failed to enrich public simulation error: ${enrichErr}`);
+          this.log.error('Failed to enrich public simulation error', enrichErr);
         }
       }
       throw err;

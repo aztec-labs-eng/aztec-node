@@ -236,6 +236,7 @@ const pinoOpts: pino.LoggerOptions<keyof typeof customLevels> = {
     log: obj => convertBigintsToStrings(obj) as Record<string, unknown>,
     ...loggingConfig.formatters,
   },
+  serializers: { err: serializeError, error: serializeError },
 };
 
 export const levels = {
@@ -462,4 +463,21 @@ function formatErr(msg: string, err?: unknown): string {
       return `${msg}: [unserializable error]`;
     }
   }
+}
+
+/**
+ * Serializes an error in log data, keeping its cause as a nested object and converting bigints in its fields to
+ * strings.
+ */
+function serializeError(err: unknown): unknown {
+  let serialized: unknown = err;
+  if (err instanceof Error) {
+    try {
+      serialized = pino.stdSerializers.errWithCause(err);
+    } catch {
+      // errWithCause tags each error it walks with a symbol, which throws when the error is frozen
+      serialized = { type: err.name, message: err.message, stack: err.stack };
+    }
+  }
+  return convertBigintsToStrings(serialized);
 }
