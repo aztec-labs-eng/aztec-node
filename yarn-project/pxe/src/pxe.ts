@@ -63,7 +63,7 @@ import { ContractClassService } from './contract/contract_class_service.js';
 import { ContractSyncService } from './contract/contract_sync_service.js';
 import {
   ContractFunctionSimulator,
-  computeSimulatedTxExpirationTimestamp,
+  computeSimulatedMaxExpirationTimestamp,
   generateSimulatedProvingResult,
 } from './contract_function_simulator/contract_function_simulator.js';
 import { displayDebugLogs } from './contract_logging.js';
@@ -651,12 +651,11 @@ export class PXE {
       this.node,
       anchorBlockHeader,
     );
-    const kernelTraceProver = new PrivateKernelExecutionProver(
-      kernelInputsProvider,
-      proofCreator,
-      !this.proverEnabled,
-      this.log.getBindings(),
-    );
+    const kernelTraceProver = new PrivateKernelExecutionProver(kernelInputsProvider, proofCreator, {
+      fakeProofs: !this.proverEnabled,
+      bindings: this.log.getBindings(),
+      resolveExpirationAndPadding: this.hooks?.resolveExpirationAndPadding,
+    });
     this.log.debug(`Executing kernel trace prover (${JSON.stringify(config)})...`);
     return await kernelTraceProver.proveWithKernels(txExecutionRequest.toTxRequest(), privateExecutionResult, config);
   }
@@ -713,7 +712,8 @@ export class PXE {
         privateExecutionResult,
         (addr, sel) => this.#getDebugFunctionName(addr, sel, anchorBlockHeader),
         this.node,
-        await computeSimulatedTxExpirationTimestamp(privateExecutionResult, this.node),
+        await computeSimulatedMaxExpirationTimestamp(privateExecutionResult, this.node),
+        { resolveExpirationAndPadding: this.hooks?.resolveExpirationAndPadding },
       ));
     } else {
       // Kernel logic, plus proving of all private functions and kernels.

@@ -34,6 +34,11 @@ export class PaddedSideEffects {
   }
 }
 
+/**
+ * How many padding items the final kernel appends to each side effect array, per phase. Despite the name, which mirrors
+ * the struct in the kernel circuits, these are not the lengths the arrays are padded up to: a tx with 3 revertible note
+ * hashes padded up to 8 has `revertibleNoteHashes` of 5 in `PaddedSideEffectAmounts`.
+ */
 export class PaddedSideEffectAmounts {
   constructor(
     public nonRevertibleNoteHashes: number,

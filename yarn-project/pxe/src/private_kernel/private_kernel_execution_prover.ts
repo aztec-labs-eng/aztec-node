@@ -46,8 +46,9 @@ import {
 import { VerificationKeyAsFields, VerificationKeyData, VkData } from '@aztec-labs/stdlib/vks';
 import { Buffer } from 'buffer';
 
+import type { ResolveExpirationAndPadding } from '../hooks/resolve_expiration_and_padding.js';
 import { BatchPlanner } from './batch_planner.js';
-import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';
+import { applyExpirationAndPaddingHook } from './hints/expiration_and_padding.js';
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
 import {
   type PrivateKernelInputsProvider,
@@ -67,6 +68,17 @@ export interface PrivateKernelExecutionProverConfig {
   profileMode: 'gates' | 'execution-steps' | 'full' | 'none';
 }
 
+/** Optional settings of a {@link PrivateKernelExecutionProver}. */
+export interface PrivateKernelExecutionProverOptions {
+  /** Returns a random proof instead of proving, as when PXE runs with proving disabled. */
+  fakeProofs?: boolean;
+  bindings?: LoggerBindings;
+  /** The wallet's hook choosing each tx's expiry and padding. PXE's default applies when absent. */
+  resolveExpirationAndPadding?: ResolveExpirationAndPadding;
+  /** The most private calls a single init or inner kernel absorbs. Defaults to `MAX_APPS_PER_KERNEL`. */
+  maxBatchSize?: number;
+}
+
 /**
  * The PrivateKernelExecutionProver class is responsible for taking a transaction request and sequencing the
  * the execution of the private functions within, sequenced with private kernel "glue" to check protocol rules.
@@ -75,15 +87,24 @@ export interface PrivateKernelExecutionProverConfig {
  */
 export class PrivateKernelExecutionProver {
   private log: Logger;
+  private readonly fakeProofs: boolean;
+  private readonly resolveExpirationAndPadding: ResolveExpirationAndPadding | undefined;
+  private readonly maxBatchSize: number;
 
   constructor(
     private inputsProvider: PrivateKernelInputsProvider,
     private proofCreator: PrivateKernelProver,
-    private fakeProofs = false,
-    bindings?: LoggerBindings,
-    private maxBatchSize: number = MAX_APPS_PER_KERNEL,
+    {
+      fakeProofs = false,
+      bindings,
+      resolveExpirationAndPadding,
+      maxBatchSize = MAX_APPS_PER_KERNEL,
+    }: PrivateKernelExecutionProverOptions = {},
   ) {
     this.log = createLogger('pxe:private-kernel-execution-prover', bindings);
+    this.fakeProofs = fakeProofs;
+    this.resolveExpirationAndPadding = resolveExpirationAndPadding;
+    this.maxBatchSize = maxBatchSize;
   }
 
   /**
@@ -146,7 +167,7 @@ export class PrivateKernelExecutionProver {
         while (resetBuilder.needsReset()) {
           // Inner reset: without siloing.
           const witgenTimer = new Timer();
-          const privateInputs = await resetBuilder.build(this.inputsProvider);
+          const privateInputs = await resetBuilder.build(this.inputsProvider, PaddedSideEffectAmounts.empty());
           output = generateWitnesses
             ? await this.proofCreator.generateResetOutput(privateInputs)
             : await this.proofCreator.simulateReset(privateInputs);
@@ -210,17 +231,16 @@ export class PrivateKernelExecutionProver {
       output.publicInputs.feePayer = new AztecAddress(Fr.MAX_FIELD_VALUE);
     }
 
-    // TODO: Enable padding once we better understand the final amounts to pad to.
-    const paddedSideEffectAmounts = PaddedSideEffectAmounts.empty();
+    const { expirationTimestampUpperBound, paddedSideEffectAmounts } = await applyExpirationAndPaddingHook(
+      this.resolveExpirationAndPadding,
+      {
+        anchorBlockTimestamp: output.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp,
+        maxExpirationTimestamp: output.publicInputs.expirationTimestamp,
+        minSideEffects: finalResetBuilder.getKeptSideEffectCounts(),
+      },
+    );
 
-    // Round the aggregated expirationTimestamp down to reduce precision and avoid leaking which private
-    // functions were called via their exact expiration offsets.
-    const expirationTimestampUpperBound = computeTxExpirationTimestamp({
-      anchorBlockTimestamp: output.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp,
-      expirationTimestamp: output.publicInputs.expirationTimestamp,
-    });
-
-    const resetInputs = await finalResetBuilder.build(this.inputsProvider);
+    const resetInputs = await finalResetBuilder.build(this.inputsProvider, paddedSideEffectAmounts);
     const mergedInputs = new PrivateKernelResetTailCircuitPrivateInputs(
       resetInputs.previousKernel,
       resetInputs.paddedSideEffects,

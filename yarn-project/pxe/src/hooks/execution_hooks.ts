@@ -1,9 +1,10 @@
 import type { AuthorizeUtilityCall } from './authorize_utility_call.js';
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
+import type { ResolveExpirationAndPadding } from './resolve_expiration_and_padding.js';
 import type { ResolveTaggingSecretStrategy } from './resolve_tagging_secret_strategy.js';
 
 /**
- * Hooks that PXE invokes during client-side simulation to gate or steer operations that the protocol
+ * Hooks that PXE invokes while simulating and proving transactions to gate or steer operations that the protocol
  * does not restrict on its own. They give the wallet a chance to apply custom policies (e.g.
  * prompting the user, consulting a dynamic allowlist, or inspecting call arguments) before the
  * execution proceeds. All hooks are optional, and when a hook is absent PXE applies a safe default.
@@ -54,6 +55,12 @@ export interface ExecutionHooks {
    * fulfilling it. Rejected when absent; see {@link ResolveCustomRequest}.
    */
   resolveCustomRequest?: ResolveCustomRequest;
+  /**
+   * Chooses the tx's expiration timestamp and adds padding to private side-effects, changing its public effects and
+   * therefore its privacy set. PXE applies a default when absent.
+   * See {@link ResolveExpirationAndPadding} for details and defaults.
+   */
+  resolveExpirationAndPadding?: ResolveExpirationAndPadding;
 }
 
 /**

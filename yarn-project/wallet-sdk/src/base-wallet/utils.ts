@@ -138,7 +138,7 @@ async function simulateBatchViaNode(
     node,
     // This tx is only simulated in public and never sent, so nothing reads its expiration timestamp.
     blockHeader.globalVariables.timestamp + BigInt(MAX_TX_LIFETIME),
-    1, // minRevertibleSideEffectCounter
+    { minRevertibleSideEffectCounterOverride: 1 },
   );
 
   provingResult.publicInputs.feePayer = from;
