@@ -16,10 +16,12 @@ missing=()
 count=0
 while IFS= read -r f; do
   count=$((count + 1))
-  first_source=$(grep -n -E "$ci3_source_re" "$f" | head -1 | cut -d: -f1)
+  # grep -m1 rather than `| head -1`: head exiting early SIGPIPEs grep, which pipefail turns into
+  # a silent exit.
+  first_source=$(grep -m1 -n -E "$ci3_source_re" "$f" | cut -d: -f1)
   required='bootstrap.sh" init || exit 1'
   [ "$f" == bootstrap.sh ] && required='submodule update --init'
-  first_prep=$(grep -n -F "$required" "$f" | head -1 | cut -d: -f1 || true)
+  first_prep=$(grep -m1 -n -F "$required" "$f" | cut -d: -f1 || true)
   if [ -z "$first_prep" ] || [ "$first_prep" -gt "$first_source" ]; then
     missing+=("$f")
   fi
