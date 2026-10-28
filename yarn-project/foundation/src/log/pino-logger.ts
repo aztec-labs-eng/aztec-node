@@ -475,17 +475,24 @@ function formatErr(msg: string, err?: unknown): string {
 }
 
 /**
- * Serializes an error in log data, keeping its cause as a nested object and converting bigints in its fields to
- * strings.
+ * Serializes an error in log data with its type, message and stack, converting bigints in its fields to strings. Its
+ * other fields are the ones its toJSON returns if it defines one, or else all of them, with its cause as a nested
+ * object.
  */
 function serializeError(err: unknown): unknown {
   let serialized: unknown = err;
   if (err instanceof Error) {
-    try {
-      serialized = pino.stdSerializers.errWithCause(err);
-    } catch {
-      // errWithCause tags each error it walks with a symbol, which throws when the error is frozen
-      serialized = { type: err.name, message: err.message, stack: err.stack };
+    const basicFields = { type: err.constructor.name, message: err.message, stack: err.stack };
+    if ('toJSON' in err && typeof err.toJSON === 'function') {
+      // toJSON picks which fields are safe to log, e.g. leaving out circular request objects
+      serialized = { ...basicFields, ...err.toJSON() };
+    } else {
+      try {
+        serialized = pino.stdSerializers.errWithCause(err);
+      } catch {
+        // errWithCause tags each error it walks with a symbol, which throws when the error is frozen
+        serialized = basicFields;
+      }
     }
   }
   return convertBigintsToStrings(serialized);

@@ -348,7 +348,7 @@ describe('pino-logger', () => {
     });
   });
 
-  it('serializes errors that define toJSON through it', () => {
+  it('serializes errors that define toJSON with their message, stack and toJSON fields', () => {
     const testLogger = createLogger('error-to-json-test');
     capturingStream.clear();
 
@@ -363,7 +363,7 @@ describe('pino-logger', () => {
       }
 
       public toJSON() {
-        return { name: this.name, message: this.message, code: 'E_REQUEST' };
+        return { code: 'E_REQUEST' };
       }
     }
 
@@ -372,7 +372,12 @@ describe('pino-logger', () => {
     const entries = capturingStream.getJsonLines();
     expect(entries).toHaveLength(1);
     const { err } = entries[0] as { err: unknown };
-    expect(err).toMatchObject({ name: 'RequestError', message: 'request failed', code: 'E_REQUEST' });
+    expect(err).toMatchObject({
+      type: 'RequestError',
+      message: 'request failed',
+      stack: expect.stringContaining('request failed'),
+      code: 'E_REQUEST',
+    });
     expect(err).not.toHaveProperty('request');
   });
 
