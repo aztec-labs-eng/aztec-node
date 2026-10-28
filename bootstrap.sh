@@ -166,7 +166,16 @@ function install_deps {
 # stdout is often data. `init` stops here, so scripts can prepare the checkout without the rest.
 # The update rewrites submodule config even when it has nothing to do, and entry points start in
 # parallel, so it only runs when the read-only status shows a submodule missing, moved or conflicted.
-if git -C "$(dirname "${BASH_SOURCE[0]}")" submodule status --recursive | grep -q '^[-+U]'; then
+# Submodules marked update = none never count: the update skips them, and something else may keep them
+# off their pin (aztec-packages' labs-patches). The local config is enough to find them: it is where
+# people opt out, and the first update copies the marks from .gitmodules into it.
+function stale_submodules {
+  local dir=$1 names
+  names=$(git -C "$dir" config --get-regexp '^submodule\..*\.update$' '^none$' | sed -E 's/^submodule\.(.*)\.update none$/\1/')
+  git -C "$dir" submodule status --recursive | awk '/^[-+U]/ { print $2 }' |
+    grep -vxF -f <(for n in $names; do git -C "$dir" config -f .gitmodules "submodule.$n.path"; done; echo)
+}
+if [ -n "$(stale_submodules "$(dirname "${BASH_SOURCE[0]}")")" ]; then
   git -C "$(dirname "${BASH_SOURCE[0]}")" submodule update --init --recursive --depth 1 --jobs 8 --quiet >&2 || exit 1
 fi
 [ "${1:-}" = "init" ] && exit 0

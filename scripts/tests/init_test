@@ -54,8 +54,6 @@ git -C "$src/ci3" checkout -q "$c1" && git -C "$src/other" checkout -q "$o1"
 git -C "$src" add -A && git -C "$src" commit -qm B && git -C "$src" tag B
 git -C "$src/ci3" checkout -q "$c2" && git -C "$src/other" checkout -q "$o2"
 git -C "$src" add -A && git -C "$src" commit -qm C && git -C "$src" tag C
-# D: C without the update = none submodule, like this repository.
-git -C "$src" rm -q skipped && git -C "$src" commit -qm D && git -C "$src" tag D
 
 # A fresh clone at a commit, without submodules: what a developer gets.
 function clone_at {
@@ -71,9 +69,6 @@ function init_in {
   (cd "$1" && ./bootstrap.sh init >"$work/out" 2>"$work/err") || rc=$?
   out=$(cat "$work/out") err=$(cat "$work/err")
 }
-# stderr without git's "Skipping submodule" notices, which it prints for every update = none
-# submodule on every run, even with --quiet.
-notices_only() { [ -z "$(grep -v "^Skipping submodule '" <<<"$1")" ]; }
 # Clones at B, inits, then checks out C: as after a pull that moved both pins.
 function stale_clone {
   local d
@@ -100,8 +95,8 @@ fi
 for r in ci3 other; do mv "$work/$r.git" "$work/$r.git.away"; done
 init_in "$d"
 for r in ci3 other; do mv "$work/$r.git.away" "$work/$r.git"; done
-[ $rc -eq 0 ] && [ -z "$out" ] && notices_only "$err" && pass "at the pins: silent apart from skip notices, no network" \
-  || fail "at the pins: silent apart from skip notices, no network" "rc=$rc out='$out' err='$err'"
+[ $rc -eq 0 ] && [ -z "$out$err" ] && pass "at the pins: silent, no network" \
+  || fail "at the pins: silent, no network" "rc=$rc out='$out' err='$err'"
 
 # After a pull moved the pins, the submodules follow.
 d=$(stale_clone stale)
@@ -133,6 +128,31 @@ else
     "rc=$rc ci3=$(head_of "$d/ci3") other=$(head_of "$d/other") err='$err'"
 fi
 
+# An update = none submodule that something else manages and keeps ahead of its pin, as
+# aztec-packages' labs-patches does with labs/: init must neither touch it nor be triggered by it.
+d=$(clone_at managed C)
+init_in "$d"
+git -C "$d" submodule update --init --checkout -q skipped 2>/dev/null
+echo patched > "$d/skipped/file" && git -C "$d/skipped" commit -qam "a patch on top"
+patched=$(head_of "$d/skipped")
+init_in "$d"
+if [ $rc -eq 0 ] && [ "$(head_of "$d/skipped")" = "$patched" ] && [ -z "$out$err" ]; then
+  pass "an update = none submodule kept ahead of its pin is left alone, silently"
+else
+  fail "an update = none submodule kept ahead of its pin is left alone, silently" "rc=$rc skipped=$(head_of "$d/skipped") err='$err'"
+fi
+
+# A local opt-out with nothing else stale: nothing to do, so nothing runs.
+d=$(clone_at opted_out_quiet B)
+init_in "$d"
+git -C "$d" config submodule.ci3.update none
+git -C "$d" checkout -q C
+git -C "$d/other" checkout -q "$o2"
+init_in "$d"
+[ $rc -eq 0 ] && [ "$(head_of "$d/ci3")" = "$c1" ] && [ -z "$out$err" ] \
+  && pass "a locally opted-out submodule behind its pin does not trigger an update" \
+  || fail "a locally opted-out submodule behind its pin does not trigger an update" "rc=$rc ci3=$(head_of "$d/ci3") err='$err'"
+
 # Untracked files (build output) do not block an update, and survive it.
 d=$(stale_clone untracked)
 echo "build output" > "$d/other/untracked.out"
@@ -144,7 +164,7 @@ init_in "$d"
 # A commit from before ci3 was a submodule: nothing to do.
 d=$(clone_at old A)
 init_in "$d"
-[ $rc -eq 0 ] && [ "$(cat "$d/ci3/file")" = in-tree ] && [ -z "$out" ] && notices_only "$err" \
+[ $rc -eq 0 ] && [ "$(cat "$d/ci3/file")" = in-tree ] && [ -z "$out$err" ] \
   && pass "commit where ci3 is a plain directory: no-op" || fail "commit where ci3 is a plain directory: no-op" "rc=$rc err='$err'"
 
 # Leftovers in a submodule's directory block the init: git refuses, init fails, nothing is touched.
@@ -159,10 +179,9 @@ fi
 
 # Entry points start in parallel (make runs the project bootstraps at once), long after the submodules
 # are in place: those inits must not contend. `git submodule update` rewrites submodule config even
-# with nothing to do, so parallel runs used to race on its lock and some failed. Run without an
-# update = none submodule, as in this repository: git always lists one as missing, so init would
-# still update on every start in a repository that has one.
-d=$(clone_at parallel D)
+# with nothing to do, so parallel runs used to race on its lock and some failed. Run with an
+# update = none submodule present, which git always lists as missing.
+d=$(clone_at parallel C)
 (cd "$d" && ./bootstrap.sh init 2>/dev/null)
 failed=0
 pids=()
