@@ -117,7 +117,6 @@ export const FailedL1TxSchema: ZodFor<FailedL1Tx> = z.object({
     data: hexSchema,
     value: schemas.BigInt.optional(),
   }),
-  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local store of this sequencer's own failed L1 txs
   blobData: z.array(hexSchema).optional(),
   l1BlockNumber: schemas.BigInt,
   receipt: z
@@ -133,9 +132,7 @@ export const FailedL1TxSchema: ZodFor<FailedL1Tx> = z.object({
     name: z.string().optional(),
   }),
   context: z.object({
-    // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local store of this sequencer's own failed L1 txs
     actions: z.array(z.string()),
-    // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local store of this sequencer's own failed L1 txs
     requests: z.array(z.object({ action: z.string(), to: hexSchema, data: hexSchema })).optional(),
     checkpointNumber: z.number().optional(),
     slot: z.number().optional(),
@@ -146,10 +143,8 @@ export const FailedL1TxSchema: ZodFor<FailedL1Tx> = z.object({
       sentFeesPerGas: feesPerGasSchema.optional(),
       gasLimit: schemas.BigInt.optional(),
       nonce: z.number().optional(),
-      // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local store of this sequencer's own failed L1 txs
       sentFeesPerGasLadder: z.array(feesPerGasSchema).optional(),
       attempts: z.number().optional(),
-      // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local store of this sequencer's own failed L1 txs
       windowBlocks: z.array(windowBlockFeesSchema).optional(),
     })
     .optional(),

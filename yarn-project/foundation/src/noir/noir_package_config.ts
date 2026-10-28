@@ -48,7 +48,6 @@ const noirPackageConfigSchema: z.ZodType<NoirPackageConfig> = z.object({
     type: z.enum(['lib', 'contract', 'bin']).default('bin'),
     entry: z.string().optional(),
     description: z.string().optional(),
-    // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- parses a local Nargo.toml
     authors: z.array(z.string()).optional(),
     // eslint-disable-next-line camelcase
     compiler_version: z.string().optional(),

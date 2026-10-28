@@ -110,7 +110,6 @@ export function mapSchema<TKey, TValue>(
   value: ZodFor<TValue>,
   maxSize?: number,
 ): ZodFor<Map<TKey, TValue>> {
-  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- bounded below when maxSize is given; omitted only for trusted data
   const entries = z.array(z.tuple([key, value]));
   return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Map(parsed));
 }
@@ -120,7 +119,6 @@ export function mapSchema<TKey, TValue>(
  * @param maxSize - Maximum number of entries. Required when parsing untrusted input; omit only for trusted local data.
  */
 export function setSchema<T>(value: ZodFor<T>, maxSize?: number): ZodFor<Set<T>> {
-  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- bounded below when maxSize is given; omitted only for trusted data
   const entries = z.array(value);
   return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Set(parsed));
 }
