@@ -66,7 +66,6 @@ const mnemonicConfigSchema = z
 const ethAccountSchema = z.union([ethPrivateKeySchema, remoteSignerAccountSchema, encryptedKeyFileSchema]);
 
 // EthAccounts schema
-// eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- operator keystore file
 const ethAccountsSchema = z.union([ethAccountSchema, z.array(ethAccountSchema), mnemonicConfigSchema]);
 
 // BLSAccount schema
@@ -84,7 +83,6 @@ const attesterAccountSchema = z.union([
 ]);
 
 // AttesterAccounts schema: AttesterAccount | AttesterAccount[] | MnemonicConfig
-// eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- operator keystore file
 const attesterAccountsSchema = z.union([attesterAccountSchema, z.array(attesterAccountSchema), mnemonicConfigSchema]);
 
 // Prover keystore schema
@@ -126,7 +124,6 @@ const validatorKeyStoreSchemaV2 = z
 const keystoreSchemaV1 = z
   .object({
     schemaVersion: z.literal(1),
-    // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- operator keystore file
     validators: optional(z.array(validatorKeyStoreSchemaV1)),
     slasher: optional(ethAccountsSchema),
     remoteSigner: optional(remoteSignerConfigSchema),
@@ -143,7 +140,6 @@ const keystoreSchemaV1 = z
 const keystoreSchemaV2 = z
   .object({
     schemaVersion: z.literal(2),
-    // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- operator keystore file
     validators: optional(z.array(validatorKeyStoreSchemaV2)),
     slasher: optional(ethAccountsSchema),
     remoteSigner: optional(remoteSignerConfigSchema),

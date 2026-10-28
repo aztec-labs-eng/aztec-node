@@ -124,7 +124,6 @@ export function setSchema<T>(value: ZodFor<T>, maxSize: number): ZodFor<Set<T>> 
 }
 
 function boundedArray<T extends ZodTypeAny>(item: T, maxSize: number) {
-  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- bounded unless maxSize is Infinity, which is only for trusted data
   return Number.isFinite(maxSize) ? z.array(item).max(maxSize) : z.array(item);
 }
 
