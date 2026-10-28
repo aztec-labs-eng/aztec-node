@@ -1,6 +1,6 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { EpochCache } from '@aztec-labs/epoch-cache';
-import { InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { InboxContract, RollupContract, computeAttestationsHash } from '@aztec-labs/ethereum/contracts';
 import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
@@ -622,7 +622,8 @@ export class ArchiverL1Synchronizer implements Traceable {
   /**
    * Compares the local checkpointed chain with the rollup's status at the given L1 head: updates the proven tip and
    * unwinds local checkpoints L1 no longer has. Returns whether checkpoint logs still have to be fetched forward, which
-   * is not the case when neither side has checkpoints or L1's pending tip is exactly the local one.
+   * is not the case when neither side has checkpoints, L1's pending tip is exactly the local one, or the tip was unwound
+   * because L1 holds different attestations for it.
    */
   private async reconcileCheckpointedChain(
     blocksSynchedTo: bigint,
@@ -675,7 +676,20 @@ export class ArchiverL1Synchronizer implements Traceable {
 
       const localPendingArchiveRoot = localPendingCheckpoint.archive.root.toString();
       const noCheckpointSinceLast = pendingArchive.toString() === localPendingArchiveRoot;
-      if (noCheckpointSinceLast) {
+      const localPendingRootOnL1 = archiveForLocalPendingCheckpointNumber.equals(localPendingCheckpoint.archive.root);
+      // An L1 reorg may have republished the same checkpoint with different attestations, which the root misses. This
+      // is checked even when L1 has moved past the local tip, since storing the next checkpoint would bury the stale
+      // attestations where no later pass compares them. Proven checkpoints are skipped: their attestations are no
+      // longer needed for a proof, and unwinding them would drop the local proven and finalized tips.
+      const tipAttestationsReplaced =
+        localPendingRootOnL1 &&
+        localPendingCheckpointNumber > provenCheckpointNumber &&
+        !(
+          await this.rollup.getCheckpoint(localPendingCheckpointNumber, { blockNumber: currentL1BlockNumber })
+        ).attestationsHash.equals(
+          Buffer32.fromString(computeAttestationsHash(localPendingCheckpoint.verbatimAttestations)),
+        );
+      if (noCheckpointSinceLast && !tipAttestationsReplaced) {
         // We believe the following line causes a problem when we encounter L1 re-orgs.
         // Basically, by setting the synched L1 block number here, we are saying that we have
         // processed all checkpoints up to the current L1 block number and we will not attempt to retrieve logs from
@@ -693,9 +707,7 @@ export class ArchiverL1Synchronizer implements Traceable {
         return { rollupStatus, fetchCheckpoints: false };
       }
 
-      const localPendingCheckpointInChain = archiveForLocalPendingCheckpointNumber.equals(
-        localPendingCheckpoint.archive.root,
-      );
+      const localPendingCheckpointInChain = localPendingRootOnL1 && !tipAttestationsReplaced;
       if (!localPendingCheckpointInChain) {
         // If our local pending checkpoint tip is not in the chain on L1 a "prune" must have happened
         // or the L1 have reorged.
@@ -703,11 +715,16 @@ export class ArchiverL1Synchronizer implements Traceable {
         // For simplicity here, we will simply rewind until we end in a checkpoint that is also on the chain on L1.
         this.log.debug(
           `L2 prune has been detected due to local pending checkpoint ${localPendingCheckpointNumber} not in chain`,
-          { localPendingCheckpointNumber, localPendingArchiveRoot, archiveForLocalPendingCheckpointNumber },
+          {
+            localPendingCheckpointNumber,
+            localPendingArchiveRoot,
+            archiveForLocalPendingCheckpointNumber,
+            tipAttestationsReplaced,
+          },
         );
 
         const tipAfterUnwind = await this.findLastCheckpointAlsoOnL1(
-          localPendingCheckpointNumber,
+          tipAttestationsReplaced ? CheckpointNumber(localPendingCheckpointNumber - 1) : localPendingCheckpointNumber,
           currentL1BlockNumber,
         );
         const checkpointsToRemove = localPendingCheckpointNumber - tipAfterUnwind;
@@ -721,6 +738,17 @@ export class ArchiverL1Synchronizer implements Traceable {
             `due to mismatched checkpoint hashes at L1 block ${currentL1BlockNumber}. ` +
             `Updated L2 latest checkpoint is ${await this.stores.blocks.getLatestCheckpointNumber()}.`,
         );
+
+        // The republication may sit at or below the sync point, where a forward scan would skip it and find only its
+        // successor, so the next pass scans from the last checkpoint kept. The sync point is moved here rather than
+        // left to the behind-syncpoint check, which a rejected successor still pending on L1 would satisfy.
+        if (tipAttestationsReplaced) {
+          const keptCheckpoint = await this.stores.blocks.getCheckpointData(tipAfterUnwind);
+          await this.stores.blocks.setSynchedL1BlockNumber(
+            keptCheckpoint?.l1.blockNumber ?? this.l1Constants.l1StartBlock,
+          );
+          return { rollupStatus, fetchCheckpoints: false };
+        }
       }
     }
 

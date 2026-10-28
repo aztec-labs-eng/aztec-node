@@ -10,6 +10,7 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import { TopTreeCancelledError } from '@aztec-labs/prover-client/orchestrator';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import { type EpochProvingJobState, EpochProvingJobTerminalState } from '@aztec-labs/stdlib/interfaces/server';
 import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
 import * as crypto from 'node:crypto';
@@ -68,6 +69,7 @@ export type EpochSessionDeps = {
   proverFactory: EpochProverFactory;
   proverId: EthAddress;
   publishingService: Pick<ProofPublishingService, 'submit' | 'withdraw'>;
+  l2BlockSource: Pick<L2BlockSource, 'getCheckpoint'>;
   metrics: ProverNodeJobMetrics;
   dateProvider: DateProvider;
   /** Optional proving deadline. The session enters `timed-out` if exceeded. */
@@ -343,9 +345,13 @@ export class EpochSession implements Traceable {
     // Attestations come from the highest-numbered registered checkpoint — that's the one whose attestations
     // the L1 contract checks for the proven range. They go out as the tuple that was posted to L1, byte for
     // byte: the rollup checks the submission against the `attestationsHash` it stored at propose time, and
-    // repacking the decoded attestations does not reproduce those bytes.
+    // repacking the decoded attestations does not reproduce those bytes. They are re-read from the archiver, since an
+    // L1 reorg may have republished the same checkpoint with different attestations after it was registered here.
     const lastCheckpoint = this.checkpoints[this.checkpoints.length - 1];
-    const attestations = lastCheckpoint.verbatimAttestations;
+    const published = await this.deps.l2BlockSource.getCheckpoint({ number: toCheckpoint });
+    const attestations = published?.checkpoint.archive.root.equals(lastCheckpoint.checkpoint.archive.root)
+      ? published.verbatimAttestations
+      : lastCheckpoint.verbatimAttestations;
     const epochSizeBlocks = this.checkpoints.reduce((acc, c) => acc + c.checkpoint.blocks.length, 0);
     const epochSizeTxs = this.checkpoints.reduce(
       (acc, c) => acc + c.checkpoint.blocks.reduce((bAcc, block) => bAcc + block.body.txEffects.length, 0),

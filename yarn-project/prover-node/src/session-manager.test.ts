@@ -22,7 +22,10 @@ describe('SessionManager', () => {
   let store: ReturnType<typeof mock<CheckpointStore>>;
   let l2BlockSource: ReturnType<
     typeof mock<
-      Pick<L2BlockSource, 'isEpochComplete' | 'getCheckpoints' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'>
+      Pick<
+        L2BlockSource,
+        'isEpochComplete' | 'getCheckpoints' | 'getCheckpoint' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'
+      >
     >
   >;
   let publishingService: ReturnType<typeof mock<ProofPublishingService>>;
@@ -41,7 +44,10 @@ describe('SessionManager', () => {
     store = mock<CheckpointStore>();
     l2BlockSource =
       mock<
-        Pick<L2BlockSource, 'isEpochComplete' | 'getCheckpoints' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'>
+        Pick<
+          L2BlockSource,
+          'isEpochComplete' | 'getCheckpoints' | 'getCheckpoint' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'
+        >
       >();
     publishingService = mock<ProofPublishingService>();
     metrics = new ProverNodeJobMetrics(

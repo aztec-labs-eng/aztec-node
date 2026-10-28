@@ -60,6 +60,7 @@ export async function rerunEpochProvingJob(localPath: string, log: Logger, confi
     proverFactory: prover,
     proverId: prover.getProverId(),
     publishingService,
+    l2BlockSource: { getCheckpoint: () => Promise.resolve(undefined) },
     metrics,
     dateProvider: new DateProvider(),
     deadline: undefined,

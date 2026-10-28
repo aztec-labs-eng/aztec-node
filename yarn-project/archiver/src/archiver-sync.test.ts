@@ -2284,6 +2284,140 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
     }, 15_000);
+
+    describe('L1 reorg republishes the latest checkpoint with different attestations', () => {
+      let signers: Secp256k1Signer[];
+
+      // Checkpoint 2 lands at L1 block 104, which becomes the sync point. A republication has to stay in the
+      // checkpoint's slot (L1 blocks 104 and 105), so it lands either at that block, which no forward scan reads
+      // again, or at 105, where the forward scan of the next pass reads it. A node may also first sync after the next
+      // checkpoint has landed on top of the republication.
+      const cases: [string, bigint, boolean][] = [
+        ['at the sync point', 104n, false],
+        ['above the sync point', 105n, false],
+        ['at the sync point, followed by the next checkpoint', 104n, true],
+        ['above the sync point, followed by the next checkpoint', 105n, true],
+      ];
+
+      beforeEach(async () => {
+        fake.setTargetCommitteeSize(3);
+        signers = times(3, Secp256k1Signer.random);
+        epochCache.getCommitteeForEpoch.mockResolvedValue(
+          makeCommitteeLookup({ committee: signers.map(signer => signer.address), seed: 0n }),
+        );
+        await fake.addCheckpoint(CheckpointNumber(1), { l1BlockNumber: 101n, signers });
+        await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 104n, signers });
+        await syncTo(110n);
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      });
+
+      const syncTo = async (head: bigint) => {
+        fake.setL1BlockNumber(head);
+        await archiver.syncImmediate();
+      };
+
+      /** Syncs past the republication, checks the outcome, then checks it again one L1 block range later. */
+      const syncAndExpectStable = async (expectOutcome: () => Promise<void>) => {
+        await syncTo(120n);
+        await syncTo(130n);
+        await expectOutcome();
+        await syncTo(140n);
+        await expectOutcome();
+      };
+
+      it.each(cases)(
+        'stores the republished attestations when republished %s',
+        async (_, l1BlockNumber, withNextCheckpoint) => {
+          await fake.repostCheckpoint(CheckpointNumber(2), {
+            l1BlockNumber,
+            signers,
+            spareAttestationsBitmapBit: true,
+            reorged: true,
+          });
+          if (withNextCheckpoint) {
+            await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 112n, signers });
+          }
+
+          await syncAndExpectStable(async () => {
+            expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(withNextCheckpoint ? 3 : 2));
+            const stored = await archiver.getCheckpoint({ number: CheckpointNumber(2) });
+            expect(computeAttestationsHash(stored!.verbatimAttestations)).toEqual(
+              fake.getPostedAttestationsHash(CheckpointNumber(2)).toString(),
+            );
+            expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+          });
+        },
+      );
+
+      it.each(cases)(
+        'flags the republished checkpoint when its attestations are invalid and republished %s',
+        async (_, l1BlockNumber, withNextCheckpoint) => {
+          await fake.repostCheckpoint(CheckpointNumber(2), {
+            l1BlockNumber,
+            signers: times(3, Secp256k1Signer.random),
+            reorged: true,
+          });
+          if (withNextCheckpoint) {
+            await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 112n, signers });
+          }
+
+          await syncAndExpectStable(async () => {
+            expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+            expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+          });
+        },
+      );
+
+      it('refetches the republished checkpoint when its rejected successor was republished too', async () => {
+        const invalidSigners = times(3, Secp256k1Signer.random);
+        await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 112n, signers: invalidSigners });
+        await syncTo(115n);
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+
+        await fake.repostCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 104n,
+          signers,
+          spareAttestationsBitmapBit: true,
+          reorged: true,
+        });
+        await fake.repostCheckpoint(CheckpointNumber(3), {
+          l1BlockNumber: 112n,
+          signers: invalidSigners,
+          reorged: true,
+        });
+
+        await syncAndExpectStable(async () => {
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+          const stored = await archiver.getCheckpoint({ number: CheckpointNumber(2) });
+          expect(computeAttestationsHash(stored!.verbatimAttestations)).toEqual(
+            fake.getPostedAttestationsHash(CheckpointNumber(2)).toString(),
+          );
+          expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+        });
+      });
+
+      it('keeps a proven checkpoint whose attestations L1 replaced', async () => {
+        await fake.repostCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 104n,
+          signers,
+          spareAttestationsBitmapBit: true,
+          reorged: true,
+        });
+        fake.markCheckpointAsProven(CheckpointNumber(2));
+        fake.setFinalizedL1BlockNumber(120n);
+
+        // Checked after every pass, since an unwind would be restored by the next pass's rescan.
+        for (const head of [120n, 130n, 140n]) {
+          await syncTo(head);
+          const tips = await archiver.getL2Tips();
+          expect({
+            checkpointed: tips.checkpointed.checkpoint.number,
+            proven: tips.proven.checkpoint.number,
+            finalized: tips.finalized.checkpoint.number,
+          }).toEqual({ checkpointed: 2, proven: 2, finalized: 2 });
+        }
+      });
+    });
   });
 
   describe('checkpoint ingestion recovery', () => {
