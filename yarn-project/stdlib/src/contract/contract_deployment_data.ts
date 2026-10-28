@@ -1,3 +1,4 @@
+import { MAX_CONTRACT_CLASS_LOGS_PER_TX, MAX_PRIVATE_LOGS_PER_TX } from '@aztec-labs/constants';
 import { ContractClassLog, PrivateLog } from '@aztec-labs/stdlib/logs';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
@@ -31,8 +32,8 @@ export class ContractDeploymentData {
   public static get schema() {
     return z
       .object({
-        contractClassLogs: z.array(ContractClassLog.schema),
-        privateLogs: z.array(PrivateLog.schema),
+        contractClassLogs: z.array(ContractClassLog.schema).max(MAX_CONTRACT_CLASS_LOGS_PER_TX),
+        privateLogs: z.array(PrivateLog.schema).max(MAX_PRIVATE_LOGS_PER_TX),
       })
       .transform(ContractDeploymentData.from);
   }

@@ -4,6 +4,7 @@ import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 
 /*
  * Represents a debug log emitted by public bytecode.
@@ -22,7 +23,7 @@ export class DebugLog {
         contractAddress: AztecAddress.schema,
         level: z.enum(LogLevels),
         message: z.string(),
-        fields: z.array(schemas.Fr),
+        fields: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
       })
       .transform(
         ({ contractAddress, level, message, fields }) => new DebugLog(contractAddress, level, message, fields),

@@ -12,7 +12,7 @@ describe('HashedValues', () => {
   });
 
   describe('schemaFor', () => {
-    const parseWithValueCount = (maxValues: number | undefined, count: number) =>
+    const parseWithValueCount = (maxValues: number, count: number) =>
       HashedValues.schemaFor(maxValues).parseAsync(
         JSON.parse(
           jsonStringify(
@@ -30,10 +30,6 @@ describe('HashedValues', () => {
 
     it('rejects more than the requested number of values', async () => {
       await expect(parseWithValueCount(10, 11)).rejects.toThrow(expect.objectContaining({ name: 'ZodError' }));
-    });
-
-    it('accepts any number of values when unbounded', async () => {
-      await expect(parseWithValueCount(undefined, 500)).resolves.toHaveProperty('values.length', 500);
     });
   });
 });

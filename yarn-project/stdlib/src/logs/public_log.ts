@@ -1,4 +1,8 @@
-import { FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH, PUBLIC_LOG_HEADER_LENGTH } from '@aztec-labs/constants';
+import {
+  FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH,
+  MAX_PUBLIC_LOG_SIZE_IN_FIELDS,
+  PUBLIC_LOG_HEADER_LENGTH,
+} from '@aztec-labs/constants';
 import type { FieldsOf } from '@aztec-labs/foundation/array';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { inspect } from '@aztec-labs/foundation/inspect';
@@ -7,6 +11,9 @@ import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/founda
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
+
+/** A tx's public logs share one flat payload and each takes at least its header, which caps how many a tx emits. */
+export const MAX_PUBLIC_LOGS_PER_TX = Math.floor(FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH / PUBLIC_LOG_HEADER_LENGTH);
 
 function totalSizeInFields(logs: PublicLog[]) {
   return logs.reduce((acc, log) => acc + log.sizeInFields(), 0);
@@ -203,7 +210,7 @@ export class PublicLog {
     return z
       .object({
         contractAddress: AztecAddress.schema,
-        fields: z.array(schemas.Fr),
+        fields: z.array(schemas.Fr).max(MAX_PUBLIC_LOG_SIZE_IN_FIELDS),
       })
       .transform(({ contractAddress, fields }) => PublicLog.from({ contractAddress, fields }));
   }
