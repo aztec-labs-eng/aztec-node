@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   # Orchestrates the amd64 + arm64 EC2 jobs and assembles the multi-arch docker manifest;
-  # see ci.sh::release. Runs no tests — the tag was cut from a commit that passed CI.
+  # see ci.sh::release. Runs no tests.
   release:
     runs-on: ubuntu-latest
     environment: release-private
