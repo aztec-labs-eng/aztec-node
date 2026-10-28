@@ -1,6 +1,8 @@
 import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
+import type { ExpirationAndPaddingRequest } from '../../hooks/resolve_expiration_and_padding.js';
+
 const ROUNDED_DURATIONS = [
   3600, // 1 hour
   1800, // 30 mins
@@ -21,11 +23,14 @@ function roundTimestamp(blockTimestamp: bigint, expirationTimestamp: bigint): UI
 }
 
 /**
- * Returns the expiration timestamp a tx publishes, given the highest one its private calls allow. The value is rounded
- * down so it reveals less about which functions the tx called.
+ * Rounds a tx's expiration timestamp down to a coarser one, capped at `txLifetime` after the anchor block. This is the
+ * expiry PXE publishes when no `resolveExpirationAndPadding` hook is set.
  */
-export function computeTxExpirationTimestamp(
-  { anchorBlockTimestamp, expirationTimestamp }: { anchorBlockTimestamp: UInt64; expirationTimestamp: UInt64 },
+export function roundDownTxExpirationTimestamp(
+  {
+    anchorBlockTimestamp,
+    maxExpirationTimestamp: expirationTimestamp,
+  }: Pick<ExpirationAndPaddingRequest, 'anchorBlockTimestamp' | 'maxExpirationTimestamp'>,
   txLifetime = MAX_TX_LIFETIME,
 ): UInt64 {
   if (txLifetime > MAX_TX_LIFETIME) {

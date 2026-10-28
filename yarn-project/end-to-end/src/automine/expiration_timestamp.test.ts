@@ -66,7 +66,7 @@ describe('automine/expiration_timestamp', () => {
         );
         expect(tx.data.expirationTimestamp).toEqual(expirationTimestamp);
         // Note: If the expected value doesn't match, it might be because the expirationTimestamp is rounded down.
-        // See compute_tx_expiration_timestamp.ts for the rounding logic.
+        // See round_down_tx_expiration_timestamp.ts for the rounding logic.
       });
 
       // Sends a private-only tx with a future expiration and expects it to be mined successfully.

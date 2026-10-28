@@ -17,6 +17,7 @@ import { privateKernelResetDimensionsConfig } from '@aztec-labs/noir-protocol-ci
 import {
   ClaimedLengthArray,
   KeyValidationHint,
+  type PaddedSideEffectAmounts,
   PaddedSideEffects,
   type PrivateCircuitPublicInputs,
   type PrivateKernelCircuitPublicInputs,
@@ -42,7 +43,9 @@ import {
 import { type PrivateCallExecutionResult, collectNested } from '@aztec-labs/stdlib/tx';
 import { VkData } from '@aztec-labs/stdlib/vks';
 
+import type { SideEffectCounts, TxSideEffectCounts } from '../../hooks/resolve_expiration_and_padding.js';
 import type { PrivateKernelInputsProvider } from '../private_kernel_inputs_provider.js';
+import { makePadding } from './expiration_and_padding.js';
 
 function getNullifierMembershipWitnessResolver(inputsProvider: PrivateKernelInputsProvider) {
   return async (nullifier: Fr) => {
@@ -75,6 +78,34 @@ async function getMasterSecretKeysAndKeyTypeDomainSeparators(
     }),
   );
   return padArrayEnd(keysHints, KeyValidationHint.empty(), MAX_KEY_VALIDATION_REQUESTS_PER_TX);
+}
+
+/** Fills the slots right after the kept side effects of each kind with random padding. */
+async function makePaddedSideEffects(
+  numKept: SideEffectCounts,
+  paddedSideEffectAmounts: PaddedSideEffectAmounts,
+): Promise<PaddedSideEffects> {
+  const { nonRevertible, revertible } = await makePadding(paddedSideEffectAmounts);
+  const padded = PaddedSideEffects.empty();
+  padded.noteHashes.splice(
+    numKept.noteHashes,
+    nonRevertible.noteHashes.length + revertible.noteHashes.length,
+    ...nonRevertible.noteHashes,
+    ...revertible.noteHashes,
+  );
+  padded.nullifiers.splice(
+    numKept.nullifiers,
+    nonRevertible.nullifiers.length + revertible.nullifiers.length,
+    ...nonRevertible.nullifiers,
+    ...revertible.nullifiers,
+  );
+  padded.privateLogs.splice(
+    numKept.privateLogs,
+    nonRevertible.privateLogs.length + revertible.privateLogs.length,
+    ...nonRevertible.privateLogs,
+    ...revertible.privateLogs,
+  );
+  return padded;
 }
 
 export class PrivateKernelResetPrivateInputsBuilder {
@@ -129,12 +160,89 @@ export class PrivateKernelResetPrivateInputsBuilder {
     }
   }
 
-  async build(inputsProvider: PrivateKernelInputsProvider) {
+  /**
+   * Counts the note hashes, nullifiers and private logs left after transient data is squashed, which is what the tx
+   * publishes before padding. Only known in the final reset, after `needsReset` has run.
+   */
+  getKeptSideEffectCounts(): TxSideEffectCounts {
+    if (this.nextIteration) {
+      throw new Error('Kept side effects are only known in the final reset.');
+    }
+    if (this.numTransientData === undefined) {
+      throw new Error('`needsResetTransientData` must be run before `getKeptSideEffectCounts`.');
+    }
+
+    const { noteHashes, nullifiers, privateLogs } = this.previousKernel.end;
+    const squashingHints = this.transientDataSquashingHints.slice(0, this.numTransientData);
+    const squashedNoteHashIndexes = new Set(squashingHints.map(hint => hint.noteHashIndex));
+    const squashedNullifierIndexes = new Set(squashingHints.map(hint => hint.nullifierIndex));
+    const squashedNoteHashCounters = new Set(squashingHints.map(hint => noteHashes.array[hint.noteHashIndex].counter));
+
+    const keptCounters = {
+      noteHashes: noteHashes
+        .getActiveItems()
+        .filter((_, i) => !squashedNoteHashIndexes.has(i))
+        .map(noteHash => noteHash.counter),
+      nullifiers: nullifiers
+        .getActiveItems()
+        .filter((_, i) => !squashedNullifierIndexes.has(i))
+        .map(nullifier => nullifier.counter),
+      privateLogs: privateLogs
+        .getActiveItems()
+        .filter(log => !squashedNoteHashCounters.has(log.inner.noteHashCounter))
+        .map(log => log.inner.counter),
+    };
+
+    if (!kernelStateIsForPublic(this.previousKernel)) {
+      return {
+        isPrivateOnlyTx: true,
+        noteHashes: keptCounters.noteHashes.length,
+        nullifiers: keptCounters.nullifiers.length,
+        privateLogs: keptCounters.privateLogs.length,
+      };
+    }
+
+    const countInPhase = (isInPhase: (counter: number) => boolean): SideEffectCounts => ({
+      noteHashes: keptCounters.noteHashes.filter(isInPhase).length,
+      nullifiers: keptCounters.nullifiers.filter(isInPhase).length,
+      privateLogs: keptCounters.privateLogs.filter(isInPhase).length,
+    });
+    return {
+      isPrivateOnlyTx: false,
+      nonRevertible: countInPhase(counter => counter < this.splitCounter),
+      revertible: countInPhase(counter => counter >= this.splitCounter),
+    };
+  }
+
+  /**
+   * Builds the private inputs of the reset. The final reset can also pad the tx's side effects with random values, by
+   * the amounts in `paddedSideEffectAmounts`.
+   */
+  async build(inputsProvider: PrivateKernelInputsProvider, paddedSideEffectAmounts: PaddedSideEffectAmounts) {
     if (privateKernelResetDimensionNames.every(name => !this.requestedDimensions[name])) {
       throw new Error('Reset is not required.');
     }
 
     const isInner = !!this.nextIteration;
+
+    const numPadded: SideEffectCounts = {
+      noteHashes: paddedSideEffectAmounts.nonRevertibleNoteHashes + paddedSideEffectAmounts.revertibleNoteHashes,
+      nullifiers: paddedSideEffectAmounts.nonRevertibleNullifiers + paddedSideEffectAmounts.revertibleNullifiers,
+      privateLogs: paddedSideEffectAmounts.nonRevertiblePrivateLogs + paddedSideEffectAmounts.revertiblePrivateLogs,
+    };
+    if (isInner && Object.values(numPadded).some(amount => amount > 0)) {
+      throw new Error(`Only the final reset can pad side effects, got padding ${JSON.stringify(numPadded)}.`);
+    }
+
+    // Padding goes in the slots right after the kept side effects, and is siloed along with them.
+    const numKept: SideEffectCounts = {
+      noteHashes: this.requestedDimensions.NOTE_HASH_SILOING,
+      nullifiers: this.requestedDimensions.NULLIFIER_SILOING,
+      privateLogs: this.requestedDimensions.PRIVATE_LOG_SILOING,
+    };
+    this.requestedDimensions.NOTE_HASH_SILOING += numPadded.noteHashes;
+    this.requestedDimensions.NULLIFIER_SILOING += numPadded.nullifiers;
+    this.requestedDimensions.PRIVATE_LOG_SILOING += numPadded.privateLogs;
 
     // "final" reset must be done exactly once, because siloing can't be run repeatedly.
     // The dimensions found must be big enough to reset all values, i.e. empty remainder.
@@ -202,8 +310,7 @@ export class PrivateKernelResetPrivateInputsBuilder {
     );
     const previousKernelData = new PrivateKernelData(this.previousKernelOutput.publicInputs, vkData);
 
-    // TODO: Enable padding when we have a better idea what are the final amounts we should pad to.
-    const paddedSideEffects = PaddedSideEffects.empty();
+    const paddedSideEffects = await makePaddedSideEffects(numKept, paddedSideEffectAmounts);
 
     return new PrivateKernelResetCircuitPrivateInputs(
       previousKernelData,
