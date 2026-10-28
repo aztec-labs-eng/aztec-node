@@ -153,6 +153,36 @@ describe('EpochSession', () => {
       const candidate = publishingService.submit.mock.calls[0]![0] as PublishCandidate;
       expect(candidate.attestations).toEqual(republished);
     });
+
+    it.each<[string, () => Promise<PublishedCheckpoint | undefined>]>([
+      ['has no copy of', () => Promise.resolve(undefined)],
+      [
+        'holds a different root for',
+        async () =>
+          new PublishedCheckpoint(
+            await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2 }),
+            L1PublishedData.random(),
+            [],
+            CommitteeAttestationsAndSigners.packAttestations(times(3, CommitteeAttestation.random)),
+          ),
+      ],
+    ])(
+      'submits the registered attestations when the block source %s the last checkpoint',
+      async (_, makeSourceCheckpoint) => {
+        const registered = CommitteeAttestationsAndSigners.packAttestations(times(3, CommitteeAttestation.random));
+        l2BlockSource.getCheckpoint.mockResolvedValue(await makeSourceCheckpoint());
+        publishingService.submit.mockResolvedValue('published');
+        const session = new EpochSession(
+          makeSpec(),
+          [{ ...stubProver, verbatimAttestations: registered } as CheckpointProver],
+          makeDeps(),
+        );
+        await session.start();
+
+        const candidate = publishingService.submit.mock.calls[0]![0] as PublishCandidate;
+        expect(candidate.attestations).toEqual(registered);
+      },
+    );
   });
 
   // ---------------- outcome mapping ----------------
