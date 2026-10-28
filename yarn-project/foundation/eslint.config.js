@@ -11,6 +11,7 @@ import tseslint from 'typescript-eslint';
 import noAsyncDispose from './eslint-rules/no-async-dispose.js';
 import noGlobalBuffer from './eslint-rules/no-global-buffer.js';
 import noNonPrimitiveInCollections from './eslint-rules/no-non-primitive-in-collections.js';
+import noUnboundedZodArray from './eslint-rules/no-unbounded-zod-array.js';
 import noUnsafeBrandedTypeConversion from './eslint-rules/no-unsafe-branded-type-conversion.js';
 
 export default [
@@ -56,6 +57,7 @@ export default [
           'no-async-dispose': noAsyncDispose,
           'no-global-buffer': noGlobalBuffer,
           'no-non-primitive-in-collections': noNonPrimitiveInCollections,
+          'no-unbounded-zod-array': noUnboundedZodArray,
           'no-unsafe-branded-type-conversion': noUnsafeBrandedTypeConversion,
         },
       },
@@ -144,6 +146,7 @@ export default [
       'aztec-custom/no-async-dispose': 'error',
       'aztec-custom/no-global-buffer': 'error',
       'aztec-custom/no-non-primitive-in-collections': 'error',
+      'aztec-custom/no-unbounded-zod-array': 'error',
       'aztec-custom/no-unsafe-branded-type-conversion': 'error',
     },
   }),
