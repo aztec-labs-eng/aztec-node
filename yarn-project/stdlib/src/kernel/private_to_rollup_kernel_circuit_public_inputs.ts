@@ -35,7 +35,7 @@ export class PrivateToRollupKernelCircuitPublicInputs {
      */
     public feePayer: AztecAddress,
     /**
-     * The timestamp by which the transaction must be included in a block.
+     * The highest timestamp of a block in which the transaction can still be included.
      */
     public expirationTimestamp: UInt64,
   ) {}

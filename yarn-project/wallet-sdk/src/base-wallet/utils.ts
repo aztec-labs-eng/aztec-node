@@ -1,6 +1,6 @@
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
-import { MAX_ENQUEUED_CALLS_PER_CALL } from '@aztec-labs/constants';
+import { MAX_ENQUEUED_CALLS_PER_CALL, MAX_TX_LIFETIME } from '@aztec-labs/constants';
 import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -136,6 +136,8 @@ async function simulateBatchViaNode(
     privateResult,
     (_contractAddress: AztecAddress, _functionSelector: FunctionSelector) => Promise.resolve(''),
     node,
+    // This tx is only simulated in public and never sent, so nothing reads its expiration timestamp.
+    blockHeader.globalVariables.timestamp + BigInt(MAX_TX_LIFETIME),
     1, // minRevertibleSideEffectCounter
   );
 

@@ -1,3 +1,4 @@
+import { minBigint } from '@aztec-labs/foundation/bigint';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { UInt64 } from '../types/shared.js';
@@ -27,5 +28,21 @@ export class ScheduledValueChange {
     } else {
       return this.post;
     }
+  }
+
+  /**
+   * Returns the last timestamp at which the value current at `anchorBlockTimestamp` is guaranteed to still be current,
+   * given the `minimumDelay` (from {@link ScheduledDelayChange.getEffectiveMinimumDelayAt}) for a newly scheduled change.
+   */
+  getTimeHorizon(anchorBlockTimestamp: UInt64, minimumDelay: UInt64): UInt64 {
+    const delayHorizon = anchorBlockTimestamp + minimumDelay;
+    // A change that already took effect, or one that keeps the same value (e.g. a cancellation), cannot change the
+    // current value, so only a change scheduled after the anchor block limits the horizon.
+    const keepsValue = this.previous.every((value, i) => value.equals(this.post[i]));
+    if (anchorBlockTimestamp >= this.timestampOfChange || keepsValue) {
+      return delayHorizon;
+    }
+    const changeHorizon = this.timestampOfChange - 1n;
+    return minBigint(changeHorizon, delayHorizon);
   }
 }

@@ -613,19 +613,20 @@ impl PrivateContext {
         notify_revertible_phase_start(self.min_revertible_side_effect_counter);
     }
 
-    /// Sets a deadline (an "include-by timestamp") for when this transaction must be included in a block.
+    /// Sets the last timestamp at which this transaction can be included in a block.
     ///
-    /// Other functions in this tx might call this setter with differing values for the include-by timestamp. To ensure
-    /// that all functions' deadlines are met, the _minimum_ of all these include-by timestamps will be exposed when
+    /// Other functions in this tx might call this setter with differing values for the expiration timestamp. To ensure
+    /// that all functions' deadlines are met, the _minimum_ of all these expiration timestamps will be exposed when
     /// this tx is submitted to the network.
     ///
-    /// If the transaction is not included in a block by its include-by timestamp, it becomes invalid and it will never
+    /// The transaction can be included in a block whose timestamp equals its expiration timestamp. If it is not
+    /// included in a block with a timestamp at or before its expiration timestamp, it becomes invalid and it will never
     /// be included.
     ///
     /// This expiry timestamp is publicly visible. See the "Advanced" section for privacy concerns.
     ///
     /// # Arguments
-    /// * `expiration_timestamp` - Unix timestamp (seconds) deadline for inclusion. The include-by timestamp of this tx
+    /// * `expiration_timestamp` - Unix timestamp (seconds) deadline for inclusion. The expiration timestamp of this tx
     /// will be _at most_ the timestamp specified.
     ///
     /// # Advanced
@@ -636,13 +637,12 @@ impl PrivateContext {
     /// timestamp, to enable safe mempool pruning.
     /// * The DelayedPublicMutable design makes heavy use of this functionality, to enable private functions to read
     /// public state.
-    /// * A sophisticated Wallet should cleverly set an include-by timestamp to improve the privacy of the user and the
-    /// network as a whole. For example, if a contract interaction sets include-by to some publicly-known value (e.g.
-    /// the time when a contract upgrades), then the wallet might wish to set an even lower one to avoid revealing that
-    /// this tx is interacting with said contract. Ideally, all wallets should standardize on an approach in order to
-    ///   provide users with a large privacy set -- although the exact approach
-    /// will need to be discussed. Wallets that deviate from a standard might accidentally reveal which wallet each
-    /// transaction originates from.
+    /// * A sophisticated Wallet should cleverly set an expiration timestamp to improve the privacy of the user and the
+    /// network as a whole. For example, if a contract interaction sets the expiration timestamp to some publicly-known
+    /// value (e.g. the time when a contract upgrades), then the wallet might wish to set an even lower one to avoid
+    /// revealing that this tx is interacting with said contract. Ideally, all wallets should standardize on an approach
+    /// in order to provide users with a large privacy set -- although the exact approach will need to be discussed.
+    /// Wallets that deviate from a standard might accidentally reveal which wallet each transaction originates from.
     ///
     // docs:start:expiration-timestamp
     pub fn set_expiration_timestamp(&mut self, expiration_timestamp: u64) {

@@ -90,7 +90,10 @@ export { buildACIRCallback, UnavailableOracleError } from './oracle/acir_callbac
 export { LEGACY_ORACLE_REGISTRY } from './oracle/legacy_oracle_registry.js';
 export { PROTOCOL_ORACLE_REGISTRY } from './oracle/protocol_oracle_registry.js';
 export { executePrivateFunction, extractPrivateCircuitPublicInputs } from './oracle/private_execution.js';
-export { generateSimulatedProvingResult } from './contract_function_simulator.js';
+export {
+  computeSimulatedTxExpirationTimestamp,
+  generateSimulatedProvingResult,
+} from './contract_function_simulator.js';
 export { packAsHintedNote } from './oracle/note_packing_utils.js';
 export { BoundedVec } from './noir-structs/bounded_vec.js';
 export type { ContractClassLogData } from './noir-structs/contract_class_log_data.js';

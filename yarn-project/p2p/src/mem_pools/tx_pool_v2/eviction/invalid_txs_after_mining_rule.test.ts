@@ -110,7 +110,7 @@ describe('InvalidTxsAfterMiningRule', () => {
       });
 
       it('evicts transactions with expired timestamps', async () => {
-        const tx1 = createMeta('0x1111', { expirationTimestamp: 500n }); // Expired (500 <= 1000)
+        const tx1 = createMeta('0x1111', { expirationTimestamp: 500n }); // Expired (500 < 1000)
         const tx2 = createMeta('0x2222', { expirationTimestamp: 1500n }); // Not expired (1500 > 1000)
 
         pool = createPoolOps([tx1, tx2]);
@@ -129,9 +129,9 @@ describe('InvalidTxsAfterMiningRule', () => {
         expect(deleteTxsMock).toHaveBeenCalledWith([tx1.txHash], 'InvalidTxsAfterMining');
       });
 
-      it('evicts transactions with timestamp equal to block timestamp', async () => {
-        const tx1 = createMeta('0x1111', { expirationTimestamp: 1000n }); // Exactly at timestamp
-        const tx2 = createMeta('0x2222', { expirationTimestamp: 1001n }); // Just after
+      it('keeps transactions with expiration timestamp equal to block timestamp', async () => {
+        const tx1 = createMeta('0x1111', { expirationTimestamp: 999n }); // Just before
+        const tx2 = createMeta('0x2222', { expirationTimestamp: 1000n }); // Exactly at timestamp
 
         pool = createPoolOps([tx1, tx2]);
 
@@ -145,7 +145,7 @@ describe('InvalidTxsAfterMiningRule', () => {
         const result = await rule.evict(context, pool);
 
         expect(result.success).toBe(true);
-        expect(result.txsEvicted).toEqual([tx1.txHash]); // tx1 has timestamp <= block timestamp
+        expect(result.txsEvicted).toEqual([tx1.txHash]); // tx2 can still be included in a block at its expiration
         expect(deleteTxsMock).toHaveBeenCalledWith([tx1.txHash], 'InvalidTxsAfterMining');
       });
 
