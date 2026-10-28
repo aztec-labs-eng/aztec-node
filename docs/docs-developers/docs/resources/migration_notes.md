@@ -9,6 +9,25 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [PXE] The `resolveTaggingSecretStrategy` hook also decides self-sends
+
+The PXE used to replace the hook's answer with an address-derived secret for unconstrained delivery to one of the wallet's own accounts (a self-send). It now applies the hook's answer to every message, self-sends included. `DEFAULT_TAGGING_SECRET_STRATEGY` is replaced by `defaultTaggingSecretStrategy`, which returns the strategy the PXE applies when no hook is configured.
+
+In Noir tests, a strategy set with `with_default_tag_secret_strategy` now also applies to self-sends.
+
+**Migration:** to keep address-derived self-sends, return `defaultTaggingSecretStrategy` for the messages your hook has no policy for:
+
+```diff
+ resolveTaggingSecretStrategy: async ({ recipient, deliveryMode }) =>
+   knownContacts.has(recipient.toString())
+     ? { type: 'address-derived' }
+-    : { type: 'non-interactive-handshake' },
++    : defaultTaggingSecretStrategy({
++        deliveryMode,
++        recipientIsOwnAccount: ownAccounts.has(recipient.toString()),
++      }),
+```
+
 ### [PXE] `generateSimulatedProvingResult` takes the tx's max expiration timestamp and an options object
 
 `generateSimulatedProvingResult` (exported from `@aztec-labs/pxe/simulator`) now takes the latest expiration timestamp the tx may publish as its fourth argument. For a tx that may be sent, compute it with `computeSimulatedMaxExpirationTimestamp`, so that the simulated expiry matches the proven one. The optional settings follow in an options object, which also accepts the wallet's `resolveExpirationAndPadding` hook.

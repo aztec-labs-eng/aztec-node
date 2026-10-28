@@ -197,7 +197,7 @@ unconstrained fn app_silos_an_arbitrary_secret_point() {
 }
 
 #[test]
-unconstrained fn overrides_a_configured_arbitrary_secret_for_an_unconstrained_self_send() {
+unconstrained fn applies_a_configured_arbitrary_secret_to_an_unconstrained_self_send() {
     let point = EmbeddedCurvePoint { x: 7, y: 11 };
     let mut env = TestEnvironment::new_opts(TestEnvironmentOptions::new().with_default_tag_secret_strategy(
         MessageDelivery::onchain_unconstrained(),
@@ -214,10 +214,7 @@ unconstrained fn overrides_a_configured_arbitrary_secret_for_an_unconstrained_se
             OnchainDeliveryMode::onchain_unconstrained(),
         );
 
-        // A self-send forces an address-derived secret even with an arbitrary secret configured. The resolved
-        // secret is unconstrained, but not the app-siloed arbitrary point the configured secret would have produced.
         let arbitrary_secret = compute_directional_app_secret(point, app, recipient);
-        assert(resolved.is_unconstrained_secret());
-        assert(resolved != ResolvedTaggingStrategy::unconstrained_secret(arbitrary_secret));
+        assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(arbitrary_secret));
     });
 }

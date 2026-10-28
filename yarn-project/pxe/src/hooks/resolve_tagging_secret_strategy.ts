@@ -1,7 +1,7 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import type { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
@@ -39,8 +39,25 @@ export type TaggingSecretStrategy =
       secret: Point;
     };
 
-/** The strategy PXE applies to both delivery modes when no `resolveTaggingSecretStrategy` hook is configured. */
-export const DEFAULT_TAGGING_SECRET_STRATEGY: TaggingSecretStrategy = { type: 'non-interactive-handshake' };
+/**
+ * The strategy PXE applies when no {@link ResolveTaggingSecretStrategy} hook is configured, for a hook to fall back to.
+ *
+ * Unconstrained delivery to one of the wallet's own accounts (a self-send) uses an address-derived secret: the wallet
+ * holds both sides' keys, so no handshake is needed and nothing is revealed onchain. Every other delivery uses a
+ * non-interactive handshake.
+ */
+export function defaultTaggingSecretStrategy({
+  deliveryMode,
+  recipientIsOwnAccount,
+}: {
+  deliveryMode: AppTaggingSecretKind;
+  /** Whether the wallet holds the recipient's keys, i.e. the recipient is one of the wallet's own accounts. */
+  recipientIsOwnAccount: boolean;
+}): TaggingSecretStrategy {
+  return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED && recipientIsOwnAccount
+    ? { type: 'address-derived' }
+    : { type: 'non-interactive-handshake' };
+}
 
 /** Information about the message delivery requesting a tagging secret strategy. */
 export type TaggingSecretStrategyRequest = {
@@ -56,5 +73,8 @@ export type TaggingSecretStrategyRequest = {
 
 /**
  * Hook returning the {@link TaggingSecretStrategy} for an outgoing message.
+ *
+ * PXE applies the returned strategy to every message without a registered handshake, including self-sends. A hook
+ * with no policy for some messages can return {@link defaultTaggingSecretStrategy} for them.
  */
 export type ResolveTaggingSecretStrategy = (request: TaggingSecretStrategyRequest) => Promise<TaggingSecretStrategy>;

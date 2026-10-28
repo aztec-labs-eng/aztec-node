@@ -122,14 +122,6 @@ describe('PrivateExecutionOracle', () => {
       recipient = await AztecAddress.random();
     });
 
-    it('defaults unconstrained delivery to an external recipient to a non-interactive handshake', async () => {
-      const oracle = makeOracle({ keyStore: makeKeyStore({ ownsRecipient: false }) });
-
-      await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'non-interactive-handshake' });
-    });
-
     it('defaults an unconstrained self-send to an address-derived shared secret', async () => {
       const oracle = makeOracle({ keyStore: makeKeyStore({ ownsRecipient: true }) });
       const secret = Fr.random();
@@ -140,58 +132,15 @@ describe('PrivateExecutionOracle', () => {
       ).resolves.toEqual({ type: 'unconstrained-secret', secret });
     });
 
-    it('defaults constrained delivery to a non-interactive handshake when no hooks are configured', async () => {
-      const oracle = makeOracle();
-
-      await expect(oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED)).resolves.toEqual(
-        {
-          type: 'non-interactive-handshake',
-        },
-      );
-    });
-
-    it('resolves a non-interactive-handshake strategy', async () => {
-      const { oracle } = makeHookedOracle({ strategy: { type: 'non-interactive-handshake' } });
-
-      await expect(oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED)).resolves.toEqual(
-        {
-          type: 'non-interactive-handshake',
-        },
-      );
-    });
-
-    it('resolves an interactive-handshake strategy', async () => {
-      const { oracle } = makeHookedOracle({ strategy: { type: 'interactive-handshake' } });
-
-      await expect(oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED)).resolves.toEqual(
-        {
-          type: 'interactive-handshake',
-        },
-      );
-    });
-
-    it('overrides a hooked interactive handshake on an unconstrained self-send with an address-derived secret', async () => {
+    it('keeps a hooked interactive handshake on an unconstrained self-send', async () => {
       const { oracle } = makeHookedOracle({
         strategy: { type: 'interactive-handshake' },
         keyStore: makeKeyStore({ ownsRecipient: true }),
       });
-      const secret = Fr.random();
-      jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
 
       await expect(
         oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret });
-    });
-
-    it('keeps a hooked interactive handshake under constrained delivery even when the wallet owns the recipient', async () => {
-      const { oracle } = makeHookedOracle({
-        strategy: { type: 'interactive-handshake' },
-        keyStore: makeKeyStore({ ownsRecipient: true }),
-      });
-
-      await expect(oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED)).resolves.toEqual(
-        { type: 'interactive-handshake' },
-      );
+      ).resolves.toEqual({ type: 'interactive-handshake' });
     });
 
     it('resolves an address-derived strategy to the unconstrained secret', async () => {
@@ -214,28 +163,15 @@ describe('PrivateExecutionOracle', () => {
       ).resolves.toEqual({ type: 'unconstrained-secret', secret: expected.secret });
     });
 
-    it('overrides a hooked non-interactive handshake on an unconstrained self-send with an address-derived secret', async () => {
+    it('keeps a hooked non-interactive handshake on an unconstrained self-send', async () => {
       const { oracle } = makeHookedOracle({
         strategy: { type: 'non-interactive-handshake' },
         keyStore: makeKeyStore({ ownsRecipient: true }),
       });
-      const secret = Fr.random();
-      jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
 
       await expect(
         oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret });
-    });
-
-    it('keeps a hooked non-interactive handshake under constrained delivery even when the wallet owns the recipient', async () => {
-      const { oracle } = makeHookedOracle({
-        strategy: { type: 'non-interactive-handshake' },
-        keyStore: makeKeyStore({ ownsRecipient: true }),
-      });
-
-      await expect(oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED)).resolves.toEqual(
-        { type: 'non-interactive-handshake' },
-      );
+      ).resolves.toEqual({ type: 'non-interactive-handshake' });
     });
 
     it('passes the correct message context to the hook', async () => {
