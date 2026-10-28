@@ -73,7 +73,6 @@ describe('multi-node/block-production/blob_promotion', () => {
       maxTxsPerBlock: PIPELINE_MAX_TXS_PER_BLOCK,
       maxTxsPerCheckpoint: 24,
       mockGossipSubNetworkLatency: 500,
-      clearInheritedCoinbase: true,
       disableCheckpointPromotionOnFirstNode: true,
     });
     const { test, context, logger, nodes, contract, from } = fixture;

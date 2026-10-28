@@ -5,7 +5,7 @@ import {
   createAztecNodeService,
   getConfigEnvVars,
 } from '@aztec-labs/aztec-node';
-import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import type { ContractMethod } from '@aztec-labs/aztec.js/contracts';
 import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -476,9 +476,8 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       config.sequencerPublisherPrivateKeys = [new SecretValue(publisherPrivKeyHex)];
     }
 
-    if (config.coinbase === undefined) {
-      config.coinbase = EthAddress.fromString(publisherHdAccount.address);
-    }
+    // `coinbase` is deliberately left unset so that each validator node defaults to the address of its first
+    // validator key, giving every single-key validator node its own reward address.
     logger.trace('Resolved L1 publisher account');
 
     // The accounts setup creates itself: `numberOfAccounts` initializerless accounts, generated here and
