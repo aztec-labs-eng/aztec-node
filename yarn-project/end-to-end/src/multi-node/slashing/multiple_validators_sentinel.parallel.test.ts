@@ -90,7 +90,7 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
   // attestation-missed entries across the observed slots. Phase 2 then stops the second validator node,
   // finds a slot where a first-node validator is the proposer, and asserts via the sentinel node that
   // first-node validators have no missed entries for that slot, the offline validators do, and at least one
-  // first-node validator shows a checkpoint-mined/-valid/-orphaned entry. The phases are ordered (phase 1 needs both
+  // first-node validator shows a checkpoint-valid/-orphaned entry. The phases are ordered (phase 1 needs both
   // nodes online; phase 2 self-anchors on a fresh post-stop slot window).
   it('collects attestations for all validators, including when a block is not published', async () => {
     // --- Phase 1: all validators on a node ---
@@ -199,9 +199,7 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
     const firstNodeBlockProposedHistory = firstNodeValidators
       .flatMap(v => stats.stats[v.toString().toLowerCase()].history)
       .filter(h => h.slot === slotForSentinel)
-      .filter(
-        h => h.status === 'checkpoint-valid' || h.status === 'checkpoint-orphaned' || h.status === 'checkpoint-mined',
-      );
+      .filter(h => h.status === 'checkpoint-valid' || h.status === 'checkpoint-orphaned');
     expect(firstNodeBlockProposedHistory).not.toBeEmpty();
 
     // And all of the validators for the offline node must be seen as missed attestation or proposal.
