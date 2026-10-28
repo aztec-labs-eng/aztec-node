@@ -963,7 +963,7 @@ __metadata:
     tslib: "npm:^2.5.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1044,7 +1044,7 @@ __metadata:
     typescript: "npm:^5.3.3"
     util: "npm:^0.12.5"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1097,7 +1097,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   bin:
     aztec: ./scripts/aztec.sh
   languageName: unknown
@@ -1166,7 +1166,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   bin:
     blob-client: ./dest/client/bin/index.js
   languageName: unknown
@@ -1222,7 +1222,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1446,7 +1446,7 @@ __metadata:
     typescript: "npm:^5.3.3"
     util: "npm:^0.12.5"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1465,7 +1465,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1488,7 +1488,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1518,7 +1518,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1579,7 +1579,7 @@ __metadata:
     typescript-eslint: "npm:^8.32.1"
     undici: "npm:^6.29.0"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1709,7 +1709,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1938,7 +1938,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2089,7 +2089,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2155,7 +2155,7 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2234,7 +2234,7 @@ __metadata:
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
     vitest: "npm:^4.0.0"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2299,7 +2299,7 @@ __metadata:
     msgpackr: "npm:^1.11.2"
     ts-node: "npm:^10.9.1"
     typescript: "npm:^5.3.3"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   bin:
     txe: ./dest/bin/index.js
   languageName: unknown
@@ -2365,7 +2365,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2439,7 +2439,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
-    zod: "npm:~4.4.3"
+    zod: "npm:~4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -23328,16 +23328,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.25 || ^4.0":
-  version: 4.3.6
-  resolution: "zod@npm:4.3.6"
-  checksum: 10/25fc0f62e01b557b4644bf0b393bbaf47542ab30877c37837ea8caf314a8713d220c7d7fe51f68ffa72f0e1018ddfa34d96f1973d23033f5a2a5a9b6b9d9da01
-  languageName: node
-  linkType: hard
-
-"zod@npm:~4.4.3":
-  version: 4.4.3
-  resolution: "zod@npm:4.4.3"
-  checksum: 10/804b9a42aa8f35f2b3c5a8dff906291cb749115f83ee2afe3576d70b5b5c53c965365c7f4967690647a9c54af9838ff232a85ff9577a0a36c44b68bc6cdefe36
+"zod@npm:^3.25 || ^4.0, zod@npm:~4.6.7":
+  version: 4.6.7
+  resolution: "zod@npm:4.6.7"
+  checksum: 10/3ca8b8d6bb401538e59504c543db629ea7beaa775e504c3f22269b406fdffbf1431c856d59a597bf66d8487e4d2be12b03a55d76fc2c63d9f046eae1ca173bca
   languageName: node
   linkType: hard

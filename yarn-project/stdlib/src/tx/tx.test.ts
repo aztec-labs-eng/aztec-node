@@ -83,6 +83,18 @@ describe('Tx', () => {
       );
       await expect(Tx.schema.parseAsync(json)).rejects.toThrow(expect.objectContaining({ name: 'ZodError' }));
     });
+
+    // An oversized array of invalid entries must fail on its length bound alone. If every entry were validated
+    // first, a single RPC request could allocate one issue per entry and exhaust the node's memory.
+    it('rejects an oversized array of invalid entries without validating each entry', async () => {
+      const json = JSON.parse(jsonStringify(await mockTx()));
+      json.publicFunctionCalldata = times(100_000, () => 0);
+      const result = await Tx.schema.safeParseAsync(json);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ code: 'too_big', path: ['publicFunctionCalldata'] }),
+      ]);
+    });
   });
 
   describe('public calldata counts', () => {
