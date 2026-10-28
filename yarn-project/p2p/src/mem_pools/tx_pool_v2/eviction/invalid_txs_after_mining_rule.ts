@@ -9,7 +9,7 @@ import { EvictionEvent } from './interfaces.js';
  *
  * Eviction criteria includes:
  * - Transactions with nullifiers that are already included in the mined block
- * - Transactions with an expiration timestamp less than or equal to the mined block timestamp
+ * - Transactions with an expiration timestamp lower than the mined block timestamp
  */
 export class InvalidTxsAfterMiningRule implements EvictionRule {
   public readonly name = 'InvalidTxsAfterMining';
@@ -39,8 +39,8 @@ export class InvalidTxsAfterMiningRule implements EvictionRule {
           continue;
         }
 
-        // Evict pending txs with an expiration timestamp less than or equal to the mined block timestamp
-        if (meta.expirationTimestamp <= timestamp) {
+        // Evict pending txs with an expiration timestamp less than the mined block timestamp.
+        if (meta.expirationTimestamp < timestamp) {
           this.log.verbose(
             `Evicting tx ${meta.txHash} from pool due to the tx being expired (expirationTimestamp: ${meta.expirationTimestamp}, mined block timestamp: ${timestamp})`,
           );

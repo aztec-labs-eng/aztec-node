@@ -358,10 +358,20 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     // Streaming Inbox: the checkpoint's consumed messages are those between the parent
     // checkpoint's consumed position and this checkpoint's last block, as a compact leaf-count range. The prover
     // slices them per block.
-    const l1ToL2Messages = await this.l1ToL2MessageSource.getL1ToL2MessagesBetweenLeafCounts(
+    const { messages: l1ToL2Messages, end } = await this.l1ToL2MessageSource.getL1ToL2MessageRange(
       BigInt(previousBlockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex),
       BigInt(lastBlock.header.state.l1ToL2MessageTree.nextAvailableLeafIndex),
     );
+    // A count-matching range can still hold a pre-reorg version of the messages while the source recovers. The store
+    // keeps a prover's messages for good, so throw and let the next pass retry rather than freeze a list that can
+    // never prove this checkpoint.
+    if (!end.rollingHash.equals(checkpoint.header.inboxRollingHash)) {
+      throw new Error(
+        `L1-to-L2 messages for checkpoint ${checkpoint.number} do not match its inbox rolling hash: ` +
+          `source has ${end.rollingHash} at message count ${end.totalMessageCount}, ` +
+          `checkpoint committed to ${checkpoint.header.inboxRollingHash}`,
+      );
+    }
     const previousInboxRollingHash = await this.gatherPreviousInboxRollingHash(checkpoint.number);
     const lastBlockHash = await lastBlock.header.hash();
     await this.worldState.syncImmediate(lastBlock.number, lastBlockHash);

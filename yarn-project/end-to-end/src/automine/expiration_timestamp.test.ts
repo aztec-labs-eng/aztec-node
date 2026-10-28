@@ -66,7 +66,7 @@ describe('automine/expiration_timestamp', () => {
         );
         expect(tx.data.expirationTimestamp).toEqual(expirationTimestamp);
         // Note: If the expected value doesn't match, it might be because the expirationTimestamp is rounded down.
-        // See compute_tx_expiration_timestamp.ts for the rounding logic.
+        // See round_down_tx_expiration_timestamp.ts for the rounding logic.
       });
 
       // Sends a private-only tx with a future expiration and expects it to be mined successfully.
@@ -114,7 +114,7 @@ describe('automine/expiration_timestamp', () => {
       // 1n below the start of the next slot (header.timestamp + slotDuration). Under
       // AutomineSequencer the next block is always one slot ahead, so an expiration just
       // before that boundary is provable (expiration > anchor block timestamp) but rejected
-      // at submission because nextSlotTimestamp >= expiration.
+      // at submission because nextSlotTimestamp > expiration.
       expirationTimestamp = header.globalVariables.timestamp + aztecSlotDuration - 1n;
     });
 

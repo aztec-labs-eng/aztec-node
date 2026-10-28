@@ -64,7 +64,7 @@ export type TxMetaData = {
   /** Non-empty nullifiers emitted by the transaction (hex strings) */
   readonly nullifiers: readonly string[];
 
-  /** Timestamp by which the transaction must be included (for expiration checks) */
+  /** The highest timestamp of a block in which the transaction can still be included (for expiration checks) */
   readonly expirationTimestamp: bigint;
 
   /** Whether the tx's setup-phase calls pass the allow list check. Computed at receipt time. */
@@ -151,7 +151,7 @@ const HEX_STRING_BYTES = 98;
 const BIGINT_BYTES = 32;
 const FR_BYTES = 80;
 // Fixed cost: object shell + txHash + anchorBlockHeaderHash + feePayer (3 hex strings)
-// + txHashBigInt + priorityFee + claimAmount + feeLimit + includeByTimestamp (5 bigints)
+// + txHashBigInt + priorityFee + claimAmount + feeLimit + expirationTimestamp (5 bigints)
 // + receivedAt (number, 8 bytes) + estimatedSizeBytes (number, 8 bytes)
 // + data closure object (~OBJECT_OVERHEAD + anchorBlockHeaderHashFr Fr + anchorBlockNumber number)
 const FIXED_METADATA_BYTES =

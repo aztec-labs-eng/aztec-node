@@ -1,11 +1,9 @@
 import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
-import { uniqueBy } from '@aztec-labs/foundation/collection';
 import { vkAsFields } from '@aztec-labs/foundation/crypto/keys';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
-import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { pushTestData } from '@aztec-labs/foundation/testing';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -42,17 +40,20 @@ import {
   type PrivateCallExecutionResult,
   type PrivateExecutionResult,
   TxRequest,
-  collectNested,
   collectNoteHashNullifierCounterMap,
   getFinalMinRevertibleSideEffectCounter,
 } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyAsFields, VerificationKeyData, VkData } from '@aztec-labs/stdlib/vks';
 import { Buffer } from 'buffer';
 
+import type { ResolveExpirationAndPadding } from '../hooks/resolve_expiration_and_padding.js';
 import { BatchPlanner } from './batch_planner.js';
-import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';
+import { applyExpirationAndPaddingHook } from './hints/expiration_and_padding.js';
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
-import type { PrivateKernelInputsProvider } from './private_kernel_inputs_provider.js';
+import {
+  type PrivateKernelInputsProvider,
+  getUpdatedClassIdHintsOfCalledContracts,
+} from './private_kernel_inputs_provider.js';
 
 const NULL_SIMULATE_OUTPUT: PrivateKernelSimulateOutput<PrivateKernelCircuitPublicInputs> = {
   publicInputs: PrivateKernelCircuitPublicInputs.empty(),
@@ -67,6 +68,17 @@ export interface PrivateKernelExecutionProverConfig {
   profileMode: 'gates' | 'execution-steps' | 'full' | 'none';
 }
 
+/** Optional settings of a {@link PrivateKernelExecutionProver}. */
+export interface PrivateKernelExecutionProverOptions {
+  /** Returns a random proof instead of proving, as when PXE runs with proving disabled. */
+  fakeProofs?: boolean;
+  bindings?: LoggerBindings;
+  /** The wallet's hook choosing each tx's expiry and padding. PXE's default applies when absent. */
+  resolveExpirationAndPadding?: ResolveExpirationAndPadding;
+  /** The most private calls a single init or inner kernel absorbs. Defaults to `MAX_APPS_PER_KERNEL`. */
+  maxBatchSize?: number;
+}
+
 /**
  * The PrivateKernelExecutionProver class is responsible for taking a transaction request and sequencing the
  * the execution of the private functions within, sequenced with private kernel "glue" to check protocol rules.
@@ -75,15 +87,24 @@ export interface PrivateKernelExecutionProverConfig {
  */
 export class PrivateKernelExecutionProver {
   private log: Logger;
+  private readonly fakeProofs: boolean;
+  private readonly resolveExpirationAndPadding: ResolveExpirationAndPadding | undefined;
+  private readonly maxBatchSize: number;
 
   constructor(
     private inputsProvider: PrivateKernelInputsProvider,
     private proofCreator: PrivateKernelProver,
-    private fakeProofs = false,
-    bindings?: LoggerBindings,
-    private maxBatchSize: number = MAX_APPS_PER_KERNEL,
+    {
+      fakeProofs = false,
+      bindings,
+      resolveExpirationAndPadding,
+      maxBatchSize = MAX_APPS_PER_KERNEL,
+    }: PrivateKernelExecutionProverOptions = {},
   ) {
     this.log = createLogger('pxe:private-kernel-execution-prover', bindings);
+    this.fakeProofs = fakeProofs;
+    this.resolveExpirationAndPadding = resolveExpirationAndPadding;
+    this.maxBatchSize = maxBatchSize;
   }
 
   /**
@@ -131,7 +152,9 @@ export class PrivateKernelExecutionProver {
     // reusing the existing single-app `needsReset()` check.
     const planner = new BatchPlanner(noteHashNullifierCounterMap, splitCounter, this.maxBatchSize);
 
-    const updatedClassIdHintsMap = await this.prefetchUpdatedClassIdHints(executionResult);
+    const updatedClassIdHintsMap = await getUpdatedClassIdHintsOfCalledContracts(executionResult, address =>
+      this.inputsProvider.getUpdatedClassIdHints(address),
+    );
 
     while (executionStack.length) {
       if (!firstIteration) {
@@ -144,7 +167,7 @@ export class PrivateKernelExecutionProver {
         while (resetBuilder.needsReset()) {
           // Inner reset: without siloing.
           const witgenTimer = new Timer();
-          const privateInputs = await resetBuilder.build(this.inputsProvider);
+          const privateInputs = await resetBuilder.build(this.inputsProvider, PaddedSideEffectAmounts.empty());
           output = generateWitnesses
             ? await this.proofCreator.generateResetOutput(privateInputs)
             : await this.proofCreator.simulateReset(privateInputs);
@@ -208,14 +231,16 @@ export class PrivateKernelExecutionProver {
       output.publicInputs.feePayer = new AztecAddress(Fr.MAX_FIELD_VALUE);
     }
 
-    // TODO: Enable padding once we better understand the final amounts to pad to.
-    const paddedSideEffectAmounts = PaddedSideEffectAmounts.empty();
+    const { expirationTimestampUpperBound, paddedSideEffectAmounts } = await applyExpirationAndPaddingHook(
+      this.resolveExpirationAndPadding,
+      {
+        anchorBlockTimestamp: output.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp,
+        maxExpirationTimestamp: output.publicInputs.expirationTimestamp,
+        minSideEffects: finalResetBuilder.getKeptSideEffectCounts(),
+      },
+    );
 
-    // Round the aggregated expirationTimestamp down to reduce precision and avoid leaking which private
-    // functions were called via their exact expiration offsets.
-    const expirationTimestampUpperBound = computeTxExpirationTimestamp(output.publicInputs);
-
-    const resetInputs = await finalResetBuilder.build(this.inputsProvider);
+    const resetInputs = await finalResetBuilder.build(this.inputsProvider, paddedSideEffectAmounts);
     const mergedInputs = new PrivateKernelResetTailCircuitPrivateInputs(
       resetInputs.previousKernel,
       resetInputs.paddedSideEffects,
@@ -389,24 +414,6 @@ export class PrivateKernelExecutionProver {
     });
 
     return await this.createPrivateCallData(next, updatedClassIdHintsMap);
-  }
-
-  /** Prefetches updated class id hints for all unique contracts in the execution tree in parallel. */
-  private async prefetchUpdatedClassIdHints(
-    executionResult: PrivateExecutionResult,
-  ): Promise<Map<string, UpdatedClassIdHints>> {
-    const allAddresses = collectNested([executionResult.entrypoint], exec => [
-      exec.publicInputs.callContext.contractAddress,
-    ]);
-    const uniqueAddresses = uniqueBy(allAddresses, a => a.toString());
-    return new Map<string, UpdatedClassIdHints>(
-      await allToCompletion(
-        uniqueAddresses.map(
-          async addr =>
-            [addr.toString(), await this.inputsProvider.getUpdatedClassIdHints(addr)] as [string, UpdatedClassIdHints],
-        ),
-      ),
-    );
   }
 
   private async createPrivateCallData(

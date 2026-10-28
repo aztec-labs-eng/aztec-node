@@ -16,6 +16,7 @@ import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { Buffer } from 'buffer';
 import { type Hex, type Transaction, decodeFunctionData, hexToBytes, multicall3Abi, toFunctionSelector } from 'viem';
+import { ZodError } from 'zod';
 
 import { CheckpointCalldataUnavailableError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
@@ -374,6 +375,18 @@ export class CalldataRetriever {
         });
         this.instrumentation?.recordCheckpointCalldataUnavailable();
         throw new CheckpointCalldataUnavailableError(txHash, checkpointNumber);
+      }
+
+      // The endpoint serves trace_transaction but the archiver cannot parse its output, so say so even though the
+      // fallback decoded the tx. A decoded tx is not traced again, so this fires once per tx.
+      if (traceError instanceof ZodError) {
+        this.logger.warn(
+          `trace_transaction returned a malformed trace for L1 tx ${txHash}, used debug_traceTransaction`,
+          {
+            txHash,
+            issues: traceError.issues.slice(0, 5),
+          },
+        );
       }
     }
 

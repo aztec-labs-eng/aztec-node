@@ -70,7 +70,8 @@ fast: yarn-project yarn-project-tests \
 		playground playground-tests \
 		docs docs-tests \
 		release-image release-image-tests \
-		claude-tests
+		claude-tests \
+		scripts-tests
 
 # Full bootstrap.
 full: fast yarn-project-benches
@@ -89,8 +90,9 @@ chonk-inputs:
 crs:
 	$(call run_command,$@,$(ROOT)/ci3/aws,./download_crs.sh)
 
-# Release.
-release: fast
+# Release: everything the projects in RELEASE_PROJECTS (ci3/source_release_target) publish from.
+# Keep in sync with that list.
+release: aztec-nr yarn-project aztec-up playground release-image
 
 #==============================================================================
 # .claude tooling
@@ -99,6 +101,12 @@ release: fast
 .PHONY: claude-tests
 claude-tests:
 	$(call test,$@,.claude)
+
+# Repository scripts
+
+.PHONY: scripts-tests
+scripts-tests:
+	$(call test,$@,scripts)
 
 #==============================================================================
 # Labs Aztec Toolchain

@@ -46,8 +46,13 @@ export class BrowserEmbeddedWallet extends EmbeddedWallet {
       delete pxeConfig.dataDirectory;
     }
 
+    // The browser createPXE opens one persistent store per chain and rollup whatever the config says, so without this
+    // an ephemeral wallet would persist its PXE data and collide with any other wallet open in the same origin.
+    const ownedPxeStore = !mergedCreationOverrides.store && options.ephemeral ? await openTmpStore(true) : undefined;
+
     const pxeOptions: PXECreationOptions = {
       ...mergedCreationOverrides,
+      store: mergedCreationOverrides.store ?? ownedPxeStore,
       preloadedContractsProvider: mergedCreationOverrides.preloadedContractsProvider ?? {
         getPreloadedContracts: async () => [
           await getStandardMultiCallEntrypoint(),
@@ -63,7 +68,14 @@ export class BrowserEmbeddedWallet extends EmbeddedWallet {
       },
     };
 
-    const pxe = await createPXE(aztecNode, pxeConfig, pxeOptions);
+    let pxe: PXE;
+    try {
+      pxe = await createPXE(aztecNode, pxeConfig, pxeOptions);
+    } catch (err) {
+      // No wallet is returned on failure, so nothing else can stop the store's worker.
+      await ownedPxeStore?.close();
+      throw err;
+    }
 
     let walletDBStore = options.walletDb?.store;
     if (!walletDBStore) {

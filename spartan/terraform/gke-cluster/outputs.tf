@@ -49,13 +49,3 @@ output "npm_registry_repository_url" {
   value       = "https://${var.region}-npm.pkg.dev/${var.project}/${google_artifact_registry_repository.npm_registry.repository_id}/"
 }
 
-output "devnet_network_rpc_ips" {
-  description = "Static IPs and hostnames for v4 devnet networks"
-  value = {
-    for name, addr in google_compute_global_address.devnet_network_rpc_ip :
-    name => {
-      ip       = addr.address
-      hostname = "${name}.aztec-labs.com"
-    }
-  }
-}

@@ -20,20 +20,45 @@ function aztec {
 
 case $cmd in
   test)
+    txe_port=8081
     # Attempt to compile, no-op if there are no changes
     node --no-warnings "$script_dir/../dest/bin/index.js" compile
 
     export LOG_LEVEL="${LOG_LEVEL:-"error;trace:^contract:"}"
-    aztec start --txe --port 8081 &
-    server_pid=$!
-    trap 'kill $server_pid &>/dev/null || true' EXIT
     if ! command -v nc &>/dev/null; then
       echo "Error: 'nc' (netcat) is required but not installed." >&2
       exit 1
     fi
-    while ! nc -z 127.0.0.1 8081 &>/dev/null; do sleep 0.2; done
+    # The readiness check below cannot tell our TXE apart from another server on the port.
+    if nc -z 127.0.0.1 "$txe_port" &>/dev/null; then
+      echo "Error: port $txe_port is already in use, so the TXE cannot listen on it. Stop the process holding it and retry." >&2
+      exit 1
+    fi
+    # The TXE runs alongside nargo, and by default both would write to the same stdout and stderr. When those are pipes,
+    # Node switches them to non-blocking mode, and every process holding the pipe shares that mode, so nargo's writes
+    # would become non-blocking too. A non-blocking write to a full pipe fails instead of waiting for the reader to
+    # drain it, and nargo exits with an error when a write fails, so a reader slower than nargo's output (a log
+    # collector, a pager) would make `aztec test` crash partway through. Giving the TXE pipes of its own, relayed by
+    # `cat`, confines the non-blocking mode to them. Terminals need no relay: Node opens its own handle to a terminal
+    # rather than changing the shared one, and a relay would hide the terminal from the TXE and turn off its colors.
+    (
+      if ! [ -t 1 ]; then exec > >(cat); fi
+      if ! [ -t 2 ]; then exec 2> >(cat >&2); fi
+      aztec start --txe --port "$txe_port"
+    ) &
+    server_pid=$!
+    trap 'kill $server_pid &>/dev/null || true' EXIT
+    while ! nc -z 127.0.0.1 "$txe_port" &>/dev/null; do
+      if ! kill -0 $server_pid 2>/dev/null; then
+        txe_status=0
+        wait $server_pid || txe_status=$?
+        echo "Error: the TXE exited with status $txe_status before listening on port $txe_port." >&2
+        exit 1
+      fi
+      sleep 0.2
+    done
     export NARGO_FOREIGN_CALL_TIMEOUT=300000
-    nargo test --silence-warnings --oracle-resolver http://127.0.0.1:8081 "$@"
+    nargo test --silence-warnings --oracle-resolver "http://127.0.0.1:$txe_port" "$@"
     ;;
   start)
     if [ "${1:-}" == "--local-network" ]; then

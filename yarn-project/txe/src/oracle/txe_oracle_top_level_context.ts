@@ -37,6 +37,7 @@ import {
   TransientArrayService,
   UtilityExecutionOracle,
   buildACIRCallback,
+  computeSimulatedMaxExpirationTimestamp,
   executePrivateFunction,
   generateSimulatedProvingResult,
 } from '@aztec-labs/pxe/simulator';
@@ -603,7 +604,8 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
       result,
       (addr, sel) => anchoredContractData.getDebugFunctionName(addr, sel),
       this.stateMachine.node,
-      minRevertibleSideEffectCounter,
+      await computeSimulatedMaxExpirationTimestamp(result, this.stateMachine.node),
+      { minRevertibleSideEffectCounterOverride: minRevertibleSideEffectCounter },
     );
 
     const globals = makeGlobalVariables();

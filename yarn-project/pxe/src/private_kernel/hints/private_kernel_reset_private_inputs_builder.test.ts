@@ -9,12 +9,14 @@ import {
   VK_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { type GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type DimensionName,
+  PaddedSideEffectAmounts,
   type PrivateKernelResetDimensions,
+  PublicCallRequest,
   privateKernelResetDimensionNames,
 } from '@aztec-labs/stdlib/kernel';
 import { NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
@@ -91,13 +93,17 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
       expect(builder.needsReset()).toBe(false);
 
       // Throws if attempting to build.
-      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider, PaddedSideEffectAmounts.empty())).rejects.toThrow(
+        'Reset is not required.',
+      );
     });
 
     it('throws when building without calling needsReset', async () => {
       kernel.addSettledNoteHashReadRequest();
       const builder = makeResetBuilder();
-      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider, PaddedSideEffectAmounts.empty())).rejects.toThrow(
+        'Reset is not required.',
+      );
     });
 
     describe('note hash read requests', () => {
@@ -110,7 +116,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { NOTE_HASH_PENDING_READ: numReads });
       });
 
@@ -121,7 +127,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { NOTE_HASH_SETTLED_READ: numReads });
         expect(inputsProvider.getNoteHashMembershipWitness).toHaveBeenCalledTimes(numReads);
       });
@@ -137,7 +143,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, {
           NOTE_HASH_PENDING_READ: numPending,
           NOTE_HASH_SETTLED_READ: numSettled,
@@ -153,7 +159,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        await expect(builder.build(inputsProvider)).rejects.toThrow('Read request is reading an unknown note hash.');
+        await expect(builder.build(inputsProvider, PaddedSideEffectAmounts.empty())).rejects.toThrow(
+          'Read request is reading an unknown note hash.',
+        );
       });
 
       it('throws when pending read request has no matching note hash', () => {
@@ -175,7 +183,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { NULLIFIER_PENDING_READ: numReads });
       });
 
@@ -186,7 +194,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { NULLIFIER_SETTLED_READ: numReads });
         expect(inputsProvider.getNullifierMembershipWitness).toHaveBeenCalledTimes(numReads);
       });
@@ -203,7 +211,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, {
           NULLIFIER_PENDING_READ: numPending,
           NULLIFIER_SETTLED_READ: numSettled,
@@ -219,7 +227,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        await expect(builder.build(inputsProvider)).rejects.toThrow('Cannot find the leaf for nullifier');
+        await expect(builder.build(inputsProvider, PaddedSideEffectAmounts.empty())).rejects.toThrow(
+          'Cannot find the leaf for nullifier',
+        );
       });
 
       it('throws when pending read request has no matching nullifier', () => {
@@ -238,7 +248,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { KEY_VALIDATION: numRequests });
         expect(inputsProvider.getMasterSecretKey).toHaveBeenCalledTimes(numRequests);
       });
@@ -265,7 +275,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { TRANSIENT_DATA_SQUASHING: numSquashing });
       });
     });
@@ -278,7 +288,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
 
         expectDimensions(builder, result.dimensions, { NOTE_HASH_SILOING: numNoteHashes });
       });
@@ -290,7 +300,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
 
         expectDimensions(builder, result.dimensions, { NULLIFIER_SILOING: numNullifiers });
       });
@@ -302,7 +312,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
 
         expectDimensions(builder, result.dimensions, { PRIVATE_LOG_SILOING: numPrivateLogs });
       });
@@ -345,7 +355,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, { NULLIFIER_SILOING: 1, PRIVATE_LOG_SILOING: 1 });
       });
     });
@@ -363,7 +373,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, {
           NOTE_HASH_SILOING: 1,
           NULLIFIER_SILOING: 1,
@@ -387,12 +397,176 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, {
           PRIVATE_LOG_SILOING: 1,
           NOTE_HASH_SILOING: 1,
           NULLIFIER_SILOING: 1,
         });
+      });
+    });
+
+    describe('kept side effects', () => {
+      /**
+       * Adds a squashed note hash/nullifier pair with a log of the note, plus one kept side effect of each kind:
+       *
+       *   counter:  1          2               3         4          5          6
+       *   effect:   note hash  nullifier of 1  log of 1  note hash  nullifier  log
+       *             |--------- squashed ----------------| |------------ kept -----------|
+       */
+      const addSquashedAndKeptSideEffects = () => {
+        kernel
+          .addNoteHash({ value: new Fr(11), counter: 1 })
+          .addNullifier({ value: new Fr(222), noteHash: new Fr(11), counter: 2 })
+          .addPrivateLog({ noteHashCounter: 1, counter: 3 })
+          .addNoteHash({ value: new Fr(44), counter: 4 })
+          .addNullifier({ counter: 5 })
+          .addPrivateLog({ noteHashCounter: 0, counter: 6 });
+        noteHashNullifierCounterMap.set(1, 2);
+      };
+
+      it('counts the side effects of a private-only tx left after squashing', () => {
+        addSquashedAndKeptSideEffects();
+
+        const builder = makeResetBuilder();
+        expect(builder.needsReset()).toBe(true);
+
+        expect(builder.getKeptSideEffectCounts()).toEqual({
+          isPrivateOnlyTx: true,
+          noteHashes: 1,
+          nullifiers: 1,
+          privateLogs: 1,
+        });
+      });
+
+      it('splits the side effects of a tx with public calls into phases at the split counter', () => {
+        // Nothing is squashed, and side effects with a counter below the split counter (3) are non-revertible:
+        //
+        //   counter:  1          2          3          4          5
+        //   effect:   note hash  nullifier  note hash  nullifier  log
+        //             |- non-revertible --| |-------- revertible ---------|
+        splitCounter = 3;
+        kernel
+          .addNoteHash({ counter: 1 })
+          .addNullifier({ counter: 2 })
+          .addNoteHash({ counter: 3 })
+          .addNullifier({ counter: 4 })
+          .addPrivateLog({ counter: 5 });
+        const publicInputs = kernel.build();
+        const teardown = PublicCallRequest.empty();
+        teardown.msgSender = AztecAddress.fromBigIntUnsafe(1n);
+        publicInputs.publicTeardownCallRequest = teardown;
+
+        const builder = new PrivateKernelResetPrivateInputsBuilder(
+          makeKernelOutput(publicInputs),
+          [],
+          noteHashNullifierCounterMap,
+          splitCounter,
+        );
+        expect(builder.needsReset()).toBe(true);
+
+        expect(builder.getKeptSideEffectCounts()).toEqual({
+          isPrivateOnlyTx: false,
+          nonRevertible: { noteHashes: 1, nullifiers: 1, privateLogs: 0 },
+          revertible: { noteHashes: 1, nullifiers: 1, privateLogs: 1 },
+        });
+      });
+
+      it('throws when counting before needsReset', () => {
+        addSquashedAndKeptSideEffects();
+
+        expect(() => makeResetBuilder().getKeptSideEffectCounts()).toThrow(
+          '`needsResetTransientData` must be run before `getKeptSideEffectCounts`.',
+        );
+      });
+    });
+
+    describe('padding', () => {
+      const nonEmptyIndexes = <T>(items: T[], isEmpty: (item: T) => boolean) =>
+        items.flatMap((item, i) => (isEmpty(item) ? [] : [i]));
+
+      /** The indexes right after the first `numKept` items, where `numPadded` padding items go. */
+      const indexesAfter = (numKept: number, numPadded: number) => times(numPadded, i => numKept + i);
+
+      it('places random padding right after the kept side effects and widens siloing to fit it', async () => {
+        // A squashed note hash/nullifier pair with a log of the note, then the kept side effects:
+        //
+        //   counter:  1          2               3         4          5          6          7
+        //   effect:   note hash  nullifier of 1  log of 1  note hash  nullifier  nullifier  log
+        //             |--------- squashed ----------------| |----------------- kept -----------------|
+        kernel
+          .addNoteHash({ value: new Fr(11), counter: 1 })
+          .addNullifier({ value: new Fr(222), noteHash: new Fr(11), counter: 2 })
+          .addPrivateLog({ noteHashCounter: 1, counter: 3 })
+          .addNoteHash({ value: new Fr(44), counter: 4 })
+          .addNullifier({ counter: 5 })
+          .addNullifier({ counter: 6 })
+          .addPrivateLog({ noteHashCounter: 0, counter: 7 });
+        noteHashNullifierCounterMap.set(1, 2);
+        const KEPT = { noteHashes: 1, nullifiers: 2, privateLogs: 1 };
+        const PADDING = { noteHashes: 3, nullifiers: 2, privateLogs: 1 };
+
+        const builder = makeResetBuilder();
+        expect(builder.needsReset()).toBe(true);
+
+        const result = await builder.build(
+          inputsProvider,
+          new PaddedSideEffectAmounts(0, PADDING.noteHashes, 0, PADDING.nullifiers, 0, PADDING.privateLogs),
+        );
+
+        const { noteHashes, nullifiers, privateLogs } = result.paddedSideEffects;
+        expect(nonEmptyIndexes(noteHashes, noteHash => noteHash.isZero())).toEqual(
+          indexesAfter(KEPT.noteHashes, PADDING.noteHashes),
+        );
+        expect(nonEmptyIndexes(nullifiers, nullifier => nullifier.isZero())).toEqual(
+          indexesAfter(KEPT.nullifiers, PADDING.nullifiers),
+        );
+        expect(nonEmptyIndexes(privateLogs, log => log.isEmpty())).toEqual(
+          indexesAfter(KEPT.privateLogs, PADDING.privateLogs),
+        );
+        expectDimensions(builder, result.dimensions, {
+          NOTE_HASH_SILOING: KEPT.noteHashes + PADDING.noteHashes,
+          NULLIFIER_SILOING: KEPT.nullifiers + PADDING.nullifiers,
+          PRIVATE_LOG_SILOING: KEPT.privateLogs + PADDING.privateLogs,
+        });
+      });
+
+      it('pads up to the per-tx maximum', async () => {
+        kernel.addNoteHash().addNullifier();
+        const KEPT_NOTE_HASHES = 1;
+
+        const builder = makeResetBuilder();
+        expect(builder.needsReset()).toBe(true);
+
+        const result = await builder.build(
+          inputsProvider,
+          new PaddedSideEffectAmounts(0, MAX_NOTE_HASHES_PER_TX - KEPT_NOTE_HASHES, 0, 0, 0, 0),
+        );
+
+        expect(result.paddedSideEffects.noteHashes.filter(noteHash => !noteHash.isZero())).toHaveLength(
+          MAX_NOTE_HASHES_PER_TX - KEPT_NOTE_HASHES,
+        );
+        expectDimensions(builder, result.dimensions, { NOTE_HASH_SILOING: MAX_NOTE_HASHES_PER_TX });
+      });
+
+      it('pads private logs with a curve point x-coordinate where a message carries its ephemeral public key', async () => {
+        // An aztec-nr message log starts with its tag, followed by its ephemeral public key's x-coordinate. A uniformly
+        // random field is a valid x-coordinate about half of the time, so a single run could pass by chance.
+        const EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX = 1;
+        const NUM_RUNS = 10;
+        kernel.addNullifier();
+
+        for (let run = 0; run < NUM_RUNS; run++) {
+          const builder = makeResetBuilder();
+          expect(builder.needsReset()).toBe(true);
+
+          const result = await builder.build(inputsProvider, new PaddedSideEffectAmounts(0, 0, 0, 0, 0, 1));
+
+          const [paddedLog] = result.paddedSideEffects.privateLogs.filter(log => !log.isEmpty());
+          const ephemeralPublicKeyX = paddedLog.fields[EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX];
+          // Rejects when no point on the curve has this x-coordinate.
+          await expect(Point.fromXAndSign(ephemeralPublicKeyX, true)).resolves.toBeInstanceOf(Point);
+        }
       });
     });
   });
@@ -448,7 +622,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
       expect(builder.needsReset()).toBe(false);
 
       // Throws if attempting to build.
-      await expect(builder.build(inputsProvider)).rejects.toThrow('Reset is not required.');
+      await expect(builder.build(inputsProvider, PaddedSideEffectAmounts.empty())).rejects.toThrow(
+        'Reset is not required.',
+      );
     });
 
     describe('note hash read requests', () => {
@@ -477,7 +653,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', numReads);
       });
 
@@ -491,7 +667,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_SETTLED_READ', numReads);
       });
 
@@ -516,7 +692,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', numPending);
       });
 
@@ -541,7 +717,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_SETTLED_READ', numSettled);
       });
 
@@ -586,7 +762,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numReads);
       });
 
@@ -600,7 +776,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'NULLIFIER_SETTLED_READ', numReads);
       });
 
@@ -625,7 +801,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         if (numPending >= numSettled) {
           expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numPending);
         } else {
@@ -654,7 +830,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         if (numPending >= numSettled) {
           expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', numPending);
         } else {
@@ -700,8 +876,20 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'KEY_VALIDATION', numRequests);
+      });
+
+      it('throws when asked to pad side effects', async () => {
+        times(MAX_KEY_VALIDATION_REQUESTS_PER_TX, () => kernel.addKeyValidationRequest());
+        nextIteration.addKeyValidationRequest();
+
+        const builder = makeResetBuilder();
+        expect(builder.needsReset()).toBe(true);
+
+        await expect(builder.build(inputsProvider, new PaddedSideEffectAmounts(0, 1, 0, 0, 0, 0))).rejects.toThrow(
+          'Only the final reset can pad side effects',
+        );
       });
     });
 
@@ -765,7 +953,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -797,7 +985,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -835,7 +1023,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', numSquashed);
       });
 
@@ -858,7 +1046,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -882,7 +1070,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', 1);
       });
@@ -908,7 +1096,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Must reset the read request to unblock more squashing in the next round.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -928,7 +1116,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Resets the note hash read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -948,7 +1136,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Resets the nullifier read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NULLIFIER_PENDING_READ', 1);
       });
@@ -969,7 +1157,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Resets the note hash read request instead of transient data.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -995,7 +1183,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         // Only one dimension should be reset for an inner reset -> note hash read request is reset first.
         expectDimensions(builder, result.dimensions, 'NOTE_HASH_PENDING_READ', 1);
       });
@@ -1035,7 +1223,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', 1);
       });
 
@@ -1055,7 +1243,7 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         expect(builder.needsReset()).toBe(true);
 
-        const result = await builder.build(inputsProvider);
+        const result = await builder.build(inputsProvider, PaddedSideEffectAmounts.empty());
         expectDimensions(builder, result.dimensions, 'TRANSIENT_DATA_SQUASHING', 1);
       });
 
@@ -1119,6 +1307,16 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         const builder = makeResetBuilder();
         // Nothing overflows, and siloing is not required for inner resets.
         expect(builder.needsReset()).toBe(false);
+      });
+    });
+
+    describe('kept side effects', () => {
+      it('throws when counting before the final reset', () => {
+        kernel.addNoteHash().addNullifier();
+
+        expect(() => makeResetBuilder().getKeptSideEffectCounts()).toThrow(
+          'Kept side effects are only known in the final reset.',
+        );
       });
     });
   });
