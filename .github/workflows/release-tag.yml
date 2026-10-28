@@ -5,8 +5,8 @@
 #
 # Every run tags the commit named by its full SHA and takes the version from
 # that commit's .release-please-manifest.json. The approval screen shows the
-# SHA, so the commit the second person approves is the one that gets tagged,
-# whatever lands on the branch while the run waits.
+# SHA, so the second person approves the exact commit that gets tagged, whatever
+# lands on the branch while the run waits.
 #
 #   nightly:  dispatch with kind=nightly    -> v<ver>-nightly.<date>[.<suffix>]
 #             re-cuts a day the schedule missed or botched. The optional
@@ -74,9 +74,10 @@ on:
 jobs:
   tag:
     runs-on: ubuntu-latest
-    # No concurrency group: when two runs compute one tag name, such as rc
-    # dispatches approved together, whichever pushes second fails, since a push
-    # never moves an existing tag.
+    # No concurrency group, so dispatches tag in parallel, none waiting on
+    # another's approval. When two compute one tag name, such as rc dispatches
+    # for one version approved together, whichever pushes second fails, since a
+    # push never moves an existing tag.
     #
     # A re-run replays the original commit but computes the tag name afresh: an
     # rc re-run would cut another candidate nobody asked for, and a nightly re-run
