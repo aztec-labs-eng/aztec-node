@@ -14,6 +14,7 @@ import {
 } from '@aztec-labs/pxe/server';
 import { jest } from '@jest/globals';
 
+import { padSideEffectCounts } from '../fixtures/side_effect_padding.js';
 import type { TestWallet } from '../test-wallet/test_wallet.js';
 import { proveInteraction } from '../test-wallet/utils.js';
 import { AutomineTestContext } from './automine_test_context.js';
@@ -38,28 +39,13 @@ describe('automine/resolve_expiration_and_padding', () => {
   let hookBehavior: 'keep-defaults' | 'pad-side-effects' | 'lower-expiry' = 'keep-defaults';
   let lastResolution: ExpirationAndPadding | undefined;
 
-  const padPhase = (counts: SideEffectCounts): SideEffectCounts => ({
-    noteHashes: counts.noteHashes + PADDING_PER_PHASE,
-    nullifiers: counts.nullifiers + PADDING_PER_PHASE,
-    privateLogs: counts.privateLogs + PADDING_PER_PHASE,
-  });
-
-  const pad = (counts: TxSideEffectCounts): TxSideEffectCounts =>
-    counts.isPrivateOnlyTx
-      ? { isPrivateOnlyTx: true, ...padPhase(counts) }
-      : {
-          isPrivateOnlyTx: false,
-          nonRevertible: padPhase(counts.nonRevertible),
-          revertible: padPhase(counts.revertible),
-        };
-
   const resolveExpirationAndPadding: ResolveExpirationAndPadding = request => {
     const resolution: ExpirationAndPadding = {
       expirationTimestamp: roundDownTxExpirationTimestamp(request),
       sideEffects: request.minSideEffects,
     };
     if (hookBehavior === 'pad-side-effects') {
-      resolution.sideEffects = pad(request.minSideEffects);
+      resolution.sideEffects = padSideEffectCounts(request.minSideEffects, PADDING_PER_PHASE);
     } else if (hookBehavior === 'lower-expiry') {
       // One second below the maximum and not rounded, unlike the expiry PXE publishes without the hook.
       resolution.expirationTimestamp = request.maxExpirationTimestamp - 1n;

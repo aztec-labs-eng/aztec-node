@@ -13,12 +13,14 @@ import { type TokenContract, TokenContractArtifact } from '@aztec-labs/noir-cont
 import { AuthWitTestContract, AuthWitTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AuthWitTest';
 import { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
 import { PendingNoteHashesContract } from '@aztec-labs/noir-test-contracts.js/PendingNoteHashes';
+import { type ResolveExpirationAndPadding, roundDownTxExpirationTimestamp } from '@aztec-labs/pxe/server';
 import { decodeEachFromAbi, getFunctionArtifact } from '@aztec-labs/stdlib/abi';
 import { computeOuterAuthWitHash } from '@aztec-labs/stdlib/auth-witness';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 
 import { simulateThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';
+import { padSideEffectCounts } from '../../fixtures/side_effect_padding.js';
 import { deployToken } from '../../fixtures/token_utils.js';
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../automine_test_context.js';
@@ -30,7 +32,8 @@ import { deployAmmWithTokens } from '../token/token_test_helpers.js';
  * to be as close as possible to reality, so their output can be used to calculate gas usage
  *
  * Uses a single automine node with three funded accounts (admin, liquidityProvider, swapper),
- * an AMM with two token pairs, and various test contracts deployed in beforeAll.
+ * an AMM with two token pairs, and various test contracts deployed in beforeAll. The PXE has a
+ * resolveExpirationAndPadding hook, which pads side effects only for the tests that set paddingPerPhase.
  */
 describe('automine/simulation/kernelless_simulation', () => {
   let teardown: () => Promise<void>;
@@ -51,6 +54,15 @@ describe('automine/simulation/kernelless_simulation', () => {
 
   const INITIAL_TOKEN_BALANCE = 1_000_000_000n;
 
+  /** How many items the hook pads each kind of side effect with, in each phase of the txs the running test simulates. */
+  let paddingPerPhase = 0;
+
+  const resolveExpirationAndPadding: ResolveExpirationAndPadding = request =>
+    Promise.resolve({
+      expirationTimestamp: roundDownTxExpirationTimestamp(request),
+      sideEffects: padSideEffectCounts(request.minSideEffects, paddingPerPhase),
+    });
+
   beforeAll(async () => {
     ({
       aztecNode,
@@ -58,7 +70,12 @@ describe('automine/simulation/kernelless_simulation', () => {
       wallet,
       accounts: [adminAddress, liquidityProviderAddress, swapperAddress],
       logger,
-    } = (await AutomineTestContext.setup({ numberOfAccounts: 3 })).context);
+    } = (
+      await AutomineTestContext.setup({
+        numberOfAccounts: 3,
+        pxeCreationOptions: { hooks: { resolveExpirationAndPadding } },
+      })
+    ).context);
 
     ({ token0, token1, amm } = await deployAmmWithTokens(wallet, adminAddress, deployToken, {
       liquidityProviders: [liquidityProviderAddress],
@@ -69,6 +86,10 @@ describe('automine/simulation/kernelless_simulation', () => {
   });
 
   afterAll(() => teardown());
+
+  afterEach(() => {
+    paddingPerPhase = 0;
+  });
 
   // Covers authwit-request discovery via kernelless simulation, gas estimation comparison between
   // kernelless and with-kernels paths, and fee payer identity propagation.
@@ -339,6 +360,40 @@ describe('automine/simulation/kernelless_simulation', () => {
 
       expect(kernellessGas.totalGas.daGas).toEqual(withKernelsGas.totalGas.daGas);
       expect(kernellessGas.totalGas.l2Gas).toEqual(withKernelsGas.totalGas.l2Gas);
+    });
+  });
+
+  // Verifies that kernelless simulation includes the side effects the resolveExpirationAndPadding hook pads in its gas
+  // estimates, matching the full-kernels path. Covers both tx shapes, since the kernels publish them differently.
+  describe('Side effect padding', () => {
+    // Simulates the tx unpadded in kernelless mode, then padded in both modes; checks that padding raises DA gas and
+    // that L2Gas and DA gas estimates are identical between the padded kernelless and full paths.
+    it.each([
+      { txKind: 'a private-only tx', makeInteraction: () => token0.methods.transfer(adminAddress, 1n) },
+      {
+        txKind: 'a tx with public calls',
+        makeInteraction: () => token0.methods.transfer_to_public(swapperAddress, swapperAddress, 1n, 0),
+      },
+    ])('padding produces same gas estimates as with-kernels path for $txKind', async ({ makeInteraction }) => {
+      const interaction = makeInteraction();
+      const simulateGas = async (mode: 'kernelless-override' | 'full') => {
+        wallet.setSimulationMode(mode);
+        return (await interaction.simulate({ from: swapperAddress, includeMetadata: true })).gasUsed!.totalGas;
+      };
+
+      const unpaddedGas = await simulateGas('kernelless-override');
+
+      paddingPerPhase = 2;
+      const kernellessGas = await simulateGas('kernelless-override');
+      const withKernelsGas = await simulateGas('full');
+
+      logger.info(`Padded kernelless gas: L2=${kernellessGas.l2Gas} DA=${kernellessGas.daGas}`);
+      logger.info(`Padded with kernels gas: L2=${withKernelsGas.l2Gas} DA=${withKernelsGas.daGas}`);
+
+      // Without this, both paths leaving the padding out of their estimates would also match.
+      expect(kernellessGas.daGas).toBeGreaterThan(unpaddedGas.daGas);
+      expect(kernellessGas.daGas).toEqual(withKernelsGas.daGas);
+      expect(kernellessGas.l2Gas).toEqual(withKernelsGas.l2Gas);
     });
   });
 
