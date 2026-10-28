@@ -185,6 +185,7 @@ describe('abi', () => {
     });
 
     it('rejects debug metadata with an oversized file map without parsing each entry', () => {
+      // eslint-disable-next-line camelcase
       const debugSymbols = { location_tree: { locations: [] }, acir_locations: {}, brillig_locations: {} };
       const files = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`${i}`, {}]));
       const result = FunctionDebugMetadataSchema.safeParse({ debugSymbols, files });
