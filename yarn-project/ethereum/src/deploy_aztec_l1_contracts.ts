@@ -656,6 +656,22 @@ export async function deployAztecL1Contracts(
 
   const rollup = new RollupContract(l1Client, result.rollupAddress);
 
+  // The entry queue flush refunds a deposit that fails (e.g. a BLS key whose proof of possession exceeds the GSE gas
+  // cap) instead of reverting, so a dropped validator would otherwise only surface later as a missing committee. The
+  // flush admits at most one epoch's budget, so validators beyond it legitimately stay queued for a later flush.
+  const expectedAttesterCount = args.initialValidators?.length ?? 0;
+  if (expectedAttesterCount > 0) {
+    const [activeAttesterCount, queuedAttesterCount] = await Promise.all([
+      rollup.getActiveAttesterCount(),
+      rollup.getEntryQueueLength(),
+    ]);
+    if (activeAttesterCount + queuedAttesterCount !== expectedAttesterCount) {
+      throw new Error(
+        `Deployed rollup ${result.rollupAddress} activated ${activeAttesterCount} and queued ${queuedAttesterCount} of ${expectedAttesterCount} initial validators; the entry queue flush dropped the rest`,
+      );
+    }
+  }
+
   if (isAnvilTestChain(chainId)) {
     // @note  We make a time jump PAST the very first slot to not have to deal with the edge case of the first slot.
     //        The edge case being that the genesis block is already occupying slot 0, so we cannot have another block.

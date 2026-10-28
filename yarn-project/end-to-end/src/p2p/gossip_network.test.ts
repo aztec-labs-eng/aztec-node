@@ -3,8 +3,8 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { Fr } from '@aztec-labs/aztec.js/fields';
 import { addL1Validator } from '@aztec-labs/cli/l1/validators';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -232,7 +232,7 @@ describe('e2e_p2p_network', () => {
               withdrawerAddress,
               stakingAssetHandlerAddress: t.ctx.deployL1ContractsValues.l1ContractAddresses.stakingAssetHandlerAddress!,
               proofParams: mockPassportProof,
-              blsSecretKey: Fr.random().toBigInt(),
+              blsSecretKey: randomStakeableBn254SecretKey(),
               log: t.logger.info,
               debugLogger: t.logger,
             });

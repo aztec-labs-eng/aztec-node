@@ -18,6 +18,7 @@ import {
   MAX_TX_DA_GAS,
 } from '@aztec-labs/constants';
 import { type CommitteeLookup, EpochCache, type ProposerLookup } from '@aztec-labs/epoch-cache';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
@@ -819,7 +820,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
           .map(address => ({
             attester: address,
             withdrawer: address,
-            bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+            bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
           })),
       });
     });

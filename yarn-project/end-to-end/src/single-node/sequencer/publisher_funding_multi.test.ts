@@ -1,7 +1,7 @@
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { EthCheatCodes } from '@aztec-labs/aztec/testing';
+import { randomStakeableBn254SecretKey } from '@aztec-labs/ethereum/bn254';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
@@ -95,7 +95,7 @@ describeAcrossL1Forks('single-node/sequencer/publisher_funding_multi', () => {
         attester: EthAddress.fromString(attesterAddress),
         withdrawer: EthAddress.fromString(attesterAddress),
         privateKey: attesterKey as Hex,
-        bn254SecretKey: new SecretValue(Fr.random().toBigInt()),
+        bn254SecretKey: new SecretValue(randomStakeableBn254SecretKey()),
       },
     ];
 

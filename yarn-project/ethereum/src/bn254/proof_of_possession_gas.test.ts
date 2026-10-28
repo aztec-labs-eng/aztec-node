@@ -1,3 +1,5 @@
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+
 import gasVectors from './fixtures/bn254_pop_gas_vectors.json' with { type: 'json' };
 import { computeBn254RegistrationDigestForPrivateKey } from './hash_to_point.js';
 import {
@@ -5,6 +7,7 @@ import {
   estimateBlsKeyProofOfPossessionGas,
   estimateProofOfPossessionGas,
   minimumProofOfPossessionGas,
+  randomStakeableBn254SecretKey,
 } from './proof_of_possession_gas.js';
 
 describe('BN254 proof-of-possession gas model', () => {
@@ -59,5 +62,26 @@ describe('BN254 proof-of-possession gas model', () => {
     expect(estimateBlsKeyProofOfPossessionGas(model, `0x${(57193).toString(16).padStart(64, '0')}`)).toBe(
       estimateProofOfPossessionGas(model, 95, 18),
     );
+  });
+
+  describe('randomStakeableBn254SecretKey', () => {
+    it('skips keys whose proof of possession needs more than the GSE gas limit', () => {
+      // sk = 57193 needs 95 attempts, an estimated 264,926 gas.
+      const candidates = [57193n, 1n];
+      expect(randomStakeableBn254SecretKey(undefined, () => candidates.shift()!)).toBe(1n);
+    });
+
+    it('skips candidates that are not valid BN254 secret keys', () => {
+      const candidates = [0n, Fr.MODULUS + 1n, 1n];
+      expect(randomStakeableBn254SecretKey(undefined, () => candidates.shift()!)).toBe(1n);
+    });
+
+    it('accepts an expensive key when the gas limit covers it', () => {
+      expect(randomStakeableBn254SecretKey(300_000, () => 57193n)).toBe(57193n);
+    });
+
+    it('rejects a gas limit that no key fits', () => {
+      expect(() => randomStakeableBn254SecretKey(minimumProofOfPossessionGas(model) - 1)).toThrow();
+    });
   });
 });
