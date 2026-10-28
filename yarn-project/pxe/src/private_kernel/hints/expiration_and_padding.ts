@@ -52,7 +52,7 @@ export async function applyExpirationAndPaddingHook(
   }
   if (expirationTimestamp <= request.anchorBlockTimestamp) {
     throw new Error(
-      `resolveExpirationAndPadding hook returned expiration timestamp ${expirationTimestamp}, not later than the anchor block timestamp ${request.anchorBlockTimestamp}, so the tx could never be included.`,
+      `resolveExpirationAndPadding hook returned expiration timestamp ${expirationTimestamp}, not later than the anchor block timestamp ${request.anchorBlockTimestamp}, so the tx could only be included in a block sharing the anchor block's timestamp.`,
     );
   }
 

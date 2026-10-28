@@ -26,7 +26,7 @@ export type ExpirationAndPaddingRequest = {
   anchorBlockTimestamp: UInt64;
   /**
    * The latest timestamp at which the tx can be included: the minimum over the expiry requested by each private call
-   * and the upgrade horizon of each contract the tx calls privately.
+   * and the upgrade horizon of each contract the tx calls privately, capped at `MAX_TX_LIFETIME` after the anchor block.
    */
   maxExpirationTimestamp: UInt64;
   /** Minimum counts of side effects that will be publicly visible: the ones the transaction creates. */
