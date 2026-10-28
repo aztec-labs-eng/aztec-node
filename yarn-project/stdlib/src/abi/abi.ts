@@ -293,16 +293,21 @@ export const FunctionDebugMetadataSchema = z.object({
         )
         .max(MAX_UNCAPPED_ARRAY_LEN),
     }),
-    acir_locations: z.record(z.string(), z.number()),
-    brillig_locations: z.record(z.string(), z.record(z.string(), z.number())),
+    acir_locations: boundedRecord(z.string(), z.number(), MAX_UNCAPPED_ARRAY_LEN),
+    brillig_locations: boundedRecord(
+      z.string(),
+      boundedRecord(z.string(), z.number(), MAX_UNCAPPED_ARRAY_LEN),
+      MAX_UNCAPPED_ARRAY_LEN,
+    ),
   }),
-  files: z.record(
+  files: boundedRecord(
     z.string(),
     z.object({
       source: z.string(),
       path: z.string(),
       function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_UNCAPPED_ARRAY_LEN),
     }),
+    MAX_ARTIFACT_RECORD_KEYS,
   ),
 }) satisfies z.ZodType<FunctionDebugMetadata>;
 

@@ -9,6 +9,7 @@ import {
   type ContractArtifact,
   ContractArtifactSchema,
   type FunctionArtifact,
+  FunctionDebugMetadataSchema,
   FunctionType,
   getDefaultInitializer,
   getFunctionReturnType,
@@ -181,6 +182,14 @@ describe('abi', () => {
         value = { kind: 'array', value: [value] };
       }
       expect(AbiValueSchema.safeParse(value).success).toBe(false);
+    });
+
+    it('rejects debug metadata with an oversized file map without parsing each entry', () => {
+      const debugSymbols = { location_tree: { locations: [] }, acir_locations: {}, brillig_locations: {} };
+      const files = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`${i}`, {}]));
+      const result = FunctionDebugMetadataSchema.safeParse({ debugSymbols, files });
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
     });
 
     it('rejects an artifact with an oversized storage layout without parsing each entry', () => {
