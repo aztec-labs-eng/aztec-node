@@ -129,9 +129,9 @@ List of all slashable offenses in the system:
 **Time Unit**: Slot-based offense.
 
 ### ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL
-**Description**: A committee member attested to a checkpoint proposal in a slot where this node detected a slashable invalid block proposal.
-**Detection**: ValidatorClient marks slots with invalid block proposals detected via reexecution and slashes checkpoint attesters seen for that slot. If proposal equivocation is later detected for the slot, pending bad-attestation offenses are cleared.
-**Target**: Committee members who attested in the invalid proposal slot.
+**Description**: A committee member attested to a checkpoint proposal that this node found invalid. The attester is slashed only for the payload it signed, not for other invalid proposals in the same slot.
+**Detection**: The proposal handler records the signed-payload hash of each checkpoint proposal it rejects as invalid. When it cannot find the checkpoint's last block, it also records the hash if the checkpoint commits to a block it rejected for a reason bound to the block header. A checkpoint rejected only because it leaves later blocks of its slot out is not recorded, since an attester that had not yet received those blocks would rightly find it valid; its proposer is still slashed. AttestedInvalidProposalWatcher slashes the attesters whose signed payload hash was recorded, and skips slots with proposal equivocation.
+**Target**: Committee members who attested to the invalid checkpoint payload.
 **Time Unit**: Slot-based offense.
 
 ### BROADCASTED_INVALID_CHECKPOINT_PROPOSAL

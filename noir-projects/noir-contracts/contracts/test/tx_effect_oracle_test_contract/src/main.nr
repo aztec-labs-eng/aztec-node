@@ -23,12 +23,12 @@ pub contract TxEffectOracleTest {
 
     /// Poseidon hash of each requested tx's effect, in request order, fetched via the batch oracle.
     #[external("utility")]
-    unconstrained fn get_tx_effect_hashes(tx_hashes: [Field; 2]) -> [Field; 2] {
+    unconstrained fn get_tx_effects_hashes(tx_hashes: [Field; 2]) -> [Field; 2] {
         let tx_effects = get_tx_effects(EphemeralArray::from_array(tx_hashes));
         [poseidon2_hash(tx_effects.get(0).unwrap().serialize()), poseidon2_hash(tx_effects.get(1).unwrap().serialize())]
     }
 
-    /// Like `get_tx_effect_hashes`, but via the batch-with-block oracle.
+    /// Like `get_tx_effects_hashes`, but via the batch-with-block oracle.
     #[external("utility")]
     unconstrained fn get_tx_effect_with_block_hashes(tx_hashes: [Field; 2]) -> [Field; 2] {
         let tx_effects = get_tx_effects_with_block(EphemeralArray::from_array(tx_hashes));

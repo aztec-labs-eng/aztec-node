@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 # nargo binary path relative to the crate root (this directory)
@@ -22,7 +23,7 @@ function test {
     fi
 
     # Warm nargo's git-dependency cache before the snapshot tests run. On a cold cache nargo prints a
-    # one-time "Cloning into '.../noir-lang/{poseidon,sha256}/v0.3.0'..." line to stderr while resolving
+    # one-time "Cloning into '.../noir-lang/poseidon/v0.4.0'..." line to stderr while resolving
     # the aztec library's git deps; with tests running in parallel that line lands in whichever
     # compile_failure snapshot triggers the clone first and breaks the byte-for-byte match. Cloning the
     # deps here keeps every captured stderr clean — the clone happens during dependency resolution

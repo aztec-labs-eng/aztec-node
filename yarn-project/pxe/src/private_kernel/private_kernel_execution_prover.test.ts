@@ -23,6 +23,10 @@ import { Buffer } from 'buffer';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 
+import type {
+  ExpirationAndPaddingRequest,
+  ResolveExpirationAndPadding,
+} from '../hooks/resolve_expiration_and_padding.js';
 import {
   PrivateCircuitPublicInputsBuilder,
   PrivateKernelCircuitPublicInputsBuilder,
@@ -166,7 +170,7 @@ describe('Private Kernel Sequencer', () => {
     proofCreator.simulateReset.mockResolvedValue(simulateProofOutput());
     proofCreator.simulateResetTail.mockResolvedValue(simulateProofOutputFinal());
 
-    prover = new PrivateKernelExecutionProver(inputsProvider, proofCreator, true);
+    prover = new PrivateKernelExecutionProver(inputsProvider, proofCreator, { fakeProofs: true });
   });
 
   it('dispatches the right init_K / inner_K variant at MAX_APPS_PER_KERNEL', async () => {
@@ -363,6 +367,78 @@ describe('Private Kernel Sequencer', () => {
     expect(proofCreator.simulateResetTail).toHaveBeenCalledTimes(1);
     const tailInputs = proofCreator.simulateResetTail.mock.calls[0][0];
     expect(tailInputs.expirationTimestampUpperBound).toBe(blockTimestamp + expectedRoundedOffset);
+  });
+
+  it('passes a lower expiry returned by the resolveExpirationAndPadding hook to the tail circuit', async () => {
+    const HOOK_EXPIRATION_TIMESTAMP = expirationTimestamp - 1000n;
+    const requests: ExpirationAndPaddingRequest[] = [];
+    const hook: ResolveExpirationAndPadding = request => {
+      requests.push(request);
+      return Promise.resolve({ expirationTimestamp: HOOK_EXPIRATION_TIMESTAMP, sideEffects: request.minSideEffects });
+    };
+    prover = new PrivateKernelExecutionProver(inputsProvider, proofCreator, {
+      fakeProofs: true,
+      resolveExpirationAndPadding: hook,
+    });
+
+    dependencies = { a: [] };
+    await prove(createExecutionResult('a'));
+
+    // The hook sees the expiry the kernels computed, unrounded.
+    expect(requests.map(request => request.maxExpirationTimestamp)).toEqual([expirationTimestamp]);
+    const tailInputs = proofCreator.simulateResetTail.mock.calls[0][0];
+    expect(tailInputs.expirationTimestampUpperBound).toBe(HOOK_EXPIRATION_TIMESTAMP);
+  });
+
+  it('pads the side effects up to the counts the resolveExpirationAndPadding hook returns', async () => {
+    const REAL_NOTE_HASHES = 1;
+    // The kernel output always has the tx's first nullifier.
+    const REAL_NULLIFIERS = 1;
+    const REAL_PRIVATE_LOGS = 1;
+    const TARGET_NOTE_HASHES = 4;
+    const TARGET_NULLIFIERS = 2;
+    const TARGET_PRIVATE_LOGS = 3;
+    proofCreator.simulateInit.mockResolvedValue(
+      simulateProofOutput(b => {
+        times(REAL_NOTE_HASHES, () => b.addNoteHash());
+        times(REAL_PRIVATE_LOGS, () => b.addPrivateLog());
+      }),
+    );
+
+    const requests: ExpirationAndPaddingRequest[] = [];
+    const hook: ResolveExpirationAndPadding = request => {
+      requests.push(request);
+      return Promise.resolve({
+        expirationTimestamp: request.maxExpirationTimestamp,
+        sideEffects: {
+          isPrivateOnlyTx: true,
+          noteHashes: TARGET_NOTE_HASHES,
+          nullifiers: TARGET_NULLIFIERS,
+          privateLogs: TARGET_PRIVATE_LOGS,
+        },
+      });
+    };
+    prover = new PrivateKernelExecutionProver(inputsProvider, proofCreator, {
+      fakeProofs: true,
+      resolveExpirationAndPadding: hook,
+    });
+
+    dependencies = { a: [] };
+    await prove(createExecutionResult('a'));
+
+    // The hook sees the side effects before padding.
+    expect(requests.map(request => request.minSideEffects)).toEqual([
+      {
+        isPrivateOnlyTx: true,
+        noteHashes: REAL_NOTE_HASHES,
+        nullifiers: REAL_NULLIFIERS,
+        privateLogs: REAL_PRIVATE_LOGS,
+      },
+    ]);
+    const { noteHashes, nullifiers, privateLogs } = proofCreator.simulateResetTail.mock.calls[0][0].paddedSideEffects;
+    expect(noteHashes.filter(noteHash => !noteHash.isZero())).toHaveLength(TARGET_NOTE_HASHES - REAL_NOTE_HASHES);
+    expect(nullifiers.filter(nullifier => !nullifier.isZero())).toHaveLength(TARGET_NULLIFIERS - REAL_NULLIFIERS);
+    expect(privateLogs.filter(log => !log.isEmpty())).toHaveLength(TARGET_PRIVATE_LOGS - REAL_PRIVATE_LOGS);
   });
 
   it('runs two consecutive inner resets when first reset output still overflows', async () => {

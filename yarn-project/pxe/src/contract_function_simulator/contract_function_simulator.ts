@@ -5,6 +5,7 @@ import {
   AVM_EMITNULLIFIER_BASE_L2_GAS,
   AVM_SENDL2TOL1MSG_BASE_L2_GAS,
   DA_GAS_PER_FIELD,
+  DEFAULT_UPDATE_DELAY,
   FIXED_AVM_STARTUP_L2_GAS,
   L2_GAS_PER_CONTRACT_CLASS_LOG,
   L2_GAS_PER_L2_TO_L1_MSG,
@@ -25,6 +26,7 @@ import {
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
 } from '@aztec-labs/constants';
+import { minBigint } from '@aztec-labs/foundation/bigint';
 import { arrayNonEmptyLength, padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -96,8 +98,13 @@ import {
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
 import type { ContractSyncService } from '../contract/contract_sync_service.js';
-import type { ExecutionHooks } from '../hooks/index.js';
+import type { ExecutionHooks, ResolveExpirationAndPadding, TxSideEffectCounts } from '../hooks/index.js';
 import type { TxResolverService } from '../messages/tx_resolver_service.js';
+import { applyExpirationAndPaddingHook, makePadding } from '../private_kernel/hints/expiration_and_padding.js';
+import {
+  getUpdatedClassIdHints,
+  getUpdatedClassIdHintsOfCalledContracts,
+} from '../private_kernel/private_kernel_inputs_provider.js';
 import type { AddressStore } from '../storage/address_store/address_store.js';
 import { CapsuleService } from '../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../storage/capsule_store/capsule_store.js';
@@ -466,6 +473,37 @@ class OrderedSideEffect<T> {
 }
 
 /**
+ * Returns the latest expiration timestamp the kernels allow the tx of `privateExecutionResult` to publish: the earliest
+ * of the timestamps its calls set and the time horizons of its called contracts' class ids, capped at `MAX_TX_LIFETIME`
+ * after the anchor block.
+ * @param privateExecutionResult - The result of the private execution.
+ * @param node - AztecNode to read the called contracts' class id updates from, at the anchor block.
+ */
+export async function computeSimulatedMaxExpirationTimestamp(
+  privateExecutionResult: PrivateExecutionResult,
+  node: AztecNode,
+): Promise<bigint> {
+  const anchorBlockHeader = privateExecutionResult.entrypoint.publicInputs.anchorBlockHeader;
+  const anchorBlockTimestamp = anchorBlockHeader.globalVariables.timestamp;
+
+  // The kernels cap the expiration timestamp at the time horizon of each called contract's class id, so the tx can't
+  // be included once a pending upgrade of a contract it ran takes effect.
+  const updatedClassIdHints = await getUpdatedClassIdHintsOfCalledContracts(privateExecutionResult, address =>
+    getUpdatedClassIdHints(node, anchorBlockHeader, address),
+  );
+  const classIdHorizons = [...updatedClassIdHints.values()].map(({ updatedClassIdValues }) =>
+    updatedClassIdValues.getTimeHorizon(anchorBlockTimestamp, BigInt(DEFAULT_UPDATE_DELAY)),
+  );
+
+  // Just like kernels, a call's expiration timestamp only counts if the call sets it.
+  const callExpirationTimestamps = collectNested([privateExecutionResult.entrypoint], execution => [
+    execution.publicInputs.expirationTimestamp,
+  ]).filter(timestamp => timestamp !== 0n);
+
+  return minBigint(anchorBlockTimestamp + BigInt(MAX_TX_LIFETIME), ...classIdHorizons, ...callExpirationTimestamps);
+}
+
+/**
  * Generates the final public inputs of the tail kernel circuit, an empty Chonk proof
  * and the execution steps for a `PrivateExecutionResult` as if it had been
  * processed by the private kernel prover. This skips many of the checks performed by the kernels
@@ -474,15 +512,22 @@ class OrderedSideEffect<T> {
  * @param privateExecutionResult - The result of the private execution.
  * @param debugFunctionNameGetter - A provider for contract data in order to get function names and debug info.
  * @param node - AztecNode for verifying settled read requests against the note hash and nullifier trees.
- * @param minRevertibleSideEffectCounterOverride - Optional override for the min revertible side effect counter.
+ * @param maxExpirationTimestamp - The latest expiration timestamp the tx may publish. For a tx that may be sent, this
+ * must come from {@link computeSimulatedMaxExpirationTimestamp}.
+ * @param opts.minRevertibleSideEffectCounterOverride - Optional override for the min revertible side effect counter.
  * Used by TXE to simulate account contract behavior (setting the counter before app execution).
+ * @param opts.resolveExpirationAndPadding - The wallet's hook choosing the tx's expiry and padding.
  * @returns The simulated proving result.
  */
 export async function generateSimulatedProvingResult(
   privateExecutionResult: PrivateExecutionResult,
   debugFunctionNameGetter: (contractAddress: AztecAddress, functionSelector: FunctionSelector) => Promise<string>,
   node: AztecNode,
-  minRevertibleSideEffectCounterOverride?: number,
+  maxExpirationTimestamp: bigint,
+  opts: {
+    minRevertibleSideEffectCounterOverride?: number;
+    resolveExpirationAndPadding?: ResolveExpirationAndPadding;
+  } = {},
 ): Promise<PrivateKernelExecutionProofOutput<PrivateKernelTailCircuitPublicInputs>> {
   const taggedPrivateLogs: OrderedSideEffect<PrivateLogData>[] = [];
   const l2ToL1Messages: OrderedSideEffect<ScopedL2ToL1Message>[] = [];
@@ -501,11 +546,6 @@ export async function generateSimulatedProvingResult(
 
   let publicTeardownCallRequest;
 
-  // We set expiration timestamp to anchor_block_timestamp + MAX_TX_LIFETIME (24h) just like kernels do
-  let expirationTimestamp =
-    privateExecutionResult.entrypoint.publicInputs.anchorBlockHeader.globalVariables.timestamp +
-    BigInt(MAX_TX_LIFETIME);
-
   let feePayer = AztecAddress.zero();
 
   const executions = [privateExecutionResult.entrypoint];
@@ -513,12 +553,6 @@ export async function generateSimulatedProvingResult(
   while (executions.length !== 0) {
     const execution = executions.shift()!;
     executions.unshift(...execution!.nestedExecutionResults);
-
-    // Just like kernels we overwrite the default value if the call sets it.
-    const callExpirationTimestamp = execution.publicInputs.expirationTimestamp;
-    if (callExpirationTimestamp !== 0n && callExpirationTimestamp < expirationTimestamp) {
-      expirationTimestamp = callExpirationTimestamp;
-    }
 
     const { contractAddress } = execution.publicInputs.callContext;
 
@@ -590,7 +624,7 @@ export async function generateSimulatedProvingResult(
 
   const noteHashNullifierCounterMap = collectNoteHashNullifierCounterMap(privateExecutionResult);
   const minRevertibleSideEffectCounter =
-    minRevertibleSideEffectCounterOverride ?? getFinalMinRevertibleSideEffectCounter(privateExecutionResult);
+    opts.minRevertibleSideEffectCounterOverride ?? getFinalMinRevertibleSideEffectCounter(privateExecutionResult);
 
   const scopedNoteHashesCLA = new ClaimedLengthArray<ScopedNoteHash, typeof MAX_NOTE_HASHES_PER_TX>(
     padArrayEnd(scopedNoteHashes, ScopedNoteHash.empty(), MAX_NOTE_HASHES_PER_TX),
@@ -657,6 +691,22 @@ export async function generateSimulatedProvingResult(
   const nonceGenerator = privateExecutionResult.firstNullifier;
   nonRevertibleNullifiers.unshift(nonceGenerator);
 
+  const { expirationTimestampUpperBound, paddedSideEffectAmounts } = await applyExpirationAndPaddingHook(
+    opts.resolveExpirationAndPadding,
+    {
+      anchorBlockTimestamp: privateExecutionResult.entrypoint.publicInputs.anchorBlockHeader.globalVariables.timestamp,
+      maxExpirationTimestamp,
+      minSideEffects: countSideEffects(
+        isPrivateOnlyTx,
+        siloedNoteHashes,
+        siloedNullifiers,
+        filteredPrivateLogs,
+        minRevertibleSideEffectCounter,
+      ),
+    },
+  );
+  const padding = await makePadding(paddedSideEffectAmounts);
+
   if (isPrivateOnlyTx) {
     // We must make the note hashes unique by using the
     // nonce generator and their index in the tx.
@@ -669,14 +719,35 @@ export async function generateSimulatedProvingResult(
       }),
     );
     const accumulatedDataForRollup = new PrivateToRollupAccumulatedData(
-      padArrayEnd(uniqueNoteHashes, Fr.ZERO, MAX_NOTE_HASHES_PER_TX),
-      padArrayEnd(nonRevertibleNullifiers.concat(revertibleNullifiers), Fr.ZERO, MAX_NULLIFIERS_PER_TX),
+      padArrayEnd(
+        [...uniqueNoteHashes, ...padding.nonRevertible.noteHashes, ...padding.revertible.noteHashes],
+        Fr.ZERO,
+        MAX_NOTE_HASHES_PER_TX,
+      ),
+      padArrayEnd(
+        [
+          ...nonRevertibleNullifiers,
+          ...revertibleNullifiers,
+          ...padding.nonRevertible.nullifiers,
+          ...padding.revertible.nullifiers,
+        ],
+        Fr.ZERO,
+        MAX_NULLIFIERS_PER_TX,
+      ),
       padArrayEnd(
         l2ToL1Messages.sort(sortByCounter).map(getEffect),
         ScopedL2ToL1Message.empty(),
         MAX_L2_TO_L1_MSGS_PER_TX,
       ),
-      padArrayEnd(filteredPrivateLogs.sort(sortByCounter).map(getEffect), PrivateLog.empty(), MAX_PRIVATE_LOGS_PER_TX),
+      padArrayEnd(
+        [
+          ...filteredPrivateLogs.sort(sortByCounter).map(getEffect),
+          ...padding.nonRevertible.privateLogs,
+          ...padding.revertible.privateLogs,
+        ],
+        PrivateLog.empty(),
+        MAX_PRIVATE_LOGS_PER_TX,
+      ),
       padArrayEnd(
         contractClassLogsHashes.sort(sortByCounter).map(getEffect),
         ScopedLogHash.empty(),
@@ -714,19 +785,31 @@ export async function generateSimulatedProvingResult(
     );
 
     const nonRevertibleData = new PrivateToPublicAccumulatedData(
-      padArrayEnd(nonRevertibleUniqueNoteHashes, Fr.ZERO, MAX_NOTE_HASHES_PER_TX),
-      padArrayEnd(nonRevertibleNullifiers, Fr.ZERO, MAX_NULLIFIERS_PER_TX),
+      padArrayEnd(
+        nonRevertibleUniqueNoteHashes.concat(padding.nonRevertible.noteHashes),
+        Fr.ZERO,
+        MAX_NOTE_HASHES_PER_TX,
+      ),
+      padArrayEnd(nonRevertibleNullifiers.concat(padding.nonRevertible.nullifiers), Fr.ZERO, MAX_NULLIFIERS_PER_TX),
       padArrayEnd(nonRevertibleL2ToL1Messages, ScopedL2ToL1Message.empty(), MAX_L2_TO_L1_MSGS_PER_TX),
-      padArrayEnd(nonRevertibleTaggedPrivateLogs, PrivateLog.empty(), MAX_PRIVATE_LOGS_PER_TX),
+      padArrayEnd(
+        nonRevertibleTaggedPrivateLogs.concat(padding.nonRevertible.privateLogs),
+        PrivateLog.empty(),
+        MAX_PRIVATE_LOGS_PER_TX,
+      ),
       padArrayEnd(nonRevertibleContractClassLogHashes, ScopedLogHash.empty(), MAX_CONTRACT_CLASS_LOGS_PER_TX),
       padArrayEnd(nonRevertiblePublicCallRequests, PublicCallRequest.empty(), MAX_ENQUEUED_CALLS_PER_TX),
     );
 
     const revertibleData = new PrivateToPublicAccumulatedData(
-      padArrayEnd(revertibleNoteHashes, Fr.ZERO, MAX_NOTE_HASHES_PER_TX),
-      padArrayEnd(revertibleNullifiers, Fr.ZERO, MAX_NULLIFIERS_PER_TX),
+      padArrayEnd(revertibleNoteHashes.concat(padding.revertible.noteHashes), Fr.ZERO, MAX_NOTE_HASHES_PER_TX),
+      padArrayEnd(revertibleNullifiers.concat(padding.revertible.nullifiers), Fr.ZERO, MAX_NULLIFIERS_PER_TX),
       padArrayEnd(revertibleL2ToL1Messages, ScopedL2ToL1Message.empty(), MAX_L2_TO_L1_MSGS_PER_TX),
-      padArrayEnd(revertibleTaggedPrivateLogs, PrivateLog.empty(), MAX_PRIVATE_LOGS_PER_TX),
+      padArrayEnd(
+        revertibleTaggedPrivateLogs.concat(padding.revertible.privateLogs),
+        PrivateLog.empty(),
+        MAX_PRIVATE_LOGS_PER_TX,
+      ),
       padArrayEnd(revertibleContractClassLogHashes, ScopedLogHash.empty(), MAX_CONTRACT_CLASS_LOGS_PER_TX),
       padArrayEnd(revertiblePublicCallRequests, PublicCallRequest.empty(), MAX_ENQUEUED_CALLS_PER_TX),
     );
@@ -756,7 +839,7 @@ export async function generateSimulatedProvingResult(
       }),
     ),
     /*feePayer=*/ feePayer,
-    /*expirationTimestamp=*/ expirationTimestamp,
+    /*expirationTimestamp=*/ expirationTimestampUpperBound,
     hasPublicCalls ? inputsForPublic : undefined,
     !hasPublicCalls ? inputsForRollup : undefined,
   );
@@ -876,6 +959,47 @@ async function verifyReadRequests(
       );
     }
   }
+}
+
+/**
+ * Counts the side effects a simulated tx publishes before padding, split into phases as its final kernel splits them.
+ * `nullifiers` excludes the protocol nullifier, which the kernels add as the tx's first non-revertible nullifier.
+ */
+function countSideEffects(
+  isPrivateOnlyTx: boolean,
+  noteHashes: OrderedSideEffect<unknown>[],
+  nullifiers: OrderedSideEffect<unknown>[],
+  privateLogs: OrderedSideEffect<unknown>[],
+  minRevertibleSideEffectCounter: number,
+): TxSideEffectCounts {
+  const numProtocolNullifiers = 1;
+  if (isPrivateOnlyTx) {
+    return {
+      isPrivateOnlyTx,
+      noteHashes: noteHashes.length,
+      nullifiers: numProtocolNullifiers + nullifiers.length,
+      privateLogs: privateLogs.length,
+    };
+  }
+
+  const countPhases = (effects: OrderedSideEffect<unknown>[]) =>
+    splitOrderedSideEffects(effects, minRevertibleSideEffectCounter).map(phase => phase.length);
+  const [nonRevertibleNoteHashes, revertibleNoteHashes] = countPhases(noteHashes);
+  const [nonRevertibleNullifiers, revertibleNullifiers] = countPhases(nullifiers);
+  const [nonRevertiblePrivateLogs, revertiblePrivateLogs] = countPhases(privateLogs);
+  return {
+    isPrivateOnlyTx,
+    nonRevertible: {
+      noteHashes: nonRevertibleNoteHashes,
+      nullifiers: numProtocolNullifiers + nonRevertibleNullifiers,
+      privateLogs: nonRevertiblePrivateLogs,
+    },
+    revertible: {
+      noteHashes: revertibleNoteHashes,
+      nullifiers: revertibleNullifiers,
+      privateLogs: revertiblePrivateLogs,
+    },
+  };
 }
 
 function splitOrderedSideEffects<T>(effects: OrderedSideEffect<T>[], minRevertibleSideEffectCounter: number) {

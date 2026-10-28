@@ -1,6 +1,6 @@
 # @aztec-labs/sqlite3mc-wasm
 
-SQLite3 Multiple Ciphers v2.3.5 (based on SQLite 3.53.2) packaged as a WASM
+SQLite3 Multiple Ciphers v2.6.1 (based on SQLite 3.54.0) packaged as a WASM
 module.
 
 Upstream: https://github.com/utelle/SQLite3MultipleCiphers
@@ -31,9 +31,9 @@ files come back via the build cache without re-fetching from upstream.
 The pinned upstream version lives in `scripts/vendor.pin`:
 
 ```sh
-MC_VERSION=2.3.5
-SQLITE_VERSION=3.53.2
-SHA256=3d0d5ebe4c54a9a22012410726ecef711e4e3e15ec11dffddf09488c72a10670
+MC_VERSION=2.6.1
+SQLITE_VERSION=3.54.0
+SHA256=aba121490fd6123bcbef8404ee26df9b26c0301063781e2aa31f05aed6f48384
 ```
 
 ## Verification (full chain)

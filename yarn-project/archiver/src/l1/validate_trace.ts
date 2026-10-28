@@ -1,7 +1,7 @@
 import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type { Hex } from 'viem';
-import type { ZodSchema } from 'zod';
+import { ZodError, type ZodSchema } from 'zod';
 
 import { callTraceSchema } from './debug_tx.js';
 import { traceTransactionResponseSchema } from './trace_tx.js';
@@ -37,7 +37,13 @@ async function testTraceMethod(
     logger.debug(`${method} works for ${blockType} blocks`);
     return true;
   } catch (error) {
-    logger.warn(`${method} failed for ${blockType} blocks: ${error}`);
+    if (error instanceof ZodError) {
+      logger.warn(`${method} returned a trace that failed validation for ${blockType} blocks`, {
+        issues: error.issues.slice(0, 5),
+      });
+    } else {
+      logger.warn(`${method} failed for ${blockType} blocks: ${error}`);
+    }
     return false;
   }
 }

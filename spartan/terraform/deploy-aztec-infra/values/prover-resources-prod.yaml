@@ -1,12 +1,15 @@
 node:
   node:
+    nodeJsOptions:
+      - "--no-warnings"
+      - "--max-old-space-size=7168"
     resources:
       requests:
-        cpu: "0.5"
+        cpu: "1.5"
         memory: "2Gi"
       limits:
-        cpu: "1.5"
-        memory: "6Gi"
+        cpu: "3.5"
+        memory: "7.5Gi"
 
   nodeSelector:
     local-ssd: "false"
