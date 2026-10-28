@@ -64,7 +64,9 @@ export function createLogger(module: string, bindings?: LoggerBindings): Logger 
   // Note that isLevelEnabled is missing from the browser version of pino.
   const logFn = (level: LogLevel, msg: string, data?: unknown) => {
     const pinoLogger = getPinoLogger();
-    return isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData((data as LogData) ?? {}), msg);
+    // Data handlers copy the data into a new object, which would drop a bare error's message and stack.
+    const logData = data instanceof Error ? { err: data } : ((data as LogData) ?? {});
+    return isLevelEnabled(pinoLogger, level) && pinoLogger[level](processLogData(logData), msg);
   };
 
   return {
@@ -117,6 +119,13 @@ const logDataHandlers: LogDataHandler[] = [];
 
 export function addLogDataHandler(handler: LogDataHandler): void {
   logDataHandlers.push(handler);
+}
+
+export function removeLogDataHandler(handler: LogDataHandler): void {
+  const index = logDataHandlers.indexOf(handler);
+  if (index !== -1) {
+    logDataHandlers.splice(index, 1);
+  }
 }
 
 function processLogData(data: LogData): LogData {
@@ -236,6 +245,7 @@ const pinoOpts: pino.LoggerOptions<keyof typeof customLevels> = {
     log: obj => convertBigintsToStrings(obj) as Record<string, unknown>,
     ...loggingConfig.formatters,
   },
+  serializers: { err: serializeError, error: serializeError },
 };
 
 export const levels = {
@@ -462,4 +472,28 @@ function formatErr(msg: string, err?: unknown): string {
       return `${msg}: [unserializable error]`;
     }
   }
+}
+
+/**
+ * Serializes an error in log data with its type, message and stack, converting bigints in its fields to strings. Its
+ * other fields are the ones its toJSON returns if it defines one, or else all of them, with its cause as a nested
+ * object.
+ */
+function serializeError(err: unknown): unknown {
+  let serialized: unknown = err;
+  if (err instanceof Error) {
+    const basicFields = { type: err.constructor.name, message: err.message, stack: err.stack };
+    if ('toJSON' in err && typeof err.toJSON === 'function') {
+      // toJSON picks which fields are safe to log, e.g. leaving out circular request objects
+      serialized = { ...basicFields, ...err.toJSON() };
+    } else {
+      try {
+        serialized = pino.stdSerializers.errWithCause(err);
+      } catch {
+        // errWithCause tags each error it walks with a symbol, which throws when the error is frozen
+        serialized = basicFields;
+      }
+    }
+  }
+  return convertBigintsToStrings(serialized);
 }

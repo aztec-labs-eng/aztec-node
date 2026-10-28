@@ -1,5 +1,6 @@
 /**
- * Converts bigint values to strings recursively in a log object to avoid serialization issues.
+ * Converts bigint values to strings recursively in a log object to avoid serialization issues. Errors are returned
+ * unchanged, since walking their properties or calling their toJSON would lose their message and stack.
  */
 export function convertBigintsToStrings(obj: unknown): unknown {
   if (typeof obj === 'bigint') {
@@ -11,6 +12,9 @@ export function convertBigintsToStrings(obj: unknown): unknown {
   }
 
   if (obj !== null && typeof obj === 'object') {
+    if (obj instanceof Error) {
+      return obj;
+    }
     if (typeof (obj as any).toJSON === 'function') {
       return convertBigintsToStrings((obj as any).toJSON());
     }

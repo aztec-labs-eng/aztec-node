@@ -99,7 +99,7 @@ export class FileCircuitRecorder extends CircuitRecorder {
         state.isFirstCall = false;
         await fs.appendFile(state.filePath, prefix + JSON.stringify(entry) + '\n');
       } catch (err) {
-        this.logger.error('Failed to log circuit call', { error: err });
+        this.logger.error('Failed to log circuit call', err);
       }
     }
     return entry;
@@ -114,7 +114,7 @@ export class FileCircuitRecorder extends CircuitRecorder {
     try {
       await fs.appendFile(state.filePath, '  ]\n}\n');
     } catch (err) {
-      this.logger.error('Failed to finalize recording file', { error: err });
+      this.logger.error('Failed to finalize recording file', err);
     }
   }
 
@@ -129,7 +129,7 @@ export class FileCircuitRecorder extends CircuitRecorder {
       await fs.appendFile(state.filePath, `  "error": ${JSON.stringify(error)}\n`);
       await fs.appendFile(state.filePath, '}\n');
     } catch (err) {
-      this.logger.error('Failed to finalize recording file with error', { error: err });
+      this.logger.error('Failed to finalize recording file with error', err);
     }
   }
 }

@@ -4,7 +4,9 @@ import { Writable } from 'stream';
 
 import { inspect } from '../inspect/index.js';
 import { createLibp2pComponentLogger } from './libp2p_logger.js';
+import type { LogData } from './log_fn.js';
 import {
+  addLogDataHandler,
   createLogger,
   getActorColor,
   getLogLevel,
@@ -12,6 +14,7 @@ import {
   overwriteLoggingStream,
   pinoPrettyOpts,
   registerLoggingStream,
+  removeLogDataHandler,
   resetActorColors,
   setLogLevel,
 } from './pino-logger.js';
@@ -315,6 +318,99 @@ describe('pino-logger', () => {
       nested: { addr: '0x1234567890abcdef1234567890abcdef12345678' },
       array: ['0x1234567890abcdef1234567890abcdef12345678'],
       plainString: 'hello',
+    });
+  });
+
+  it('preserves errors in log data', () => {
+    const testLogger = createLogger('error-data-test');
+    capturingStream.clear();
+
+    // The smallest positive integer a JavaScript number cannot represent exactly.
+    const amount = 2n ** 53n + 1n;
+    const err = Object.assign(new Error('outer failure', { cause: new Error('root cause') }), {
+      code: 'E_OUTER',
+      amount,
+    });
+    testLogger.warn('errors in data', { err, error: new TypeError('other failure') });
+
+    const entries = capturingStream.getJsonLines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      err: {
+        type: 'Error',
+        message: 'outer failure',
+        stack: expect.stringContaining('outer failure'),
+        code: 'E_OUTER',
+        amount: amount.toString(),
+        cause: { type: 'Error', message: 'root cause', stack: expect.stringContaining('root cause') },
+      },
+      error: { type: 'TypeError', message: 'other failure', stack: expect.stringContaining('other failure') },
+    });
+  });
+
+  it('serializes errors that define toJSON with their message, stack and toJSON fields', () => {
+    const testLogger = createLogger('error-to-json-test');
+    capturingStream.clear();
+
+    // HTTP client errors such as AxiosError hold circular request objects and define toJSON to leave them out.
+    class RequestError extends Error {
+      public readonly request: Record<string, unknown> = {};
+
+      constructor() {
+        super('request failed');
+        this.name = 'RequestError';
+        this.request.self = this.request;
+      }
+
+      public toJSON() {
+        return { code: 'E_REQUEST' };
+      }
+    }
+
+    testLogger.warn('error in data', { err: new RequestError() });
+
+    const entries = capturingStream.getJsonLines();
+    expect(entries).toHaveLength(1);
+    const { err } = entries[0] as { err: unknown };
+    expect(err).toMatchObject({
+      type: 'RequestError',
+      message: 'request failed',
+      stack: expect.stringContaining('request failed'),
+      code: 'E_REQUEST',
+    });
+    expect(err).not.toHaveProperty('request');
+  });
+
+  it('serializes frozen errors in log data', () => {
+    const testLogger = createLogger('frozen-error-test');
+    capturingStream.clear();
+
+    testLogger.warn('frozen error in data', { err: Object.freeze(new Error('frozen failure')) });
+
+    const entries = capturingStream.getJsonLines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      err: { type: 'Error', message: 'frozen failure', stack: expect.stringContaining('frozen failure') },
+    });
+  });
+
+  it('serializes errors passed as the log data itself', () => {
+    const testLogger = createLogger('bare-error-test');
+    capturingStream.clear();
+
+    // Handlers that add fields copy the data into a new object.
+    const copyData = (data: LogData) => ({ ...data });
+    addLogDataHandler(copyData);
+    try {
+      testLogger.warn('error as data', new Error('bare failure'));
+    } finally {
+      removeLogDataHandler(copyData);
+    }
+
+    const entries = capturingStream.getJsonLines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      err: { type: 'Error', message: 'bare failure', stack: expect.stringContaining('bare failure') },
     });
   });
 

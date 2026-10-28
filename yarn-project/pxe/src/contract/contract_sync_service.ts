@@ -259,7 +259,7 @@ export class ContractSyncService implements OperationContributor {
       // `settle` only escalates these failures at the end of the change set: catch here so one does not become an
       // unhandled rejection before then, and log it.
       syncPromise.catch(err => {
-        this.log.warn(`Speculative sync of ${callee.address} failed`, { changeSetId, error: err?.message });
+        this.log.warn(`Speculative sync of ${callee.address} failed`, { changeSetId, err });
       });
     }
   }
