@@ -1,5 +1,6 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { type Offense, OffenseType } from '../slashing/index.js';
 import { type AztecNodeAdmin, AztecNodeAdminApiSchema } from './aztec-node-admin.js';
@@ -181,3 +182,9 @@ class MockAztecNodeAdmin implements AztecNodeAdmin {
     return Promise.resolve();
   }
 }
+
+describe('AztecNodeAdminApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(AztecNodeAdminApiSchema)).toEqual([]);
+  });
+});

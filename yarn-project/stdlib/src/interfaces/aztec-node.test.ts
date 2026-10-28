@@ -12,6 +12,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { Buffer } from 'buffer';
 import omit from 'lodash.omit';
@@ -1153,3 +1154,9 @@ class MockAztecNode implements AztecNode {
     return Promise.resolve({ blockProposals: [], checkpointProposals: [] });
   }
 }
+
+describe('AztecNodeApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(AztecNodeApiSchema)).toEqual([]);
+  });
+});

@@ -15,7 +15,7 @@ const MAX_WALK_DEPTH = 64;
  */
 export function findUnboundedContainers(schema: z.core.$ZodType, path = ''): string[] {
   const found: string[] = [];
-  walk(schema, path, found, new Set(), 0);
+  walk(schema, path, found, new WeakSet(), 0);
   return found;
 }
 
@@ -37,7 +37,7 @@ function walk(
   schema: z.core.$ZodType,
   path: string,
   found: string[],
-  visited: Set<z.core.$ZodType>,
+  visited: WeakSet<z.core.$ZodType>,
   depth: number,
 ): void {
   if (visited.has(schema) || depth > MAX_WALK_DEPTH) {

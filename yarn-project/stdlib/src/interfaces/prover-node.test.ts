@@ -1,5 +1,6 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { type EpochProvingJobState, type ProverNodeApi, ProverNodeApiSchema } from './prover-node.js';
 
@@ -54,3 +55,9 @@ class MockProverNode implements ProverNodeApi {
     return Promise.resolve(`job-${epochNumber}`);
   }
 }
+
+describe('ProverNodeApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(ProverNodeApiSchema)).toEqual([]);
+  });
+});

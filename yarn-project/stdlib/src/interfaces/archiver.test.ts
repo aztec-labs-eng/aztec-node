@@ -4,6 +4,7 @@ import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
 import { Buffer } from 'buffer';
 import omit from 'lodash.omit';
@@ -774,3 +775,9 @@ class MockArchiver implements ArchiverApi {
     return Promise.resolve(false);
   }
 }
+
+describe('ArchiverApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(ArchiverApiSchema)).toEqual([]);
+  });
+});
