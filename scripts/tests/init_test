@@ -54,6 +54,8 @@ git -C "$src/ci3" checkout -q "$c1" && git -C "$src/other" checkout -q "$o1"
 git -C "$src" add -A && git -C "$src" commit -qm B && git -C "$src" tag B
 git -C "$src/ci3" checkout -q "$c2" && git -C "$src/other" checkout -q "$o2"
 git -C "$src" add -A && git -C "$src" commit -qm C && git -C "$src" tag C
+# D: C without the update = none submodule, like this repository.
+git -C "$src" rm -q skipped && git -C "$src" commit -qm D && git -C "$src" tag D
 
 # A fresh clone at a commit, without submodules: what a developer gets.
 function clone_at {
@@ -154,6 +156,20 @@ if [ $rc -ne 0 ] && [ -f "$d/ci3/__pycache__/stale.pyc" ] && [[ "$err" == *"not 
 else
   fail "leftovers in a submodule directory fail with an explanation and are kept" "rc=$rc err='$err'"
 fi
+
+# Entry points start in parallel (make runs the project bootstraps at once), long after the submodules
+# are in place: those inits must not contend. `git submodule update` rewrites submodule config even
+# with nothing to do, so parallel runs used to race on its lock and some failed. Run without an
+# update = none submodule, as in this repository: git always lists one as missing, so init would
+# still update on every start in a repository that has one.
+d=$(clone_at parallel D)
+(cd "$d" && ./bootstrap.sh init 2>/dev/null)
+failed=0
+pids=()
+for _ in $(seq 32); do (cd "$d" && ./bootstrap.sh init >/dev/null 2>>"$work/parallel.err") & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || failed=$((failed + 1)); done
+[ $failed -eq 0 ] && pass "32 parallel inits with everything in place all succeed" \
+  || fail "32 parallel inits with everything in place all succeed" "$failed failed: $(sort -u "$work/parallel.err" | head -2 | tr '\n' ' ')"
 
 # Run from an unrelated directory: init finds the repository it belongs to.
 d=$(clone_at elsewhere C)

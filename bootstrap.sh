@@ -164,7 +164,11 @@ function install_deps {
 # ones, move stale ones. Git refuses rather than overwrite local changes; to work in a submodule
 # without this moving it, `git config submodule.<name>.update none`. stdout is kept clean: callers'
 # stdout is often data. `init` stops here, so scripts can prepare the checkout without the rest.
-git -C "$(dirname "${BASH_SOURCE[0]}")" submodule update --init --recursive --depth 1 --jobs 8 --quiet >&2 || exit 1
+# The update rewrites submodule config even when it has nothing to do, and entry points start in
+# parallel, so it only runs when the read-only status shows a submodule missing, moved or conflicted.
+if git -C "$(dirname "${BASH_SOURCE[0]}")" submodule status --recursive | grep -q '^[-+U]'; then
+  git -C "$(dirname "${BASH_SOURCE[0]}")" submodule update --init --recursive --depth 1 --jobs 8 --quiet >&2 || exit 1
+fi
 [ "${1:-}" = "init" ] && exit 0
 
 # Special case for installing dependencies (can run on older bash).
