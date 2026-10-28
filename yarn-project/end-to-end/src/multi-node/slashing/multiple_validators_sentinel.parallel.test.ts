@@ -90,7 +90,7 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
   // attestation-missed entries across the observed slots. Phase 2 then stops the second validator node,
   // finds a slot where a first-node validator is the proposer, and asserts via the sentinel node that
   // first-node validators have no missed entries for that slot, the offline validators do, and at least one
-  // first-node validator shows a checkpoint-mined/-valid entry. The phases are ordered (phase 1 needs both
+  // first-node validator shows a checkpoint-valid/-orphaned entry. The phases are ordered (phase 1 needs both
   // nodes online; phase 2 self-anchors on a fresh post-stop slot window).
   it('collects attestations for all validators, including when a block is not published', async () => {
     // --- Phase 1: all validators on a node ---
@@ -133,7 +133,7 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
     // --- Phase 2: validators in proposer node when block is not published ---
     test.logger.info(`Phase 1 complete; stopping a validator node and establishing a new initial slot`);
 
-    // Stop the second node, this means the first node won't be able to propose since won't achieve quorum
+    // Stop the second node so proposals built after shutdown cannot collect enough attestations to publish
     await tryStop(nodes[1]);
 
     await test.monitor.run();
@@ -192,11 +192,14 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
       ).toBeEmpty();
     }
 
-    // At least one of the first node validators must have been seen as proposer
+    // At least one of the first node validators must have been seen as proposer of a valid checkpoint. Without quorum
+    // its proposal cannot land, so it is `checkpoint-valid` when it built on the L1 tip, or `checkpoint-orphaned` when
+    // it pipelined on top of an earlier proposal that never landed either. Which one depends on the proposer schedule
+    // and on what was still in flight when the second node stopped.
     const firstNodeBlockProposedHistory = firstNodeValidators
       .flatMap(v => stats.stats[v.toString().toLowerCase()].history)
       .filter(h => h.slot === slotForSentinel)
-      .filter(h => h.status === 'checkpoint-valid' || h.status === 'checkpoint-mined');
+      .filter(h => h.status === 'checkpoint-valid' || h.status === 'checkpoint-orphaned');
     expect(firstNodeBlockProposedHistory).not.toBeEmpty();
 
     // And all of the validators for the offline node must be seen as missed attestation or proposal.
