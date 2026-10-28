@@ -1,6 +1,7 @@
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import type {
   SingleValidatorStats,
   ValidatorMissedStats,
@@ -26,15 +27,17 @@ export const ValidatorStatusInSlotSchema = zodFor<ValidatorStatusInSlot>()(
 );
 
 export const ValidatorStatusHistorySchema = zodFor<ValidatorStatusHistory>()(
-  z.array(
-    z.object({
-      slot: schemas.SlotNumber,
-      status: ValidatorStatusInSlotSchema,
-    }),
-  ),
+  z
+    .array(
+      z.object({
+        slot: schemas.SlotNumber,
+        status: ValidatorStatusInSlotSchema,
+      }),
+    )
+    .max(MAX_UNCAPPED_ARRAY_LEN),
 );
 
-export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema);
+export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema).max(MAX_UNCAPPED_ARRAY_LEN);
 
 export const ValidatorStatusHistorySchemaMap = z.record(z.string(), ValidatorStatusHistorySchemaArray);
 
@@ -77,13 +80,15 @@ export const ValidatorsStatsSchema = zodFor<ValidatorsStats>()(
 export const SingleValidatorStatsSchema = zodFor<SingleValidatorStats>()(
   z.object({
     validator: ValidatorStatsSchema,
-    allTimeEpochPerformance: z.array(
-      z.object({
-        missed: schemas.Integer,
-        total: schemas.Integer,
-        epoch: schemas.EpochNumber,
-      }),
-    ),
+    allTimeEpochPerformance: z
+      .array(
+        z.object({
+          missed: schemas.Integer,
+          total: schemas.Integer,
+          epoch: schemas.EpochNumber,
+        }),
+      )
+      .max(MAX_UNCAPPED_ARRAY_LEN),
     lastProcessedSlot: schemas.SlotNumber.optional(),
     initialSlot: schemas.SlotNumber.optional(),
     slotWindow: schemas.Integer,

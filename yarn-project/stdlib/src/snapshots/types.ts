@@ -2,6 +2,8 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
+
 export const SnapshotDataKeys = [
   'archiver',
   'nullifier-tree',
@@ -42,22 +44,24 @@ export const SnapshotsIndexSchema = zodFor<SnapshotsIndex>()(
     l1ChainId: z.number(),
     rollupVersion: z.number(),
     rollupAddress: schemas.EthAddress,
-    snapshots: z.array(
-      z.object({
-        l2BlockNumber: z.number(),
-        l2BlockHash: z.string(),
-        l1BlockNumber: z.number(),
-        timestamp: z.number(),
-        schemaVersions: z.object({
-          archiver: z.number(),
-          worldState: z.number(),
+    snapshots: z
+      .array(
+        z.object({
+          l2BlockNumber: z.number(),
+          l2BlockHash: z.string(),
+          l1BlockNumber: z.number(),
+          timestamp: z.number(),
+          schemaVersions: z.object({
+            archiver: z.number(),
+            worldState: z.number(),
+          }),
+          dataUrls: z
+            .record(z.enum(SnapshotDataKeys), z.string())
+            // See https://stackoverflow.com/questions/77958464/zod-record-with-required-keys
+            .refine((obj): obj is Required<typeof obj> => SnapshotDataKeys.every(key => !!obj[key])),
         }),
-        dataUrls: z
-          .record(z.enum(SnapshotDataKeys), z.string())
-          // See https://stackoverflow.com/questions/77958464/zod-record-with-required-keys
-          .refine((obj): obj is Required<typeof obj> => SnapshotDataKeys.every(key => !!obj[key])),
-      }),
-    ),
+      )
+      .max(MAX_UNCAPPED_ARRAY_LEN),
   }),
 );
 
