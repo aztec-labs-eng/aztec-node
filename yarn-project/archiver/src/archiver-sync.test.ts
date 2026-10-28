@@ -2368,6 +2368,34 @@ describe('Archiver Sync', () => {
         },
       );
 
+      it('refetches the republished checkpoint when its rejected successor was republished too', async () => {
+        const invalidSigners = times(3, Secp256k1Signer.random);
+        await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 112n, signers: invalidSigners });
+        await syncTo(115n);
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+
+        await fake.repostCheckpoint(CheckpointNumber(2), {
+          l1BlockNumber: 104n,
+          signers,
+          spareAttestationsBitmapBit: true,
+          reorged: true,
+        });
+        await fake.repostCheckpoint(CheckpointNumber(3), {
+          l1BlockNumber: 112n,
+          signers: invalidSigners,
+          reorged: true,
+        });
+
+        await syncAndExpectStable(async () => {
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+          const stored = await archiver.getCheckpoint({ number: CheckpointNumber(2) });
+          expect(computeAttestationsHash(stored!.verbatimAttestations)).toEqual(
+            fake.getPostedAttestationsHash(CheckpointNumber(2)).toString(),
+          );
+          expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+        });
+      });
+
       it('keeps a proven checkpoint whose attestations L1 replaced', async () => {
         await fake.repostCheckpoint(CheckpointNumber(2), {
           l1BlockNumber: 104n,

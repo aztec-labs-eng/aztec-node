@@ -740,8 +740,13 @@ export class ArchiverL1Synchronizer implements Traceable {
         );
 
         // The republication may sit at or below the sync point, where a forward scan would skip it and find only its
-        // successor. The behind-syncpoint check instead rewinds the scan to the last checkpoint kept.
+        // successor, so the next pass scans from the last checkpoint kept. The sync point is moved here rather than
+        // left to the behind-syncpoint check, which a rejected successor still pending on L1 would satisfy.
         if (tipAttestationsReplaced) {
+          const keptCheckpoint = await this.stores.blocks.getCheckpointData(tipAfterUnwind);
+          await this.stores.blocks.setSynchedL1BlockNumber(
+            keptCheckpoint?.l1.blockNumber ?? this.l1Constants.l1StartBlock,
+          );
           return { rollupStatus, fetchCheckpoints: false };
         }
       }
