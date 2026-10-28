@@ -1,3 +1,16 @@
+import {
+  ARCHIVE_HEIGHT,
+  L1_TO_L2_MSG_TREE_HEIGHT,
+  MAX_ENQUEUED_CALLS_PER_TX,
+  MAX_L2_TO_L1_MSGS_PER_TX,
+  MAX_NOTE_HASHES_PER_TX,
+  MAX_NULLIFIERS_PER_TX,
+  MAX_PROCESSABLE_L2_GAS,
+  MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
+  NOTE_HASH_TREE_HEIGHT,
+  NULLIFIER_TREE_HEIGHT,
+  PUBLIC_DATA_TREE_HEIGHT,
+} from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { Buffer } from 'buffer';
@@ -14,7 +27,7 @@ import { GasSettings } from '../gas/gas_settings.js';
 import { GasUsed } from '../gas/gas_used.js';
 import { PublicKeys } from '../keys/public_keys.js';
 import { DebugLog } from '../logs/debug_log.js';
-import { PublicLog } from '../logs/public_log.js';
+import { MAX_PUBLIC_LOGS_PER_TX, PublicLog } from '../logs/public_log.js';
 import { ScopedL2ToL1Message } from '../messaging/l2_to_l1_message.js';
 import { NullishToUndefined, type ZodFor, schemas } from '../schemas/schemas.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
@@ -35,6 +48,22 @@ import { AvmCircuitPublicInputs } from './avm_circuit_public_inputs.js';
 import { serializeWithMessagePack } from './message_pack.js';
 import { PublicDataWrite } from './public_data_write.js';
 import { RevertCode } from './revert_code.js';
+
+/** Hinted sibling paths can belong to any tree, so they are bounded by the tallest one. */
+const MAX_SIBLING_PATH_LEN = Math.max(
+  ARCHIVE_HEIGHT,
+  NOTE_HASH_TREE_HEIGHT,
+  NULLIFIER_TREE_HEIGHT,
+  PUBLIC_DATA_TREE_HEIGHT,
+  L1_TO_L2_MSG_TREE_HEIGHT,
+);
+
+/**
+ * Bound for arrays that grow with the work a tx's public execution does, such as hints, call metadata and calldata of
+ * nested calls. Every entry stems from an operation that costs L2 gas, so a tx cannot produce more entries than the L2
+ * gas it can process. Real inputs stay orders of magnitude below it.
+ */
+const MAX_AVM_EXECUTION_ENTRIES = MAX_PROCESSABLE_L2_GAS;
 
 ////////////////////////////////////////////////////////////////////////////
 // Hints (contracts)
@@ -253,7 +282,7 @@ export class AvmGetSiblingPathHint {
         hintKey: AppendOnlyTreeSnapshot.schema,
         treeId: z.number().int().nonnegative(),
         index: schemas.BigInt,
-        path: schemas.Fr.array(),
+        path: schemas.Fr.array().max(MAX_SIBLING_PATH_LEN),
       })
       .transform(({ hintKey, treeId, index, path }) => new AvmGetSiblingPathHint(hintKey, treeId, index, path));
   }
@@ -453,12 +482,12 @@ function AvmSequentialInsertHintFactory(klass: IndexedTreeLeafPreimagesClasses) 
           lowLeavesWitnessData: z.object({
             leaf: klass.schema,
             index: schemas.BigInt,
-            path: schemas.Fr.array(),
+            path: schemas.Fr.array().max(MAX_SIBLING_PATH_LEN),
           }),
           insertionWitnessData: z.object({
             leaf: klass.schema,
             index: schemas.BigInt,
-            path: schemas.Fr.array(),
+            path: schemas.Fr.array().max(MAX_SIBLING_PATH_LEN),
           }),
         })
         .transform(
@@ -527,7 +556,7 @@ export class AvmAppendLeavesHint {
         hintKey: AppendOnlyTreeSnapshot.schema,
         stateAfter: AppendOnlyTreeSnapshot.schema,
         treeId: z.number().int().nonnegative(),
-        leaves: schemas.Fr.array(),
+        leaves: schemas.Fr.array().max(MAX_AVM_EXECUTION_ENTRIES),
       })
       .transform(
         ({ hintKey, stateAfter, treeId, leaves }) => new AvmAppendLeavesHint(hintKey, stateAfter, treeId, leaves),
@@ -807,17 +836,17 @@ export class AvmTxHint {
         nonRevertibleContractDeploymentData: ContractDeploymentData.schema,
         revertibleContractDeploymentData: ContractDeploymentData.schema,
         nonRevertibleAccumulatedData: z.object({
-          noteHashes: schemas.Fr.array(),
-          nullifiers: schemas.Fr.array(),
-          l2ToL1Messages: ScopedL2ToL1Message.schema.array(),
+          noteHashes: schemas.Fr.array().max(MAX_NOTE_HASHES_PER_TX),
+          nullifiers: schemas.Fr.array().max(MAX_NULLIFIERS_PER_TX),
+          l2ToL1Messages: ScopedL2ToL1Message.schema.array().max(MAX_L2_TO_L1_MSGS_PER_TX),
         }),
         revertibleAccumulatedData: z.object({
-          noteHashes: schemas.Fr.array(),
-          nullifiers: schemas.Fr.array(),
-          l2ToL1Messages: ScopedL2ToL1Message.schema.array(),
+          noteHashes: schemas.Fr.array().max(MAX_NOTE_HASHES_PER_TX),
+          nullifiers: schemas.Fr.array().max(MAX_NULLIFIERS_PER_TX),
+          l2ToL1Messages: ScopedL2ToL1Message.schema.array().max(MAX_L2_TO_L1_MSGS_PER_TX),
         }),
-        setupEnqueuedCalls: PublicCallRequestWithCalldata.schema.array(),
-        appLogicEnqueuedCalls: PublicCallRequestWithCalldata.schema.array(),
+        setupEnqueuedCalls: PublicCallRequestWithCalldata.schema.array().max(MAX_ENQUEUED_CALLS_PER_TX),
+        appLogicEnqueuedCalls: PublicCallRequestWithCalldata.schema.array().max(MAX_ENQUEUED_CALLS_PER_TX),
         teardownEnqueuedCall: PublicCallRequestWithCalldata.schema.nullable(),
         gasUsedByPrivate: Gas.schema,
         feePayer: AztecAddress.schema,
@@ -938,25 +967,39 @@ export class AvmExecutionHints {
         globalVariables: GlobalVariables.schema,
         tx: AvmTxHint.schema,
         protocolContracts: ProtocolContracts.schema,
-        contractInstances: AvmContractInstanceHint.schema.array(),
-        contractClasses: AvmContractClassHint.schema.array(),
-        bytecodeCommitments: AvmBytecodeCommitmentHint.schema.array(),
-        debugFunctionNames: AvmDebugFunctionNameHint.schema.array(),
-        contractDbCreateCheckpointHints: AvmContractDbCreateCheckpointHint.schema.array(),
-        contractDbCommitCheckpointHints: AvmContractDbCommitCheckpointHint.schema.array(),
-        contractDbRevertCheckpointHints: AvmContractDbRevertCheckpointHint.schema.array(),
+        contractInstances: AvmContractInstanceHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        contractClasses: AvmContractClassHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        bytecodeCommitments: AvmBytecodeCommitmentHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        debugFunctionNames: AvmDebugFunctionNameHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        contractDbCreateCheckpointHints: AvmContractDbCreateCheckpointHint.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        contractDbCommitCheckpointHints: AvmContractDbCommitCheckpointHint.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        contractDbRevertCheckpointHints: AvmContractDbRevertCheckpointHint.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
         startingTreeRoots: TreeSnapshots.schema,
-        getSiblingPathHints: AvmGetSiblingPathHint.schema.array(),
-        getPreviousValueIndexHints: AvmGetPreviousValueIndexHint.schema.array(),
-        getLeafPreimageHintsPublicDataTree: AvmGetLeafPreimageHintPublicDataTree.schema.array(),
-        getLeafPreimageHintsNullifierTree: AvmGetLeafPreimageHintNullifierTree.schema.array(),
-        getLeafValueHints: AvmGetLeafValueHint.schema.array(),
-        sequentialInsertHintsPublicDataTree: AvmSequentialInsertHintPublicDataTree.schema.array(),
-        sequentialInsertHintsNullifierTree: AvmSequentialInsertHintNullifierTree.schema.array(),
-        appendLeavesHints: AvmAppendLeavesHint.schema.array(),
-        createCheckpointHints: AvmCreateCheckpointHint.schema.array(),
-        commitCheckpointHints: AvmCommitCheckpointHint.schema.array(),
-        revertCheckpointHints: AvmRevertCheckpointHint.schema.array(),
+        getSiblingPathHints: AvmGetSiblingPathHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        getPreviousValueIndexHints: AvmGetPreviousValueIndexHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        getLeafPreimageHintsPublicDataTree: AvmGetLeafPreimageHintPublicDataTree.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        getLeafPreimageHintsNullifierTree: AvmGetLeafPreimageHintNullifierTree.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        getLeafValueHints: AvmGetLeafValueHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        sequentialInsertHintsPublicDataTree: AvmSequentialInsertHintPublicDataTree.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        sequentialInsertHintsNullifierTree: AvmSequentialInsertHintNullifierTree.schema
+          .array()
+          .max(MAX_AVM_EXECUTION_ENTRIES),
+        appendLeavesHints: AvmAppendLeavesHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        createCheckpointHints: AvmCreateCheckpointHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        commitCheckpointHints: AvmCommitCheckpointHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        revertCheckpointHints: AvmRevertCheckpointHint.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
       })
       .transform(
         ({
@@ -1073,14 +1116,14 @@ export class CallStackMetadata {
         phase: z.nativeEnum(TxExecutionPhase),
         contractAddress: Fr.schema,
         callerPc: z.number(),
-        calldata: Fr.schema.array(),
+        calldata: Fr.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
         isStaticCall: z.boolean(),
         gasLimit: Gas.schema,
-        output: Fr.schema.array(),
-        internalCallStackAtExit: z.number().array(),
+        output: Fr.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        internalCallStackAtExit: z.number().array().max(MAX_AVM_EXECUTION_ENTRIES),
         haltingMessage: NullishToUndefined(z.string()),
         reverted: z.boolean(),
-        nested: CallStackMetadata.schema.array(),
+        nested: CallStackMetadata.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
         numNestedCalls: z.number(),
       })
       .transform(
@@ -1218,11 +1261,11 @@ export class PublicTxEffect {
     return z
       .object({
         transactionFee: Fr.schema,
-        noteHashes: Fr.schema.array(),
-        nullifiers: Fr.schema.array(),
-        l2ToL1Msgs: ScopedL2ToL1Message.schema.array(),
-        publicLogs: PublicLog.schema.array(),
-        publicDataWrites: PublicDataWrite.schema.array(),
+        noteHashes: Fr.schema.array().max(MAX_NOTE_HASHES_PER_TX),
+        nullifiers: Fr.schema.array().max(MAX_NULLIFIERS_PER_TX),
+        l2ToL1Msgs: ScopedL2ToL1Message.schema.array().max(MAX_L2_TO_L1_MSGS_PER_TX),
+        publicLogs: PublicLog.schema.array().max(MAX_PUBLIC_LOGS_PER_TX),
+        publicDataWrites: PublicDataWrite.schema.array().max(MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX),
       })
       .transform(PublicTxEffect.from);
   }
@@ -1310,8 +1353,11 @@ export class PublicTxResult {
         revertCode: RevertCode.schema,
         revertReason: NullishToUndefined(SimulationError.schema),
         publicTxEffect: PublicTxEffect.schema,
-        callStackMetadata: z.union([CallStackMetadata.schema.array(), NestedProcessReturnValues.schema.array()]),
-        logs: NullishToUndefined(DebugLog.schema.array()),
+        callStackMetadata: z.union([
+          CallStackMetadata.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+          NestedProcessReturnValues.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        ]),
+        logs: NullishToUndefined(DebugLog.schema.array().max(MAX_AVM_EXECUTION_ENTRIES)),
         // Missing/null coalesces to an empty map.
         stats: z
           .record(z.string(), z.string())
