@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { OpcodeLocation } from '../abi/abi.js';
 import { FunctionSelector } from '../abi/function_selector.js';
 import { AztecAddress } from '../aztec-address/index.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { type ZodFor, optional, schemas } from '../schemas/index.js';
 
 /**
@@ -67,7 +68,10 @@ const SourceCodeLocationSchema = z.object({
  */
 export type NoirCallStack = SourceCodeLocation[] | OpcodeLocation[];
 
-const NoirCallStackSchema: z.ZodType<NoirCallStack> = z.union([z.array(SourceCodeLocationSchema), z.array(z.string())]);
+const NoirCallStackSchema: z.ZodType<NoirCallStack> = z.union([
+  z.array(SourceCodeLocationSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+  z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN),
+]);
 
 /**
  * Checks if a call stack is unresolved.
@@ -235,16 +239,18 @@ export class SimulationError extends Error {
     return z
       .object({
         originalMessage: z.string(),
-        functionErrorStack: z.array(
-          z.object({
-            contractAddress: schemas.AztecAddress,
-            contractName: z.string().optional(),
-            functionSelector: optional(schemas.FunctionSelector),
-            functionName: z.string().optional(),
-          }),
-        ),
+        functionErrorStack: z
+          .array(
+            z.object({
+              contractAddress: schemas.AztecAddress,
+              contractName: z.string().optional(),
+              functionSelector: optional(schemas.FunctionSelector),
+              functionName: z.string().optional(),
+            }),
+          )
+          .max(MAX_UNCAPPED_ARRAY_LEN),
         noirErrorStack: NoirCallStackSchema.optional(),
-        revertData: z.array(schemas.Fr),
+        revertData: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
       })
       .transform(
         ({ originalMessage, functionErrorStack, noirErrorStack, revertData }) =>

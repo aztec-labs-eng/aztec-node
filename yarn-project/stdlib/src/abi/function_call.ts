@@ -1,8 +1,10 @@
+import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS } from '@aztec-labs/constants';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { schemas } from '../schemas/index.js';
 import { type AbiType, AbiTypeSchema, FunctionType, getFunctionReturnType } from './abi.js';
 import { FunctionSelector } from './function_selector.js';
@@ -54,11 +56,11 @@ export class FunctionCall {
         type: z.nativeEnum(FunctionType),
         isStatic: z.boolean(),
         hideMsgSender: z.boolean(),
-        args: z.array(schemas.Fr),
+        args: z.array(schemas.Fr).max(MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS),
         returnType: AbiTypeSchema.optional(),
         // Old consumers send `returnTypes`, not `returnType`. So we accept both for now, until we can safely remove
         // the old version.
-        returnTypes: z.array(AbiTypeSchema).optional(),
+        returnTypes: z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN).optional(),
       })
       .transform(({ returnType, returnTypes, ...fields }) =>
         FunctionCall.from({ ...fields, returnType: getFunctionReturnType({ returnType, returnTypes }) }),

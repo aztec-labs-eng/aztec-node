@@ -1,3 +1,9 @@
+import {
+  MAX_CONTRACT_CLASS_LOGS_PER_CALL,
+  MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS,
+  MAX_NOTE_HASHES_PER_CALL,
+  MAX_PRIVATE_CALL_STACK_LENGTH_PER_CALL,
+} from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import { randomBytes, randomInt } from '@aztec-labs/foundation/crypto/random';
@@ -6,6 +12,7 @@ import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { NoteSelector } from '../abi/note_selector.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { PrivateCircuitPublicInputs } from '../kernel/private_circuit_public_inputs.js';
 import type { IsEmpty } from '../kernel/utils/interfaces.js';
 import { sortByCounter } from '../kernel/utils/order_and_comparison.js';
@@ -15,6 +22,7 @@ import { Note } from '../note/note.js';
 import { type ZodFor, mapSchema, schemas } from '../schemas/index.js';
 import { HashedValues } from './hashed_values.js';
 import type { OffchainEffect } from './offchain_effect.js';
+import { MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX } from './tx.js';
 
 /**
  * The contents of a new note.
@@ -89,7 +97,9 @@ export class PrivateExecutionResult {
       .object({
         entrypoint: PrivateCallExecutionResult.schema,
         firstNullifier: schemas.Fr,
-        publicFunctionCalldata: z.array(HashedValues.schema),
+        publicFunctionCalldata: z
+          .array(HashedValues.schemaFor(MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS))
+          .max(MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX),
       })
       .transform(PrivateExecutionResult.from);
   }
@@ -161,13 +171,17 @@ export class PrivateCallExecutionResult {
         vk: schemas.Buffer,
         partialWitness: mapSchema(z.coerce.number(), z.string()),
         publicInputs: PrivateCircuitPublicInputs.schema,
-        newNotes: z.array(NoteAndSlot.schema),
+        newNotes: z.array(NoteAndSlot.schema).max(MAX_NOTE_HASHES_PER_CALL),
         noteHashNullifierCounterMap: mapSchema(z.coerce.number(), z.number()),
-        returnValues: z.array(schemas.Fr),
-        offchainEffects: z.array(z.object({ data: z.array(schemas.Fr) })),
-        taggingIndexRanges: z.array(TaggingIndexRangeSchema),
-        nestedExecutionResults: z.array(z.lazy(() => PrivateCallExecutionResult.schema)),
-        contractClassLogs: z.array(CountedContractClassLog.schema),
+        returnValues: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+        offchainEffects: z
+          .array(z.object({ data: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN) }))
+          .max(MAX_UNCAPPED_ARRAY_LEN),
+        taggingIndexRanges: z.array(TaggingIndexRangeSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        nestedExecutionResults: z
+          .array(z.lazy(() => PrivateCallExecutionResult.schema))
+          .max(MAX_PRIVATE_CALL_STACK_LENGTH_PER_CALL),
+        contractClassLogs: z.array(CountedContractClassLog.schema).max(MAX_CONTRACT_CLASS_LOGS_PER_CALL),
       })
       .transform(PrivateCallExecutionResult.from));
   }

@@ -6,6 +6,7 @@ import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import type { AztecNode } from '../interfaces/aztec-node.js';
 import { type PrivateExecutionStep, PrivateExecutionStepSchema } from '../kernel/private_kernel_prover_output.js';
 
@@ -23,8 +24,8 @@ export type RoundTripStats = {
 const RoundTripStatsSchema = z.object({
   roundTrips: z.number(),
   totalBlockingTime: z.number(),
-  roundTripDurations: z.array(z.number()),
-  roundTripMethods: z.array(z.array(z.string())),
+  roundTripDurations: z.array(z.number()).max(MAX_UNCAPPED_ARRAY_LEN),
+  roundTripMethods: z.array(z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN)).max(MAX_UNCAPPED_ARRAY_LEN),
 });
 
 export type NodeStats = {
@@ -35,7 +36,7 @@ export type NodeStats = {
 };
 
 const NodeStatsSchema = z.object({
-  perMethod: z.record(z.string(), z.object({ times: z.array(z.number()) })),
+  perMethod: z.record(z.string(), z.object({ times: z.array(z.number()).max(MAX_UNCAPPED_ARRAY_LEN) })),
   roundTrips: RoundTripStatsSchema,
 });
 
@@ -48,7 +49,7 @@ type FunctionTiming = {
 const FunctionTimingSchema = z.object({
   functionName: z.string(),
   time: z.number(),
-  oracles: optional(z.record(z.string(), z.object({ times: z.array(z.number()) }))),
+  oracles: optional(z.record(z.string(), z.object({ times: z.array(z.number()).max(MAX_UNCAPPED_ARRAY_LEN) }))),
 });
 
 export type ProvingTimings = {
@@ -62,7 +63,7 @@ export type ProvingTimings = {
 export const ProvingTimingsSchema = z.object({
   sync: optional(z.number()),
   proving: optional(z.number()),
-  perFunction: z.array(FunctionTimingSchema),
+  perFunction: z.array(FunctionTimingSchema).max(MAX_UNCAPPED_ARRAY_LEN),
   unaccounted: z.number(),
   total: z.number(),
 });
@@ -90,7 +91,7 @@ export const SimulationTimingsSchema = z.object({
   sync: z.number(),
   publicSimulation: optional(z.number()),
   validation: optional(z.number()),
-  perFunction: z.array(FunctionTimingSchema),
+  perFunction: z.array(FunctionTimingSchema).max(MAX_UNCAPPED_ARRAY_LEN),
   unaccounted: z.number(),
   total: z.number(),
 });
@@ -113,7 +114,7 @@ export class TxProfileResult {
   static get schema(): ZodFor<TxProfileResult> {
     return z
       .object({
-        executionSteps: z.array(PrivateExecutionStepSchema),
+        executionSteps: z.array(PrivateExecutionStepSchema).max(MAX_UNCAPPED_ARRAY_LEN),
         stats: ProvingStatsSchema,
       })
       .transform(({ executionSteps, stats }) => new TxProfileResult(executionSteps, stats));
@@ -173,8 +174,12 @@ export class UtilityExecutionResult {
   static get schema(): ZodFor<UtilityExecutionResult> {
     return z
       .object({
-        result: z.array(schemas.Fr),
-        offchainEffects: z.array(z.object({ data: z.array(schemas.Fr), contractAddress: AztecAddress.schema })),
+        result: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+        offchainEffects: z
+          .array(
+            z.object({ data: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN), contractAddress: AztecAddress.schema }),
+          )
+          .max(MAX_UNCAPPED_ARRAY_LEN),
         anchorBlockTimestamp: schemas.BigInt,
         stats: optional(SimulationStatsSchema),
       })

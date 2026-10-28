@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { FunctionSelector } from '../abi/function_selector.js';
 import { AuthWitness } from '../auth_witness/auth_witness.js';
 import { AztecAddress } from '../aztec-address/index.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { type ZodFor, schemas } from '../schemas/index.js';
 import { Vector } from '../types/shared.js';
 import { Capsule } from './capsule.js';
@@ -69,9 +70,9 @@ export class TxExecutionRequest {
         functionSelector: schemas.FunctionSelector,
         firstCallArgsHash: schemas.Fr,
         txContext: TxContext.schema,
-        argsOfCalls: z.array(HashedValues.schema),
-        authWitnesses: z.array(AuthWitness.schema),
-        capsules: z.array(Capsule.schema),
+        argsOfCalls: z.array(HashedValues.schema).max(MAX_UNCAPPED_ARRAY_LEN),
+        authWitnesses: z.array(AuthWitness.schema).max(MAX_UNCAPPED_ARRAY_LEN),
+        capsules: z.array(Capsule.schema).max(MAX_UNCAPPED_ARRAY_LEN),
         salt: schemas.Fr,
       })
       .transform(TxExecutionRequest.from);
