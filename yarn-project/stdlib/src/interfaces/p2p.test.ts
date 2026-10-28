@@ -1,5 +1,6 @@
 import { CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { CheckpointAttestation } from '../p2p/checkpoint_attestation.js';
 import { Tx } from '../tx/tx.js';
@@ -103,3 +104,9 @@ class MockP2P implements P2PApi {
     return Promise.resolve({ enabled: true, connectedPeers: 3 });
   }
 }
+
+describe('P2PApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(P2PApiSchema)).toEqual([]);
+  });
+});

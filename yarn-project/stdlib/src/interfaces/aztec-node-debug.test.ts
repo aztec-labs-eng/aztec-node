@@ -1,5 +1,6 @@
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { type AztecNodeDebug, AztecNodeDebugApiSchema } from './aztec-node-debug.js';
 
@@ -67,3 +68,9 @@ class MockAztecNodeDebug implements AztecNodeDebug {
     return Promise.resolve();
   }
 }
+
+describe('AztecNodeDebugApiSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(AztecNodeDebugApiSchema)).toEqual([]);
+  });
+});

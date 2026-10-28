@@ -24,7 +24,7 @@ interface OracleTestRpcHandler {
   resolve_foreign_call(callData: OracleTestCallInput): Promise<ForeignCallResult>;
 }
 
-const OracleTestRpcHandlerSchema: ApiSchemaFor<OracleTestRpcHandler> = {
+export const OracleTestRpcHandlerSchema: ApiSchemaFor<OracleTestRpcHandler> = {
   resolve_foreign_call: z.function({
     input: z.tuple([OracleTestCallInputSchema]),
     output: ForeignCallResultSchema,
