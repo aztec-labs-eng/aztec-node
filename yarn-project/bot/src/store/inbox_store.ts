@@ -116,8 +116,10 @@ export const InboxMessageRecordSchema = z.object({
   failedAt: timestampMs.optional(),
   failureReason: z.enum(InboxBotReasons).optional(),
   /** Milestones already exported to telemetry, so a restart does not re-emit them. */
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local bot state, written and read only by this bot
   exportedMilestones: z.array(z.enum(InboxBotMilestones)).default([]),
   /** Stage latencies already exported to telemetry. */
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local bot state, written and read only by this bot
   exportedStages: z.array(z.enum(InboxBotStages)).default([]),
 });
 export type InboxMessageRecord = z.infer<typeof InboxMessageRecordSchema>;
@@ -127,6 +129,7 @@ export const InboxBatchRecordSchema = z.object({
   batchId: z.string().min(1),
   scenario: z.enum(InboxBotScenarios),
   state: z.enum(InboxBatchStates),
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local bot state, written and read only by this bot
   messageIds: z.array(z.string().min(1)),
   /** Number of messages the batch was built to carry. */
   messageCount: z.number().int().positive(),
@@ -145,6 +148,7 @@ export const InboxBatchRecordSchema = z.object({
   gasUsed: decimalString.optional(),
   sender: hexString.optional(),
   failureReason: z.enum(InboxBotReasons).optional(),
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local bot state, written and read only by this bot
   exportedStages: z.array(z.enum(InboxBotStages)).default([]),
   /** Whether the batch's outcome, size and gas were exported, so resolving its receipt again does not repeat them. */
   resultExported: z.boolean().default(false),
@@ -158,6 +162,7 @@ export const InboxBatchRecordSchema = z.object({
    * Checks that failed anywhere in this batch, so a run's outcome can be judged on every check having passed and
    * not only on its messages having been consumed. Bounded by the check set, and each check is listed once.
    */
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- local bot state, written and read only by this bot
   failedChecks: z.array(z.enum(InboxBotChecks)).default([]),
 });
 export type InboxBatchRecord = z.infer<typeof InboxBatchRecordSchema>;
