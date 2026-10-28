@@ -10,6 +10,18 @@ export const hexSchema = z.string().refine(isHex, 'Not a valid hex string').tran
 // Copied from zod internals, which was copied from https://stackoverflow.com/questions/7860392/determine-if-string-is-in-base64-using-javascript
 const base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
 
+const isByte = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255;
+
+/**
+ * Byte array checked as a whole, so a malformed array yields a single issue rather than one per element. A buffer has
+ * no natural size bound to declare with `.max()`, so this is what keeps an oversized array of junk from allocating
+ * memory proportional to its length.
+ */
+const byteArraySchema = z.custom<number[]>(
+  value => Array.isArray(value) && value.every(isByte),
+  'Not a valid byte array',
+);
+
 /** Schema for a buffer represented as a base64 string or a Buffer object. */
 export const bufferSchema: ZodFor<Buffer> = z.union([
   // Serialization from base64 string.
@@ -23,7 +35,7 @@ export const bufferSchema: ZodFor<Buffer> = z.union([
   z
     .object({
       type: z.literal('Buffer'),
-      data: z.array(z.number().int().min(0).max(255)),
+      data: byteArraySchema,
     })
     .transform(({ data }) => Buffer.from(data)),
   // Serialization from Buffer
@@ -89,14 +101,26 @@ export function bufferSchemaFor<TClass extends { fromBuffer(buf: Buffer): any }>
   return bufferSchema.refine(refinement ?? (() => true), 'Not a valid buffer').transform(klazz.fromBuffer.bind(klazz));
 }
 
-/** Creates a schema for a js Map type that matches the serialization used in jsonStringify. */
-export function mapSchema<TKey, TValue>(key: ZodFor<TKey>, value: ZodFor<TValue>): ZodFor<Map<TKey, TValue>> {
-  return z.array(z.tuple([key, value])).transform(entries => new Map(entries));
+/**
+ * Creates a schema for a js Map type that matches the serialization used in jsonStringify.
+ * @param maxSize - Maximum number of entries. Required when parsing untrusted input; omit only for trusted local data.
+ */
+export function mapSchema<TKey, TValue>(
+  key: ZodFor<TKey>,
+  value: ZodFor<TValue>,
+  maxSize?: number,
+): ZodFor<Map<TKey, TValue>> {
+  const entries = z.array(z.tuple([key, value]));
+  return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Map(parsed));
 }
 
-/** Creates a schema for a js Set type that matches the serialization used in jsonStringify. */
-export function setSchema<T>(value: ZodFor<T>): ZodFor<Set<T>> {
-  return z.array(value).transform(entries => new Set(entries));
+/**
+ * Creates a schema for a js Set type that matches the serialization used in jsonStringify.
+ * @param maxSize - Maximum number of entries. Required when parsing untrusted input; omit only for trusted local data.
+ */
+export function setSchema<T>(value: ZodFor<T>, maxSize?: number): ZodFor<Set<T>> {
+  const entries = z.array(value);
+  return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Set(parsed));
 }
 
 /** Given an already parsed and validated object, extracts the keys defined in the given schema. Does not validate again. */

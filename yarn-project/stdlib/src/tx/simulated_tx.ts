@@ -55,12 +55,18 @@ export class SimulationOverrides {
             message: `publicStorage must have at most ${MAX_RPC_PUBLIC_STORAGE_OVERRIDES_LEN} entries`,
           }),
         ),
+        // The entry count is checked before the record parses its entries, so an oversized record of junk fails with
+        // a single issue instead of one per entry.
         contracts: optional(
           z
-            .record(z.string(), z.object({ instance: ContractInstanceWithAddressSchema }))
-            .refine(contracts => Object.keys(contracts).length <= MAX_RPC_CONTRACT_OVERRIDES_LEN, {
-              message: `contracts must have at most ${MAX_RPC_CONTRACT_OVERRIDES_LEN} entries`,
-            }),
+            .custom<object>(
+              value =>
+                typeof value === 'object' &&
+                value !== null &&
+                Object.keys(value).length <= MAX_RPC_CONTRACT_OVERRIDES_LEN,
+              { message: `contracts must have at most ${MAX_RPC_CONTRACT_OVERRIDES_LEN} entries` },
+            )
+            .pipe(z.record(z.string(), z.object({ instance: ContractInstanceWithAddressSchema }))),
         ),
       })
       .transform(args => new SimulationOverrides(args));
