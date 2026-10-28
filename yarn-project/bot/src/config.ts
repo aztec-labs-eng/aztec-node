@@ -118,6 +118,7 @@ export const BotConfigSchema = zodFor<BotConfig>()(
     .object({
       nodeUrl: z.string().optional(),
       nodeAdminUrl: z.string().optional(),
+      // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- operator config from env
       l1RpcUrls: z.array(z.string()).optional(),
       l1Mnemonic: schemas.SecretValue(z.string()).optional(),
       l1PrivateKey: schemas.SecretValue(z.string()).optional(),

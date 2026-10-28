@@ -161,12 +161,15 @@ export function toForeignCallResult(obj: (ForeignCallSingle | ForeignCallArray)[
 
 export const ForeignCallSingleSchema = z.string();
 
+// eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- foreign calls come from the local nargo test runner
 export const ForeignCallArraySchema = z.array(z.string());
 
+// eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- foreign calls come from the local nargo test runner
 export const ForeignCallArgsSchema = z.array(
   z.union([ForeignCallSingleSchema, ForeignCallArraySchema, ContractArtifactSchema, ContractInstanceWithAddressSchema]),
 );
 
 export const ForeignCallResultSchema = z.object({
+  // eslint-disable-next-line aztec-custom/no-unbounded-zod-array -- foreign calls come from the local nargo test runner
   values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])),
 });
