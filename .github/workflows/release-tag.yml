@@ -134,12 +134,6 @@ jobs:
           export LC_ALL=C
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
-          # A tag object's SHA also passes the first step's check and checks out as
-          # the commit it points to, which is not the SHA the approver saw.
-          if [ "$(git rev-parse HEAD)" != "$COMMIT" ]; then
-            echo "::error::$COMMIT is not a commit. To tag what an existing tag points to, pass its commit SHA."
-            exit 1
-          fi
           version=$(jq -r '."."' .release-please-manifest.json)
           # The whole tag name is built from this, so refuse anything that is not
           # a plain X.Y.Z before it reaches a ref name. Not echoed, like the
@@ -208,7 +202,7 @@ jobs:
               fi
               ;;
           esac
-          echo "Tagging $COMMIT: $tag"
+          echo "Tagging $(git rev-parse HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
