@@ -3,6 +3,11 @@
 # second person's approval; the unattended nightly lives in
 # release-tag-nightly.yml, apart from this file.
 #
+# Every run tags the commit named by its full SHA and takes the version from
+# that commit's .release-please-manifest.json. The approval screen shows the
+# SHA, so the commit the second person approves is the one that gets tagged,
+# whatever lands on the branch while the run waits.
+#
 #   nightly:  dispatch with kind=nightly    -> v<ver>-nightly.<date>[.<suffix>]
 #             re-cuts a day the schedule missed or botched. The optional
 #             suffix keeps a re-cut from colliding with the tag the schedule
@@ -34,14 +39,14 @@
 # `tagger`, whose deployment policies admit main alone: a copy on another branch
 # that drops the `environment:` line below mints nothing.
 #
-# To start a new release line, add it to the `branch` options below, and to the
-# matrix in release-tag-nightly.yml for nightlies. Move main's manifest to the
-# next major before tagging the new line: each line takes its version from its
-# own manifest, so while the two agree they cut the same tag names.
+# A new release line needs nothing here. For its nightlies, add it to the matrix
+# in release-tag-nightly.yml. Move main's manifest to the next major before
+# tagging the new line: each line takes its version from its own manifest, so
+# while the two agree they cut the same tag names.
 
 name: Release Tag
 # The approval screen shows the run title, not the inputs.
-run-name: Release Tag (${{ inputs.kind }} on ${{ inputs.branch }})
+run-name: Release Tag (${{ inputs.kind }} at ${{ inputs.commit }})
 
 on:
   workflow_dispatch:
@@ -51,19 +56,16 @@ on:
         type: choice
         options: [nightly, rc, stable, private]
         default: rc
-      # A choice, not free text: this value reaches both the checkout ref and
-      # the tagging step, and git accepts shell metacharacters in a ref name.
-      branch:
-        description: "release line to tag (its manifest supplies the version)"
-        type: choice
-        options: [main, v6]
-        default: main
-      # Free text, unlike the two above, because it can afford to be. `branch`
-      # steers what actions/checkout puts on disk before any of this file's own
-      # code runs, so it is constrained where it is declared; this steers nothing
-      # but the name of the tag at the end, and reaches the script as an env var,
-      # which bash never parses as code. The pattern checked below is what keeps
-      # it one semver prerelease identifier and a legal ref component.
+      # Free text, so the job's first step checks it before any token is minted
+      # or anything is checked out.
+      commit:
+        description: "full 40-character SHA of the commit to tag (its manifest supplies the version)"
+        type: string
+        required: true
+      # Free text too, and it steers nothing but the name of the tag at the end.
+      # It reaches the script as an env var, which bash never parses as code. The
+      # pattern checked below is what keeps it one semver prerelease identifier
+      # and a legal ref component.
       suffix:
         description: "nightly only: tells a re-cut apart from the day's scheduled tag, e.g. 'hotfix' -> v<ver>-nightly.<date>.hotfix"
         type: string
@@ -72,20 +74,33 @@ on:
 jobs:
   tag:
     runs-on: ubuntu-latest
-    # One group per line and kind, so a run waiting on its approval holds back
-    # only dispatches of its own kind, which would otherwise compute the same tag
-    # name. Kinds never share a tag name, so they tag in parallel.
-    # The scheduled nightly in release-tag-nightly.yml takes no group.
-    concurrency:
-      group: release-tag-${{ inputs.branch }}-${{ inputs.kind }}
-    # A re-run replays the original inputs against the branch's current tip, so
-    # an old stable dispatch re-run after a version bump would cut a release
-    # nobody asked for. Dispatch again instead, which asks for approval afresh.
+    # No concurrency group: when two runs compute one tag name, such as rc
+    # dispatches approved together, whichever pushes second fails, since a push
+    # never moves an existing tag.
+    #
+    # A re-run replays the original commit but computes the tag name afresh: an
+    # rc re-run would cut another candidate nobody asked for, and a nightly re-run
+    # one dated the day of the re-run. Dispatch again instead, which asks for
+    # approval afresh.
     if: github.run_attempt == 1
     # A literal, not an expression: no input or event can route this job to
     # `tagger`, whatever the kind.
     environment: release-approval
     steps:
+      # A branch or tag name would resolve to wherever it points when the checkout
+      # runs, not to what the approver saw, so only a full SHA gets through.
+      - name: Check commit is a full SHA
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          # [a-f] is a collation range outside the C locale, as in the tagging step.
+          export LC_ALL=C
+          # Not echoed, for the same reason as the suffix in the tagging step.
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character lowercase SHA."
+            exit 1
+          fi
+
       - name: Mint App token
         # SHA-pinned, not @v2: this is the step the private key is passed to, so a
         # moved tag upstream would be arbitrary code beside the key.
@@ -99,8 +114,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           submodules: true
-          # Qualified, since a bare `v6` would also fetch every `v6.*` tag.
-          ref: refs/heads/${{ inputs.branch }}
+          ref: ${{ inputs.commit }}
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
@@ -108,7 +122,7 @@ jobs:
         # substituted into the script before bash parses it, so its value would
         # be executed as shell text.
         env:
-          BRANCH: ${{ inputs.branch }}
+          COMMIT: ${{ inputs.commit }}
           KIND: ${{ inputs.kind }}
           SUFFIX: ${{ inputs.suffix }}
         run: |
@@ -119,11 +133,18 @@ jobs:
           export LC_ALL=C
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
+          # A tag object's SHA also passes the first step's check and checks out as
+          # the commit it points to, which is not the SHA the approver saw.
+          if [ "$(git rev-parse HEAD)" != "$COMMIT" ]; then
+            echo "::error::$COMMIT is not a commit. To tag what an existing tag points to, pass its commit SHA."
+            exit 1
+          fi
           version=$(jq -r '."."' .release-please-manifest.json)
           # The whole tag name is built from this, so refuse anything that is not
-          # a plain X.Y.Z before it reaches a ref name.
+          # a plain X.Y.Z before it reaches a ref name. Not echoed, like the
+          # suffix below: the manifest is whatever the dispatched commit holds.
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Manifest version on $BRANCH is not X.Y.Z: $version"
+            echo "::error::Manifest version at $COMMIT is not X.Y.Z."
             exit 1
           fi
           suffix=${SUFFIX:-}
@@ -186,7 +207,7 @@ jobs:
               fi
               ;;
           esac
-          echo "Tagging $BRANCH @ $(git rev-parse --short HEAD): $tag"
+          echo "Tagging $COMMIT: $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
@@ -194,8 +215,10 @@ jobs:
               echo "::error::Tag $tag already exists. Re-dispatch with a different suffix."
             elif [ "$KIND" = nightly ]; then
               echo "::error::Tag $tag already exists. Re-dispatch with a suffix to cut a distinct nightly for today, e.g. suffix=hotfix."
+            elif [ "$KIND" = rc ] || [ "$KIND" = private ]; then
+              echo "::error::Another run cut $tag first. Dispatch again for the next number."
             else
-              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on $BRANCH first."
+              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on the release line and tag a commit that has the bump."
             fi
             exit 1
           fi
@@ -210,7 +233,6 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           KIND: ${{ inputs.kind }}
-          BRANCH: ${{ inputs.branch }}
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -218,7 +240,9 @@ jobs:
             echo "No SLACK_BOT_TOKEN, skipping notification"
             exit 0
           fi
-          TEXT="Release tagging FAILED (${KIND}, branch *${BRANCH}*, ${ACTOR}): <${RUN_URL}|View Run>"
+          # The commit is left out: this also reports a run whose commit input
+          # failed its check, and the run page's title names it anyway.
+          TEXT="Release tagging FAILED (${KIND}, ${ACTOR}): <${RUN_URL}|View Run>"
           response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H "Content-type: application/json" \
