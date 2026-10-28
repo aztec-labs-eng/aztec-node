@@ -270,6 +270,7 @@ export class PXE {
     private operationQueue: OperationQueue,
     public debug: PXEDebugUtils,
     private hooks: ExecutionHooks | undefined,
+    private selfSendOnlyToSender: boolean,
   ) {}
 
   /**
@@ -407,6 +408,7 @@ export class PXE {
       operationQueue,
       debugUtils,
       hooks,
+      config.selfSendOnlyToSender,
     );
 
     debugUtils.setPXEHelpers(
@@ -444,6 +446,7 @@ export class PXE {
       contractSyncService: this.contractSyncService,
       txResolver: this.txResolver,
       hooks: this.hooks,
+      selfSendOnlyToSender: this.selfSendOnlyToSender,
     });
   }
 

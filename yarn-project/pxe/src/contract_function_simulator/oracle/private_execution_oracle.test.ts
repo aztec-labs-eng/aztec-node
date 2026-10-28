@@ -140,6 +140,25 @@ describe('PrivateExecutionOracle', () => {
       ).resolves.toEqual({ type: 'unconstrained-secret', secret });
     });
 
+    it('opens a handshake to another account the wallet owns when self-sends are limited to the sender', async () => {
+      const oracle = makeOracle({ keyStore: makeKeyStore({ ownsRecipient: true }), selfSendOnlyToSender: true });
+
+      await expect(
+        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'non-interactive-handshake' });
+    });
+
+    it('keeps an address-derived secret for a send to the sender itself when self-sends are limited to the sender', async () => {
+      const oracle = makeOracle({ keyStore: makeKeyStore({ ownsRecipient: true }), selfSendOnlyToSender: true });
+      const secret = Fr.random();
+      jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
+
+      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+        type: 'unconstrained-secret',
+        secret,
+      });
+    });
+
     it('defaults constrained delivery to a non-interactive handshake when no hooks are configured', async () => {
       const oracle = makeOracle();
 

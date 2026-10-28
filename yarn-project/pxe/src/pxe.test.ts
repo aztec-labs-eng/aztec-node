@@ -76,6 +76,7 @@ describe('PXE', () => {
       rollupVersion: 1,
       autoSync: true,
       concurrentContractSyncEnabled: false,
+      selfSendOnlyToSender: false,
     };
 
     // Mock getNodeInfo which is called during PXE creation

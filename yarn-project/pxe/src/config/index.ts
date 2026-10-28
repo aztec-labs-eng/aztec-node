@@ -51,11 +51,25 @@ export interface ContractSyncConfig {
   concurrentContractSyncEnabled: boolean;
 }
 
+/**
+ * Configuration settings for message tagging.
+ */
+export interface TaggingConfig {
+  /**
+   * Whether an unconstrained delivery is a self-send only when the recipient is the sender. When disabled, a delivery
+   * to any account in this PXE's key store is a self-send and gets an address-derived secret, which a recipient PXE
+   * that does not know the sender cannot discover. When enabled, a delivery to any other account resolves through the
+   * `resolveTaggingSecretStrategy` hook, or its default, a non-interactive handshake.
+   */
+  selfSendOnlyToSender: boolean;
+}
+
 export type PXEConfig = KernelProverConfig &
   DataStoreConfig &
   ChainConfig &
   BlockSynchronizerConfig &
-  ContractSyncConfig;
+  ContractSyncConfig &
+  TaggingConfig;
 
 export type CliPXEOptions = {
   /** Custom Aztec Node URL to connect to  */
@@ -97,6 +111,12 @@ export const pxeConfigMappings: ConfigMappingsType<PXEConfig> = {
     env: 'PXE_CONCURRENT_CONTRACT_SYNC_ENABLED',
     description:
       'Whether PXE speculatively syncs contracts it predicts will follow the one requested, running them concurrently with it. Repeated flows sync faster, but a wrong prediction spends unnecessary node requests. Experimental, off by default.',
+    ...booleanConfigHelper(false),
+  },
+  selfSendOnlyToSender: {
+    env: 'PXE_SELF_SEND_ONLY_TO_SENDER',
+    description:
+      'Whether an unconstrained delivery is a self-send only when the recipient is the sender. When enabled, a delivery to another account in this PXE resolves through the tagging strategy hook or a non-interactive handshake instead of an address-derived secret.',
     ...booleanConfigHelper(false),
   },
 };

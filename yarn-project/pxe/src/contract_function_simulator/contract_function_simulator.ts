@@ -155,6 +155,8 @@ export type ContractFunctionSimulatorArgs = {
   contractSyncService: ContractSyncService;
   txResolver: TxResolverService;
   hooks?: ExecutionHooks;
+  /** The PXE's `selfSendOnlyToSender` config. */
+  selfSendOnlyToSender?: boolean;
 };
 
 /**
@@ -180,6 +182,7 @@ export class ContractFunctionSimulator {
   private readonly contractSyncService: ContractSyncService;
   private readonly txResolver: TxResolverService;
   private readonly hooks: ExecutionHooks | undefined;
+  private readonly selfSendOnlyToSender: boolean;
 
   constructor(args: ContractFunctionSimulatorArgs) {
     this.contractStore = args.contractStore;
@@ -200,6 +203,7 @@ export class ContractFunctionSimulator {
     this.contractSyncService = args.contractSyncService;
     this.txResolver = args.txResolver;
     this.hooks = args.hooks;
+    this.selfSendOnlyToSender = args.selfSendOnlyToSender ?? false;
     this.log = createLogger('simulator');
   }
 
@@ -305,6 +309,7 @@ export class ContractFunctionSimulator {
       simulator: this.simulator,
       l2TipsStore: this.l2TipsStore,
       hooks: this.hooks,
+      selfSendOnlyToSender: this.selfSendOnlyToSender,
       transientArrayService,
     });
 

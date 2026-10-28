@@ -79,7 +79,7 @@ When the hook is absent, cross-contract utility calls are denied. See [Cross-con
 
 Called as a fallback for message delivery: a registered onchain handshake's secret is reused directly, so this hook only fires when the sender-recipient pair has none yet. The wallet returns a concrete `TaggingSecretStrategy` (and any material the chosen derivation needs); see [Tagging secret strategy](../../aztec-nr/framework-description/note_delivery.md#tagging-secret-strategy) for the variants, the trade-offs, and the defaults in each environment.
 
-For an unconstrained self-send (the recipient is one of the wallet's own accounts), the PXE always uses an [address-derived shared secret](../../aztec-nr/framework-description/note_delivery.md#tagging-secret-strategy) regardless of what the hook returns: both sides' keys are local, so no handshake is needed.
+For an unconstrained self-send (the recipient is one of the wallet's own accounts), the PXE always uses an [address-derived shared secret](../../aztec-nr/framework-description/note_delivery.md#tagging-secret-strategy) regardless of what the hook returns: both sides' keys are local, so no handshake is needed. A recipient PXE that has never held the sender's keys cannot discover such a message. When one browser or device holds several people's accounts, set the PXE's `selfSendOnlyToSender` config (`PXE_SELF_SEND_ONLY_TO_SENDER`): only a send to the sender itself is then a self-send, and a send to any other account goes through this hook, or its default, a non-interactive handshake.
 
 ### In Noir tests
 

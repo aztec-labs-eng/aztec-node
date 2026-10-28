@@ -65,6 +65,8 @@ export type PrivateExecutionOracleArgs = UtilityExecutionOracleArgs & {
   totalPublicCalldataCount?: number;
   sideEffectCounter?: number;
   senderForTags?: AztecAddress;
+  /** The PXE's `selfSendOnlyToSender` config. */
+  selfSendOnlyToSender?: boolean;
 };
 
 /**
@@ -97,6 +99,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   private readonly initialSideEffectCounter: number;
   /** Sender for tags passed in at oracle construction time. Returned by `getSenderForTags`. */
   private readonly defaultSenderForTags: AztecAddress | undefined;
+  private readonly selfSendOnlyToSender: boolean;
 
   constructor(args: PrivateExecutionOracleArgs) {
     super({
@@ -113,6 +116,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     this.totalPublicCalldataCount = args.totalPublicCalldataCount ?? 0;
     this.initialSideEffectCounter = args.sideEffectCounter ?? 0;
     this.defaultSenderForTags = args.senderForTags;
+    this.selfSendOnlyToSender = args.selfSendOnlyToSender ?? false;
   }
 
   public getPrivateContextInputs(): PrivateContextInputs {
@@ -219,7 +223,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     deliveryMode: AppTaggingSecretKind,
   ): Promise<ResolvedTaggingStrategy> {
     const [isUnconstrainedSelfSend, chosenStrategy] = await allToCompletion([
-      this.#isUnconstrainedSelfSend(recipient, deliveryMode),
+      this.#isUnconstrainedSelfSend(sender, recipient, deliveryMode),
       this.#chooseTaggingSecretStrategy(sender, recipient, deliveryMode),
     ]);
 
@@ -265,11 +269,15 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     return classId;
   }
 
-  /** Whether this is an unconstrained delivery to one of the wallet's own accounts (a self-send). */
-  #isUnconstrainedSelfSend(recipient: AztecAddress, deliveryMode: AppTaggingSecretKind) {
-    return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED
-      ? this.keyStore.hasAccount(recipient)
-      : Promise.resolve(false);
+  /**
+   * Whether this is an unconstrained delivery to one of the wallet's own accounts (a self-send), or only to the sender
+   * itself when the PXE's `selfSendOnlyToSender` config is set.
+   */
+  #isUnconstrainedSelfSend(sender: AztecAddress, recipient: AztecAddress, deliveryMode: AppTaggingSecretKind) {
+    if (deliveryMode !== AppTaggingSecretKind.UNCONSTRAINED) {
+      return Promise.resolve(false);
+    }
+    return this.selfSendOnlyToSender ? Promise.resolve(recipient.equals(sender)) : this.keyStore.hasAccount(recipient);
   }
 
   /** Resolves a wallet-provided {@link TaggingSecretStrategy} into the app-siloed secret handed to the contract. */
@@ -723,6 +731,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       senderForTags: this.defaultSenderForTags,
       simulator: this.simulator,
       hooks: this.hooks,
+      selfSendOnlyToSender: this.selfSendOnlyToSender,
       l2TipsStore: this.l2TipsStore,
       transientArrayService: this.transientArrayService,
     });
