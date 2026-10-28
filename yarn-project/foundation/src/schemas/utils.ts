@@ -123,6 +123,51 @@ export function setSchema<T>(value: ZodFor<T>, maxSize?: number): ZodFor<Set<T>>
   return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Set(parsed));
 }
 
+/**
+ * Creates a record schema that rejects objects with more than `maxKeys` keys before parsing any entry. A record has no
+ * size bound zod checks up front, and a `.refine` on the record would only run after every entry was parsed.
+ */
+export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends ZodTypeAny>(
+  key: TKey,
+  value: TValue,
+  maxKeys: number,
+) {
+  return z
+    .custom<object>(input => typeof input === 'object' && input !== null && Object.keys(input).length <= maxKeys, {
+      message: `Must have at most ${maxKeys} entries`,
+    })
+    .pipe(z.record(key, value));
+}
+
+/**
+ * Wraps a recursive schema so that input nested more than `maxDepth` arrays or objects deep fails before zod recurses
+ * into it. Parsing deeply nested input through `z.lazy` otherwise overflows the stack.
+ */
+export function withMaxDepth<T extends ZodTypeAny>(schema: T, maxDepth: number) {
+  return z
+    .custom<unknown>(input => !isNestedDeeperThan(input, maxDepth), {
+      message: `Must not be nested more than ${maxDepth} levels deep`,
+    })
+    .pipe(schema);
+}
+
+function isNestedDeeperThan(input: unknown, maxDepth: number): boolean {
+  const pending: [unknown, number][] = [[input, 0]];
+  while (pending.length > 0) {
+    const [value, depth] = pending.pop()!;
+    if (value === null || typeof value !== 'object') {
+      continue;
+    }
+    if (depth >= maxDepth) {
+      return true;
+    }
+    for (const child of Object.values(value)) {
+      pending.push([child, depth + 1]);
+    }
+  }
+  return false;
+}
+
 /** Given an already parsed and validated object, extracts the keys defined in the given schema. Does not validate again. */
 export function pickFromSchema<T extends object, S extends ZodObject<ZodRawShape>>(obj: T, schema: S) {
   return pick(obj, ...Object.keys(schema.shape));

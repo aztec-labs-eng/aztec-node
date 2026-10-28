@@ -26,7 +26,7 @@ import { GasFees } from '../gas/gas_fees.js';
 import { GasSettings } from '../gas/gas_settings.js';
 import { GasUsed } from '../gas/gas_used.js';
 import { PublicKeys } from '../keys/public_keys.js';
-import { DebugLog } from '../logs/debug_log.js';
+import { DEFAULT_MAX_DEBUG_LOG_MEMORY_READS, DebugLog } from '../logs/debug_log.js';
 import { MAX_PUBLIC_LOGS_PER_TX, PublicLog } from '../logs/public_log.js';
 import { ScopedL2ToL1Message } from '../messaging/l2_to_l1_message.js';
 import { NullishToUndefined, type ZodFor, schemas } from '../schemas/schemas.js';
@@ -1439,9 +1439,7 @@ export class PublicTxResult {
   }
 }
 
-// Excessive memory reads due to debug logging can open a DOS vector to nodes that perform public tx simulation for users.
-// This default limit (4MB) can be configured further by node runners via the `RPC_SIMULATE_PUBLIC_MAX_DEBUG_LOG_MEMORY_READS` environment variable.
-export const DEFAULT_MAX_DEBUG_LOG_MEMORY_READS = 125000;
+export { DEFAULT_MAX_DEBUG_LOG_MEMORY_READS } from '../logs/debug_log.js';
 
 export class CollectionLimitsConfig {
   constructor(

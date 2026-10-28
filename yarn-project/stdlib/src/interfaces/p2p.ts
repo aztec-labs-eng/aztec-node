@@ -8,7 +8,7 @@ import { CheckpointProposal, type CheckpointProposalCore } from '../p2p/checkpoi
 import { type ApiSchemaFor, optional, schemas } from '../schemas/index.js';
 import { Tx } from '../tx/tx.js';
 import { TxHash } from '../tx/tx_hash.js';
-import { MAX_RPC_TXS_LEN, MAX_UNCAPPED_ARRAY_LEN } from './api_limit.js';
+import { MAX_RPC_TXS_LEN } from './api_limit.js';
 import { type GetTxByHashOptions, GetTxByHashOptionsSchema } from './get_tx_by_hash_options.js';
 
 export type PeerInfo =
@@ -16,18 +16,21 @@ export type PeerInfo =
   | { status: 'dialing'; dialStatus: string; id: string; addresses: string[] }
   | { status: 'cached'; id: string; addresses: string[]; enr: string; dialAttempts: number };
 
+/** Multiaddrs reported for a single peer. */
+const MAX_PEER_ADDRESSES = 64;
+
 export const PeerInfoSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('connected'), score: z.number(), id: z.string() }),
   z.object({
     status: z.literal('dialing'),
     dialStatus: z.string(),
     id: z.string(),
-    addresses: z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN),
+    addresses: z.array(z.string()).max(MAX_PEER_ADDRESSES),
   }),
   z.object({
     status: z.literal('cached'),
     id: z.string(),
-    addresses: z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN),
+    addresses: z.array(z.string()).max(MAX_PEER_ADDRESSES),
     enr: z.string(),
     dialAttempts: z.number(),
   }),

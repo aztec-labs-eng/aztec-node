@@ -2,8 +2,6 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
-
 export const SnapshotDataKeys = [
   'archiver',
   'nullifier-tree',
@@ -39,6 +37,9 @@ export type SnapshotsIndex = SnapshotsIndexMetadata & {
 export type UploadSnapshotMetadata = Pick<SnapshotMetadata, 'l2BlockNumber' | 'l2BlockHash' | 'l1BlockNumber'> &
   Pick<SnapshotsIndex, 'l1ChainId' | 'rollupVersion' | 'rollupAddress'>;
 
+/** Snapshots listed in a remote index. The index is never pruned, so this leaves room for years of uploads. */
+const MAX_SNAPSHOTS_IN_INDEX = 100_000;
+
 export const SnapshotsIndexSchema = zodFor<SnapshotsIndex>()(
   z.object({
     l1ChainId: z.number(),
@@ -61,7 +62,7 @@ export const SnapshotsIndexSchema = zodFor<SnapshotsIndex>()(
             .refine((obj): obj is Required<typeof obj> => SnapshotDataKeys.every(key => !!obj[key])),
         }),
       )
-      .max(MAX_UNCAPPED_ARRAY_LEN),
+      .max(MAX_SNAPSHOTS_IN_INDEX),
   }),
 );
 

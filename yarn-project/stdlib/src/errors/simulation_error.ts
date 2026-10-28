@@ -4,7 +4,6 @@ import { z } from 'zod';
 import type { OpcodeLocation } from '../abi/abi.js';
 import { FunctionSelector } from '../abi/function_selector.js';
 import { AztecAddress } from '../aztec-address/index.js';
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { type ZodFor, optional, schemas } from '../schemas/index.js';
 
 /**
@@ -68,9 +67,12 @@ const SourceCodeLocationSchema = z.object({
  */
 export type NoirCallStack = SourceCodeLocation[] | OpcodeLocation[];
 
+/** Frames in a call stack, and fields of revert data. */
+const MAX_SIMULATION_ERROR_LEN = 2 ** 16;
+
 const NoirCallStackSchema: z.ZodType<NoirCallStack> = z.union([
-  z.array(SourceCodeLocationSchema).max(MAX_UNCAPPED_ARRAY_LEN),
-  z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN),
+  z.array(SourceCodeLocationSchema).max(MAX_SIMULATION_ERROR_LEN),
+  z.array(z.string()).max(MAX_SIMULATION_ERROR_LEN),
 ]);
 
 /**
@@ -248,9 +250,9 @@ export class SimulationError extends Error {
               functionName: z.string().optional(),
             }),
           )
-          .max(MAX_UNCAPPED_ARRAY_LEN),
+          .max(MAX_SIMULATION_ERROR_LEN),
         noirErrorStack: NoirCallStackSchema.optional(),
-        revertData: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+        revertData: z.array(schemas.Fr).max(MAX_SIMULATION_ERROR_LEN),
       })
       .transform(
         ({ originalMessage, functionErrorStack, noirErrorStack, revertData }) =>

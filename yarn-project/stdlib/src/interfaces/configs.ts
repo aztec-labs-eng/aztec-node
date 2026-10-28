@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { AztecAddress } from '../aztec-address/index.js';
 import { schemas, zodFor } from '../schemas/index.js';
 import { type AllowedElement, AllowedElementSchema } from './allowed_element.js';
+import { MAX_ADMIN_CONFIG_LIST_LEN } from './api_limit.js';
 
 /** Sequencer configuration */
 export interface SequencerConfig {
@@ -169,7 +170,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     feeRecipient: schemas.AztecAddress.optional(),
     noirExecuteWorkingDirectory: z.string().optional(),
     noirExecuteBinaryPath: z.string().optional(),
-    txPublicSetupAllowListExtend: z.array(AllowedElementSchema).optional(),
+    txPublicSetupAllowListExtend: z.array(AllowedElementSchema).max(MAX_ADMIN_CONFIG_LIST_LEN).optional(),
     governanceProposerPayload: schemas.EthAddress.optional(),
     governanceProposerForcePayloadVote: z.boolean().optional(),
     minBlockDuration: z.number().positive().optional(),
@@ -202,7 +203,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     skipPublishingCheckpointsPercent: z.number().gte(0).lte(100).optional(),
     skipBroadcastProposals: z.boolean().optional(),
     skipBroadcastCheckpointProposal: z.boolean().optional(),
-    pauseProposingForSlots: z.array(SlotNumberSchema).optional(),
+    pauseProposingForSlots: z.array(SlotNumberSchema).max(MAX_ADMIN_CONFIG_LIST_LEN).optional(),
     minPeersToPropose: z.number().nonnegative().optional(),
     allowUnsafeInboxCatchupCapacity: z.boolean().optional(),
   }),

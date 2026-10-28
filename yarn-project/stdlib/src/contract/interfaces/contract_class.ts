@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../../abi/index.js';
-import { MAX_UNCAPPED_ARRAY_LEN } from '../../interfaces/api_limit.js';
+import { MAX_CONTRACT_FUNCTIONS } from '../../interfaces/api_limit.js';
 
 const VERSION = 1 as const;
 
@@ -47,7 +47,7 @@ export const ContractClassSchema = zodFor<ContractClass>()(
   z.object({
     version: z.literal(VERSION),
     artifactHash: schemas.Fr,
-    privateFunctions: z.array(PrivateFunctionSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+    privateFunctions: z.array(PrivateFunctionSchema).max(MAX_CONTRACT_FUNCTIONS),
     packedBytecode: schemas.Buffer,
   }),
 );

@@ -1,7 +1,6 @@
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import type {
   SingleValidatorStats,
   ValidatorMissedStats,
@@ -10,6 +9,9 @@ import type {
   ValidatorStatusInSlot,
   ValidatorsStats,
 } from './types.js';
+
+/** Slots or epochs of history reported per validator, and validators per history list. */
+const MAX_VALIDATOR_HISTORY_LEN = 2 ** 16;
 
 export const ValidatorStatusInSlotSchema = zodFor<ValidatorStatusInSlot>()(
   z.enum([
@@ -34,10 +36,10 @@ export const ValidatorStatusHistorySchema = zodFor<ValidatorStatusHistory>()(
         status: ValidatorStatusInSlotSchema,
       }),
     )
-    .max(MAX_UNCAPPED_ARRAY_LEN),
+    .max(MAX_VALIDATOR_HISTORY_LEN),
 );
 
-export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema).max(MAX_UNCAPPED_ARRAY_LEN);
+export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema).max(MAX_VALIDATOR_HISTORY_LEN);
 
 export const ValidatorStatusHistorySchemaMap = z.record(z.string(), ValidatorStatusHistorySchemaArray);
 
@@ -88,7 +90,7 @@ export const SingleValidatorStatsSchema = zodFor<SingleValidatorStats>()(
           epoch: schemas.EpochNumber,
         }),
       )
-      .max(MAX_UNCAPPED_ARRAY_LEN),
+      .max(MAX_VALIDATOR_HISTORY_LEN),
     lastProcessedSlot: schemas.SlotNumber.optional(),
     initialSlot: schemas.SlotNumber.optional(),
     slotWindow: schemas.Integer,

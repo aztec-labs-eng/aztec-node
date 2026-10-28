@@ -18,7 +18,6 @@ import {
   ContractInstancePreimageWithAddressSchema,
 } from '@aztec-labs/stdlib/contract';
 import { Gas, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
-import { MAX_UNCAPPED_ARRAY_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
 import type { MasterSecretKeys } from '@aztec-labs/stdlib/keys';
 import { refineTxHashAndRange } from '@aztec-labs/stdlib/logs';
 import {
@@ -553,20 +552,23 @@ export const WalletCapabilitiesSchema = z.object({
   expiresAt: optional(z.number()),
 });
 
+/** Offchain effects and messages a tx emits, and the fields in each one. */
+const MAX_OFFCHAIN_OUTPUT_LEN = 4096;
+
 const OffchainEffectSchema = z.object({
-  data: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+  data: z.array(schemas.Fr).max(MAX_OFFCHAIN_OUTPUT_LEN),
   contractAddress: schemas.AztecAddress,
 });
 
 const OffchainMessageSchema = z.object({
   recipient: schemas.AztecAddress,
-  payload: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+  payload: z.array(schemas.Fr).max(MAX_OFFCHAIN_OUTPUT_LEN),
   contractAddress: schemas.AztecAddress,
 });
 
 const OffchainOutputSchema = z.object({
-  offchainEffects: z.array(OffchainEffectSchema).max(MAX_UNCAPPED_ARRAY_LEN),
-  offchainMessages: z.array(OffchainMessageSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+  offchainEffects: z.array(OffchainEffectSchema).max(MAX_OFFCHAIN_OUTPUT_LEN),
+  offchainMessages: z.array(OffchainMessageSchema).max(MAX_OFFCHAIN_OUTPUT_LEN),
 });
 
 /**

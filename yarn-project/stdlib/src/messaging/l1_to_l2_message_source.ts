@@ -1,9 +1,9 @@
+import { MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import type { L2Tips } from '../block/l2_block_source.js';
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 
 /**
  * A position in the ordered Inbox message sequence: the number of messages up to it, which is also the compact index
@@ -37,7 +37,7 @@ export type InboxMessageRange = {
 };
 
 export const InboxMessageRangeSchema = z.object({
-  messages: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
+  messages: z.array(schemas.Fr).max(MAX_L1_TO_L2_MSGS_PER_CHECKPOINT),
   start: InboxMessagePositionSchema,
   end: InboxMessagePositionSchema,
 }) satisfies z.ZodType<InboxMessageRange>;

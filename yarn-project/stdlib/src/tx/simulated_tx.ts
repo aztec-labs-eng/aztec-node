@@ -1,4 +1,4 @@
-import { type ZodFor, optional } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, boundedRecord, optional } from '@aztec-labs/foundation/schemas';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
@@ -55,18 +55,12 @@ export class SimulationOverrides {
             message: `publicStorage must have at most ${MAX_RPC_PUBLIC_STORAGE_OVERRIDES_LEN} entries`,
           }),
         ),
-        // The entry count is checked before the record parses its entries, so an oversized record of junk fails with
-        // a single issue instead of one per entry.
         contracts: optional(
-          z
-            .custom<object>(
-              value =>
-                typeof value === 'object' &&
-                value !== null &&
-                Object.keys(value).length <= MAX_RPC_CONTRACT_OVERRIDES_LEN,
-              { message: `contracts must have at most ${MAX_RPC_CONTRACT_OVERRIDES_LEN} entries` },
-            )
-            .pipe(z.record(z.string(), z.object({ instance: ContractInstanceWithAddressSchema }))),
+          boundedRecord(
+            z.string(),
+            z.object({ instance: ContractInstanceWithAddressSchema }),
+            MAX_RPC_CONTRACT_OVERRIDES_LEN,
+          ),
         ),
       })
       .transform(args => new SimulationOverrides(args));

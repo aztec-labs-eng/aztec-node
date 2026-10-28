@@ -1,12 +1,18 @@
 /* eslint-disable camelcase */
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
+import { boundedRecord, schemas, withMaxDepth, zodFor } from '@aztec-labs/foundation/schemas';
 import { Buffer } from 'buffer';
 import { inflate } from 'pako';
 import { z } from 'zod';
 
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
+import {
+  MAX_ABI_RETURN_TYPES,
+  MAX_ABI_VALUE_LEN,
+  MAX_CONTRACT_FUNCTIONS,
+  MAX_SCHEMA_NESTING_DEPTH,
+  MAX_UNCAPPED_ARRAY_LEN,
+} from '../interfaces/api_limit.js';
 import { DEV_VERSION } from '../update-checker/dev_version.js';
 import { FunctionSelector } from './function_selector.js';
 
@@ -36,17 +42,21 @@ export interface AbiNamedValue {
   value: AbiValue;
 }
 
-export const AbiValueSchema: z.ZodType<AbiValue> = z.discriminatedUnion('kind', [
+const UnboundedAbiValueSchema: z.ZodType<AbiValue> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('boolean'), value: z.boolean() }),
   z.object({ kind: z.literal('string'), value: z.string() }),
-  z.object({ kind: z.literal('array'), value: z.array(z.lazy(() => AbiValueSchema)).max(MAX_UNCAPPED_ARRAY_LEN) }),
-  z.object({ kind: z.literal('tuple'), fields: z.array(z.lazy(() => AbiValueSchema)).max(MAX_UNCAPPED_ARRAY_LEN) }),
+  z.object({ kind: z.literal('array'), value: z.array(z.lazy(() => UnboundedAbiValueSchema)).max(MAX_ABI_VALUE_LEN) }),
+  z.object({ kind: z.literal('tuple'), fields: z.array(z.lazy(() => UnboundedAbiValueSchema)).max(MAX_ABI_VALUE_LEN) }),
   z.object({ kind: z.literal('integer'), value: z.string(), sign: z.boolean() }),
   z.object({
     kind: z.literal('struct'),
-    fields: z.array(z.object({ name: z.string(), value: z.lazy(() => AbiValueSchema) })).max(MAX_UNCAPPED_ARRAY_LEN),
+    fields: z
+      .array(z.object({ name: z.string(), value: z.lazy(() => UnboundedAbiValueSchema) }))
+      .max(MAX_ABI_VALUE_LEN),
   }),
 ]);
+
+export const AbiValueSchema: z.ZodType<AbiValue> = withMaxDepth(UnboundedAbiValueSchema, MAX_SCHEMA_NESTING_DEPTH);
 
 export const AbiNamedValueSchema: z.ZodType<AbiNamedValue> = z.object({
   name: z.string(),
@@ -95,19 +105,29 @@ export type AbiType =
   | StructType
   | TupleType;
 
-export const AbiTypeSchema: z.ZodType<AbiType> = z.discriminatedUnion('kind', [
+/** Fields of a struct or tuple type, and items of a format string error. */
+const MAX_ABI_TYPE_FIELDS = 1024;
+
+const UnboundedAbiTypeSchema: z.ZodType<AbiType> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('field') }),
   z.object({ kind: z.literal('boolean') }),
   z.object({ kind: z.literal('integer'), sign: z.enum(Sign), width: z.number() }),
-  z.object({ kind: z.literal('array'), length: z.number(), type: z.lazy(() => AbiTypeSchema) }),
+  z.object({ kind: z.literal('array'), length: z.number(), type: z.lazy(() => UnboundedAbiTypeSchema) }),
   z.object({ kind: z.literal('string'), length: z.number() }),
   z.object({
     kind: z.literal('struct'),
-    fields: z.array(z.lazy(() => ABIVariableSchema)).max(MAX_UNCAPPED_ARRAY_LEN),
+    fields: z
+      .array(z.object({ name: z.string(), type: z.lazy(() => UnboundedAbiTypeSchema) }))
+      .max(MAX_ABI_TYPE_FIELDS),
     path: z.string(),
   }),
-  z.object({ kind: z.literal('tuple'), fields: z.array(z.lazy(() => AbiTypeSchema)).max(MAX_UNCAPPED_ARRAY_LEN) }),
+  z.object({
+    kind: z.literal('tuple'),
+    fields: z.array(z.lazy(() => UnboundedAbiTypeSchema)).max(MAX_ABI_TYPE_FIELDS),
+  }),
 ]);
+
+export const AbiTypeSchema: z.ZodType<AbiType> = withMaxDepth(UnboundedAbiTypeSchema, MAX_SCHEMA_NESTING_DEPTH);
 
 /** A named type. */
 export const ABIVariableSchema = z.object({
@@ -179,7 +199,7 @@ const AbiErrorTypeSchema = zodFor<AbiErrorType>()(
     z.object({
       error_kind: z.literal('fmtstring'),
       length: z.number(),
-      item_types: z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+      item_types: z.array(AbiTypeSchema).max(MAX_ABI_TYPE_FIELDS),
     }),
     z.object({ error_kind: z.literal('custom') }).and(AbiTypeSchema),
   ]),
@@ -232,6 +252,10 @@ export function getFunctionReturnType(abi: Pick<FunctionAbi, 'returnType' | 'ret
   return abi.returnType ?? abi.returnTypes?.[0];
 }
 
+const MAX_ABI_PARAMETERS = 256;
+/** Entries in each record of a contract artifact: structs, globals, storage layout, file map and error types. */
+const MAX_ARTIFACT_RECORD_KEYS = 4096;
+
 export const FunctionAbiSchema = z.object({
   name: z.string(),
   functionType: z.nativeEnum(FunctionType),
@@ -240,10 +264,10 @@ export const FunctionAbiSchema = z.object({
   isInitializer: z.boolean(),
   parameters: z
     .array(z.object({ name: z.string(), type: AbiTypeSchema, visibility: z.enum(ABIParameterVisibility) }))
-    .max(MAX_UNCAPPED_ARRAY_LEN),
+    .max(MAX_ABI_PARAMETERS),
   returnType: AbiTypeSchema.optional(),
-  returnTypes: z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN).optional(),
-  errorTypes: z.record(z.string(), AbiErrorTypeSchema.optional()),
+  returnTypes: z.array(AbiTypeSchema).max(MAX_ABI_RETURN_TYPES).optional(),
+  errorTypes: boundedRecord(z.string(), AbiErrorTypeSchema.optional(), MAX_ARTIFACT_RECORD_KEYS),
 }) satisfies z.ZodType<FunctionAbi>;
 
 /** Debug metadata for a function. */
@@ -421,10 +445,14 @@ export const ContractArtifactSchema = zodFor<ContractArtifact>()(
   z.object({
     name: z.string(),
     aztecVersion: z.string().default(ARTIFACT_VERSION_BEFORE_INJECTION), // TODO(F-557): Remove default.
-    functions: z.array(FunctionArtifactSchema).max(MAX_UNCAPPED_ARRAY_LEN),
-    nonDispatchPublicFunctions: z.array(FunctionAbiSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+    functions: z.array(FunctionArtifactSchema).max(MAX_CONTRACT_FUNCTIONS),
+    nonDispatchPublicFunctions: z.array(FunctionAbiSchema).max(MAX_CONTRACT_FUNCTIONS),
     outputs: z.object({
-      structs: z.record(z.string(), z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN)).transform(structs => {
+      structs: boundedRecord(
+        z.string(),
+        z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        MAX_ARTIFACT_RECORD_KEYS,
+      ).transform(structs => {
         for (const [key, value] of Object.entries(structs)) {
           // We are manually ordering events and functions in the abi by path.
           // The path ordering is arbitrary, and only needed to ensure deterministic order.
@@ -436,16 +464,21 @@ export const ContractArtifactSchema = zodFor<ContractArtifact>()(
         }
         return structs;
       }),
-      globals: z.record(z.string(), z.array(AbiNamedValueSchema).max(MAX_UNCAPPED_ARRAY_LEN)),
+      globals: boundedRecord(
+        z.string(),
+        z.array(AbiNamedValueSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        MAX_ARTIFACT_RECORD_KEYS,
+      ),
     }),
-    storageLayout: z.record(z.string(), z.object({ slot: schemas.Fr })),
-    fileMap: z.record(
+    storageLayout: boundedRecord(z.string(), z.object({ slot: schemas.Fr }), MAX_ARTIFACT_RECORD_KEYS),
+    fileMap: boundedRecord(
       z.coerce.number(),
       z.object({
         source: z.string(),
         path: z.string(),
         function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_UNCAPPED_ARRAY_LEN),
       }),
+      MAX_ARTIFACT_RECORD_KEYS,
     ),
   }),
 );

@@ -2,6 +2,8 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
+import { MAX_ADMIN_VALIDATOR_LIST_LEN } from './api_limit.js';
+
 export interface SlasherConfig {
   slashOverridePayload?: EthAddress;
   slashSelfAllowed?: boolean; // Whether to allow slashes to own validators
@@ -34,8 +36,8 @@ export interface SlasherConfig {
 export const SlasherConfigSchema = zodFor<SlasherConfig>()(
   z.object({
     slashOverridePayload: schemas.EthAddress.optional(),
-    slashValidatorsAlways: z.array(schemas.EthAddress),
-    slashValidatorsNever: z.array(schemas.EthAddress),
+    slashValidatorsAlways: z.array(schemas.EthAddress).max(MAX_ADMIN_VALIDATOR_LIST_LEN),
+    slashValidatorsNever: z.array(schemas.EthAddress).max(MAX_ADMIN_VALIDATOR_LIST_LEN),
     slashDataWithholdingPenalty: schemas.BigInt,
     // Tolerated as undefined to allow validating responses from older node images that
     // predate the per-slot data-withholding watcher (PR #23116).
