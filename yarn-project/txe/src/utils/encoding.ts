@@ -5,6 +5,7 @@ import { type ContractArtifact, ContractArtifactSchema } from '@aztec-labs/stdli
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { type ContractInstanceWithAddress, ContractInstanceWithAddressSchema } from '@aztec-labs/stdlib/contract';
+import { MAX_UNCAPPED_ARRAY_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
 import { Buffer } from 'buffer';
 import { z } from 'zod';
 
@@ -161,12 +162,19 @@ export function toForeignCallResult(obj: (ForeignCallSingle | ForeignCallArray)[
 
 export const ForeignCallSingleSchema = z.string();
 
-export const ForeignCallArraySchema = z.array(z.string());
+export const ForeignCallArraySchema = z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN);
 
-export const ForeignCallArgsSchema = z.array(
-  z.union([ForeignCallSingleSchema, ForeignCallArraySchema, ContractArtifactSchema, ContractInstanceWithAddressSchema]),
-);
+export const ForeignCallArgsSchema = z
+  .array(
+    z.union([
+      ForeignCallSingleSchema,
+      ForeignCallArraySchema,
+      ContractArtifactSchema,
+      ContractInstanceWithAddressSchema,
+    ]),
+  )
+  .max(MAX_UNCAPPED_ARRAY_LEN);
 
 export const ForeignCallResultSchema = z.object({
-  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])),
+  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])).max(MAX_UNCAPPED_ARRAY_LEN),
 });

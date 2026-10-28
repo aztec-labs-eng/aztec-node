@@ -20,6 +20,9 @@ import { schemas, zodFor } from '@aztec-labs/stdlib/schemas';
 import type { ComponentsVersions } from '@aztec-labs/stdlib/versioning';
 import { z } from 'zod';
 
+/** L1 RPC URLs the bot accepts in its config, which `BotRunnerApi.update` takes over RPC. */
+const MAX_L1_RPC_URLS = 100;
+
 const BotFollowChain = ['NONE', 'PROPOSED', 'CHECKPOINTED', 'PROVEN'] as const;
 type BotFollowChain = (typeof BotFollowChain)[number];
 
@@ -118,7 +121,7 @@ export const BotConfigSchema = zodFor<BotConfig>()(
     .object({
       nodeUrl: z.string().optional(),
       nodeAdminUrl: z.string().optional(),
-      l1RpcUrls: z.array(z.string()).optional(),
+      l1RpcUrls: z.array(z.string()).max(MAX_L1_RPC_URLS).optional(),
       l1Mnemonic: schemas.SecretValue(z.string()).optional(),
       l1PrivateKey: schemas.SecretValue(z.string()).optional(),
       l1ToL2MessageTimeoutSeconds: z.number(),
