@@ -132,12 +132,20 @@ export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends 
   value: TValue,
   maxKeys: number,
 ) {
+  const record = z.record(key, value);
+  sizeCheckedBeforeParse.add(record);
   return z
     .custom<object>(input => typeof input === 'object' && input !== null && Object.keys(input).length <= maxKeys, {
       message: `Must have at most ${maxKeys} entries`,
     })
-    .pipe(z.record(key, value));
+    .pipe(record);
 }
+
+/**
+ * Containers whose size a guard in front of them checks before they parse their entries, where zod's own checks cannot
+ * show it. Schema walkers that look for unbounded containers treat these as bounded.
+ */
+export const sizeCheckedBeforeParse = new WeakSet<z.core.$ZodType>();
 
 /**
  * Wraps a recursive schema so that input nested more than `maxDepth` arrays or objects deep fails before zod recurses
