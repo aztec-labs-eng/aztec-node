@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# ci3 is a submodule: without it nothing below can be sourced.
-if [ ! -f "$(git rev-parse --show-toplevel)/ci3/source" ]; then
-  echo "ci3 submodule is not initialised. Run: git submodule update --init ci3" >&2
-  exit 1
-fi
+# ci3 is a submodule: fetch it, or move it to the pinned commit, before anything sources it.
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 source $(git rev-parse --show-toplevel)/ci3/source
 
 cmd=${1:-}

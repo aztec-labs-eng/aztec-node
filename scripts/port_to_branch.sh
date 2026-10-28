@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+"$(git rev-parse --show-toplevel)/bootstrap.sh" init || exit 1
 NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
 
 # Port a merged PR to another branch as a standalone PR.

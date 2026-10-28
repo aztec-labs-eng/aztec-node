@@ -70,7 +70,8 @@ fast: yarn-project yarn-project-tests \
 		playground playground-tests \
 		docs docs-tests \
 		release-image release-image-tests \
-		claude-tests
+		claude-tests \
+		scripts-tests
 
 # Full bootstrap.
 full: fast yarn-project-benches
@@ -100,6 +101,12 @@ release: aztec-nr yarn-project aztec-up playground release-image
 .PHONY: claude-tests
 claude-tests:
 	$(call test,$@,.claude)
+
+# Repository scripts
+
+.PHONY: scripts-tests
+scripts-tests:
+	$(call test,$@,scripts)
 
 #==============================================================================
 # Labs Aztec Toolchain

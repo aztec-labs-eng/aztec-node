@@ -6,6 +6,7 @@
 #   ./bootstrap.sh: Max parallelism. Only use on serious hardware.
 #   ./bootstrap.sh gentle: Less parallelism. Gentler on hardware. Slow.
 #   ./bootstrap.sh check: Check required toolchains and versions are installed.
+#   ./bootstrap.sh init: Bring the submodules to their pinned commits. Run before anything sources ci3.
 #   ./bootstrap.sh clean: Force a complete clean of the repo. Erases untracked files, be careful!
 
 ### TOOLCHAIN INSTALLATIONS ############################################################################################
@@ -159,11 +160,25 @@ function install_deps {
   fi
 }
 
-# ci3 is a submodule: without it nothing below can be sourced.
-if [ ! -f "$(git rev-parse --show-toplevel)/ci3/source" ]; then
-  echo "ci3 submodule is not initialised. Run: git submodule update --init ci3" >&2
-  exit 1
+# Bring every submodule to the commit this repository pins, before anything sources ci3: fetch missing
+# ones, move stale ones. Git refuses rather than overwrite local changes; to work in a submodule
+# without this moving it, `git config submodule.<name>.update none`. stdout is kept clean: callers'
+# stdout is often data. `init` stops here, so scripts can prepare the checkout without the rest.
+# The update rewrites submodule config even when it has nothing to do, and entry points start in
+# parallel, so it only runs when the read-only status shows a submodule missing, moved or conflicted.
+# Submodules marked update = none never count: the update skips them, and something else may keep them
+# off their pin (aztec-packages' labs-patches). The local config is enough to find them: it is where
+# people opt out, and the first update copies the marks from .gitmodules into it.
+function stale_submodules {
+  local dir=$1 names
+  names=$(git -C "$dir" config --get-regexp '^submodule\..*\.update$' '^none$' | sed -E 's/^submodule\.(.*)\.update none$/\1/')
+  git -C "$dir" submodule status --recursive | awk '/^[-+U]/ { print $2 }' |
+    grep -vxF -f <(for n in $names; do git -C "$dir" config -f .gitmodules "submodule.$n.path"; done; echo)
+}
+if [ -n "$(stale_submodules "$(dirname "${BASH_SOURCE[0]}")")" ]; then
+  git -C "$(dirname "${BASH_SOURCE[0]}")" submodule update --init --recursive --depth 1 --jobs 8 --quiet >&2 || exit 1
 fi
+[ "${1:-}" = "init" ] && exit 0
 
 # Special case for installing dependencies (can run on older bash).
 if [ "${1:-}" = "install_deps" ]; then
@@ -321,14 +336,9 @@ EOF
   cat <<EOF >$hooks_dir/post-merge
 #!/usr/bin/env bash
 set -euo pipefail
-git submodule update --init --recursive
+./bootstrap.sh init
 EOF
   chmod +x $hooks_dir/post-merge
-}
-
-function pull_submodules {
-  echo_header "pull submodules"
-  denoise "git submodule update --init --recursive --depth 1 --jobs 8"
 }
 
 function start_txes {
@@ -390,19 +400,14 @@ function stop_txes {
   fi
 }
 
-function prep {
-  check_toolchains
-  pull_submodules
-}
-
 function build {
-  prep
+  check_toolchains
   echo_header "build"
   make ${1:-fast}
 }
 
 function build_and_test {
-  prep
+  check_toolchains
   echo_header "build and test"
 
   # Start the test engine.
@@ -680,7 +685,7 @@ case "$cmd" in
   ;;
   "gentle")
     install_hooks
-    prep
+    check_toolchains
     if [ -t 1 ]; then
       export DUMP_FAIL=1
     fi
@@ -717,7 +722,7 @@ case "$cmd" in
     # the cache for this commit. No test engine; bench uploads bench-<treehash>.
     export CI=1
     export CI_FULL=1
-    prep
+    check_toolchains
     make bench
     bench
     ;;
