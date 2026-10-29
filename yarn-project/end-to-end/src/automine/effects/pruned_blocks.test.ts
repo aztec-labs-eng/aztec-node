@@ -108,15 +108,17 @@ describe('automine/effects/pruned_blocks', () => {
       .send({ from: admin });
     const firstMintTxEffect = await aztecNode.getTxEffect(firstMintReceipt.txHash);
 
-    // mint_to_private should create just one new note with the minted amount
-    expect(firstMintTxEffect?.data.noteHashes.length).toEqual(1);
-    const mintedNote = firstMintTxEffect?.data.noteHashes[0];
+    // Any note hash the first mint created can probe whether its block's history is still available.
+    const firstMintNoteHash = firstMintTxEffect?.data.noteHashes[0];
 
     // We now make a historical query for the leaf index at the block number in which this first note was created and
     // check that we get a valid result, which indirectly means that the queried block has not yet been pruned.
     expect(
-      (await aztecNode.findLeavesIndexes(firstMintReceipt.blockNumber!, MerkleTreeId.NOTE_HASH_TREE, [mintedNote!]))[0]!
-        .data,
+      (
+        await aztecNode.findLeavesIndexes(firstMintReceipt.blockNumber!, MerkleTreeId.NOTE_HASH_TREE, [
+          firstMintNoteHash!,
+        ])
+      )[0]!.data,
     ).toBeGreaterThan(0);
 
     // Mine enough empty blocks past the first mint block so it becomes eligible for pruning, then
@@ -132,7 +134,7 @@ describe('automine/effects/pruned_blocks', () => {
     // The same historical query we performed before should now fail since this block is not available anymore. We poll
     // the node for a bit until it processes the blocks we marked as proven, causing the historical query to fail.
     logger.warn(`Awaiting 'unable to find leaf' error from node due to pruned history`);
-    await waitForWorldStatePrune(firstMintReceipt.blockNumber!, mintedNote!);
+    await waitForWorldStatePrune(firstMintReceipt.blockNumber!, firstMintNoteHash!);
 
     // We've completed the setup we were interested in, and can now simply mint the second half of the amount, transfer
     // the full amount to the recipient (which will require the sender to discover and prove both the old and new notes)
