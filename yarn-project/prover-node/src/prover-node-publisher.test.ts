@@ -24,7 +24,7 @@ import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type Hex, type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
-import { ProverNodePublisher } from './prover-node-publisher.js';
+import { type EpochProofSubmission, ProverNodePublisher } from './prover-node-publisher.js';
 
 /**
  * A packed attestations tuple for a committee of `committeeSize`, optionally with one of the bitmap's spare bits
@@ -435,6 +435,71 @@ describe('prover-node-publisher', () => {
       );
       expect(submission.headers).toEqual(headers.slice(prefixLength));
       expect(rollup.getEpochProofPublicInputs.mock.calls[0][0][3]).toEqual(fullHeaders);
+    });
+  });
+
+  describe('pending proof replacement', () => {
+    it.each([true, false])('reports the proof that actually mines (replacement: %s)', async mineReplacement => {
+      const initial = { ...setupPublishData(65, 32, 33, 48), kind: 'partial' as const };
+      const longer = {
+        ...initial,
+        kind: 'full' as const,
+        toCheckpoint: CheckpointNumber(64),
+        headers: makeHeadersForRange(33, 64),
+      };
+      const finalCheckpoint = await rollup.getCheckpoint(CheckpointNumber(48));
+      const getCheckpoint = rollup.getCheckpoint.getMockImplementation()!;
+      rollup.getCheckpoint.mockImplementation(n =>
+        n === CheckpointNumber(64) ? Promise.resolve(finalCheckpoint) : getCheckpoint(n),
+      );
+      const mined: EpochProofSubmission[] = [];
+      l1Utils.sendAndMonitorTransaction.mockImplementation(async (request, _config, _blobs, options) => {
+        const replacement = await options!.getReplacement!(mock<L1TxState>({ request }));
+        expect(replacement).toBeDefined();
+        const decoded = decodeFunctionData({ abi: RollupAbi, data: replacement!.data! });
+        if (decoded.functionName !== 'submitEpochRootProof') {
+          throw new Error('Unexpected transaction function');
+        }
+        expect(decoded.args[0].headers).toHaveLength(longer.headers.length);
+        return {
+          state: mock<L1TxState>({ request: mineReplacement ? replacement! : request, gasLimit: 2_000_000n }),
+          receipt: mock<TransactionReceipt>({
+            status: 'success',
+            transactionHash: '0x1234',
+            gasUsed: 1n,
+            effectiveGasPrice: 1n,
+          }),
+        };
+      });
+      l1Utils.getTransactionStats.mockResolvedValue({
+        calldataGas: 1,
+        calldataSize: 1,
+        sender: EthAddress.random().toString(),
+        transactionHash: '0x1234',
+      });
+
+      await expect(
+        publisher.submitEpochProof(initial, {
+          getReplacement: () => Promise.resolve(longer),
+          onMined: submission => {
+            mined.push(submission);
+          },
+        }),
+      ).resolves.toEqual('published');
+      expect(mined).toEqual([mineReplacement ? longer : initial]);
+    });
+
+    it('rejects a longer proof from another prover before replacing the transaction', async () => {
+      const initial = { ...setupPublishData(65, 32, 33, 48), kind: 'partial' as const };
+      const longer = { ...initial, toCheckpoint: CheckpointNumber(64), publicInputs: RootRollupPublicInputs.random() };
+      l1Utils.sendAndMonitorTransaction.mockImplementation(async (request, _config, _blobs, options) => {
+        expect(await options!.getReplacement!(mock<L1TxState>({ request }))).toBeUndefined();
+        return { state: mock<L1TxState>({ request }), receipt: mock<TransactionReceipt>({ status: 'reverted' }) };
+      });
+
+      await expect(
+        publisher.submitEpochProof(initial, { getReplacement: () => Promise.resolve(longer) }),
+      ).resolves.toEqual('failed');
     });
   });
 

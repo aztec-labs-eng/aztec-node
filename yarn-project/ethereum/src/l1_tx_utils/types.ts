@@ -15,6 +15,15 @@ export interface L1TxRequest {
 
 export type L1TxConfig = Partial<L1TxUtilsConfig> & { gasLimit?: bigint; txTimeoutAt?: Date };
 
+/** Supplies alternative calldata for a pending, non-blob transaction when it stalls. */
+export type L1TxMonitorOptions = {
+  /**
+   * Checked once per stall interval, including after ordinary speed-ups are exhausted.
+   * Replacements reuse the nonce and bump fees without resetting the ordinary speed-up budget.
+   */
+  getReplacement?: (state: Readonly<L1TxState>) => Promise<L1TxRequest | undefined>;
+};
+
 export interface L1BlobInputs {
   blobs: Uint8Array[];
   kzg: BlobKzgInstance;
