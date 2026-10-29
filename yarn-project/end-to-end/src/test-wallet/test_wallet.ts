@@ -15,7 +15,7 @@ import {
 } from '@aztec-labs/aztec.js/authorization';
 import { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import { AccountManager, type SendOptions } from '@aztec-labs/aztec.js/wallet';
+import { AccountManager, type PrivateEventFilter, type SendOptions } from '@aztec-labs/aztec.js/wallet';
 import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
 import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
 import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
@@ -23,7 +23,14 @@ import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import type { NotesFilter } from '@aztec-labs/pxe/client/lazy';
 import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
-import { PXE, type PXECreationOptions, type TaggingSecretSource, createPXE } from '@aztec-labs/pxe/server';
+import {
+  PXE,
+  type PXECreationOptions,
+  type PackedPrivateEvent,
+  type TaggingSecretSource,
+  createPXE,
+} from '@aztec-labs/pxe/server';
+import type { EventSelector } from '@aztec-labs/stdlib/abi';
 import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
@@ -401,6 +408,10 @@ export class TestWallet extends BaseWallet {
 
   getNotes(filter: NotesFilter): Promise<NoteDao[]> {
     return this.pxe.debug.getNotes(filter);
+  }
+
+  getPackedPrivateEvents(eventSelector: EventSelector, filter: PrivateEventFilter): Promise<PackedPrivateEvent[]> {
+    return this.pxe.getPrivateEvents(eventSelector, filter);
   }
 
   getSyncedBlockHeader(): Promise<BlockHeader> {

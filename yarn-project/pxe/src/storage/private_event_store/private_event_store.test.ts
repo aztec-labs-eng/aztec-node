@@ -47,6 +47,7 @@ describe('PrivateEventStore', () => {
 
     expectedEvent = {
       packedEvent: msgContent,
+      randomness,
       txHash,
       l2BlockNumber,
       l2BlockHash,

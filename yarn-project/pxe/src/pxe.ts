@@ -99,6 +99,8 @@ import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
 export type PackedPrivateEvent = InTx & {
   packedEvent: Fr[];
   eventSelector: EventSelector;
+  /** Random value hashed into the event's commitment. */
+  randomness: Fr;
 };
 
 /** Options for PXE.proveTx. */

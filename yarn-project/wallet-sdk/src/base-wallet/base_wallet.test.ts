@@ -163,6 +163,7 @@ describe('BaseWallet', () => {
     function privateEventFor(serial: Fr[]): PackedPrivateEvent {
       return {
         packedEvent: serial,
+        randomness: Fr.random(),
         l2BlockHash: BlockHash.random(),
         l2BlockNumber: BlockNumber(42),
         txHash: TxHash.random(),
