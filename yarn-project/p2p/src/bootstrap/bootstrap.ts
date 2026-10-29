@@ -6,9 +6,11 @@ import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { Discv5, type Discv5EventEmitter } from '@nethermindeth/discv5';
 import { ENR, type SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 
 import type { BootnodeConfig } from '../config.js';
 import { createBootnodeENRandPeerId } from '../enr/generate-enr.js';
+import { AZTEC_ENR_KEY } from '../types/index.js';
 import { convertToMultiaddr, getPeerIdPrivateKey, getPublicIp } from '../util.js';
 
 /**
@@ -84,6 +86,11 @@ export class BootstrapNode implements P2PBootstrapApi {
     });
     this.node.on('discovered', async (enr: SignableENR) => {
       try {
+        const aztecKey = enr.kvs.get(AZTEC_ENR_KEY);
+        if (!aztecKey || !Buffer.from(aztecKey).toString().startsWith(`00-${config.l1ChainId}-`)) {
+          this.logger.debug('Dropping discovered ENR without a matching Aztec L1 chain', { nodeId: enr.nodeId });
+          return;
+        }
         const addr = await enr.getFullMultiaddr('udp');
         this.logger.verbose(`Discovered new peer`, { enr: enr.encodeTxt(), addr: addr?.toString() });
         // discv5's discovered() only updates routing table entries that already exist. Nodes that
