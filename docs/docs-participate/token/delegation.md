@@ -161,10 +161,14 @@ Keep track of your delegated stake:
 
 ### Changing Operators
 
-If you want to switch to a different operator:
-1. Initiate undelegation from your current operator
-2. Wait for the unbonding period
-3. Delegate to your new chosen operator
+There is no direct way to move a delegation between operators. You exit the stake, then delegate it again:
+
+1. Open the delegation's details panel and click **Initiate Exit**
+2. Wait for the exit delay (and the governance withdrawal delay, if your tokens are in the Governance Staking Escrow). See [Staking Tokens](/participate/token/staking) for current values
+3. Click **Finalize Exit** to return the stake to your Token Vault
+4. Delegate to your new chosen operator, following Steps 2-9 above (Steps 5 and 6 are skipped if the vault already has an operator and staker version set)
+
+Both exit steps queue into the batch cart, so you confirm them from there.
 
 ## Voting with Delegated Stake
 
