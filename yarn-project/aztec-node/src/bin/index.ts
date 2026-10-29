@@ -56,7 +56,7 @@ async function main() {
     p2pHealthMinPeers: aztecNodeConfig.p2pHealthMinPeers,
   });
   const rpcServer = createNamespacedSafeJsonRpcServer(services, {
-    diagnostic: getOtelJsonRpcDiagnosticsMiddleware(),
+    diagnostic: getOtelJsonRpcDiagnosticsMiddleware(undefined, aztecNodeConfig.rpcTrustClientIdHeader),
     middlewares: [getOtelJsonRpcServerMetricsMiddleware(), getOtelJsonRpcPropagationMiddleware()],
     maxBatchSize: aztecNodeConfig.rpcMaxBatchSize,
     maxBodySizeBytes: aztecNodeConfig.rpcMaxBodySize,
