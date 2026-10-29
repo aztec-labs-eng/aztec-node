@@ -123,24 +123,22 @@ describe('PrivateExecutionOracle', () => {
     });
 
     it('defaults an unconstrained self-send to an address-derived shared secret', async () => {
-      const oracle = makeOracle({ keyStore: makeKeyStore({ ownsRecipient: true }) });
+      const oracle = makeOracle();
       const secret = Fr.random();
       jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
 
-      await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret });
+      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+        type: 'unconstrained-secret',
+        secret,
+      });
     });
 
     it('keeps a hooked interactive handshake on an unconstrained self-send', async () => {
-      const { oracle } = makeHookedOracle({
-        strategy: { type: 'interactive-handshake' },
-        keyStore: makeKeyStore({ ownsRecipient: true }),
-      });
+      const { oracle } = makeHookedOracle({ strategy: { type: 'interactive-handshake' } });
 
-      await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'interactive-handshake' });
+      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+        type: 'interactive-handshake',
+      });
     });
 
     it('resolves an address-derived strategy to the unconstrained secret', async () => {
@@ -164,14 +162,11 @@ describe('PrivateExecutionOracle', () => {
     });
 
     it('keeps a hooked non-interactive handshake on an unconstrained self-send', async () => {
-      const { oracle } = makeHookedOracle({
-        strategy: { type: 'non-interactive-handshake' },
-        keyStore: makeKeyStore({ ownsRecipient: true }),
-      });
+      const { oracle } = makeHookedOracle({ strategy: { type: 'non-interactive-handshake' } });
 
-      await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'non-interactive-handshake' });
+      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+        type: 'non-interactive-handshake',
+      });
     });
 
     it('passes the correct message context to the hook', async () => {
@@ -195,23 +190,15 @@ describe('PrivateExecutionOracle', () => {
     const makeHookedOracle = ({
       strategy,
       contractClassId = Fr.random(),
-      keyStore = makeKeyStore({ ownsRecipient: false }),
     }: {
       strategy: TaggingSecretStrategy;
       contractClassId?: Fr;
-      keyStore?: KeyStore;
     }) => {
       const resolveTaggingSecretStrategy = jest.fn<ResolveTaggingSecretStrategy>().mockResolvedValue(strategy);
       const anchoredContractData = mock<AnchoredContractData>();
       anchoredContractData.getCurrentClassId.mockResolvedValue(contractClassId);
-      const oracle = makeOracle({ hooks: { resolveTaggingSecretStrategy }, keyStore, anchoredContractData });
+      const oracle = makeOracle({ hooks: { resolveTaggingSecretStrategy }, anchoredContractData });
       return { oracle, resolveTaggingSecretStrategy };
-    };
-
-    const makeKeyStore = ({ ownsRecipient }: { ownsRecipient: boolean }) => {
-      const keyStore = mock<KeyStore>();
-      keyStore.hasAccount.mockResolvedValue(ownsRecipient);
-      return keyStore;
     };
   });
 

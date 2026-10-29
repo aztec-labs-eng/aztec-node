@@ -41,20 +41,13 @@ export type TaggingSecretStrategy =
 
 /**
  * The strategy PXE applies when no {@link ResolveTaggingSecretStrategy} hook is configured, for a hook to fall back to.
- *
- * Unconstrained delivery to one of the wallet's own accounts (a self-send) uses an address-derived secret: the wallet
- * holds both sides' keys, so no handshake is needed and nothing is revealed onchain. Every other delivery uses a
- * non-interactive handshake.
  */
 export function defaultTaggingSecretStrategy({
+  sender,
+  recipient,
   deliveryMode,
-  recipientIsOwnAccount,
-}: {
-  deliveryMode: AppTaggingSecretKind;
-  /** Whether the wallet holds the recipient's keys, i.e. the recipient is one of the wallet's own accounts. */
-  recipientIsOwnAccount: boolean;
-}): TaggingSecretStrategy {
-  return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED && recipientIsOwnAccount
+}: Pick<TaggingSecretStrategyRequest, 'sender' | 'recipient' | 'deliveryMode'>): TaggingSecretStrategy {
+  return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED && recipient.equals(sender)
     ? { type: 'address-derived' }
     : { type: 'non-interactive-handshake' };
 }

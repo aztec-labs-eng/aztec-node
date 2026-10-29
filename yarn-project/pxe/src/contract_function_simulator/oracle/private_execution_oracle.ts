@@ -229,10 +229,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   ): Promise<TaggingSecretStrategy> {
     const hook: ResolveTaggingSecretStrategy | undefined = this.hooks?.resolveTaggingSecretStrategy;
     if (!hook) {
-      return defaultTaggingSecretStrategy({
-        deliveryMode,
-        recipientIsOwnAccount: await this.keyStore.hasAccount(recipient),
-      });
+      return defaultTaggingSecretStrategy({ sender, recipient, deliveryMode });
     }
 
     const contractClassId = await this.#getCurrentContractClassId(this.contractAddress);

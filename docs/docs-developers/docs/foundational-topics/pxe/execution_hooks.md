@@ -79,16 +79,13 @@ When the hook is absent, cross-contract utility calls are denied. See [Cross-con
 
 Called as a fallback for message delivery: a registered onchain handshake's secret is reused directly, so this hook only fires when the sender-recipient pair has none yet. The wallet returns a concrete `TaggingSecretStrategy` (and any material the chosen derivation needs); see [Tagging secret strategy](../../aztec-nr/framework-description/note_delivery.md#tagging-secret-strategy) for the variants, the trade-offs, and the defaults in each environment.
 
-The PXE applies whatever the hook returns, including for a self-send (when the recipient is one of the wallet's own accounts). For messages your wallet has no policy for, return `defaultTaggingSecretStrategy` (exported from `@aztec-labs/pxe/config`), which is what the PXE applies when the hook is absent:
+The PXE applies whatever the hook returns, including for a self-send (when the recipient is the sender itself). For messages your wallet has no policy for, return `defaultTaggingSecretStrategy` (exported from `@aztec-labs/pxe/config`), which is what the PXE applies when the hook is absent:
 
 ```ts
-resolveTaggingSecretStrategy: async ({ recipient, deliveryMode }) =>
-  knownContacts.has(recipient.toString())
+resolveTaggingSecretStrategy: async (request) =>
+  knownContacts.has(request.recipient.toString())
     ? { type: "address-derived" }
-    : defaultTaggingSecretStrategy({
-        deliveryMode,
-        recipientIsOwnAccount: ownAccounts.has(recipient.toString()),
-      }),
+    : defaultTaggingSecretStrategy(request),
 ```
 
 ### In Noir tests
