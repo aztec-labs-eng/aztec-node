@@ -1,13 +1,12 @@
-# Describes tests that we either:
-#   - Outright skip.
-#   - Run and alert owners on failure.
-# To outright skip a test add a "skip: true" property.
-# Only do this for tests that are currently expected to fail constantly and the noise is unbearable!
-# Otherwise, tests must have owner(s). Owners are identified by their Slack id, (profile, three dots, copy member id).
-# If there is no owner for failed test the build will fail, regardless of if it matches in this file.
-# When a failing test matches one or more of the "regex" properties below,
-# a message is sent to slack channel #aztec3-ci tagging the owners.
-# If an optional error_regex is provided, the output file must match for the test to be considered a flake.
+# Describes how CI treats the tests whose command matches an entry's "regex".
+# If an optional error_regex is provided, the test's output must also match for the entry to apply.
+#   skip: true       Outright skip the test.
+#                    Only do this for tests that are currently expected to fail constantly and the noise is unbearable!
+#   retry: true      Retry a failing test once; a pass on the retry is a flake and does not fail the build.
+#                    A failing test that matches no entry with retry: true fails the build.
+#   notify_on: [...] The events that post to Slack: flake, fail, or both. Default: [flake].
+#   channel: "#..."  The Slack channel those posts go to. Default: #aztec3-ci.
+#   owners: [...]    Who those posts tag. Owners are identified by their Slack id, (profile, three dots, copy member id).
 
 names:
   - adam: &adam "U04BM8H25NJ"
@@ -45,49 +44,53 @@ flake_groups:
 tests:
   # Nightly GKE tests
   - regex: "spartan/bootstrap.sh"
-    owners:
-      - *alex
+    retry: true
+    owners: [*alex]
+
+  # Contract artifact backwards-compat tests run in full CI only, so a PR's own CI usually does not catch a break.
+  - regex: "^CONTRACT_ARTIFACTS_VERSION="
+    notify_on: [fail, flake]
+    channel: "#team-fairies"
+    owners: [*nico]
 
   # Slack testing.
   - regex: "nonsense to match"
     error_regex: "something else"
-    owners:
-      - *charlie
-      - *adam
+    retry: true
+    owners: [*charlie, *adam]
 
   # Blanket flake patterns for unstable p2p, epoch, and l1 tx utils tests
   # This is a temporary measure while team bandwidth is constrained
   # Replaced many specific patterns - see https://github.com/AztecProtocol/aztec-packages/pull/17962 for historical context
   - regex: "src/p2p/.*\\.test\\.ts"
     flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *phil
+    retry: true
+    owners: [*phil]
 
   - regex: "src/single-node/.*\\.test\\.ts"
     flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *palla
+    retry: true
+    owners: [*palla]
 
   - regex: "src/multi-node/.*\\.test\\.ts"
     flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *palla
+    retry: true
+    owners: [*palla]
 
   - regex: "src/automine/.*\\.test\\.ts"
     flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *palla
+    retry: true
+    owners: [*palla]
 
   - regex: "p2p/src/client/test/.*\\.test\\.ts"
     flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *palla
-      - *phil
+    retry: true
+    owners: [*palla, *phil]
 
   # tx_stats_bench's 10 TPS sub-test occasionally returns valid:false from a single IVC
   # verification under heavy concurrency (8 parallel verifiers, each spawning a fresh bb subprocess
   # via the bb.js NativeUnixSocket backend introduced in #21564). The serial sub-tests pass.
   - regex: "tx_stats_bench"
     error_regex: "tx_stats_bench\\.test\\.ts:[0-9]+:[0-9]+"
-    owners:
-      - *charlie
+    retry: true
+    owners: [*charlie]

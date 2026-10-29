@@ -125,7 +125,6 @@ function run_network_tests {
   shift
   source_network_env "$env_file"
   gcp_auth
-  export SCENARIO_TESTS=1
   export_admin_api_key
   local failed=()
   for test_file in "$@"; do

@@ -170,8 +170,8 @@ overrides live in the `case` block in `test_cmds` and must stay in sync with the
 ### Flaky tests — `.test_patterns.yml`
 
 Flaky/owner entries live in `.test_patterns.yml` at the **git root** (not in this package), keyed on the
-test path. A bare entry flags the test as flaky whenever it fails; add `error_regex` to flag only on a
-matching message; `skip: true` disables it. Blanket regex entries (e.g. `src/automine/.*\.test\.ts`) are
+test path. An entry with `retry: true` retries the test once when it fails and treats a pass on the retry as a
+flake; add `error_regex` to apply the entry only on a matching message; `skip: true` disables the test. Blanket regex entries (e.g. `src/automine/.*\.test\.ts`) are
 depth-agnostic and survive folder renames; path-specific entries must be updated when a file moves.
 
 ### Compose / HA / web3signer tests

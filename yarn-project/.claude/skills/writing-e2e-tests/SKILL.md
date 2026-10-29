@@ -308,8 +308,8 @@ from six months of deflake PRs — write the test right the first time.
 - Run with verbose logs once and read them: `LOG_LEVEL='info; debug:sequencer,archiver,publisher'
   yarn workspace @aztec-labs/end-to-end test:e2e src/<category>/<file>.test.ts -t 'test name'`.
 - If a known-unfixable external flake remains, the last resort is an entry in `.test_patterns.yml`
-  (repo root) with a **tightly-scoped `error_regex`** and an owner — it alerts instead of failing
-  CI. This is for tracked product fragility, not a substitute for fixing the test.
+  (repo root) with `retry: true`, a **tightly-scoped `error_regex`** and an owner — a pass on the
+  retry alerts instead of failing CI. This is for tracked product fragility, not a substitute for fixing the test.
 
 ## Checklist
 
