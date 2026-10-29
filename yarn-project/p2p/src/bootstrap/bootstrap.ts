@@ -10,6 +10,7 @@ import { ENR, type SignableENR } from '@nethermindeth/enr';
 import type { BootnodeConfig } from '../config.js';
 import { createBootnodeENRandPeerId } from '../enr/generate-enr.js';
 import { convertToMultiaddr, getPeerIdPrivateKey, getPublicIp } from '../util.js';
+import { validateAztecEnrVersion } from '../versioning.js';
 
 /**
  * Encapsulates a 'Bootstrap' node, used for the purpose of assisting new joiners in acquiring peers.
@@ -79,11 +80,31 @@ export class BootstrapNode implements P2PBootstrapApi {
       metricsRegistry,
     });
 
+    const versions = { l1ChainId: config.l1ChainId };
+    const origOnEstablished = this.node.onEstablished.bind(this.node);
+    this.node.onEstablished = (...args: unknown[]) => {
+      if (validateAztecEnrVersion(args[1] as ENR, versions, this.logger)) {
+        return origOnEstablished(...args);
+      }
+    };
+
+    // discv5 updates known ENRs after emitting 'discovered', so filter before that update runs.
+    const origDiscovered = this.node.discovered.bind(this.node);
+    this.node.discovered = (srcId: string, enrs: ENR[], lookupId?: number) =>
+      origDiscovered(
+        srcId,
+        enrs.filter(enr => validateAztecEnrVersion(enr, versions, this.logger)),
+        lookupId,
+      );
+
     this.node.on('multiaddrUpdated', (addr: Multiaddr) => {
       this.logger.info('Advertised socket address updated', { addr: addr.toString() });
     });
     this.node.on('discovered', async (enr: SignableENR) => {
       try {
+        if (!validateAztecEnrVersion(enr, versions, this.logger)) {
+          return;
+        }
         const addr = await enr.getFullMultiaddr('udp');
         this.logger.verbose(`Discovered new peer`, { enr: enr.encodeTxt(), addr: addr?.toString() });
         // discv5's discovered() only updates routing table entries that already exist. Nodes that
