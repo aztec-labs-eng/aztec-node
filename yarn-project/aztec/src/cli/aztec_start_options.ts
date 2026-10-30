@@ -198,6 +198,7 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
     configToFlag('--rpc-cors-allowed-headers', nodeRpcConfigMappings.rpcCorsAllowedHeaders),
     configToFlag('--rpc-cors-allowed-origins', nodeRpcConfigMappings.rpcCorsAllowedOrigins),
     configToFlag('--rpc-cors-allow-any-origin', nodeRpcConfigMappings.rpcCorsAllowAnyOrigin),
+    configToFlag('--rpc-trust-client-id-header', nodeRpcConfigMappings.rpcTrustClientIdHeader),
   ],
   ETHEREUM: [
     configToFlag('--l1-chain-id', l1ReaderConfigMappings.l1ChainId),

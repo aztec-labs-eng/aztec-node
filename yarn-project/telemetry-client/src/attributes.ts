@@ -20,6 +20,9 @@ export const HTTP_RESPONSE_STATUS_CODE = 'http.response.status_code';
 
 export const JSON_RPC_REJECTION_REASON = 'aztec.json_rpc.rejection_reason';
 
+/** Non-secret client identity supplied by a trusted RPC proxy, e.g. an API Gateway key ID. */
+export const RPC_CLIENT_ID = 'aztec.rpc.client_id';
+
 /** The Aztec network identifier */
 export const NETWORK_NAME = 'aztec.network_name';
 

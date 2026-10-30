@@ -1,9 +1,12 @@
 import type { DiagnosticsMiddleware } from '@aztec-labs/foundation/json-rpc/server';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ROOT_CONTEXT, type Span, SpanKind, SpanStatusCode, propagation } from '@opentelemetry/api';
 import type Koa from 'koa';
 
+import { RPC_CLIENT_ID } from './attributes.js';
 import { getJsonRpcServerMetrics, splitJsonRpcMethod } from './json_rpc_server_metrics.js';
+import { withLogContext } from './log_context.js';
 import { getTelemetryClient } from './start.js';
 import {
   ATTR_JSONRPC_ERROR_CODE,
@@ -68,40 +71,57 @@ export function getOtelJsonRpcPropagationMiddleware(
   };
 }
 
-export function getOtelJsonRpcDiagnosticsMiddleware(metricsProvider = getJsonRpcServerMetrics): DiagnosticsMiddleware {
+export function getOtelJsonRpcDiagnosticsMiddleware(
+  metricsProvider = getJsonRpcServerMetrics,
+  trustClientIdHeader = false,
+): DiagnosticsMiddleware {
+  const log = createLogger('json-rpc');
   return function otelJsonRpcDiagnostics(ctx, next) {
     const [service, method] = splitJsonRpcMethod(ctx.method);
     const scope = service ?? 'UnknownHandler';
+    const clientId = trustClientIdHeader ? ctx.headers['x-aztec-client-id'] : undefined;
     const tracer = getTelemetryClient().getTracer(scope);
     const attributes = {
       ...(service === undefined ? {} : { [ATTR_JSONRPC_SERVICE]: service }),
       [ATTR_JSONRPC_METHOD]: method,
+      ...(clientId === undefined ? {} : { [RPC_CLIENT_ID]: clientId }),
     };
-    return tracer.startActiveSpan(`${scope}.${method}`, { kind: SpanKind.INTERNAL, attributes }, async span => {
-      const timer = new Timer();
-      let ok = false;
-      if (ctx.id !== null) {
-        span.setAttribute(ATTR_JSONRPC_REQUEST_ID, ctx.id);
-      }
+    return withLogContext({ rpcClientId: clientId, rpcMethod: ctx.method }, () =>
+      tracer.startActiveSpan(`${scope}.${method}`, { kind: SpanKind.INTERNAL, attributes }, async span => {
+        const timer = new Timer();
+        let ok = false;
+        if (ctx.id !== null) {
+          span.setAttribute(ATTR_JSONRPC_REQUEST_ID, ctx.id);
+        }
 
-      try {
-        await next();
-        ok = true;
-        span.setStatus({ code: SpanStatusCode.OK });
-      } catch (err) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
-        if (typeof err === 'string' || err instanceof Error) {
-          span.recordException(err);
+        try {
+          await next();
+          ok = true;
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (err) {
+          if (clientId !== undefined) {
+            log.warn('RPC request failed', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
+          if (typeof err === 'string' || err instanceof Error) {
+            span.recordException(err);
+          }
+          throw err;
+        } finally {
+          const metrics = metricsProvider();
+          metrics.recordRequest(ctx.method, timer.ms(), ok);
+          if (ctx.requestValidationDurationMs !== undefined && ctx.requestValidationSucceeded !== undefined) {
+            metrics.recordRequestValidation(
+              ctx.method,
+              ctx.requestValidationDurationMs,
+              ctx.requestValidationSucceeded,
+            );
+          }
+          span.end();
         }
-        throw err;
-      } finally {
-        const metrics = metricsProvider();
-        metrics.recordRequest(ctx.method, timer.ms(), ok);
-        if (ctx.requestValidationDurationMs !== undefined && ctx.requestValidationSucceeded !== undefined) {
-          metrics.recordRequestValidation(ctx.method, ctx.requestValidationDurationMs, ctx.requestValidationSucceeded);
-        }
-        span.end();
-      }
-    });
+      }),
+    );
   };
 }
