@@ -38,7 +38,7 @@ import {
 import { EventSelector, FunctionSelector, NoteSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import { EVENT_SELECTOR } from '../txe_oracle_registry.js';
@@ -87,9 +87,7 @@ const SCALAR_IMPLS: ScalarImpl[] = [
   scalar(SLOT_NUMBER, seed => SlotNumber(seed)),
   scalar(TX_HASH, seed => TxHash.fromField(new Fr(seed))),
   // Only two delivery modes are valid for tagging, so the seed alternates between them, matching the Noir impl.
-  scalar(DELIVERY_MODE, seed =>
-    seed % 2 === 0 ? AppTaggingSecretKind.UNCONSTRAINED : AppTaggingSecretKind.CONSTRAINED,
-  ),
+  scalar(DELIVERY_MODE, seed => (seed % 2 === 0 ? OnchainDeliveryMode.UNCONSTRAINED : OnchainDeliveryMode.CONSTRAINED)),
 ];
 
 /**

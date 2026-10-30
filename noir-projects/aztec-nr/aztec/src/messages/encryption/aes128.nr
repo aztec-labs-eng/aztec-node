@@ -3,7 +3,7 @@ use crate::protocol::{address::AztecAddress, public_keys::AddressPoint, traits::
 use crate::{
     keys::{
         ecdh_shared_secret::{
-            compute_app_siloed_shared_secret, derive_ecdh_shared_secret, derive_shared_secret_field_mask,
+            compute_app_siloed_shared_secret_from_point, derive_ecdh_shared_secret, derive_shared_secret_field_mask,
             derive_shared_secret_subkey,
         },
         ephemeral::generate_positive_ephemeral_key_pair,
@@ -214,8 +214,7 @@ impl MessageEncryption for AES128 {
     /// ## Key Derivation
     ///
     /// The raw ECDH shared secret point is first app-siloed into a scalar `s_app` by hashing with the contract
-    /// address (see
-    /// [`compute_app_siloed_shared_secret`](crate::keys::ecdh_shared_secret::compute_app_siloed_shared_secret)).
+    /// address (see [`compute_app_siloed_shared_secret_from_point`]).
     /// Two (key, IV) pairs are then derived from `s_app` via indexed Poseidon2 hashing: one pair for the body
     /// ciphertext and one for the header ciphertext.
     fn encrypt<let PlaintextLen: u32>(
@@ -263,7 +262,7 @@ impl MessageEncryption for AES128 {
                 .inner,
         );
 
-        let s_app = compute_app_siloed_shared_secret(raw_shared_secret, contract_address);
+        let s_app = compute_app_siloed_shared_secret_from_point(raw_shared_secret, contract_address);
 
         // It is safe to derive AES keys from `s_app` using Poseidon2 because `s_app` was derived from an ECDH shared
         // secret using an AztecAddress (the recipient). See the block comment in
@@ -479,7 +478,7 @@ unconstrained fn random_address_point() -> AddressPoint {
 mod test {
     use crate::{
         ephemeral::EphemeralArray,
-        keys::ecdh_shared_secret::{compute_app_siloed_shared_secret, derive_ecdh_shared_secret},
+        keys::ecdh_shared_secret::{compute_app_siloed_shared_secret_from_point, derive_ecdh_shared_secret},
         messages::{
             encoding::{HEADER_CIPHERTEXT_SIZE_IN_BYTES, MESSAGE_PLAINTEXT_LEN, MESSAGE_PLAINTEXT_SIZE_IN_BYTES},
             encryption::message_encryption::MessageEncryption,
@@ -518,7 +517,7 @@ mod test {
                 EmbeddedCurveScalar::from_field(eph_sk),
                 recipient.to_address_point().unwrap().inner,
             );
-            let s_app = compute_app_siloed_shared_secret(raw_shared_secret, contract_address);
+            let s_app = compute_app_siloed_shared_secret_from_point(raw_shared_secret, contract_address);
 
             // The shared-secrets oracle is batched: it returns a slot pointing at an EphemeralArray
             // populated with the per-key results. Set up that array with the single expected `s_app`

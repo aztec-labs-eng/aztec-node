@@ -1,6 +1,6 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import type { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
-import { type AppTaggingSecret, AppTaggingSecretKind, PrivateLog, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { type AppTaggingSecret, OnchainDeliveryMode, PrivateLog, SiloedTag } from '@aztec-labs/stdlib/logs';
 import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
@@ -18,7 +18,7 @@ describe('persistSenderTaggingIndexRangesForTx', () => {
   let getTxHash: jest.Mock<() => Promise<TxHash>>;
 
   beforeAll(async () => {
-    secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
     log = createLogger('test:persist-sender-tagging-index-ranges');
   });
 

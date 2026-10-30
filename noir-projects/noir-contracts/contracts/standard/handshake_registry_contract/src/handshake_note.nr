@@ -1,5 +1,5 @@
 use aztec::{
-    keys::ecdh_shared_secret::compute_app_siloed_shared_secret,
+    keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point,
     macros::notes::note,
     messages::delivery::handshake::AppSiloedHandshakeSecrets,
     protocol::{
@@ -38,14 +38,14 @@ impl HandshakeNote {
     }
 
     /// Returns the [app-siloed handshake secrets][AppSiloedHandshakeSecrets] for `caller`: the shared secret (via
-    /// aztec-nr's canonical [`compute_app_siloed_shared_secret`]) and the sender-only secret folded into
+    /// aztec-nr's canonical [`compute_app_siloed_shared_secret_from_point`]) and the sender-only secret folded into
     /// constrained-delivery nullifiers so only the sender can advance a sequence. Both are siloed to `caller`, so a
     /// different caller receives different values for the same note; the raw `S` and `sender_secret` never leave the
     /// registry. The recipient cannot derive the sender-only secret: `sender_secret` is random, known only to the
     /// sender, and never transmitted.
     pub(crate) fn app_siloed_secrets_for(self, caller: AztecAddress) -> AppSiloedHandshakeSecrets {
         AppSiloedHandshakeSecrets {
-            shared: compute_app_siloed_shared_secret(self.secret, caller),
+            shared: compute_app_siloed_shared_secret_from_point(self.secret, caller),
             sender_only: poseidon2_hash_with_separator(
                 [self.sender_secret, caller.to_field()],
                 DOM_SEP__CONSTRAINED_MSG_SENDER_SECRET,

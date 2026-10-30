@@ -5,7 +5,7 @@ import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import type { AztecAddress } from '../aztec-address/index.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
 import { schemas } from '../schemas/schemas.js';
-import { AppTaggingSecretKind } from './app_tagging_secret_kind.js';
+import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
 import type { PreTag } from './pre_tag.js';
 import { Tag } from './tag.js';
 
@@ -22,7 +22,7 @@ export class SiloedTag {
   static async compute(preTag: PreTag): Promise<SiloedTag> {
     const tag = await Tag.compute(preTag);
     const domainSeparator =
-      preTag.extendedSecret.kind === AppTaggingSecretKind.CONSTRAINED
+      preTag.extendedSecret.deliveryMode === OnchainDeliveryMode.CONSTRAINED
         ? DomainSeparator.CONSTRAINED_MSG_LOG_TAG
         : DomainSeparator.UNCONSTRAINED_MSG_LOG_TAG;
     const logTag = await computeLogTag(tag.value, domainSeparator);
