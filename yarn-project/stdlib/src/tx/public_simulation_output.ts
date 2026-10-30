@@ -1,19 +1,25 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, schemas, withMaxDepth } from '@aztec-labs/foundation/schemas';
 import times from 'lodash.times';
 import { z } from 'zod';
 
 import { SimulationError } from '../errors/simulation_error.js';
 import { Gas } from '../gas/gas.js';
 import type { GasUsed } from '../gas/gas_used.js';
+import { MAX_SCHEMA_NESTING_DEPTH, MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { DebugLog } from '../logs/debug_log.js';
 import { NullishToUndefined } from '../schemas/schemas.js';
 import { TxEffect } from '../tx/tx_effect.js';
 import { GlobalVariables } from './global_variables.js';
+import { MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX } from './tx.js';
 
 /** Return values of simulating a circuit. */
 export type ProcessReturnValues = Fr[] | undefined;
 
+/** Return values of a single call, and calls nested directly under it. */
+const MAX_RETURN_VALUES_LEN = 2 ** 16;
+
+let unboundedNestedProcessReturnValuesSchema: ZodFor<NestedProcessReturnValues> | undefined;
 let nestedProcessReturnValuesSchema: ZodFor<NestedProcessReturnValues> | undefined;
 
 /** Return values of simulating complete callstack. */
@@ -39,12 +45,10 @@ export class NestedProcessReturnValues {
   // every access makes that self-reference a fresh schema each time, which zod >= 4.5 walks
   // eagerly while parsing until the stack overflows. One instance keeps the cycle finite.
   static get schema(): ZodFor<NestedProcessReturnValues> {
-    return (nestedProcessReturnValuesSchema ??= z
-      .object({
-        values: NullishToUndefined(z.array(schemas.Fr)),
-        nested: z.array(z.lazy(() => NestedProcessReturnValues.schema)),
-      })
-      .transform(({ values, nested }) => new NestedProcessReturnValues(values, nested)));
+    return (nestedProcessReturnValuesSchema ??= withMaxDepth(
+      NestedProcessReturnValues.unboundedSchema,
+      MAX_SCHEMA_NESTING_DEPTH,
+    ));
   }
 
   static fromPlainObject(obj: any): NestedProcessReturnValues {
@@ -63,6 +67,15 @@ export class NestedProcessReturnValues {
       times(3, Fr.random),
       depth > 0 ? [NestedProcessReturnValues.random(depth - 1)] : [],
     );
+  }
+
+  private static get unboundedSchema(): ZodFor<NestedProcessReturnValues> {
+    return (unboundedNestedProcessReturnValuesSchema ??= z
+      .object({
+        values: NullishToUndefined(z.array(schemas.Fr).max(MAX_RETURN_VALUES_LEN)),
+        nested: z.array(z.lazy(() => NestedProcessReturnValues.unboundedSchema)).max(MAX_RETURN_VALUES_LEN),
+      })
+      .transform(({ values, nested }) => new NestedProcessReturnValues(values, nested)));
   }
 }
 
@@ -85,14 +98,14 @@ export class PublicSimulationOutput {
         revertReason: SimulationError.schema.optional(),
         globalVariables: GlobalVariables.schema,
         txEffect: TxEffect.schema,
-        publicReturnValues: z.array(NestedProcessReturnValues.schema),
+        publicReturnValues: z.array(NestedProcessReturnValues.schema).max(MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX),
         gasUsed: z.object({
           totalGas: Gas.schema,
           teardownGas: Gas.schema,
           publicGas: Gas.schema,
           billedGas: Gas.schema,
         }),
-        debugLogs: z.array(DebugLog.schema).default([]),
+        debugLogs: z.array(DebugLog.schema).max(MAX_UNCAPPED_ARRAY_LEN).default([]),
       })
       .transform(
         fields =>

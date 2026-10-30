@@ -1,4 +1,4 @@
-import { type ZodFor, optional } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, boundedRecord, optional } from '@aztec-labs/foundation/schemas';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
@@ -56,11 +56,11 @@ export class SimulationOverrides {
           }),
         ),
         contracts: optional(
-          z
-            .record(z.string(), z.object({ instance: ContractInstanceWithAddressSchema }))
-            .refine(contracts => Object.keys(contracts).length <= MAX_RPC_CONTRACT_OVERRIDES_LEN, {
-              message: `contracts must have at most ${MAX_RPC_CONTRACT_OVERRIDES_LEN} entries`,
-            }),
+          boundedRecord(
+            z.string(),
+            z.object({ instance: ContractInstanceWithAddressSchema }),
+            MAX_RPC_CONTRACT_OVERRIDES_LEN,
+          ),
         ),
       })
       .transform(args => new SimulationOverrides(args));

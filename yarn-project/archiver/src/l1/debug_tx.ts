@@ -6,7 +6,7 @@ import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 
-import type { CallInfo } from './types.js';
+import { type CallInfo, MAX_L1_TRACE_LEN } from './types.js';
 
 /** Zod schema for validating call trace from debug_traceTransaction */
 export const callTraceSchema: ZodFor<DebugCallTrace> = z.lazy(() =>
@@ -20,7 +20,7 @@ export const callTraceSchema: ZodFor<DebugCallTrace> = z.lazy(() =>
     gasUsed: schemas.HexStringWith0x.optional(),
     value: schemas.HexStringWith0x.optional(),
     error: z.string().optional(),
-    calls: z.array(callTraceSchema).optional(),
+    calls: z.array(callTraceSchema).max(MAX_L1_TRACE_LEN).optional(),
   }),
 );
 

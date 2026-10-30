@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { BlockHash } from '../block/block_hash.js';
 import { Body } from '../block/body.js';
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';
+import { MAX_COMMITTEE_SIZE } from '../deserialization/index.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 import { BlockHeader } from '../tx/block_header.js';
 import { type L1PublishInfo, L1PublishInfoSchema } from './l1_publish_info.js';
@@ -87,5 +88,5 @@ export const BlockResponseSchema = z.object({
   number: BlockNumberSchema,
   body: Body.schema.optional(),
   l1: L1PublishInfoSchema.optional(),
-  attestations: z.array(CommitteeAttestation.schema).optional(),
+  attestations: z.array(CommitteeAttestation.schema).max(MAX_COMMITTEE_SIZE).optional(),
 });

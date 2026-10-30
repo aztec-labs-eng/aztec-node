@@ -7,6 +7,7 @@ import type { ApiSchemaFor } from '../schemas/schemas.js';
 import { optional } from '../schemas/schemas.js';
 import { type Offense, OffenseSchema } from '../slashing/index.js';
 import { type ComponentsVersions, getVersioningResponseHandler } from '../versioning/index.js';
+import { MAX_ADMIN_CONFIG_LIST_LEN } from './api_limit.js';
 import { type ArchiverSpecificConfig, ArchiverSpecificConfigSchema } from './archiver.js';
 import { type SequencerConfig, SequencerConfigSchema } from './configs.js';
 import { type ProverConfig, ProverConfigSchema } from './prover-client.js';
@@ -117,7 +118,7 @@ export const AztecNodeAdminConfigSchema = SequencerConfigSchema.merge(ProverConf
     z.object({
       maxPendingTxCount: z.number(),
       skipIncomingProposals: z.boolean().optional(),
-      preferredPeers: z.array(z.string()).optional(),
+      preferredPeers: z.array(z.string()).max(MAX_ADMIN_CONFIG_LIST_LEN).optional(),
       logLevel: z.string().refine(isValidLogLevelSpec, 'Invalid log level spec').optional(),
     }),
   );

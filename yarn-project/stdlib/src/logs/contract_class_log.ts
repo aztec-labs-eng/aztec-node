@@ -29,7 +29,7 @@ export class ContractClassLogFields {
   static get schema() {
     return z
       .object({
-        fields: z.array(schemas.Fr).refine(arr => arr.length === CONTRACT_CLASS_LOG_SIZE_IN_FIELDS),
+        fields: z.array(schemas.Fr).length(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS),
       })
       .transform(({ fields }) => new ContractClassLogFields(fields));
   }

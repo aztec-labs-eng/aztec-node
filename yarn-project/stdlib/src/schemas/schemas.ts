@@ -3,7 +3,7 @@ import type { Buffer32 } from '@aztec-labs/foundation/buffer';
 import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { type ZodFor, schemas as foundationSchemas } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, schemas as foundationSchemas, withMaxDepth } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import type { AbiDecoded } from '../abi/decoder.js';
@@ -12,6 +12,7 @@ import { FunctionSelector } from '../abi/function_selector.js';
 import { NoteSelector } from '../abi/note_selector.js';
 import { AztecAddress } from '../aztec-address/index.js';
 import { Gas } from '../gas/gas.js';
+import { MAX_ABI_VALUE_LEN, MAX_SCHEMA_NESTING_DEPTH } from '../interfaces/api_limit.js';
 
 /**
  * Validation schemas for common types. Every schema must match its toJSON.
@@ -83,16 +84,18 @@ export const schemas = {
   }),
 };
 
-export const AbiDecodedSchema: ZodFor<AbiDecoded> = z.union([
+const UnboundedAbiDecodedSchema: ZodFor<AbiDecoded> = z.union([
   schemas.BigInt,
   z.boolean(),
   schemas.AztecAddress,
-  z.array(z.lazy(() => AbiDecodedSchema)),
+  z.array(z.lazy(() => UnboundedAbiDecodedSchema)).max(MAX_ABI_VALUE_LEN),
   z.record(
     z.string(),
-    z.lazy(() => AbiDecodedSchema),
+    z.lazy(() => UnboundedAbiDecodedSchema),
   ),
 ]);
+
+export const AbiDecodedSchema: ZodFor<AbiDecoded> = withMaxDepth(UnboundedAbiDecodedSchema, MAX_SCHEMA_NESTING_DEPTH);
 
 // C++ only supports null values, which we want to convert to undefined.
 export const NullishToUndefined = (schema: ZodFor<any>) => schema.nullish().transform(x => x ?? undefined);

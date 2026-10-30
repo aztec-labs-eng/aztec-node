@@ -6,6 +6,7 @@ import type { PickIfFlag, Prettify } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';
+import { MAX_CAPACITY_BLOCKS_PER_CHECKPOINT, MAX_COMMITTEE_SIZE } from '../deserialization/index.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 import { type BlockResponse, BlockResponseSchema } from './block_response.js';
@@ -77,7 +78,7 @@ export const CheckpointResponseSchema = z.object({
   startBlock: BlockNumberSchema,
   blockCount: z.number(),
   feeAssetPriceModifier: schemas.BigInt,
-  blocks: z.array(BlockResponseSchema).optional(),
+  blocks: z.array(BlockResponseSchema).max(MAX_CAPACITY_BLOCKS_PER_CHECKPOINT).optional(),
   l1: L1PublishInfoSchema.optional(),
-  attestations: z.array(CommitteeAttestation.schema).optional(),
+  attestations: z.array(CommitteeAttestation.schema).max(MAX_COMMITTEE_SIZE).optional(),
 });

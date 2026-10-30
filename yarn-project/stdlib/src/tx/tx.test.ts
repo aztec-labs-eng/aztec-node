@@ -9,6 +9,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { countZodIssues } from '@aztec-labs/foundation/testing';
 import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
@@ -94,6 +95,22 @@ describe('Tx', () => {
       expect(result.error?.issues).toEqual([
         expect.objectContaining({ code: 'too_big', path: ['publicFunctionCalldata'] }),
       ]);
+    });
+
+    it('rejects a buffer sent as an oversized array of invalid bytes with a bounded number of issues', async () => {
+      const json = JSON.parse(jsonStringify(await mockTx()));
+      json.data = { type: 'Buffer', data: times(100_000, () => 'x') };
+      const result = await Tx.schema.safeParseAsync(json);
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
+    });
+
+    it('rejects a contract class log with an oversized array of invalid fields with a bounded number of issues', async () => {
+      const json = JSON.parse(jsonStringify(await mockTx()));
+      json.contractClassLogFields = [{ fields: times(100_000, () => 'x') }];
+      const result = await Tx.schema.safeParseAsync(json);
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
     });
   });
 

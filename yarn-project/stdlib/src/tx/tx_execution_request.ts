@@ -16,6 +16,11 @@ import { HashedValues } from './hashed_values.js';
 import { TxContext } from './tx_context.js';
 import { TxRequest } from './tx_request.js';
 
+/** Hashed argument preimages, one per call the request makes. */
+const MAX_ARGS_OF_CALLS = 1024;
+const MAX_AUTH_WITNESSES = 256;
+const MAX_CAPSULES = 256;
+
 /**
  * Request to execute a transaction. Similar to TxRequest, but has the full args.
  */
@@ -69,9 +74,9 @@ export class TxExecutionRequest {
         functionSelector: schemas.FunctionSelector,
         firstCallArgsHash: schemas.Fr,
         txContext: TxContext.schema,
-        argsOfCalls: z.array(HashedValues.schema),
-        authWitnesses: z.array(AuthWitness.schema),
-        capsules: z.array(Capsule.schema),
+        argsOfCalls: z.array(HashedValues.schema).max(MAX_ARGS_OF_CALLS),
+        authWitnesses: z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES),
+        capsules: z.array(Capsule.schema).max(MAX_CAPSULES),
         salt: schemas.Fr,
       })
       .transform(TxExecutionRequest.from);

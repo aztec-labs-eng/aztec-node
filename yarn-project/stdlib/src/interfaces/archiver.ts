@@ -36,6 +36,7 @@ import { optional, schemas } from '../schemas/schemas.js';
 import { indexedTxSchema } from '../tx/indexed_tx_effect.js';
 import { TxEffectMembershipWitnessSchema } from '../tx/tx_effect_membership.js';
 import { TxHash } from '../tx/tx_hash.js';
+import { MAX_SIGNATURES_PER_REGISTER_CALL, MAX_SIGNATURE_LEN } from './api_limit.js';
 import type { L2LogsSource } from './l2_logs_source.js';
 
 /**
@@ -146,7 +147,10 @@ export const ArchiverApiSchema: ApiSchemaFor<ArchiverApi> = {
     output: ContractInstanceWithAddressSchema.optional(),
   }),
   getContractClassIds: z.function({ input: z.tuple([]), output: z.array(schemas.Fr) }),
-  registerContractFunctionSignatures: z.function({ input: z.tuple([z.array(z.string())]), output: z.void() }),
+  registerContractFunctionSignatures: z.function({
+    input: z.tuple([z.array(z.string().max(MAX_SIGNATURE_LEN)).max(MAX_SIGNATURES_PER_REGISTER_CALL)]),
+    output: z.void(),
+  }),
   getL1ToL2MessageIndex: z.function({ input: z.tuple([schemas.Fr]), output: schemas.BigInt.optional() }),
   getL1ToL2MessagesBetweenLeafCounts: z.function({
     input: z.tuple([schemas.BigInt, schemas.BigInt]),

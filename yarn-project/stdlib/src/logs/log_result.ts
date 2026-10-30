@@ -1,3 +1,9 @@
+import {
+  MAX_NOTE_HASHES_PER_TX,
+  MAX_NULLIFIERS_PER_TX,
+  MAX_PUBLIC_LOG_SIZE_IN_FIELDS,
+  PRIVATE_LOG_SIZE_IN_FIELDS,
+} from '@aztec-labs/constants';
 import { BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -55,17 +61,20 @@ export type LogResult<Opts extends LogIncludeOptions = LogIncludeOptions> = Pret
   LogResultBase & PickIfFlag<LogIncludeOptions, Opts, 'includeEffects', { noteHashes: Fr[]; nullifiers: Fr[] }>
 >;
 
+/** A log result carries the fields of either a private or a public log, tag included. */
+const MAX_LOG_DATA_LEN = Math.max(PRIVATE_LOG_SIZE_IN_FIELDS, MAX_PUBLIC_LOG_SIZE_IN_FIELDS);
+
 /** Zod schema for the widest {@link LogResult} shape (all include-gated fields optional). */
 export const LogResultSchema: z.ZodType<LogResult> = z.object({
-  logData: z.array(foundationSchemas.Fr),
+  logData: z.array(foundationSchemas.Fr).max(MAX_LOG_DATA_LEN),
   blockNumber: BlockNumberSchema,
   blockHash: BlockHash.schema,
   blockTimestamp: schemas.UInt64,
   txHash: TxHash.schema,
   txIndexWithinBlock: schemas.Integer,
   logIndexWithinTx: schemas.Integer,
-  noteHashes: z.array(foundationSchemas.Fr).optional(),
-  nullifiers: z.array(foundationSchemas.Fr).optional(),
+  noteHashes: z.array(foundationSchemas.Fr).max(MAX_NOTE_HASHES_PER_TX).optional(),
+  nullifiers: z.array(foundationSchemas.Fr).max(MAX_NULLIFIERS_PER_TX).optional(),
 });
 
 /** Builds a random {@link LogResult} for tests. `includeEffects` populates `noteHashes` + `nullifiers`. */

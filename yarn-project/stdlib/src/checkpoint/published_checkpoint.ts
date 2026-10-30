@@ -80,7 +80,7 @@ export class PublishedCheckpoint {
       .object({
         checkpoint: Checkpoint.schema,
         l1: L1PublishedData.schema,
-        attestations: z.array(CommitteeAttestation.schema),
+        attestations: z.array(CommitteeAttestation.schema).max(MAX_COMMITTEE_SIZE),
         verbatimAttestations: ViemCommitteeAttestationsSchema,
       })
       .transform(obj => PublishedCheckpoint.from(obj));

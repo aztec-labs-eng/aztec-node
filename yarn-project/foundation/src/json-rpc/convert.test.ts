@@ -28,7 +28,7 @@ describe('jsonStringify', () => {
 
   it('handles arrays', () => {
     const values = [10, 20, 30];
-    test(values, z.array(z.number()));
+    test(values, z.array(z.number()).max(100));
   });
 
   it('handles maps', () => {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { Buffer32 } from '../buffer/buffer32.js';
 import { schemas } from './schemas.js';
-import { optional } from './utils.js';
+import { boundedRecord, optional, withMaxDepth } from './utils.js';
 
 describe('schemas', () => {
   describe('optional', () => {
@@ -21,6 +21,41 @@ describe('schemas', () => {
       expect(schema.parse('x')).toEqual('x');
     });
   });
+
+  describe('boundedRecord', () => {
+    const schema = boundedRecord(z.string(), z.number(), 2);
+
+    it('parses a record within the bound', () => {
+      expect(schema.parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+    });
+
+    it('rejects an oversized record of invalid entries with a single issue', () => {
+      const input = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`k${i}`, 'not a number']));
+      expect(schema.safeParse(input).error?.issues).toHaveLength(1);
+    });
+  });
+
+  describe('withMaxDepth', () => {
+    type Tree = { children: Tree[] };
+    const tree: z.ZodType<Tree> = z.object({ children: z.array(z.lazy(() => tree)).max(10) });
+    const nest = (depth: number): Tree => {
+      let node: Tree = { children: [] };
+      for (let i = 0; i < depth; i++) {
+        node = { children: [node] };
+      }
+      return node;
+    };
+
+    it('parses input within the depth bound', () => {
+      expect(withMaxDepth(tree, 64).parse(nest(10))).toEqual(nest(10));
+    });
+
+    it('rejects input nested past the bound without recursing into it', () => {
+      expect(() => tree.safeParse(nest(20_000))).toThrow(RangeError);
+      expect(withMaxDepth(tree, 64).safeParse(nest(20_000)).success).toBe(false);
+    });
+  });
+
   describe('Buffer32', () => {
     it('parses a valid hex string into a Buffer32', () => {
       const buffer32 = Buffer32.random();

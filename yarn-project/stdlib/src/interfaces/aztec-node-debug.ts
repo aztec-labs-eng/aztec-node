@@ -4,9 +4,7 @@ import { z } from 'zod';
 
 import { type ApiSchemaFor, optional } from '../schemas/schemas.js';
 import { type ComponentsVersions, getVersioningResponseHandler } from '../versioning/index.js';
-
-const MAX_SIGNATURES_PER_REGISTER_CALL = 100;
-const MAX_SIGNATURE_LEN = 10000;
+import { MAX_SIGNATURES_PER_REGISTER_CALL, MAX_SIGNATURE_LEN } from './api_limit.js';
 
 /**
  * Debug interface for Aztec node available in sandbox/local-network mode.

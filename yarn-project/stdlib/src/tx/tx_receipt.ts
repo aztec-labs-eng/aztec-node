@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { RevertCode } from '../avm/revert_code.js';
 import { BlockHash } from '../block/block_hash.js';
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { DebugLog } from '../logs/debug_log.js';
 import { type ZodFor, schemas } from '../schemas/schemas.js';
 import { Tx } from './tx.js';
@@ -289,7 +290,7 @@ export class MinedTxReceipt<Opts extends GetTxReceiptOptions = GetTxReceiptOptio
         txIndexInBlock: schemas.Integer,
         epochNumber: EpochNumberSchema,
         txEffect: TxEffect.schema.optional(),
-        debugLogs: z.array(DebugLog.schema).optional(),
+        debugLogs: z.array(DebugLog.schema).max(MAX_UNCAPPED_ARRAY_LEN).optional(),
       })
       .transform(fields => MinedTxReceipt.from({ txEffect: undefined, ...fields }));
   }

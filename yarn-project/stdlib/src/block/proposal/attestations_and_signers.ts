@@ -4,6 +4,7 @@ import { Buffer } from 'buffer';
 import { encodeAbiParameters, parseAbiParameters } from 'viem';
 import { z } from 'zod';
 
+import { MAX_COMMITTEE_SIZE } from '../../deserialization/index.js';
 import {
   type CoordinationSignatureContext,
   type CoordinationSignatureType,
@@ -23,7 +24,7 @@ export class CommitteeAttestationsAndSigners implements Signable {
   static get schema() {
     return z
       .object({
-        attestations: CommitteeAttestation.schema.array(),
+        attestations: CommitteeAttestation.schema.array().max(MAX_COMMITTEE_SIZE),
         signatureContext: coordinationSignatureContextSchema,
       })
       .transform(obj => new CommitteeAttestationsAndSigners(obj.attestations, obj.signatureContext));

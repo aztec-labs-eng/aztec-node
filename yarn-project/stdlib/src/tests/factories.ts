@@ -1252,7 +1252,7 @@ export function makeAvmGetSiblingPathHint(seed = 0): AvmGetSiblingPathHint {
     makeAppendOnlyTreeSnapshot(seed),
     /*treeId=*/ (seed + 1) % 5,
     /*index=*/ index,
-    makeArray(seed % 64, i => new Fr(i), seed + 10),
+    makeArray(seed % (NULLIFIER_TREE_HEIGHT + 1), i => new Fr(i), seed + 10),
   );
 }
 
@@ -1304,12 +1304,12 @@ export function makeAvmSequentialInsertHintPublicDataTree(seed = 0): AvmSequenti
   const lowLeavesWitnessData = {
     leaf: makePublicDataTreeLeafPreimage(seed + 3),
     index: BigInt(seed + 4),
-    path: makeArray(seed % 64, i => new Fr(i), seed + 5),
+    path: makeArray(seed % (NULLIFIER_TREE_HEIGHT + 1), i => new Fr(i), seed + 5),
   };
   const insertionWitnessData = {
     leaf: makePublicDataTreeLeafPreimage(seed + 6),
     index: BigInt(seed + 7),
-    path: makeArray(seed % 64, i => new Fr(i), seed + 8),
+    path: makeArray(seed % (NULLIFIER_TREE_HEIGHT + 1), i => new Fr(i), seed + 8),
   };
 
   return new AvmSequentialInsertHintPublicDataTree(
@@ -1326,12 +1326,12 @@ export function makeAvmSequentialInsertHintNullifierTree(seed = 0): AvmSequentia
   const lowLeavesWitnessData = {
     leaf: makeNullifierLeafPreimage(seed + 3),
     index: BigInt(seed + 4),
-    path: makeArray(seed % 64, i => new Fr(i), seed + 5),
+    path: makeArray(seed % (NULLIFIER_TREE_HEIGHT + 1), i => new Fr(i), seed + 5),
   };
   const insertionWitnessData = {
     leaf: makeNullifierLeafPreimage(seed + 6),
     index: BigInt(seed + 7),
-    path: makeArray(seed % 64, i => new Fr(i), seed + 8),
+    path: makeArray(seed % (NULLIFIER_TREE_HEIGHT + 1), i => new Fr(i), seed + 8),
   };
 
   return new AvmSequentialInsertHintNullifierTree(
@@ -1471,7 +1471,11 @@ export function makeContractClassLog(seed = 0): ContractClassLog {
 }
 
 export function makeContractDeploymentData(seed = 0): ContractDeploymentData {
-  const contractClassLogs = makeArray(seed % 20, i => makeContractClassLog(i), seed + 0x1000);
+  const contractClassLogs = makeArray(
+    seed % (MAX_CONTRACT_CLASS_LOGS_PER_TX + 1),
+    i => makeContractClassLog(i),
+    seed + 0x1000,
+  );
   const privateLogs = makeArray(seed % 20, i => makePrivateLog(i), seed + 0x2000);
   return new ContractDeploymentData(contractClassLogs, privateLogs);
 }
@@ -1486,12 +1490,12 @@ export async function makeAvmTxHint(seed = 0): Promise<AvmTxHint> {
     {
       noteHashes: makeArray((seed % 20) + 4, i => new Fr(i), seed + 0x1000),
       nullifiers: makeArray((seed % 20) + 4, i => new Fr(i), seed + 0x2000),
-      l2ToL1Messages: makeArray((seed % 20) + 4, i => makeScopedL2ToL1Message(i), seed + 0x3000),
+      l2ToL1Messages: makeArray((seed % MAX_L2_TO_L1_MSGS_PER_TX) + 1, i => makeScopedL2ToL1Message(i), seed + 0x3000),
     },
     {
       noteHashes: makeArray((seed % 20) + 4, i => new Fr(i), seed + 0x3000),
       nullifiers: makeArray((seed % 20) + 4, i => new Fr(i), seed + 0x4000),
-      l2ToL1Messages: makeArray((seed % 20) + 4, i => makeScopedL2ToL1Message(i), seed + 0x5000),
+      l2ToL1Messages: makeArray((seed % MAX_L2_TO_L1_MSGS_PER_TX) + 1, i => makeScopedL2ToL1Message(i), seed + 0x5000),
     },
     await makeArrayAsync((seed % 20) + 4, i => makePublicCallRequestWithCalldata(i), seed + 0x5000), //setupEnqueuedCalls
     await makeArrayAsync((seed % 20) + 4, i => makePublicCallRequestWithCalldata(i), seed + 0x6000), // appLogicEnqueuedCalls

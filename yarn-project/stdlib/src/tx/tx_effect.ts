@@ -31,7 +31,7 @@ import { PublicDataWrite } from '../avm/public_data_write.js';
 import { RevertCode } from '../avm/revert_code.js';
 import { ContractClassLog } from '../logs/contract_class_log.js';
 import { PrivateLog } from '../logs/private_log.js';
-import { FlatPublicLogs, PublicLog } from '../logs/public_log.js';
+import { FlatPublicLogs, MAX_PUBLIC_LOGS_PER_TX, PublicLog } from '../logs/public_log.js';
 import { computeTxEffectsTreeLeaf } from './tx_effect_membership.js';
 import { TxHash } from './tx_hash.js';
 
@@ -378,13 +378,13 @@ export class TxEffect {
         revertCode: RevertCode.schema,
         txHash: TxHash.schema,
         transactionFee: schemas.Fr,
-        noteHashes: z.array(schemas.Fr),
-        nullifiers: z.array(schemas.Fr),
-        l2ToL1Msgs: z.array(schemas.Fr),
-        publicDataWrites: z.array(PublicDataWrite.schema),
-        privateLogs: z.array(PrivateLog.schema),
-        publicLogs: z.array(PublicLog.schema),
-        contractClassLogs: z.array(ContractClassLog.schema),
+        noteHashes: z.array(schemas.Fr).max(MAX_NOTE_HASHES_PER_TX),
+        nullifiers: z.array(schemas.Fr).max(MAX_NULLIFIERS_PER_TX),
+        l2ToL1Msgs: z.array(schemas.Fr).max(MAX_L2_TO_L1_MSGS_PER_TX),
+        publicDataWrites: z.array(PublicDataWrite.schema).max(MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX),
+        privateLogs: z.array(PrivateLog.schema).max(MAX_PRIVATE_LOGS_PER_TX),
+        publicLogs: z.array(PublicLog.schema).max(MAX_PUBLIC_LOGS_PER_TX),
+        contractClassLogs: z.array(ContractClassLog.schema).max(MAX_CONTRACT_CLASS_LOGS_PER_TX),
       })
       .transform(TxEffect.from);
   }

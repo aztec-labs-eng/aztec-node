@@ -1,3 +1,4 @@
+import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, BufferSink, serializeToSink } from '@aztec-labs/foundation/serialize';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
@@ -6,6 +7,12 @@ import { z } from 'zod';
 import { computeCalldataHash, computeVarArgsHash } from '../hash/index.js';
 import { type ZodFor, schemas } from '../schemas/schemas.js';
 import { Vector } from '../types/index.js';
+
+/**
+ * Bound for private call and authwit arguments, which no protocol constant caps. It matches what a tx can spend on
+ * public calldata: private arguments are circuit inputs and real lists are far shorter.
+ */
+export const MAX_HASHED_VALUES_LEN = MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS;
 
 /**
  * A container for storing a list of values and their hash.
@@ -27,17 +34,16 @@ export class HashedValues {
   }
 
   static get schema(): ZodFor<HashedValues> {
-    return HashedValues.schemaFor();
+    return HashedValues.schemaFor(MAX_HASHED_VALUES_LEN);
   }
 
   /**
-   * Returns a schema that additionally rejects more than `maxValues` values. The bound belongs to the caller
-   * rather than to this class: the same container carries public calldata, private call arguments and authwit
-   * arguments, and those have different limits.
+   * Returns a schema that rejects more than `maxValues` values. The bound belongs to the caller rather than to this
+   * class: the same container carries public calldata, private call arguments and authwit arguments, and those have
+   * different limits.
    */
-  static schemaFor(maxValues?: number): ZodFor<HashedValues> {
-    const values = maxValues === undefined ? z.array(schemas.Fr) : z.array(schemas.Fr).max(maxValues);
-    return z.object({ values, hash: schemas.Fr }).transform(HashedValues.from);
+  static schemaFor(maxValues: number): ZodFor<HashedValues> {
+    return z.object({ values: z.array(schemas.Fr).max(maxValues), hash: schemas.Fr }).transform(HashedValues.from);
   }
 
   static from(fields: FieldsOf<HashedValues>): HashedValues {

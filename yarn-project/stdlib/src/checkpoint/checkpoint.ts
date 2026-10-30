@@ -45,7 +45,7 @@ export class Checkpoint {
       .object({
         archive: AppendOnlyTreeSnapshot.schema,
         header: CheckpointHeader.schema,
-        blocks: z.array(L2Block.schema),
+        blocks: z.array(L2Block.schema).max(MAX_CAPACITY_BLOCKS_PER_CHECKPOINT),
         number: CheckpointNumberSchema,
         feeAssetPriceModifier: schemas.BigInt,
       })

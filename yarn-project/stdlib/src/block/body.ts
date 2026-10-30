@@ -25,7 +25,7 @@ export class Body {
   static get schema(): ZodFor<Body> {
     return z
       .object({
-        txEffects: z.array(TxEffect.schema),
+        txEffects: z.array(TxEffect.schema).max(MAX_TX_EFFECTS_PER_BODY),
       })
       .transform(({ txEffects }) => new Body(txEffects));
   }
