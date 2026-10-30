@@ -136,8 +136,9 @@ impl MessageDelivery {
     /// by default, a non-interactive handshake. This reveals to anyone who knows the recipient's address that a
     /// handshake was made with them, but not by whom, nor the contents. An interactive handshake
     /// ([`OnchainUnconstrainedDelivery::via_interactive_handshake`]) does not leak this, but it requires the
-    /// recipient's cooperation. Delivering to one of the wallet's own accounts instead uses an address-derived
-    /// secret and reveals nothing.
+    /// recipient's cooperation.
+    ///
+    /// Delivering to the sender itself uses an address-derived secret and reveals nothing.
     ///
     /// Delivering the message does produce on-chain information in the form of private logs, so transactions that
     /// deliver many messages this way might be identifiable by the large number of logs.

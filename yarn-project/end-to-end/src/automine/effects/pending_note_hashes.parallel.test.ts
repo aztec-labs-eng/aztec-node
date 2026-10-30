@@ -1,4 +1,5 @@
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
 import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
@@ -8,7 +9,11 @@ import {
   MAX_NOTE_HASH_READ_REQUESTS_PER_CALL,
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
 } from '@aztec-labs/constants';
+import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
 import { PendingNoteHashesContract } from '@aztec-labs/noir-test-contracts.js/PendingNoteHashes';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../automine_test_context.js';
@@ -375,6 +380,16 @@ describe('automine/effects/pending_note_hashes', () => {
         ),
       )
     ).map(a => a.address);
+
+    // A delivery to a recipient without a handshake establishes one through a private call, and one per recipient
+    // would exceed the private calls a single function can make, so the handshakes are established up front.
+    const registry = HandshakeRegistryContract.at(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, wallet);
+    for (const batch of chunk(recipients, APP_MAX_CALLS)) {
+      await new BatchCall(
+        wallet,
+        batch.map(recipient => registry.methods.non_interactive_handshake(owner, recipient)),
+      ).send({ from: owner });
+    }
 
     await deployedContract.methods
       .test_recursively_create_notes(recipients, Math.ceil(minToNeedReset / notesPerIteration))

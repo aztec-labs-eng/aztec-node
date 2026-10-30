@@ -1,10 +1,13 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
-import { DEFAULT_TAGGING_SECRET_STRATEGY, type TaggingSecretStrategy } from '@aztec-labs/pxe/server';
+import { type TaggingSecretStrategy, defaultTaggingSecretStrategy } from '@aztec-labs/pxe/server';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 import { makeResolveTaggingSecretStrategyHook } from './tagging_secret_strategy.js';
+
+const SENDER = AztecAddress.fromNumberUnsafe(1);
+const OTHER_ACCOUNT = AztecAddress.fromNumberUnsafe(2);
 
 describe('makeResolveTaggingSecretStrategyHook', () => {
   it('returns undefined when no TXE strategy is configured', () => {
@@ -21,27 +24,36 @@ describe('makeResolveTaggingSecretStrategyHook', () => {
       ]),
     );
 
-    await expect(hook?.(makeRequest(AppTaggingSecretKind.UNCONSTRAINED))).resolves.toBe(unconstrained);
-    await expect(hook?.(makeRequest(AppTaggingSecretKind.CONSTRAINED))).resolves.toBe(constrained);
+    await expect(hook?.(makeRequest(AppTaggingSecretKind.UNCONSTRAINED, OTHER_ACCOUNT))).resolves.toBe(unconstrained);
+    await expect(hook?.(makeRequest(AppTaggingSecretKind.CONSTRAINED, OTHER_ACCOUNT))).resolves.toBe(constrained);
   });
 
-  it('defaults an unset mode to PXE default strategy when another mode is configured', async () => {
-    const unconstrained = { type: 'address-derived' as const };
+  it('applies a configured strategy to a self-send', async () => {
+    const unconstrained: TaggingSecretStrategy = { type: 'arbitrary-secret', secret: await Point.random() };
     const hook = makeResolveTaggingSecretStrategyHook(new Map([[AppTaggingSecretKind.UNCONSTRAINED, unconstrained]]));
 
-    await expect(hook?.(makeRequest(AppTaggingSecretKind.UNCONSTRAINED))).resolves.toBe(unconstrained);
-    await expect(hook?.(makeRequest(AppTaggingSecretKind.CONSTRAINED))).resolves.toEqual(
-      DEFAULT_TAGGING_SECRET_STRATEGY,
+    await expect(hook?.(makeRequest(AppTaggingSecretKind.UNCONSTRAINED, SENDER))).resolves.toBe(unconstrained);
+  });
+
+  it.each([
+    ['a self-send', SENDER],
+    ['another account', OTHER_ACCOUNT],
+  ])('defaults an unset mode to the PXE default strategy for %s', async (_, recipient) => {
+    const hook = makeResolveTaggingSecretStrategyHook(
+      new Map([[AppTaggingSecretKind.CONSTRAINED, { type: 'interactive-handshake' as const }]]),
     );
+    const request = makeRequest(AppTaggingSecretKind.UNCONSTRAINED, recipient);
+
+    await expect(hook?.(request)).resolves.toEqual(defaultTaggingSecretStrategy(request));
   });
 });
 
-function makeRequest(deliveryMode: AppTaggingSecretKind) {
+function makeRequest(deliveryMode: AppTaggingSecretKind, recipient: AztecAddress) {
   return {
     contractAddress: AztecAddress.ZERO,
     contractClassId: Fr.ZERO,
-    sender: AztecAddress.ZERO,
-    recipient: AztecAddress.ZERO,
+    sender: SENDER,
+    recipient,
     deliveryMode,
   };
 }

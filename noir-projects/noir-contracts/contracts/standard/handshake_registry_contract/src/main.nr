@@ -224,10 +224,11 @@ pub contract HandshakeRegistry {
         let note = HandshakeNote::new(s_protected, sender_secret);
 
         // We deliver onchain unconstrained rather than offchain so the note is discoverable via normal PXE sync. This
-        // is a self-send (the note is owned by and delivered to `sender`), so the wallet would resolve to an
-        // address-derived secret anyway. Pinning that derivation here at compile time lets this contract, the
-        // handshake registry itself, skip the default flow's runtime registry check, which would otherwise embed the
-        // registry's own address in its bytecode and make its deploy address depend on itself.
+        // is a self-send (the note is owned by and delivered to `sender`), so an address-derived secret needs no
+        // handshake. Pinning that derivation here at compile time, rather than leaving it to the wallet, keeps a
+        // wallet that picks a handshake for this delivery from recursing into the registry. It also lets this
+        // contract, the handshake registry itself, skip the default flow's runtime registry check, which would
+        // otherwise embed the registry's own address in its bytecode and make its deploy address depend on itself.
         self.storage.handshakes.at(recipient).at(sender).initialize_or_replace(|_| note).deliver(
             MessageDelivery::onchain_unconstrained().with_sender(sender).via_address_derived_secret(),
         );

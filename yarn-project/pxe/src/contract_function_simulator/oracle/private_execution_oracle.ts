@@ -16,7 +16,7 @@ import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
 import {
   AppTaggingSecret,
-  AppTaggingSecretKind,
+  type AppTaggingSecretKind,
   ContractClassLog,
   ContractClassLogFields,
   type TaggingIndexRange,
@@ -32,9 +32,9 @@ import {
 
 import type { ResolveCustomRequest } from '../../hooks/resolve_custom_request.js';
 import {
-  DEFAULT_TAGGING_SECRET_STRATEGY,
   type ResolveTaggingSecretStrategy,
   type TaggingSecretStrategy,
+  defaultTaggingSecretStrategy,
 } from '../../hooks/resolve_tagging_secret_strategy.js';
 import { NoteService } from '../../notes/note_service.js';
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
@@ -209,27 +209,16 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   }
 
   /**
-   * Resolves the tagging strategy for a message via the wallet's {@link ResolveTaggingSecretStrategy} hook. The contract receives a ready-to-use {@link ResolvedTaggingStrategy}.
-   * When no hook is configured, applies a default: a non-interactive handshake, except for an unconstrained self-send,
-   * which uses an address-derived secret.
+   * Resolves the tagging strategy for a message via the wallet's {@link ResolveTaggingSecretStrategy} hook, or
+   * {@link defaultTaggingSecretStrategy} when no hook is configured. The contract receives a ready-to-use
+   * {@link ResolvedTaggingStrategy}.
    */
   public async resolveTaggingStrategy(
     sender: AztecAddress,
     recipient: AztecAddress,
     deliveryMode: AppTaggingSecretKind,
   ): Promise<ResolvedTaggingStrategy> {
-    const [isUnconstrainedSelfSend, chosenStrategy] = await allToCompletion([
-      this.#isUnconstrainedSelfSend(recipient, deliveryMode),
-      this.#chooseTaggingSecretStrategy(sender, recipient, deliveryMode),
-    ]);
-
-    // For unconstrained delivery, a self-send uses a local address-derived secret instead of a non-interactive
-    // handshake. A self-send is one where the wallet controls the recipient's keys, so both sides' keys are local: no
-    // handshake is needed and nothing is revealed onchain. It also avoids a recursion: a handshake self-delivers its
-    // note via unconstrained delivery, which would establish yet another handshake. This guard runs regardless of the
-    // resolved strategy (hook or default), to protect wallets from invalid configuration.
-    const strategy: TaggingSecretStrategy = isUnconstrainedSelfSend ? { type: 'address-derived' } : chosenStrategy;
-
+    const strategy = await this.#chooseTaggingSecretStrategy(sender, recipient, deliveryMode);
     return this.#resolveTaggingSecretStrategy(strategy, sender, recipient);
   }
 
@@ -240,7 +229,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   ): Promise<TaggingSecretStrategy> {
     const hook: ResolveTaggingSecretStrategy | undefined = this.hooks?.resolveTaggingSecretStrategy;
     if (!hook) {
-      return DEFAULT_TAGGING_SECRET_STRATEGY;
+      return defaultTaggingSecretStrategy({ sender, recipient, deliveryMode });
     }
 
     const contractClassId = await this.#getCurrentContractClassId(this.contractAddress);
@@ -263,13 +252,6 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       throw new Error(`Cannot resolve the current contract class for ${address}`);
     }
     return classId;
-  }
-
-  /** Whether this is an unconstrained delivery to one of the wallet's own accounts (a self-send). */
-  #isUnconstrainedSelfSend(recipient: AztecAddress, deliveryMode: AppTaggingSecretKind) {
-    return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED
-      ? this.keyStore.hasAccount(recipient)
-      : Promise.resolve(false);
   }
 
   /** Resolves a wallet-provided {@link TaggingSecretStrategy} into the app-siloed secret handed to the contract. */

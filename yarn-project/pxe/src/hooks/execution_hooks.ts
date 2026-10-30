@@ -2,6 +2,8 @@ import type { AuthorizeUtilityCall } from './authorize_utility_call.js';
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
 import type { ResolveExpirationAndPadding } from './resolve_expiration_and_padding.js';
 import type { ResolveTaggingSecretStrategy } from './resolve_tagging_secret_strategy.js';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
+import type { defaultTaggingSecretStrategy } from './resolve_tagging_secret_strategy.js';
 
 /**
  * Hooks that PXE invokes while simulating and proving transactions to gate or steer operations that the protocol
@@ -30,12 +32,12 @@ import type { ResolveTaggingSecretStrategy } from './resolve_tagging_secret_stra
  *         ? { authorized: true }
  *         : { authorized: false, reason: 'Unknown target' };
  *     },
- *     // Apply per-recipient policy: reach a known contact via their address keys (no onchain trace) and use a
- *     // non-interactive handshake for everyone else.
- *     resolveTaggingSecretStrategy: async ({ recipient }) =>
- *       knownContacts.has(recipient.toString())
+ *     // Apply per-recipient policy: reach a known contact via their address keys (no onchain trace) and apply PXE's
+ *     // default to everyone else.
+ *     resolveTaggingSecretStrategy: async request =>
+ *       knownContacts.has(request.recipient.toString())
  *         ? { type: 'address-derived' }
- *         : { type: 'non-interactive-handshake' },
+ *         : defaultTaggingSecretStrategy(request),
  *   },
  * });
  * ```
@@ -45,8 +47,8 @@ export interface ExecutionHooks {
   authorizeUtilityCall?: AuthorizeUtilityCall;
   /**
    * Resolves a message's tagging secret when none is already established for the sender/recipient pair, letting the
-   * wallet apply per-recipient policy. PXE applies a default when absent.
-   * See {@link ResolveTaggingSecretStrategy} for the request shape and defaults.
+   * wallet apply per-recipient policy. PXE applies {@link defaultTaggingSecretStrategy} when absent.
+   * See {@link ResolveTaggingSecretStrategy} for the request shape.
    */
   resolveTaggingSecretStrategy?: ResolveTaggingSecretStrategy;
   /**
