@@ -9,6 +9,17 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `get_app_tagging_secret` is deprecated
+
+`get_app_tagging_secret` is deprecated in favor of `get_app_address_derived_tagging_secret`, since it only ever returns the address-derived secret. The old name keeps working and returns the same secret. Contracts already compiled against the old name also keep working.
+
+**Migration:**
+
+```diff
+-use aztec::oracle::notes::get_app_tagging_secret;
++use aztec::oracle::notes::get_app_address_derived_tagging_secret;
+```
+
 ### [Aztec.nr] `compute_app_siloed_shared_secret` is deprecated
 
 `compute_app_siloed_shared_secret` is deprecated in favor of `compute_app_siloed_shared_secret_from_point`, and its TypeScript counterpart `appSiloEcdhSharedSecretPoint` in favor of `computeAppSiloedSharedSecretFromPoint`. The old names keep working and produce the same output.

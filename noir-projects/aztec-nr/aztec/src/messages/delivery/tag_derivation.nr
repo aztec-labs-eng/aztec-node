@@ -2,7 +2,7 @@ use crate::context::PrivateContext;
 use crate::messages::delivery::{
     handshake::get_existing_app_siloed_handshake_secrets, tag_secret_source::TagSecretSource,
 };
-use crate::oracle::notes::get_app_tagging_secret;
+use crate::oracle::notes::get_app_address_derived_tagging_secret;
 use crate::oracle::random::random;
 use crate::protocol::address::AztecAddress;
 use crate::standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS;
@@ -64,12 +64,16 @@ impl TagDerivation {
                 recipient,
                 || TagSecretSource::new_interactive_handshake(context, sender, recipient),
             )
-        } else {
+        } else if self.kind == ADDRESS_DERIVED {
             // Safety: the secret is untrusted, but address-derived tagging is unconstrained-only, where a wrong
             // secret only yields an undiscoverable tag. An invalid recipient has no shared secret, so we fall back
             // to a random (undiscoverable) secret rather than failing the send.
-            let secret = unsafe { get_app_tagging_secret(sender, recipient).unwrap_or_else(|| random()) };
+            let secret =
+                unsafe { get_app_address_derived_tagging_secret(sender, recipient).unwrap_or_else(|| random()) };
             TagSecretSource::unconstrained_secret(secret)
+        } else {
+            let kind = self.kind;
+            panic(f"unknown tag derivation kind: {kind}")
         }
     }
 }
@@ -109,7 +113,7 @@ mod test {
         let secret: Field = 7;
 
         env.private_context(|context| {
-            let _ = OracleMock::mock("aztec_prv_getAppTaggingSecret").returns(Option::some(secret));
+            let _ = OracleMock::mock("aztec_prv_getAppAddressDerivedTaggingSecret").returns(Option::some(secret));
 
             let source = TagDerivation::address_derived().into_tag_secret_source(context, SENDER, RECIPIENT);
             assert_eq(source, TagSecretSource::unconstrained_secret(secret));
@@ -122,7 +126,7 @@ mod test {
         let random_secret: Field = 999;
 
         env.private_context(|context| {
-            let _ = OracleMock::mock("aztec_prv_getAppTaggingSecret").returns(Option::<Field>::none());
+            let _ = OracleMock::mock("aztec_prv_getAppAddressDerivedTaggingSecret").returns(Option::<Field>::none());
             let _ = OracleMock::mock("aztec_misc_getRandomField").returns(random_secret);
 
             let source = TagDerivation::address_derived().into_tag_secret_source(context, SENDER, RECIPIENT);

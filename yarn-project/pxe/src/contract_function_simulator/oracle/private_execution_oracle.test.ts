@@ -13,6 +13,7 @@ import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { AppTaggingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
+import { makeInvalidAztecAddress } from '@aztec-labs/stdlib/testing';
 import { BlockHeader, CallContext, type Capsule, TxContext } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -43,6 +44,8 @@ import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import { Option } from '../noir-structs/option.js';
 import { TransientArrayService } from '../transient_array_service.js';
 import { PrivateExecutionOracle, type PrivateExecutionOracleArgs } from './private_execution_oracle.js';
+
+const INVALID_ADDRESS = makeInvalidAztecAddress();
 
 describe('PrivateExecutionOracle', () => {
   let contractAddress: AztecAddress;
@@ -84,32 +87,35 @@ describe('PrivateExecutionOracle', () => {
     });
   });
 
-  describe('getAppTaggingSecret', () => {
+  describe('getAppAddressDerivedTaggingSecret', () => {
     it('rejects a sender outside the execution scopes', async () => {
       const inScopeSender = await AztecAddress.random();
       const outOfScopeSender = await AztecAddress.random();
       const recipient = await AztecAddress.random();
       const oracle = makeOracle({ scopes: [inScopeSender] });
 
-      await expect(oracle.getAppTaggingSecret(outOfScopeSender, recipient)).rejects.toThrow(
+      await expect(oracle.getAppAddressDerivedTaggingSecret(outOfScopeSender, recipient)).rejects.toThrow(
         'is not in the allowed scopes list',
       );
     });
 
     it('returns a secret for a sender inside the execution scopes', async () => {
-      const senderCompleteAddress = await CompleteAddress.random();
-      const sender = senderCompleteAddress.address;
+      const account = await makeAccount();
       const recipient = (await CompleteAddress.random()).address;
 
-      const addressStore = mock<AddressStore>();
-      addressStore.getCompleteAddress.mockResolvedValue(senderCompleteAddress);
-      const keyStore = mock<KeyStore>();
-      keyStore.getMasterIncomingViewingSecretKey.mockResolvedValue(GrumpkinScalar.random());
+      const oracle = makeOracle(account.oracleArgs);
 
-      const oracle = makeOracle({ scopes: [sender], addressStore, keyStore });
-
-      const result = await oracle.getAppTaggingSecret(sender, recipient);
+      const result = await oracle.getAppAddressDerivedTaggingSecret(account.address, recipient);
       expect(result.isSome()).toBe(true);
+    });
+
+    it('returns none for an invalid recipient', async () => {
+      const account = await makeAccount();
+
+      const oracle = makeOracle(account.oracleArgs);
+
+      const result = await oracle.getAppAddressDerivedTaggingSecret(account.address, INVALID_ADDRESS);
+      expect(result.isNone()).toBe(true);
     });
   });
 
@@ -123,13 +129,14 @@ describe('PrivateExecutionOracle', () => {
     });
 
     it('defaults an unconstrained self-send to an address-derived shared secret', async () => {
-      const oracle = makeOracle();
-      const secret = Fr.random();
-      jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
+      const account = await makeAccount();
+      const oracle = makeOracle(account.oracleArgs);
 
-      await expect(oracle.resolveTaggingStrategy(sender, sender, OnchainDeliveryMode.UNCONSTRAINED)).resolves.toEqual({
+      await expect(
+        oracle.resolveTaggingStrategy(account.address, account.address, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({
         type: 'unconstrained-secret',
-        secret,
+        secret: await addressDerivedSecret(account, account.address),
       });
     });
 
@@ -142,13 +149,29 @@ describe('PrivateExecutionOracle', () => {
     });
 
     it('resolves an address-derived strategy to the unconstrained secret', async () => {
-      const { oracle } = makeHookedOracle({ strategy: { type: 'address-derived' } });
-      const secret = Fr.random();
-      jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
+      const account = await makeAccount();
+      const { oracle } = makeHookedOracle({ strategy: { type: 'address-derived' }, ...account.oracleArgs });
 
       await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret });
+        oracle.resolveTaggingStrategy(account.address, recipient, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await addressDerivedSecret(account, recipient) });
+    });
+
+    it('rejects an address-derived strategy for a sender outside the execution scopes', async () => {
+      const { oracle } = makeHookedOracle({ strategy: { type: 'address-derived' }, scopes: [recipient] });
+
+      await expect(oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED)).rejects.toThrow(
+        'is not in the allowed scopes list',
+      );
+    });
+
+    it('rejects an address-derived strategy for an invalid recipient', async () => {
+      const account = await makeAccount();
+      const { oracle } = makeHookedOracle({ strategy: { type: 'address-derived' }, ...account.oracleArgs });
+
+      await expect(
+        oracle.resolveTaggingStrategy(account.address, INVALID_ADDRESS, OnchainDeliveryMode.UNCONSTRAINED),
+      ).rejects.toThrow(`invalid recipient ${INVALID_ADDRESS}`);
     });
 
     it('app-silos a raw arbitrary-secret point before handing it to the contract', async () => {
@@ -190,15 +213,27 @@ describe('PrivateExecutionOracle', () => {
     const makeHookedOracle = ({
       strategy,
       contractClassId = Fr.random(),
+      ...overrides
     }: {
       strategy: TaggingSecretStrategy;
       contractClassId?: Fr;
-    }) => {
+    } & Partial<PrivateExecutionOracleArgs>) => {
       const resolveTaggingSecretStrategy = jest.fn<ResolveTaggingSecretStrategy>().mockResolvedValue(strategy);
       const anchoredContractData = mock<AnchoredContractData>();
       anchoredContractData.getCurrentClassId.mockResolvedValue(contractClassId);
-      const oracle = makeOracle({ hooks: { resolveTaggingSecretStrategy }, anchoredContractData });
+      const oracle = makeOracle({ hooks: { resolveTaggingSecretStrategy }, anchoredContractData, ...overrides });
       return { oracle, resolveTaggingSecretStrategy };
+    };
+
+    const addressDerivedSecret = async (account: Account, recipient: AztecAddress) => {
+      const secret = await AppTaggingSecret.computeViaEcdh(
+        account.completeAddress,
+        account.ivsk,
+        recipient,
+        contractAddress,
+        recipient,
+      );
+      return secret!.secret;
     };
   });
 
@@ -273,6 +308,22 @@ describe('PrivateExecutionOracle', () => {
       );
     });
   });
+
+  type Account = Awaited<ReturnType<typeof makeAccount>>;
+
+  /** An account with its keys in the stores of `oracleArgs`, which also put it in the execution scopes. */
+  const makeAccount = async () => {
+    const completeAddress = await CompleteAddress.random();
+    const ivsk = GrumpkinScalar.random();
+
+    const addressStore = mock<AddressStore>();
+    addressStore.getCompleteAddress.mockResolvedValue(completeAddress);
+    const keyStore = mock<KeyStore>();
+    keyStore.getMasterIncomingViewingSecretKey.mockResolvedValue(ivsk);
+
+    const address = completeAddress.address;
+    return { address, completeAddress, ivsk, oracleArgs: { scopes: [address], addressStore, keyStore } };
+  };
 
   const makeOracle = (overrides: Partial<PrivateExecutionOracleArgs> = {}): PrivateExecutionOracle => {
     return new PrivateExecutionOracle({

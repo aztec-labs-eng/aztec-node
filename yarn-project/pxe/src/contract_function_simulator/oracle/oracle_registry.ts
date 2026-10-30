@@ -573,7 +573,7 @@ export const ORACLE_REGISTRY = {
     returnType: BOOL,
   }),
 
-  aztec_prv_getAppTaggingSecret: makeEntry({
+  aztec_prv_getAppAddressDerivedTaggingSecret: makeEntry({
     params: [
       { name: 'sender', type: AZTEC_ADDRESS },
       { name: 'recipient', type: AZTEC_ADDRESS },
