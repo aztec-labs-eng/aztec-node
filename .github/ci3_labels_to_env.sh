@@ -62,7 +62,7 @@ function main {
 
   local explicit_ci_mode_labels=()
   local mode_label
-  for mode_label in ci-full ci-full-no-test-cache ci-docs; do
+  for mode_label in ci-full ci-full-no-test-cache; do
     if has_label "$mode_label"; then
       explicit_ci_mode_labels+=("$mode_label")
     fi
@@ -84,8 +84,6 @@ function main {
     ci_mode="full-no-test-cache"
   # elif has_label "ci-test-network"; then
   #   ci_mode="full-no-test-cache"
-  elif has_label "ci-docs"; then
-    ci_mode="docs"
   elif [[ "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
     # Pushes to main run full CI: with no merge queue, this is the post-merge gate and
     # the producer of the per-commit benchmark series (see BENCH_UPLOAD/BENCH_BRANCH below).

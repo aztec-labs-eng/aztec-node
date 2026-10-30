@@ -5,8 +5,6 @@
   "url": "https://context7.com/aztecprotocol/aztec-packages",
   "public_key": "pk_t0YiN5OA9Udc9Xnb98tqO",
   "folders": [
-    "docs/docs",
-    "docs/docs-developers",
     "noir-projects/aztec-nr",
     "yarn-project/aztec.js"
   ],
@@ -16,8 +14,7 @@
     "ci3",
     "metrics",
     "build-images",
-    "release-image",
-    "docs/internal_notes"
+    "release-image"
   ],
   "rules": [
     "Aztec releases are identified by semantic version tags (e.g. v5) and by network names (e.g. testnet, mainnet). Names such as `spartan`, `next`, and `v5-next` are internal repository, branch, and deployment-infrastructure names. They are not release channels, SDK versions, or networks. Never tell a user to install, target, or migrate to one.",

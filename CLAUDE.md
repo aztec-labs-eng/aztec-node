@@ -7,7 +7,7 @@ All paths below are relative to the git root. When working inside a component, a
 
 `noir-projects/` holds the contract libraries written in Noir; see `noir-projects/aztec-nr/CLAUDE.md`.
 
-`docs/` is the developer documentation site (Docusaurus); see `docs/CLAUDE.md`. `spartan/` holds Kubernetes deployment infrastructure (Helm charts + Terraform); see `spartan/CLAUDE.md`. `ci3/` contains CI infrastructure scripts.
+`spartan/` holds Kubernetes deployment infrastructure (Helm charts + Terraform); see `spartan/CLAUDE.md`. `ci3/` contains CI infrastructure scripts.
 </components>
 
 <build_system>

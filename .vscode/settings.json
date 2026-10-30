@@ -172,15 +172,6 @@
     "**/tsconfig.tsbuildinfo": true,
     "**/.eslintcache": true,
 
-    // Docs: versioned/generated content
-    "**/docs/developer_versioned_docs/**": true,
-    "**/docs/network_versioned_docs/**": true,
-    "**/docs/network_versioned_sidebars/**": true,
-    "**/docs/processed-docs/**": true,
-    "**/docs/processed-docs-cache/**": true,
-    "**/docs/static/**": true,
-    "**/docs/build/**": true,
-
     // C++/Rust build
     "**/cmake-build-*/**": true,
     "**/bench-out/**": true,
@@ -227,13 +218,6 @@
     "**/.hg/store/**": true,
     "**/.yarn/**": true,
     "**/dest/**": true,
-    "**/docs/.docusaurus/**": true,
-    "**/docs/build/**": true,
-    "**/docs/developer_versioned_docs/**": true,
-    "**/docs/network_versioned_docs/**": true,
-    "**/docs/processed-docs-cache/**": true,
-    "**/docs/processed-docs/**": true,
-    "**/docs/static/**": true,
     "**/node_modules/**": true,
     "**/target/**": true
   },

@@ -22,7 +22,6 @@ function print_usage {
   echo_cmd "fast"                  "Spin up an EC2 instance and run bootstrap ci-fast."
   echo_cmd "full"                  "Spin up an EC2 instance and run bootstrap ci-full."
   echo_cmd "full-no-test-cache"    "Spin up an EC2 instance and run bootstrap ci-full-no-test-cache."
-  echo_cmd "docs"                  "Spin up an EC2 instance and run docs-only CI."
   echo_cmd "grind"                 "Spin up EC2 instances to run parallel full CI runs."
   echo_cmd "grind-test"            "Spin up an EC2 and grind a given test command."
   echo_cmd "network-deploy"        "Spin up an EC2 instance to deploy a network."
@@ -165,7 +164,7 @@ case "$cmd" in
   dash)
     watch_ci -s main,prs --user --watch
     ;;
-  fast|docs)
+  fast)
     export CI_DASHBOARD="prs"
     # Route through multi_job_run (even for a single instance) so the runner-side
     # orchestration — including the spot/instance request — is captured into a

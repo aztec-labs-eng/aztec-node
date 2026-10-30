@@ -43,8 +43,7 @@ BB_VERSION=6.0.0-rc.7
 # NOIR_VERSION must be the noir release the $BB_VERSION aztec-packages release was built
 # against (its noir submodule): the pinned nargo's output is consumed by tools from that
 # release (bb, and the @aztec/noir-* js packages, which are that submodule republished).
-# Skew is not detected by check_pin_drift, it surfaces in other places (e.g. the docs
-# examples' runtime tests).
+# Skew is not detected by check_pin_drift.
 NOIR_VERSION=1.0.0-rc.3
 
 # The releases are fetched at build time; overridable for testing/mirroring.

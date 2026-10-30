@@ -89,6 +89,4 @@
 # Notify the AVM team on changes to the AVM simulator and supporting modules
 /yarn-project/simulator/src/public @IlyasRidhuan @fcarreiro
 
-# Notify devrel of changes to docs examples
-/docs/examples @AztecProtocol/devrel
 #####################################################
