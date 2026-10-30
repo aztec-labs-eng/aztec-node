@@ -16,9 +16,9 @@ import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
 import {
   AppTaggingSecret,
-  type AppTaggingSecretKind,
   ContractClassLog,
   ContractClassLogFields,
+  type OnchainDeliveryMode,
   type TaggingIndexRange,
 } from '@aztec-labs/stdlib/logs';
 import { Note, type NoteStatus } from '@aztec-labs/stdlib/note';
@@ -216,7 +216,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   public async resolveTaggingStrategy(
     sender: AztecAddress,
     recipient: AztecAddress,
-    deliveryMode: AppTaggingSecretKind,
+    deliveryMode: OnchainDeliveryMode,
   ): Promise<ResolvedTaggingStrategy> {
     const strategy = await this.#chooseTaggingSecretStrategy(sender, recipient, deliveryMode);
     return this.#resolveTaggingSecretStrategy(strategy, sender, recipient);
@@ -225,7 +225,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   async #chooseTaggingSecretStrategy(
     sender: AztecAddress,
     recipient: AztecAddress,
-    deliveryMode: AppTaggingSecretKind,
+    deliveryMode: OnchainDeliveryMode,
   ): Promise<TaggingSecretStrategy> {
     const hook: ResolveTaggingSecretStrategy | undefined = this.hooks?.resolveTaggingSecretStrategy;
     if (!hook) {
@@ -331,13 +331,15 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
    * Returns the next sender-side tagging index for a given secret and delivery mode.
    *
    * @param secret - The tagging secret to allocate an index for.
-   * @param kind - The sender-side index namespace.
+   * @param deliveryMode - The sender-side index namespace.
    * @returns The next index to use for this secret.
    */
-  public async getNextTaggingIndex(secret: Fr, kind: AppTaggingSecretKind): Promise<number> {
-    const appTaggingSecret = new AppTaggingSecret(secret, this.contractAddress, kind);
+  public async getNextTaggingIndex(secret: Fr, deliveryMode: OnchainDeliveryMode): Promise<number> {
+    const appTaggingSecret = new AppTaggingSecret(secret, this.contractAddress, deliveryMode);
     const index = await this.#reserveNextIndexForSecret(appTaggingSecret);
-    this.logger.debug(`Incrementing ${kind} tagging index for secret in contract ${this.contractAddress} to ${index}`);
+    this.logger.debug(
+      `Incrementing ${deliveryMode} tagging index for secret in contract ${this.contractAddress} to ${index}`,
+    );
     return index;
   }
 

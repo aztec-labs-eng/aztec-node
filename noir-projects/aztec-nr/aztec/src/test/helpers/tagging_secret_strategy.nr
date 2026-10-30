@@ -1,4 +1,4 @@
-use crate::keys::ecdh_shared_secret::compute_app_siloed_shared_secret;
+use crate::keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point;
 use crate::protocol::{
     address::AztecAddress,
     hash::poseidon2_hash,
@@ -68,7 +68,7 @@ impl TaggingSecretStrategy {
 /// to produce.
 pub fn compute_directional_app_secret(secret: EmbeddedCurvePoint, app: AztecAddress, recipient: AztecAddress) -> Field {
     poseidon2_hash(
-        [compute_app_siloed_shared_secret(secret, app), recipient.to_field()],
+        [compute_app_siloed_shared_secret_from_point(secret, app), recipient.to_field()],
     )
 }
 

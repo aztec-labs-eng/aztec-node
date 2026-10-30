@@ -28,11 +28,11 @@ import type { GasFees } from '@aztec-labs/stdlib/gas';
 import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import type { PublicKeys } from '@aztec-labs/stdlib/keys';
 import {
-  type AppTaggingSecretKind,
   type FlatPublicLogs,
+  type OnchainDeliveryMode,
   PrivateLog,
   Tag,
-  appTaggingSecretKindFromDeliveryMode,
+  onchainDeliveryModeFromNumber,
 } from '@aztec-labs/stdlib/logs';
 import type { UnsiloedMessageNullifier } from '@aztec-labs/stdlib/messaging';
 import type {
@@ -93,11 +93,11 @@ import { packAsHintedNote } from './note_packing_utils.js';
 // interfaces derived from it) names the protocol types below. Re-exporting them gives tsc a portable path to each
 // type instead of falling back to a deep node_modules path that breaks .d.ts portability (TS2742).
 export type {
-  AppTaggingSecretKind,
   BlockHash,
   BlockHeader,
   ContractInstancePreimage,
   MembershipWitness,
+  OnchainDeliveryMode,
   PendingTaggedLog,
   TxHash,
 };
@@ -223,10 +223,10 @@ export const U8: TypeMapping<number> = SCALAR({
 });
 
 // Noir passes `MessageDelivery` onchain variants here.
-export const DELIVERY_MODE: TypeMapping<AppTaggingSecretKind> = SCALAR({
+export const DELIVERY_MODE: TypeMapping<OnchainDeliveryMode> = SCALAR({
   kind: 'onchain-delivery-mode',
   deserialization: {
-    fn: readers => appTaggingSecretKindFromDeliveryMode(U8.deserialization!.fn(readers)),
+    fn: readers => onchainDeliveryModeFromNumber(U8.deserialization!.fn(readers)),
   },
 });
 

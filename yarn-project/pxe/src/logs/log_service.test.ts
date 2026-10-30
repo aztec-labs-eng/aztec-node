@@ -12,8 +12,8 @@ import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { deriveKeys } from '@aztec-labs/stdlib/keys';
 import {
   AppTaggingSecret,
-  AppTaggingSecretKind,
   type LogResult,
+  OnchainDeliveryMode,
   SiloedTag,
   Tag,
   computeSharedTaggingSecret,
@@ -408,8 +408,11 @@ describe('LogService', () => {
 
     function handshakeTags(secret: Point, app: AztecAddress): Promise<SiloedTag[]> {
       return Promise.all(
-        [AppTaggingSecretKind.UNCONSTRAINED, AppTaggingSecretKind.CONSTRAINED].map(async kind =>
-          SiloedTag.compute({ extendedSecret: await AppTaggingSecret.computeAppSiloed(secret, app, kind), index: 0 }),
+        [OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED].map(async deliveryMode =>
+          SiloedTag.compute({
+            extendedSecret: await AppTaggingSecret.computeAppSiloed(secret, app, deliveryMode),
+            index: 0,
+          }),
         ),
       );
     }

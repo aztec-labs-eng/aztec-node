@@ -2,7 +2,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { AppTaggingSecretKind, Tag } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode, Tag } from '@aztec-labs/stdlib/logs';
 
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
@@ -81,15 +81,15 @@ describe('oracle type mappings', () => {
     });
   });
 
-  // DELIVERY_MODE maps Noir's on-chain MessageDelivery variants (2 = unconstrained, 3 = constrained) to a tagging kind,
-  // and rejects any other value.
+  // DELIVERY_MODE maps Noir's on-chain MessageDelivery variants (2 = unconstrained, 3 = constrained) to an onchain
+  // delivery mode, and rejects any other value.
   describe('DELIVERY_MODE', () => {
     it('deserializes unconstrained delivery as unconstrained tagging', () => {
-      expect(deserialize(DELIVERY_MODE, new Fr(2))).toBe(AppTaggingSecretKind.UNCONSTRAINED);
+      expect(deserialize(DELIVERY_MODE, new Fr(2))).toBe(OnchainDeliveryMode.UNCONSTRAINED);
     });
 
     it('deserializes constrained delivery as constrained tagging', () => {
-      expect(deserialize(DELIVERY_MODE, new Fr(3))).toBe(AppTaggingSecretKind.CONSTRAINED);
+      expect(deserialize(DELIVERY_MODE, new Fr(3))).toBe(OnchainDeliveryMode.CONSTRAINED);
     });
 
     it('rejects an invalid value', () => {

@@ -1,11 +1,11 @@
-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 import { buildMessageDeliveryTest } from './onchain_delivery_harness.js';
 
 // Pins mode-agnostic handshake reuse: a handshake bootstrapped under one delivery mode must be reused when the other
 // mode sends next.
 describe('handshake_reuse', () => {
-  const forwardHookCalls: AppTaggingSecretKind[] = [];
+  const forwardHookCalls: OnchainDeliveryMode[] = [];
   buildMessageDeliveryTest({
     strategy: 'non-interactive handshake',
     mode: { events: 'constrained', notes: 'unconstrained' },
@@ -16,14 +16,14 @@ describe('handshake_reuse', () => {
     additionalTests: () => {
       it('the strategy hook fires exactly once, to bootstrap the handshake on the first constrained send', () => {
         expect(forwardHookCalls).toHaveLength(1);
-        expect(forwardHookCalls[0]).toBe(AppTaggingSecretKind.CONSTRAINED);
+        expect(forwardHookCalls[0]).toBe(OnchainDeliveryMode.CONSTRAINED);
       });
     },
   });
 
   // Reverse direction also pins the constrained sequence to a fresh index 0 after an unconstrained bootstrap; a leaked
   // unconstrained counter would make the first constrained send require a predecessor nullifier that does not exist.
-  const reverseHookCalls: AppTaggingSecretKind[] = [];
+  const reverseHookCalls: OnchainDeliveryMode[] = [];
   buildMessageDeliveryTest({
     strategy: 'non-interactive handshake',
     mode: { events: 'unconstrained', notes: 'constrained' },
@@ -34,7 +34,7 @@ describe('handshake_reuse', () => {
     additionalTests: () => {
       it('the strategy hook fires exactly once, to bootstrap the handshake on the first unconstrained send', () => {
         expect(reverseHookCalls).toHaveLength(1);
-        expect(reverseHookCalls[0]).toBe(AppTaggingSecretKind.UNCONSTRAINED);
+        expect(reverseHookCalls[0]).toBe(OnchainDeliveryMode.UNCONSTRAINED);
       });
     },
   });

@@ -23,7 +23,7 @@ export function deriveEcdhSharedSecretPoint(secretKey: GrumpkinScalar, publicKey
 
 /**
  * Derives an app-siloed ECDH shared secret from keys: ECDHs `S = secretKey * publicKey` via
- * {@link deriveEcdhSharedSecretPoint}, then app-silos it via {@link appSiloEcdhSharedSecretPoint}.
+ * {@link deriveEcdhSharedSecretPoint}, then app-silos it via {@link computeAppSiloedSharedSecretFromPoint}.
  *
  * @param secretKey - The secret key used to derive shared secret.
  * @param publicKey - The public key used to derive shared secret.
@@ -37,20 +37,24 @@ export async function appSiloEcdhSharedSecret(
   contractAddress: AztecAddress,
 ): Promise<Fr> {
   const rawSharedSecret = await deriveEcdhSharedSecretPoint(secretKey, publicKey);
-  return appSiloEcdhSharedSecretPoint(rawSharedSecret, contractAddress);
+  return computeAppSiloedSharedSecretFromPoint(rawSharedSecret, contractAddress);
 }
 
 /**
  * App-silos a shared secret point: `s_app = h(DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, S.x, S.y, app)`.
  *
- * Mirrors `compute_app_siloed_shared_secret` in aztec-nr.
+ * Mirrors `compute_app_siloed_shared_secret_from_point` in aztec-nr.
  *
  * @param point - The raw shared secret point `S`.
  * @param app - The contract address to silo to.
  */
-export function appSiloEcdhSharedSecretPoint(point: Point, app: AztecAddress): Promise<Fr> {
+export function computeAppSiloedSharedSecretFromPoint(point: Point, app: AztecAddress): Promise<Fr> {
+  // The separator name is ECDH-specific, but this silos any shared secret point, not only ECDH ones.
   return poseidon2HashWithSeparator([point.x, point.y, app], DomainSeparator.APP_SILOED_ECDH_SHARED_SECRET);
 }
+
+/** @deprecated Use {@link computeAppSiloedSharedSecretFromPoint}. */
+export const appSiloEcdhSharedSecretPoint = computeAppSiloedSharedSecretFromPoint;
 
 /**
  * Protects a handshake's shared secret from being forged by the recipient: `S' = hash(ephPk, recipientPoint) * S`.
