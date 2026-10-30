@@ -1066,7 +1066,7 @@ export class TXESession implements TXESessionStateHandler {
   /** Execution hooks for the oracles this session builds. Every oracle construction site must use this. */
   private buildExecutionHooks() {
     return composeHooks({
-      resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies, this.keyStore),
+      resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies),
       authorizeUtilityCall: this.authorizeAllUtilityCallTargets ? authorizeAllUtilityCallsHook : undefined,
     });
   }

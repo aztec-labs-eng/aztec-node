@@ -56,7 +56,20 @@ unconstrained fn defaults_an_unconstrained_self_send_to_the_address_derived_shar
     let mut env = TestEnvironment::new();
     let app = env.create_contract_account();
     let sender = env.create_light_account();
-    // The recipient is one of the environment's own accounts, so this is a self-send.
+
+    env.private_context_at(app, |_| {
+        let resolved = resolve_tagging_strategy(sender, sender, OnchainDeliveryMode::onchain_unconstrained());
+
+        // An unconstrained self-send resolves to an address-derived secret rather than a non-interactive handshake.
+        assert(resolved.is_unconstrained_secret());
+    });
+}
+
+#[test]
+unconstrained fn defaults_an_unconstrained_send_to_another_own_account_to_a_non_interactive_handshake() {
+    let mut env = TestEnvironment::new();
+    let app = env.create_contract_account();
+    let sender = env.create_light_account();
     let recipient = env.create_light_account();
 
     env.private_context_at(app, |_| {
@@ -66,8 +79,8 @@ unconstrained fn defaults_an_unconstrained_self_send_to_the_address_derived_shar
             OnchainDeliveryMode::onchain_unconstrained(),
         );
 
-        // An unconstrained self-send resolves to an address-derived secret rather than a non-interactive handshake.
-        assert(resolved.is_unconstrained_secret());
+        // The environment holds both accounts, but the recipient is not the sender, so this is not a self-send.
+        assert_eq(resolved, ResolvedTaggingStrategy::non_interactive_handshake());
     });
 }
 
@@ -205,16 +218,11 @@ unconstrained fn applies_a_configured_arbitrary_secret_to_an_unconstrained_self_
     ));
     let app = env.create_contract_account();
     let sender = env.create_light_account();
-    let recipient = env.create_light_account();
 
     env.private_context_at(app, |_| {
-        let resolved = resolve_tagging_strategy(
-            sender,
-            recipient,
-            OnchainDeliveryMode::onchain_unconstrained(),
-        );
+        let resolved = resolve_tagging_strategy(sender, sender, OnchainDeliveryMode::onchain_unconstrained());
 
-        let arbitrary_secret = compute_directional_app_secret(point, app, recipient);
+        let arbitrary_secret = compute_directional_app_secret(point, app, sender);
         assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(arbitrary_secret));
     });
 }

@@ -1,4 +1,3 @@
-import type { KeyStore } from '@aztec-labs/key-store';
 import {
   type ResolveTaggingSecretStrategy,
   type TaggingSecretStrategy,
@@ -17,13 +16,10 @@ export type TXETaggingSecretStrategies = Map<AppTaggingSecretKind, TaggingSecret
  */
 export function makeResolveTaggingSecretStrategyHook(
   strategies: TXETaggingSecretStrategies,
-  keyStore: KeyStore,
 ): ResolveTaggingSecretStrategy | undefined {
   if (strategies.size === 0) {
     return undefined;
   }
 
-  return async ({ recipient, deliveryMode }) =>
-    strategies.get(deliveryMode) ??
-    defaultTaggingSecretStrategy({ deliveryMode, recipientIsOwnAccount: await keyStore.hasAccount(recipient) });
+  return request => Promise.resolve(strategies.get(request.deliveryMode) ?? defaultTaggingSecretStrategy(request));
 }

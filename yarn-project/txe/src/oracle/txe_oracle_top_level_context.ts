@@ -561,7 +561,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
           isStaticCall ? 'private view' : 'private',
           authorizedUtilityCallTargets,
         ),
-        resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies, this.keyStore),
+        resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies),
       }),
       transientArrayService,
     });

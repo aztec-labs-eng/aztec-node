@@ -8,12 +8,14 @@ import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
 import {
   type ExampleEvent0,
   type ExampleEvent1,
   type ExampleNestedEvent,
   TestLogContract,
 } from '@aztec-labs/noir-test-contracts.js/TestLog';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';
@@ -60,6 +62,12 @@ describe('automine/effects/event_logs', () => {
     // getPublicEvents round-trips correctly.
     it('emits multiple events as private logs and decodes them', async () => {
       const preimages = makeTuple(5, makeTuple.bind(undefined, 4, Fr.random)) as Tuple<Tuple<Fr, 4>, 5>;
+
+      // The txs below are built concurrently, so without an existing handshake each would establish its own, and all
+      // but the first to land would be rejected for initializing the same registry slot.
+      await HandshakeRegistryContract.at(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, wallet)
+        .methods.non_interactive_handshake(account1Address, account2Address)
+        .send({ from: account1Address });
 
       const txs = await Promise.all(
         preimages.map(async preimage => {

@@ -34,13 +34,10 @@ import type { defaultTaggingSecretStrategy } from './resolve_tagging_secret_stra
  *     },
  *     // Apply per-recipient policy: reach a known contact via their address keys (no onchain trace) and apply PXE's
  *     // default to everyone else.
- *     resolveTaggingSecretStrategy: async ({ recipient, deliveryMode }) =>
- *       knownContacts.has(recipient.toString())
+ *     resolveTaggingSecretStrategy: async request =>
+ *       knownContacts.has(request.recipient.toString())
  *         ? { type: 'address-derived' }
- *         : defaultTaggingSecretStrategy({
- *             deliveryMode,
- *             recipientIsOwnAccount: ownAccounts.has(recipient.toString()),
- *           }),
+ *         : defaultTaggingSecretStrategy(request),
  *   },
  * });
  * ```
