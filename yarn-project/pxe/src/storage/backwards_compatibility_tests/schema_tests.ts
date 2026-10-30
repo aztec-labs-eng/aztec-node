@@ -30,9 +30,9 @@ import { GasFees } from '@aztec-labs/stdlib/gas';
 import { PublicKey, PublicKeys, deriveKeys } from '@aztec-labs/stdlib/keys';
 import {
   AppTaggingSecret,
-  AppTaggingSecretKind,
   ContractClassLog,
   ContractClassLogFields,
+  OnchainDeliveryMode,
   PrivateLog,
   PublicLog,
   type TaggingIndexRange,
@@ -575,11 +575,11 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
 
       const secretA = new AppTaggingSecret(new Fr(2n), AztecAddress.fromBigIntUnsafe(3n));
       const secretB = new AppTaggingSecret(new Fr(5n), AztecAddress.fromBigIntUnsafe(7n));
-      // A constrained secret keys under the `constrained:` prefix, so the snapshot pins both kinds side by side.
+      // A constrained secret keys under the `constrained:` prefix, so the snapshot pins both delivery modes together.
       const secretConstrained = new AppTaggingSecret(
         new Fr(19n),
         AztecAddress.fromBigIntUnsafe(23n),
-        AppTaggingSecretKind.CONSTRAINED,
+        OnchainDeliveryMode.CONSTRAINED,
       );
 
       await recipientTaggingStore.updateHighestFinalizedIndex(secretA, 11, changeSetId);
@@ -641,7 +641,7 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       const secretConstrained = new AppTaggingSecret(
         new Fr(19n),
         AztecAddress.fromBigIntUnsafe(23n),
-        AppTaggingSecretKind.CONSTRAINED,
+        OnchainDeliveryMode.CONSTRAINED,
       );
       const txHashA = TxHash.fromBigInt(17n);
       const txHashB = TxHash.fromBigInt(19n);

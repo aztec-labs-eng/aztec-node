@@ -7,12 +7,12 @@ import { z } from 'zod';
 import { AztecAddress } from '../aztec-address/index.js';
 import type { CompleteAddress } from '../contract/complete_address.js';
 import { computeAddressSecret, computePreaddress } from '../keys/derivation.js';
-import { AppTaggingSecretKind } from './app_tagging_secret_kind.js';
-import { appSiloEcdhSharedSecretPoint } from './shared_secret_derivation.js';
+import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
+import { computeAppSiloedSharedSecretFromPoint } from './shared_secret_derivation.js';
 
-const AppTaggingSecretKindSchema = z.union([
-  z.literal(AppTaggingSecretKind.UNCONSTRAINED),
-  z.literal(AppTaggingSecretKind.CONSTRAINED),
+const OnchainDeliveryModeSchema = z.union([
+  z.literal(OnchainDeliveryMode.UNCONSTRAINED),
+  z.literal(OnchainDeliveryMode.CONSTRAINED),
 ]);
 
 /**
@@ -26,13 +26,13 @@ export class AppTaggingSecret {
   constructor(
     public readonly secret: Fr,
     public readonly app: AztecAddress,
-    public readonly kind: AppTaggingSecretKind = AppTaggingSecretKind.UNCONSTRAINED,
+    public readonly deliveryMode: OnchainDeliveryMode = OnchainDeliveryMode.UNCONSTRAINED,
   ) {}
 
   /**
    * Derives an app-siloed, recipient-directional tagging secret from a shared tagging secret point.
    *
-   * App-silos the point via {@link appSiloEcdhSharedSecretPoint}, then directs the result to `recipient`:
+   * App-silos the point via {@link computeAppSiloedSharedSecretFromPoint}, then directs the result to `recipient`:
    * `h([s_app, recipient])`. The directional step stops a symmetric shared secret (ECDH against an address, or an
    * arbitrary registered point) from colliding bidirectionally, so two parties never share a tag sequence.
    *
@@ -49,22 +49,26 @@ export class AppTaggingSecret {
     app: AztecAddress,
     recipient: AztecAddress,
   ): Promise<AppTaggingSecret> {
-    const appSiloedSecret = await appSiloEcdhSharedSecretPoint(taggingSecretPoint, app);
+    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app);
     const directionalAppTaggingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
 
     return new AppTaggingSecret(directionalAppTaggingSecret, app);
   }
 
   /**
-   * Derives the bare app-siloed tagging secret from a shared secret point via {@link appSiloEcdhSharedSecretPoint},
-   * under the given delivery-mode kind.
+   * Derives the bare app-siloed tagging secret from a shared secret point via
+   * {@link computeAppSiloedSharedSecretFromPoint}, under the given delivery mode.
    */
   static async computeAppSiloed(
     taggingSecretPoint: Point,
     app: AztecAddress,
-    kind: AppTaggingSecretKind,
+    deliveryMode: OnchainDeliveryMode,
   ): Promise<AppTaggingSecret> {
-    return new AppTaggingSecret(await appSiloEcdhSharedSecretPoint(taggingSecretPoint, app), app, kind);
+    return new AppTaggingSecret(
+      await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app),
+      app,
+      deliveryMode,
+    );
   }
 
   /**
@@ -88,7 +92,7 @@ export class AppTaggingSecret {
   }
 
   toString(): string {
-    return `${this.kind}:${this.secret.toString()}:${this.app.toString()}`;
+    return `${this.deliveryMode}:${this.secret.toString()}:${this.app.toString()}`;
   }
 
   static fromString(str: string): AppTaggingSecret {
@@ -96,11 +100,11 @@ export class AppTaggingSecret {
     if (parts.length !== 3) {
       throw new Error(`Invalid AppTaggingSecret string: ${str}`);
     }
-    const [kindStr, secretStr, appStr] = parts;
+    const [deliveryModeStr, secretStr, appStr] = parts;
     return new AppTaggingSecret(
       Fr.fromString(secretStr),
       AztecAddress.fromStringUnsafe(appStr),
-      appTaggingSecretKindFromString(kindStr),
+      onchainDeliveryModeFromString(deliveryModeStr),
     );
   }
 }
@@ -114,20 +118,20 @@ export function appTaggingSecretFromString(str: string): AppTaggingSecret {
 
 export const AppTaggingSecretSchema = z
   .object({
-    kind: AppTaggingSecretKindSchema.default(AppTaggingSecretKind.UNCONSTRAINED),
+    deliveryMode: OnchainDeliveryModeSchema,
     secret: Fr.schema,
     app: AztecAddress.schema,
   })
-  .transform(({ kind, secret, app }) => new AppTaggingSecret(secret, app, kind));
+  .transform(({ deliveryMode, secret, app }) => new AppTaggingSecret(secret, app, deliveryMode));
 
-function appTaggingSecretKindFromString(kind: string): AppTaggingSecretKind {
-  switch (kind) {
-    case AppTaggingSecretKind.CONSTRAINED:
-      return AppTaggingSecretKind.CONSTRAINED;
-    case AppTaggingSecretKind.UNCONSTRAINED:
-      return AppTaggingSecretKind.UNCONSTRAINED;
+function onchainDeliveryModeFromString(deliveryMode: string): OnchainDeliveryMode {
+  switch (deliveryMode) {
+    case OnchainDeliveryMode.CONSTRAINED:
+      return OnchainDeliveryMode.CONSTRAINED;
+    case OnchainDeliveryMode.UNCONSTRAINED:
+      return OnchainDeliveryMode.UNCONSTRAINED;
     default:
-      throw new Error(`Invalid AppTaggingSecret kind: ${kind}`);
+      throw new Error(`Invalid AppTaggingSecret delivery mode: ${deliveryMode}`);
   }
 }
 

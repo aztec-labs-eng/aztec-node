@@ -12,7 +12,7 @@ import { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { BlockHeader, CallContext, type Capsule, TxContext } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -127,7 +127,7 @@ describe('PrivateExecutionOracle', () => {
       const secret = Fr.random();
       jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
 
-      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+      await expect(oracle.resolveTaggingStrategy(sender, sender, OnchainDeliveryMode.UNCONSTRAINED)).resolves.toEqual({
         type: 'unconstrained-secret',
         secret,
       });
@@ -136,7 +136,7 @@ describe('PrivateExecutionOracle', () => {
     it('keeps a hooked interactive handshake on an unconstrained self-send', async () => {
       const { oracle } = makeHookedOracle({ strategy: { type: 'interactive-handshake' } });
 
-      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+      await expect(oracle.resolveTaggingStrategy(sender, sender, OnchainDeliveryMode.UNCONSTRAINED)).resolves.toEqual({
         type: 'interactive-handshake',
       });
     });
@@ -147,7 +147,7 @@ describe('PrivateExecutionOracle', () => {
       jest.spyOn(oracle, 'getAppTaggingSecret').mockResolvedValue(Option.some(secret));
 
       await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
+        oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED),
       ).resolves.toEqual({ type: 'unconstrained-secret', secret });
     });
 
@@ -157,14 +157,14 @@ describe('PrivateExecutionOracle', () => {
 
       const expected = await AppTaggingSecret.computeDirectional(point, contractAddress, recipient);
       await expect(
-        oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.UNCONSTRAINED),
+        oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED),
       ).resolves.toEqual({ type: 'unconstrained-secret', secret: expected.secret });
     });
 
     it('keeps a hooked non-interactive handshake on an unconstrained self-send', async () => {
       const { oracle } = makeHookedOracle({ strategy: { type: 'non-interactive-handshake' } });
 
-      await expect(oracle.resolveTaggingStrategy(sender, sender, AppTaggingSecretKind.UNCONSTRAINED)).resolves.toEqual({
+      await expect(oracle.resolveTaggingStrategy(sender, sender, OnchainDeliveryMode.UNCONSTRAINED)).resolves.toEqual({
         type: 'non-interactive-handshake',
       });
     });
@@ -176,14 +176,14 @@ describe('PrivateExecutionOracle', () => {
         contractClassId,
       });
 
-      await oracle.resolveTaggingStrategy(sender, recipient, AppTaggingSecretKind.CONSTRAINED);
+      await oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.CONSTRAINED);
 
       expect(resolveTaggingSecretStrategy).toHaveBeenCalledWith({
         contractAddress,
         contractClassId,
         sender,
         recipient,
-        deliveryMode: AppTaggingSecretKind.CONSTRAINED,
+        deliveryMode: OnchainDeliveryMode.CONSTRAINED,
       });
     });
 

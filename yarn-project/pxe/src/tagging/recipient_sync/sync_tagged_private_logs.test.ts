@@ -6,7 +6,7 @@ import { MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type AppTaggingSecret,
-  AppTaggingSecretKind,
+  OnchainDeliveryMode,
   type PrivateLogsQuery,
   type SiloedTag,
   randomLogResult,
@@ -114,7 +114,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('returns empty array when no logs found for any secret', async () => {
-    const secrets = await makeSecrets(3, AppTaggingSecretKind.UNCONSTRAINED);
+    const secrets = await makeSecrets(3, OnchainDeliveryMode.UNCONSTRAINED);
     mockNodeWithLogs([]);
 
     const logs = await sync(secrets);
@@ -126,7 +126,7 @@ describe('syncTaggedPrivateLogs', () => {
     // Pick enough secrets that the total tag count spans several MAX_RPC_LEN chunks. A per-secret
     // implementation would need one RPC per secret; batched behavior needs ceil(totalTags / MAX_RPC_LEN).
     const numSecrets = 10;
-    const secrets = await makeSecrets(numSecrets, AppTaggingSecretKind.UNCONSTRAINED);
+    const secrets = await makeSecrets(numSecrets, OnchainDeliveryMode.UNCONSTRAINED);
     mockNodeWithLogs([]);
 
     await sync(secrets);
@@ -147,7 +147,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('syncs logs and updates store independently per secret', async () => {
-    const secrets = await makeSecrets(3, AppTaggingSecretKind.UNCONSTRAINED);
+    const secrets = await makeSecrets(3, OnchainDeliveryMode.UNCONSTRAINED);
 
     const log1Index = 3;
     const log2Index = 7;
@@ -169,7 +169,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('does not advance aged index for recent logs', async () => {
-    const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     const logIndex = 5;
     mockNodeWithLogs(
@@ -187,7 +187,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('updates store correctly when multiple iterations are needed', async () => {
-    const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     // A log at the last index of the initial window [0, WINDOW_LEN) moves the finalized index to WINDOW_LEN - 1,
     // which shifts the next window forward and triggers a second iteration. A second log sits in the advanced
@@ -204,7 +204,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('respects pre-existing store indexes', async () => {
-    const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     const existingAgedIndex = 5;
     const existingFinalizedIndex = 8;
@@ -221,7 +221,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('handles multiple logs at the same tag index', async () => {
-    const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     // The tag appears twice, so the node returns two logs for it.
     const logTag = await computeSiloedTagForIndex(secret, 3);
@@ -234,7 +234,7 @@ describe('syncTaggedPrivateLogs', () => {
 
   describe('constrained secrets', () => {
     it('stops at first gap and does not track aged index', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       mockNodeWithLogs(await computeSiloedTags(secret, [0, 1, 2]));
 
       const logs = await sync([secret]);
@@ -245,7 +245,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('advances the finalized index only through the finalized prefix', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const finalizedBlockNumber = BlockNumber(5);
 
       // Indexes 0..3 are finalized; indexes 4 and 5 are hits in a block past the finalized one.
@@ -263,7 +263,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('advances the probe past an unfinalized-only first probe', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const finalizedBlockNumber = BlockNumber(5);
 
       // Indexes 0 and 1 are hits in an unfinalized block (8 > finalized 5); index 2 is the gap. The initial probe
@@ -294,7 +294,7 @@ describe('syncTaggedPrivateLogs', () => {
     // catch-up resolves in ~log2(K) round-trips instead of K + 1. With 3 new logs the windows are [1,2],
     // [3,4,5,6] - round 2 (probe length 4) contains the terminating miss at index 4.
     it('doubling catch-up grows the probe geometrically and stops at the first miss', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // Recipient already synced index 0; three new finalized logs sit at indexes 1..3.
       await taggingStore.updateHighestFinalizedIndex(secret, 0, CHANGE_SET_ID);
@@ -314,7 +314,7 @@ describe('syncTaggedPrivateLogs', () => {
     // Pins the effective per-round query cap and that deep catch-up is linear past the cap, not logarithmic: the probe
     // doubles until it saturates at WINDOW_LEN per round rather than growing without bound.
     it('caps the doubling probe at the window length so deep catch-up advances linearly', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // Recipient already synced index 0; a deep run of finalized logs sits past multiple capped probe windows.
       const newLogs = UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN * 3;
@@ -335,7 +335,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('batches tags from multiple constrained secrets into a single RPC call', async () => {
-      const secrets = await makeSecrets(3, AppTaggingSecretKind.CONSTRAINED);
+      const secrets = await makeSecrets(3, OnchainDeliveryMode.CONSTRAINED);
       mockNodeWithLogs([]);
 
       await sync(secrets);
@@ -349,7 +349,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('halts at the first all-miss batch and never probes past the gap', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // Contiguous run 0,1,2 ends at the gap (index 3); a sentinel log sits far past it at index 10. The doubling probe
       // reaches the batch [2..5] spanning the gap (index 3) and stops there, starting no further round, so index 10 is
@@ -365,7 +365,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('resets the probe to the initial length on the sync after a cap-saturating catch-up', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // A cold-start run deep enough that the first sync doubles the in-memory probe all the way to the WINDOW_LEN
       // cap. The probe length lives only on the in-memory PendingSecret, so the next sync must start fresh at the
@@ -395,7 +395,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('steady state probes only the initial probe length in a single round', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const finalizedIndex = 8;
       await taggingStore.updateHighestFinalizedIndex(secret, finalizedIndex, CHANGE_SET_ID);
       mockNodeWithLogs([]);
@@ -427,7 +427,7 @@ describe('syncTaggedPrivateLogs', () => {
       // fits in a single RPC, one sync round is exactly one RPC call and the call count is the round-trip count.
       expect(UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN).toBeLessThanOrEqual(MAX_RPC_LEN);
 
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // Recipient already synced index 0; K new contiguous finalized logs sit at indexes 1..K.
       await taggingStore.updateHighestFinalizedIndex(secret, 0, CHANGE_SET_ID);
@@ -443,8 +443,8 @@ describe('syncTaggedPrivateLogs', () => {
     // Secrets whose probe misses drop out of the sync and are not re-probed in the rounds a straggler keeps driving.
     // This is the unit-level analogue of the bench `mixed` scenario, which the bench (skipped in CI) cannot pin.
     it('drops caught-up secrets from later rounds while a straggler keeps syncing', async () => {
-      const idleSecrets = await makeSecrets(4, AppTaggingSecretKind.CONSTRAINED);
-      const straggler = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const idleSecrets = await makeSecrets(4, OnchainDeliveryMode.CONSTRAINED);
+      const straggler = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // Idle secrets are caught up at index 5, so their next probe (indexes 6, 7) misses and drops them after round 1.
       // The straggler is at index 0 with 3 new contiguous logs at indexes 1..3.
@@ -474,7 +474,7 @@ describe('syncTaggedPrivateLogs', () => {
     const totalLogs = UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN + 2;
 
     it('constrained', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       // A cold-start run two indexes past one window. Reaching the tail is only possible because the scan bound
       // re-anchors forward to each finalized index found.
@@ -498,7 +498,7 @@ describe('syncTaggedPrivateLogs', () => {
     });
 
     it('unconstrained', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       // The same run as the constrained case, but gaps are possible so there is no first-miss stop and no doubling
       // probe: every round covers a full window.
@@ -523,9 +523,9 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   describe('mixed constrained and unconstrained secrets', () => {
-    it('batches both kinds into a single RPC call with different stop conditions', async () => {
-      const constrainedSecret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
-      const unconstrainedSecret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    it('batches both delivery modes into a single RPC call with different stop conditions', async () => {
+      const constrainedSecret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const unconstrainedSecret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       mockNodeWithLogs([
         ...(await computeSiloedTags(constrainedSecret, [0, 1])),
@@ -539,7 +539,7 @@ describe('syncTaggedPrivateLogs', () => {
       expect(await taggingStore.getHighestAgedIndex(constrainedSecret, CHANGE_SET_ID)).toBeUndefined();
       expect(await taggingStore.getHighestFinalizedIndex(unconstrainedSecret, CHANGE_SET_ID)).toBe(5);
 
-      // Both kinds share one batched query rather than one query per kind.
+      // Both delivery modes share one batched query rather than one query per mode.
       const firstCallTags = calledTags();
       const constrainedProbeTag = await computeSiloedTagForIndex(constrainedSecret, 0);
       const unconstrainedProbeTag = await computeSiloedTagForIndex(unconstrainedSecret, 0);
@@ -549,7 +549,7 @@ describe('syncTaggedPrivateLogs', () => {
   });
 
   it('caps the node query to blocks at or before the anchor block', async () => {
-    const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
     const anchorBlock = BlockNumber(10);
     const header = BlockHeader.random({ blockNumber: anchorBlock, timestamp: CURRENT_TIMESTAMP });
     const logTag = await computeSiloedTagForIndex(secret, 3);
@@ -580,6 +580,6 @@ describe('syncTaggedPrivateLogs', () => {
   });
 });
 
-function makeSecrets(count: number, kind: AppTaggingSecretKind): Promise<AppTaggingSecret[]> {
-  return timesParallel(count, () => randomAppTaggingSecret(kind));
+function makeSecrets(count: number, deliveryMode: OnchainDeliveryMode): Promise<AppTaggingSecret[]> {
+  return timesParallel(count, () => randomAppTaggingSecret(deliveryMode));
 }

@@ -9,6 +9,34 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `compute_app_siloed_shared_secret` is deprecated
+
+`compute_app_siloed_shared_secret` is deprecated in favor of `compute_app_siloed_shared_secret_from_point`, and its TypeScript counterpart `appSiloEcdhSharedSecretPoint` in favor of `computeAppSiloedSharedSecretFromPoint`. The old names keep working and produce the same output.
+
+**Migration:**
+
+```diff
+-use aztec::keys::ecdh_shared_secret::compute_app_siloed_shared_secret;
++use aztec::keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point;
+```
+
+### [PXE] `AppTaggingSecretKind` is renamed to `OnchainDeliveryMode`
+
+`AppTaggingSecretKind`, the type of `deliveryMode` in a `resolveTaggingSecretStrategy` request, is renamed to `OnchainDeliveryMode`, and `appTaggingSecretKindFromDeliveryMode` to `onchainDeliveryModeFromNumber`. `AppTaggingSecret.kind` is renamed to `AppTaggingSecret.deliveryMode`, in JSON as well, which includes the `taggingIndexRanges` of a `simulateTx` result. The values are unchanged. The JSON key is required, so an app on this version cannot parse a `simulateTx` result with tagged logs from a wallet on an earlier version: upgrade both together.
+
+**Migration:**
+
+```diff
+-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
++import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
+
+ resolveTaggingSecretStrategy: async (request) =>
+-  request.deliveryMode === AppTaggingSecretKind.CONSTRAINED
++  request.deliveryMode === OnchainDeliveryMode.CONSTRAINED
+     ? { type: 'interactive-handshake' }
+     : defaultTaggingSecretStrategy(request),
+```
+
 ### [PXE] The `resolveTaggingSecretStrategy` hook also decides self-sends
 
 The PXE used to replace the hook's answer with an address-derived secret for unconstrained delivery to one of the wallet's own accounts. It now applies the hook's answer to every message, including those. `DEFAULT_TAGGING_SECRET_STRATEGY` is replaced by `defaultTaggingSecretStrategy`, which returns the strategy the PXE applies when no hook is configured.
