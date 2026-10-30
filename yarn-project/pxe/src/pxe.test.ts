@@ -32,6 +32,7 @@ import type { AztecNode, AztecNodeDebug, BlockResponse } from '@aztec-labs/stdli
 import { computeAddressSecret, deriveKeys } from '@aztec-labs/stdlib/keys';
 import { deriveEcdhSharedSecretPoint, protectFromForgery } from '@aztec-labs/stdlib/logs';
 import {
+  makeInvalidAztecAddress,
   randomContractArtifact,
   randomContractInstanceWithAddress,
   randomDeployedContract,
@@ -131,11 +132,9 @@ describe('PXE', () => {
   });
 
   it('refuses to register an invalid address as a sender', async () => {
-    // x = 3 is not a valid x-coordinate on the Grumpkin curve (y^2 = x^3 - 17 = 10 has no square root in Fr)
-    const invalidAddress = new AztecAddress(new Fr(3));
-    await expect(pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: invalidAddress })).rejects.toThrow(
-      /not valid/,
-    );
+    await expect(
+      pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: makeInvalidAztecAddress() }),
+    ).rejects.toThrow(/not valid/);
   });
 
   it('does not throw when registering the same account twice (just ignores the second attempt)', async () => {

@@ -88,6 +88,9 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
       mapping: result => result as unknown as EphemeralArray<LegacyPendingTaggedLog>,
     },
   }),
+  aztec_prv_getAppTaggingSecret: legacyOracle({
+    modernOracle: 'aztec_prv_getAppAddressDerivedTaggingSecret',
+  }),
 };
 
 type LegacyLogRetrievalResponse = Pick<

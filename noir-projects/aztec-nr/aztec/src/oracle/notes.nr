@@ -209,25 +209,36 @@ unconstrained fn get_settled_note_origin_oracle(
 
 // TODO: Oracles below are generic private log oracles and are not specific to notes. Move them somewhere else.
 
-/// Returns the sender-side app tagging secret for a `(sender, recipient)` pair.
+/// Returns the sender-side address-derived app tagging secret for `(sender, recipient)`.
 ///
 /// The secret is resolved by the simulator rather than computed by the contract.
 ///
 /// Returns `None` for an invalid recipient address.
-pub unconstrained fn get_app_tagging_secret(sender: AztecAddress, recipient: AztecAddress) -> Option<Field> {
-    get_app_tagging_secret_oracle(sender, recipient)
+pub unconstrained fn get_app_address_derived_tagging_secret(
+    sender: AztecAddress,
+    recipient: AztecAddress,
+) -> Option<Field> {
+    get_app_address_derived_tagging_secret_oracle(sender, recipient)
 }
 
-#[oracle(aztec_prv_getAppTaggingSecret)]
-unconstrained fn get_app_tagging_secret_oracle(_sender: AztecAddress, _recipient: AztecAddress) -> Option<Field> {}
+#[deprecated("use get_app_address_derived_tagging_secret")]
+pub unconstrained fn get_app_tagging_secret(sender: AztecAddress, recipient: AztecAddress) -> Option<Field> {
+    get_app_address_derived_tagging_secret(sender, recipient)
+}
+
+#[oracle(aztec_prv_getAppAddressDerivedTaggingSecret)]
+unconstrained fn get_app_address_derived_tagging_secret_oracle(
+    _sender: AztecAddress,
+    _recipient: AztecAddress,
+) -> Option<Field> {}
 
 /// Returns the next sender-side tagging index for a given secret and delivery mode.
 ///
-/// The caller already holds the tagging `secret`, whether obtained from [`get_app_tagging_secret`] or computed by the
-/// contract, and only needs the simulator to hand out a fresh per-secret, per-mode index; the caller computes the tag
-/// itself. `mode` is converted into the [`OnchainDeliveryMode`] selecting the per-mode index counter, so callers can
-/// pass either a concrete on-chain delivery builder or an explicit mode. Offchain messages are not tagged, so only the
-/// onchain delivery variants can be used by this oracle.
+/// The caller already holds the tagging `secret`, whether obtained from [`get_app_address_derived_tagging_secret`] or
+/// computed by the contract, and only needs the simulator to hand out a fresh per-secret, per-mode index; the caller
+/// computes the tag itself. `mode` is converted into the [`OnchainDeliveryMode`] selecting the per-mode index counter,
+/// so callers can pass either a concrete on-chain delivery builder or an explicit mode. Offchain messages are not
+/// tagged, so only the onchain delivery variants can be used by this oracle.
 ///
 /// The simulator persists the index increment only if the tagged log is found in an actual block; a reverting
 /// transaction can otherwise cause the sender to skip indices and later produce notes that are not found by the
