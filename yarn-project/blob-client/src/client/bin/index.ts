@@ -9,26 +9,33 @@ import { createBlobClient } from '../factory.js';
 async function main() {
   const logger = createLogger('blob-client');
   const blockHash = process.argv[2];
-  if (!blockHash) {
-    logger.error('Please provide a block hash as an argument.');
+  const timestamp = process.argv[3];
+  if (!blockHash || !timestamp || !/^\d+$/.test(timestamp)) {
+    logger.error('Please provide a block hash and its execution timestamp in seconds as arguments.');
     process.exit(1);
   }
-  const blobHashes = process.argv.slice(3).map(hexToBuffer);
+  const l1BlockTimestamp = BigInt(timestamp);
+  const blobHashes = process.argv.slice(4).map(hexToBuffer);
   logger.info(`Fetching blobs for block hash ${blockHash}`);
   if (blobHashes.length > 0) {
     logger.info(`Filtering by blob hashes ${blobHashes.map(bufferToHex).join(', ')}`);
   }
 
   const blobClient = createBlobClient(getBlobClientConfigFromEnv());
-  const blobs = await blobClient.getBlobSidecar(blockHash, blobHashes);
-  logger.info(`Got ${blobs.length} blobs`);
-  for (const blob of blobs) {
-    console.log(blob.toJSON());
+  await blobClient.start?.();
+  try {
+    const blobs = await blobClient.getBlobSidecar(blockHash, blobHashes, { l1BlockTimestamp });
+    logger.info(`Got ${blobs.length} blobs`);
+    for (const blob of blobs) {
+      console.log(blob.toJSON());
+    }
+  } finally {
+    blobClient.stop?.();
   }
 }
 
 // Example usage:
-// $ L1_CHAIN_ID=11155111 LOG_LEVEL=trace yarn blob-client 0x7d81980a40426c40544f0f729ada953be406730b877b5865d6cdc35cc8f9c84e 0x010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014
+// $ L1_CHAIN_ID=11155111 LOG_LEVEL=trace yarn blob-client <block-hash> <timestamp-seconds> [blob-hash...]
 main().catch(err => {
   console.error(err);
   process.exit(1);

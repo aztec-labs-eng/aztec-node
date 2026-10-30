@@ -19,7 +19,7 @@ export class LocalBlobClient implements BlobClientInterface {
     return true;
   }
 
-  public getBlobSidecar(_blockId: string, blobHashes: Buffer[], _opts?: GetBlobSidecarOptions): Promise<Blob[]> {
+  public getBlobSidecar(_blockId: string, blobHashes: Buffer[], _opts: GetBlobSidecarOptions): Promise<Blob[]> {
     return this.blobStore.getBlobsByHashes(blobHashes);
   }
 

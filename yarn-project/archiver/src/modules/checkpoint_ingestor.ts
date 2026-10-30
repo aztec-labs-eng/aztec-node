@@ -416,7 +416,6 @@ export class CheckpointIngestor {
           checkpoint.checkpointNumber,
           this.deps.log,
           !initialSyncComplete,
-          checkpoint.parentBeaconBlockRoot,
           checkpoint.l1.timestamp,
         ),
       }),

@@ -1,12 +1,13 @@
 import { Blob, type BlobJson, computeEthVersionedBlobHash } from '@aztec-labs/blob-lib';
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { shuffle } from '@aztec-labs/foundation/array';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
-import { type RpcBlock, createPublicClient } from 'viem';
+import { mainnet, sepolia } from 'viem/chains';
+import { z } from 'zod';
 
 import { createBlobArchiveClient } from '../archive/factory.js';
 import type { BlobArchiveClient } from '../archive/interface.js';
@@ -21,6 +22,40 @@ const CONSENSUS_HOST_REPROBE_INTERVAL_MS = 5 * 60 * 1000;
 /** Outcome of probing a consensus host. Only `failed` (unreachable or erroring) hosts are probed again. */
 type ConsensusHostProbeResult = 'supernode' | 'non-supernode' | 'failed';
 
+const BEACON_CONFIG: Readonly<Partial<Record<number, { genesisTime: bigint; secondsPerSlot: number }>>> = {
+  [mainnet.id]: { genesisTime: 1606824023n, secondsPerSlot: 12 },
+  [sepolia.id]: { genesisTime: 1655733600n, secondsPerSlot: 12 },
+};
+
+const beaconExecutionHashSchema = z
+  .object({
+    data: z.object({
+      message: z.object({
+        body: z.union([
+          z
+            .object({ ['execution_payload_header']: z.object({ ['block_hash']: z.string() }) })
+            .transform(body => body.execution_payload_header.block_hash),
+          z
+            .object({
+              ['signed_execution_payload_bid']: z.object({ message: z.object({ ['block_hash']: z.string() }) }),
+            })
+            .transform(body => body.signed_execution_payload_bid.message.block_hash),
+        ]),
+      }),
+    }),
+  })
+  .transform(response => response.data.message.body);
+
+const beaconGenesisSchema = z.object({
+  data: z.object({ ['genesis_time']: schemas.BigInt }),
+});
+
+const beaconSpecSchema = z.object({
+  data: z.object({
+    SECONDS_PER_SLOT: schemas.Integer.refine(value => value > 0),
+  }),
+});
+
 export class HttpBlobClient implements BlobClientInterface {
   protected readonly log: Logger;
   protected readonly config: BlobClientConfig;
@@ -32,9 +67,9 @@ export class HttpBlobClient implements BlobClientInterface {
   private disabled = false;
   private healthcheckUploadIntervalId?: NodeJS.Timeout;
 
-  /** Cached beacon genesis time (seconds since Unix epoch). Fetched once at startup. */
+  /** Beacon genesis time (seconds since Unix epoch), discovered at startup for custom devnets. */
   private beaconGenesisTime?: bigint;
-  /** Cached beacon slot duration in seconds. Fetched once at startup. */
+  /** Beacon slot duration in seconds, discovered at startup for custom devnets. */
   private beaconSecondsPerSlot?: number;
 
   /** Indexes of consensus hosts that serve blob sidecars (supernodes). Populated by testSources(). */
@@ -57,6 +92,11 @@ export class HttpBlobClient implements BlobClientInterface {
     } = {},
   ) {
     this.config = config ?? getBlobClientConfigFromEnv();
+    const beaconConfig = this.config.l1ChainId === undefined ? undefined : BEACON_CONFIG[this.config.l1ChainId];
+    if (beaconConfig !== undefined) {
+      this.beaconGenesisTime = beaconConfig.genesisTime;
+      this.beaconSecondsPerSlot = beaconConfig.secondsPerSlot;
+    }
     this.archiveClient = opts.archiveClient ?? createBlobArchiveClient(this.config);
     this.log = opts.logger ?? createLogger('blob-client:client');
     this.fileStoreClients = opts.fileStoreClients ?? [];
@@ -303,7 +343,7 @@ export class HttpBlobClient implements BlobClientInterface {
   public async getBlobSidecar(
     blockHash: `0x${string}`,
     blobHashes: Buffer[],
-    opts?: GetBlobSidecarOptions,
+    opts: GetBlobSidecarOptions,
   ): Promise<Blob[]> {
     if (this.disabled) {
       this.log.warn('Blob storage is disabled, returning empty blob sidecar');
@@ -345,19 +385,17 @@ export class HttpBlobClient implements BlobClientInterface {
 
     const ctx = { blockHash, blobHashes: blobHashes.map(bufferToHex) };
 
-    // Lazily resolve the slot number — only resolved when consensus hosts are actually tried.
-    let slotNumber: number | undefined;
-    let slotResolved = false;
-    const getSlotNumber = async (): Promise<number | undefined> => {
-      if (!slotResolved) {
-        slotNumber = await this.resolveSlotNumber(blockHash, opts);
-        slotResolved = true;
-      }
-      return slotNumber;
-    };
+    const verifiedHosts = new Set<number>();
 
     // Build the two source-try functions. The order depends on the config.
-    const tryConsensus = () => this.tryConsensusHosts(getSlotNumber, getMissingBlobHashes, fillResults, ctx);
+    const tryConsensus = () =>
+      this.tryConsensusHosts(
+        this.resolveSlotNumber(blockHash, opts.l1BlockTimestamp),
+        verifiedHosts,
+        getMissingBlobHashes,
+        fillResults,
+        ctx,
+      );
     const tryFilestores = () => this.tryFileStores(getMissingBlobHashes, fillResults, ctx);
 
     const preferFilestores = this.config.blobPreferFilestores ?? false;
@@ -365,7 +403,7 @@ export class HttpBlobClient implements BlobClientInterface {
 
     // Historical sync: blobs should already exist, use shorter backoff for transient errors.
     // Near-tip sync: blobs may still be uploading, use longer backoff for eventual consistency.
-    const isHistoricalSync = opts?.isHistoricalSync ?? false;
+    const isHistoricalSync = opts.isHistoricalSync ?? false;
     const backoff = isHistoricalSync ? [1, 1] : [1, 1, 1, 2, 2];
 
     // Retry loop: alternate between the two primary sources with backoff.
@@ -428,10 +466,7 @@ export class HttpBlobClient implements BlobClientInterface {
   }
 
   /** Resolves the beacon slot number for the given block hash. Returns undefined if no consensus hosts. */
-  private resolveSlotNumber(
-    blockHash: `0x${string}`,
-    opts?: GetBlobSidecarOptions,
-  ): Promise<number | undefined> | undefined {
+  private resolveSlotNumber(blockHash: `0x${string}`, l1BlockTimestamp: bigint): number | undefined {
     const { l1ConsensusHostUrls } = this.config;
     if (!l1ConsensusHostUrls || l1ConsensusHostUrls.length === 0) {
       return undefined;
@@ -440,7 +475,7 @@ export class HttpBlobClient implements BlobClientInterface {
     if (this.superNodeHostIndexes && this.superNodeHostIndexes.size === 0) {
       return undefined;
     }
-    return this.getSlotNumber(blockHash, opts?.parentBeaconBlockRoot, opts?.l1BlockTimestamp);
+    return this.getSlotNumber(blockHash, l1BlockTimestamp);
   }
 
   /**
@@ -448,7 +483,8 @@ export class HttpBlobClient implements BlobClientInterface {
    * Skips hosts that were detected as non-supernodes during testSources().
    */
   private async tryConsensusHosts(
-    getSlotNumber: () => Promise<number | undefined>,
+    slotNumber: number | undefined,
+    verifiedHosts: Set<number>,
     getMissingBlobHashes: () => Buffer[],
     fillResults: (blobs: BlobJson[]) => Promise<Blob[]>,
     ctx: { blockHash: string; blobHashes: string[] },
@@ -458,8 +494,7 @@ export class HttpBlobClient implements BlobClientInterface {
       return;
     }
 
-    const slotNumber = await getSlotNumber();
-    if (!slotNumber) {
+    if (slotNumber === undefined) {
       return;
     }
 
@@ -483,6 +518,43 @@ export class HttpBlobClient implements BlobClientInterface {
         l1ConsensusHostUrl,
         ...ctx,
       });
+      if (!verifiedHosts.has(l1ConsensusHostIndex)) {
+        try {
+          const { url, ...options } = getBeaconNodeFetchOptions(
+            `${l1ConsensusHostUrl}/eth/v1/beacon/blinded_blocks/${slotNumber}`,
+            this.config,
+            l1ConsensusHostIndex,
+          );
+          const response = await this.fetch(url, options);
+          if (!response.ok) {
+            this.log.warn('Could not verify beacon block for blob retrieval', {
+              blockHash: ctx.blockHash,
+              slot: slotNumber,
+              hostIndex: l1ConsensusHostIndex,
+              status: response.status,
+            });
+            continue;
+          }
+          const executionHash = beaconExecutionHashSchema.parse(await response.json());
+          if (executionHash.toLowerCase() !== ctx.blockHash.toLowerCase()) {
+            this.log.warn('Beacon block does not contain the requested execution block', {
+              blockHash: ctx.blockHash,
+              slot: slotNumber,
+              hostIndex: l1ConsensusHostIndex,
+            });
+            continue;
+          }
+        } catch (err) {
+          this.log.warn('Failed to verify beacon block for blob retrieval', {
+            blockHash: ctx.blockHash,
+            slot: slotNumber,
+            hostIndex: l1ConsensusHostIndex,
+            err,
+          });
+          continue;
+        }
+        verifiedHosts.add(l1ConsensusHostIndex);
+      }
       const blobs = await this.getBlobsFromHost(l1ConsensusHostUrl, slotNumber, l1ConsensusHostIndex, missingHashes);
       const result = await fillResults(blobs);
       this.log.debug(
@@ -553,30 +625,9 @@ export class HttpBlobClient implements BlobClientInterface {
     blobHashes?: Buffer[],
   ): Promise<BlobJson[]> {
     try {
-      let res = await this.fetchBlobSidecars(hostUrl, blockHashOrSlot, l1ConsensusHostIndex, blobHashes);
+      const res = await this.fetchBlobSidecars(hostUrl, blockHashOrSlot, l1ConsensusHostIndex, blobHashes);
       if (res.ok) {
         return await parseBlobJsonsFromResponse(await res.json(), this.log);
-      }
-
-      if (res.status === 404 && typeof blockHashOrSlot === 'number') {
-        const latestSlot = await this.getLatestSlotNumber(hostUrl, l1ConsensusHostIndex);
-        this.log.debug(`Requested L1 slot ${blockHashOrSlot} not found, trying out slots up to ${latestSlot}`, {
-          hostUrl,
-          status: res.status,
-          statusText: res.statusText,
-        });
-
-        let maxRetries = 10;
-        let currentSlot = blockHashOrSlot + 1;
-        while (res.status === 404 && maxRetries > 0 && latestSlot !== undefined && currentSlot <= latestSlot) {
-          this.log.debug(`Trying slot ${currentSlot}`);
-          res = await this.fetchBlobSidecars(hostUrl, currentSlot, l1ConsensusHostIndex, blobHashes);
-          if (res.ok) {
-            return await parseBlobJsonsFromResponse(await res.json(), this.log);
-          }
-          currentSlot++;
-          maxRetries--;
-        }
       }
 
       this.log.warn(`Unable to get blob sidecar for ${blockHashOrSlot}: ${res.statusText} (${res.status})`, {
@@ -613,145 +664,30 @@ export class HttpBlobClient implements BlobClientInterface {
     return fetch(url, options);
   }
 
-  private async getLatestSlotNumber(hostUrl: string, l1ConsensusHostIndex?: number): Promise<number | undefined> {
-    try {
-      const baseUrl = `${hostUrl}/eth/v1/beacon/headers/head`;
-      const { url, logSafeUrl, ...options } = getBeaconNodeFetchOptions(baseUrl, this.config, l1ConsensusHostIndex);
-      this.log.debug(`Fetching latest slot number`, { url: logSafeUrl, ...options });
-      const res = await this.fetch(url, options);
-      if (res.ok) {
-        const body = await res.json();
-        const slot = parseInt(body.data.header.message.slot);
-        if (Number.isNaN(slot)) {
-          this.log.error(`Failed to parse slot number from response from ${hostUrl}`, { body });
-          return undefined;
-        }
-        return slot;
-      }
-    } catch (err) {
-      this.log.error(`Error getting latest slot number from ${hostUrl}`, err);
-      return undefined;
-    }
-  }
-
-  /**
-   * Get the slot number from the consensus host
-   * As of eip-4788, the parentBeaconBlockRoot is included in the execution layer.
-   * This allows us to query the consensus layer for the slot number of the parent block, which we will then use
-   * to request blobs from the consensus layer.
-   *
-   * If this returns undefined, it means that we are not connected to a real consensus host, and we should
-   * query blobs with the blockHash.
-   *
-   * If this returns a number, then we should query blobs with the slot number
-   *
-   * @param blockHash - The block hash
-   * @returns The slot number
-   */
-  private async getSlotNumber(
-    blockHash: `0x${string}`,
-    parentBeaconBlockRoot?: string,
-    l1BlockTimestamp?: bigint,
-  ): Promise<number | undefined> {
-    const { l1ConsensusHostUrls, l1RpcUrls } = this.config;
-    if (!l1ConsensusHostUrls || l1ConsensusHostUrls.length === 0) {
-      this.log.debug('No consensus host url configured');
-      return undefined;
+  /** Resolves the target execution block's beacon slot from its timestamp. */
+  private getSlotNumber(blockHash: `0x${string}`, l1BlockTimestamp: bigint): number | undefined {
+    if (this.beaconGenesisTime === undefined || this.beaconSecondsPerSlot === undefined) {
+      throw new Error('Beacon configuration not initialized; call start() before retrieving blobs');
     }
 
-    // Primary path: compute slot from timestamp if genesis config is cached (no network call needed)
-    if (
-      l1BlockTimestamp !== undefined &&
-      this.beaconGenesisTime !== undefined &&
-      this.beaconSecondsPerSlot !== undefined
-    ) {
-      const slot = Number((l1BlockTimestamp - this.beaconGenesisTime) / BigInt(this.beaconSecondsPerSlot));
-      this.log.debug(`Computed slot ${slot} from L1 block timestamp`, { l1BlockTimestamp });
-      return slot;
-    }
-
-    if (!parentBeaconBlockRoot) {
-      // parentBeaconBlockRoot not provided by caller — fetch it from the execution RPC
-      if (!l1RpcUrls || l1RpcUrls.length === 0) {
-        this.log.debug('No execution host url configured');
-        return undefined;
-      }
-
-      const client = createPublicClient({
-        transport: makeL1HttpTransport(l1RpcUrls, { timeout: this.config.l1HttpTimeoutMS }),
-      });
-      try {
-        const res: RpcBlock = await client.request({
-          method: 'eth_getBlockByHash',
-          params: [blockHash, /*tx flag*/ false],
-        });
-
-        if (res.parentBeaconBlockRoot) {
-          parentBeaconBlockRoot = res.parentBeaconBlockRoot;
-        }
-      } catch (err) {
-        this.log.debug('Error getting parent beacon block root', {
-          eventName: 'beacon_parent_root_failed',
-          blockHash,
-          err,
-        });
-      }
-    }
-
-    if (!parentBeaconBlockRoot) {
-      this.log.warn('No parent beacon block root found for slot resolution', {
-        eventName: 'beacon_slot_resolution',
-        method: 'headers',
-        success: false,
+    const elapsed = l1BlockTimestamp - this.beaconGenesisTime;
+    const secondsPerSlot = BigInt(this.beaconSecondsPerSlot);
+    if (elapsed < 0n || elapsed % secondsPerSlot !== 0n || elapsed / secondsPerSlot > BigInt(Number.MAX_SAFE_INTEGER)) {
+      this.log.warn('Execution block timestamp does not resolve to a valid beacon slot', {
         blockHash,
-        reason: 'missing_parent_root',
+        l1BlockTimestamp,
       });
       return undefined;
     }
-
-    // Query beacon chain to get the slot number for that block root
-    let l1ConsensusHostUrl: string;
-    for (let l1ConsensusHostIndex = 0; l1ConsensusHostIndex < l1ConsensusHostUrls.length; l1ConsensusHostIndex++) {
-      l1ConsensusHostUrl = l1ConsensusHostUrls[l1ConsensusHostIndex];
-      try {
-        const { url, ...options } = getBeaconNodeFetchOptions(
-          `${l1ConsensusHostUrl}/eth/v1/beacon/headers/${parentBeaconBlockRoot}`,
-          this.config,
-          l1ConsensusHostIndex,
-        );
-        const res = await this.fetch(url, options);
-
-        if (res.ok) {
-          const body = await res.json();
-
-          // Add one to get the slot number of the original block hash
-          const slot = Number(body.data.header.message.slot) + 1;
-          this.log.debug('Resolved beacon slot using headers fallback', {
-            eventName: 'beacon_slot_resolution',
-            method: 'headers',
-            success: true,
-            blockHash,
-            slot,
-          });
-          return slot;
-        }
-      } catch (err) {
-        this.log.debug('Error getting slot number from consensus host', {
-          eventName: 'beacon_slot_host_failed',
-          hostIndex: l1ConsensusHostIndex,
-          err,
-        });
-      }
-    }
-
-    this.log.warn('Could not resolve beacon slot from any consensus host', {
+    const slot = Number(elapsed / secondsPerSlot);
+    this.log.debug('Resolved beacon slot from execution block timestamp', {
       eventName: 'beacon_slot_resolution',
-      method: 'headers',
-      success: false,
+      method: 'timestamp',
+      success: true,
       blockHash,
-      reason: 'hosts_failed',
+      slot,
     });
-    return undefined;
+    return slot;
   }
 
   /** @internal - exposed for testing */
@@ -766,11 +702,13 @@ export class HttpBlobClient implements BlobClientInterface {
 
   /**
    * Start the blob client.
-   * Fetches and caches beacon genesis config for timestamp-based slot resolution,
+   * Discovers beacon configuration for custom devnets,
    * then uploads the initial healthcheck file (awaited) and starts periodic uploads.
    */
   public async start(): Promise<void> {
-    await this.fetchBeaconConfig();
+    if (this.beaconGenesisTime === undefined) {
+      await this.fetchBeaconConfig();
+    }
 
     if (!this.fileStoreUploadClient) {
       return;
@@ -799,7 +737,6 @@ export class HttpBlobClient implements BlobClientInterface {
   /**
    * Fetches and caches beacon genesis time and slot duration from the first available consensus host.
    * These static values enable timestamp-based slot resolution, eliminating the per-fetch headers call.
-   * Leaves fields undefined if all hosts fail; slot resolution reports the headers fallback outcome.
    */
   private async fetchBeaconConfig(): Promise<void> {
     const { l1ConsensusHostUrls } = this.config;
@@ -826,10 +763,10 @@ export class HttpBlobClient implements BlobClientInterface {
         ]);
 
         if (genesisRes.ok && specRes.ok) {
-          const genesis = await genesisRes.json();
-          const spec = await specRes.json();
-          this.beaconGenesisTime = BigInt(genesis.data.genesis_time);
-          this.beaconSecondsPerSlot = parseInt(spec.data.SECONDS_PER_SLOT);
+          const genesis = beaconGenesisSchema.parse(await genesisRes.json());
+          const spec = beaconSpecSchema.parse(await specRes.json());
+          this.beaconGenesisTime = genesis.data.genesis_time;
+          this.beaconSecondsPerSlot = spec.data.SECONDS_PER_SLOT;
           this.log.debug(`Fetched beacon genesis config`, {
             eventName: 'beacon_config_loaded',
             genesisTime: this.beaconGenesisTime,
@@ -845,10 +782,7 @@ export class HttpBlobClient implements BlobClientInterface {
         });
       }
     }
-    this.log.debug('Beacon genesis config unavailable; headers fallback will be used', {
-      eventName: 'beacon_config_unavailable',
-      fallback: 'headers',
-    });
+    throw new Error('Failed to load beacon configuration from all consensus hosts');
   }
 
   /**

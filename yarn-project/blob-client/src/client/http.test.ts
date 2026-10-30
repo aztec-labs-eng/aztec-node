@@ -1,6 +1,5 @@
 import { Blob, type BlobJson } from '@aztec-labs/blob-lib';
 import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
-import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -12,6 +11,8 @@ import type { AddressInfo } from 'net';
 import type { FileStoreBlobClient } from '../filestore/filestore_blob_client.js';
 import { HttpBlobClient } from './http.js';
 
+const blobOptions = { l1BlockTimestamp: 1655733624n, isHistoricalSync: true };
+
 describe('HttpBlobClient', () => {
   it('should handle no sources configured', async () => {
     const client = new HttpBlobClient({});
@@ -21,16 +22,13 @@ describe('HttpBlobClient', () => {
     const success = await client.sendBlobsToFilestore([blob]);
     expect(success).toBe(false);
 
-    const retrievedBlobs = await client.getBlobSidecar('0x1234', [blobHash]);
+    const retrievedBlobs = await client.getBlobSidecar('0x1234', [blobHash], blobOptions);
     expect(retrievedBlobs).toEqual([]);
   });
 
   describe('Mock Ethereum Clients', () => {
     let testBlobs: Blob[];
     let testBlobsHashes: Buffer[];
-
-    let executionHostServer: http.Server | undefined = undefined;
-    let executionHostPort: number | undefined = undefined;
 
     let consensusHostServer: http.Server | undefined = undefined;
     let consensusHostPort: number | undefined = undefined;
@@ -39,37 +37,33 @@ describe('HttpBlobClient', () => {
 
     let latestSlotNumber: number;
     let missedSlots: number[];
+    let emptySlots: number[];
     let genesisAvailable: boolean;
     let consensusHostDown: boolean;
     /** Head of the host served under the /lagging path prefix, which has no blobs past it. */
     let laggingHostSlotNumber: number;
+    let beaconExecutionHash: string;
+    let beaconSlot: number;
+    let gloas: boolean;
+    let secondsPerSlot: string;
 
     beforeEach(async () => {
       latestSlotNumber = 1;
       genesisAvailable = true;
+      beaconExecutionHash = '0x1234';
+      beaconSlot = 2;
+      gloas = false;
+      secondsPerSlot = '12';
       missedSlots = [];
       consensusHostDown = false;
       laggingHostSlotNumber = 0;
+      emptySlots = [];
 
       testBlobs = await Promise.all(Array.from({ length: 2 }, () => makeRandomBlob(3)));
       testBlobsHashes = testBlobs.map(b => b.getEthVersionedBlobHash());
 
       blobData = testBlobs.map(b => b.toJSON());
     });
-
-    const startExecutionHostServer = (): Promise<void> => {
-      executionHostServer = http.createServer((_req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result: { parentBeaconBlockRoot: '0x1234' } }));
-      });
-
-      return new Promise((resolve, _reject) => {
-        executionHostServer?.listen(0, () => {
-          executionHostPort = (executionHostServer?.address() as AddressInfo).port;
-          resolve();
-        });
-      });
-    };
 
     const startConsensusHostServer = (requireApiKey?: string, requireApiKeyHeader?: string): Promise<void> => {
       consensusHostServer = http.createServer((req, res) => {
@@ -99,6 +93,7 @@ describe('HttpBlobClient', () => {
         }
 
         const isLagging = req.url?.startsWith('/lagging/');
+        const requestPath = req.url?.split('?')[0].replace(/^\/lagging/, '');
         const requestedSlot = Number(req.url?.match(/\/eth\/v1\/beacon\/blobs\/(\d+)/)?.[1]);
 
         if (genesisAvailable && req.url?.includes('/eth/v1/beacon/genesis')) {
@@ -106,13 +101,32 @@ describe('HttpBlobClient', () => {
           res.end('{"data":{"genesis_time":"1000"}}');
         } else if (req.url?.includes('/eth/v1/config/spec')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
+          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: secondsPerSlot } }));
         } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           const slot = isLagging ? laggingHostSlotNumber : latestSlotNumber;
           res.end(JSON.stringify({ data: { header: { message: { slot } } } }));
+        } else if (
+          requestPath === `/eth/v1/beacon/blinded_blocks/${beaconSlot}` &&
+          (!isLagging || beaconSlot <= laggingHostSlotNumber)
+        ) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              data: {
+                message: {
+                  body: gloas
+                    ? { ['signed_execution_payload_bid']: { message: { ['block_hash']: beaconExecutionHash } } }
+                    : { ['execution_payload_header']: { ['block_hash']: beaconExecutionHash } },
+                },
+              },
+            }),
+          );
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
-          if (
+          if (emptySlots.some(slot => requestPath === `/eth/v1/beacon/blobs/${slot}`)) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ data: [] }));
+          } else if (
             missedSlots.some(slot => req.url?.includes(`/${slot}`)) ||
             (isLagging && requestedSlot > laggingHostSlotNumber)
           ) {
@@ -137,36 +151,42 @@ describe('HttpBlobClient', () => {
     };
 
     afterEach(() => {
-      executionHostServer?.close();
       consensusHostServer?.close();
 
-      executionHostPort = undefined;
       consensusHostPort = undefined;
     });
 
     // When the consensus host is responding, we should request blobs from the consensus host
     // based on the slot number
-    it('should request based on slot where consensus host is provided', async () => {
-      await startExecutionHostServer();
+    it.each([
+      { l1ChainId: 1, l1BlockTimestamp: 1606824047n },
+      { l1ChainId: 11155111, l1BlockTimestamp: 1655733624n },
+    ])(
+      'retrieves blobs on chain $l1ChainId without beacon configuration discovery',
+      async ({ l1ChainId, l1BlockTimestamp }) => {
+        await startConsensusHostServer();
+
+        const client = new HttpBlobClient({
+          l1ChainId,
+          l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+        });
+
+        genesisAvailable = false;
+        const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, {
+          l1BlockTimestamp,
+          isHistoricalSync: true,
+        });
+        expect(retrievedBlobs).toHaveLength(2);
+        expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
+        expect(retrievedBlobs[1].commitment).toEqual(testBlobs[1].commitment);
+      },
+    );
+
+    it('retrieves devnet blobs using beacon configuration discovered at startup', async () => {
       await startConsensusHostServer();
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
-        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
-      });
-
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
-      expect(retrievedBlobs).toHaveLength(2);
-      expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
-      expect(retrievedBlobs[1].commitment).toEqual(testBlobs[1].commitment);
-    });
-
-    it('should compute slot from l1BlockTimestamp without headers call when genesis config is cached', async () => {
-      await startExecutionHostServer();
-      await startConsensusHostServer();
-
-      const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 1337,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
 
@@ -187,48 +207,101 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs[1].commitment).toEqual(testBlobs[1].commitment);
     });
 
-    it('should fall back to headers call when l1BlockTimestamp is not provided', async () => {
-      await startExecutionHostServer();
+    it('retrieves blobs from Gloas beacon blocks after skipped slots', async () => {
+      gloas = true;
+      beaconSlot = 3;
+      emptySlots = [2];
       await startConsensusHostServer();
-
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 1337,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
-
-      // Call start() to cache genesis config, but do NOT pass l1BlockTimestamp
       await client.start();
-
-      const fetchSpy = jest.spyOn(client as any, 'fetch');
-
-      // No l1BlockTimestamp — should fall back to headers call
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
-
-      expect(retrievedBlobs).toHaveLength(2);
-      // Headers call for slot resolution SHOULD have been made (via parentBeaconBlockRoot from execution RPC)
-      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/eth/v1/beacon/headers/'), expect.anything());
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, {
+        l1BlockTimestamp: 1036n,
+        isHistoricalSync: true,
+      });
+      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
     });
 
-    it('retrieves blobs through headers when genesis configuration is unavailable', async () => {
+    it('fails startup when devnet beacon configuration is unavailable', async () => {
       await startConsensusHostServer();
       genesisAvailable = false;
-      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
-      await client.start();
-      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { parentBeaconBlockRoot: '0x1234' });
-      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
-      client.stop();
+      const client = new HttpBlobClient({
+        l1ChainId: 1337,
+        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+      });
+      await expect(client.start()).rejects.toThrow('Failed to load beacon configuration');
+    });
+
+    it('rejects blobs from a beacon block with a different execution hash', async () => {
+      await startConsensusHostServer();
+      beaconExecutionHash = '0x5678';
+      const client = new HttpBlobClient({
+        l1ChainId: 11155111,
+        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+      });
+      expect(await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions)).toEqual([]);
+    });
+
+    it.each(['0', '-12', '12seconds', '1.5'])('rejects invalid beacon slot duration %s', async duration => {
+      await startConsensusHostServer();
+      secondsPerSlot = duration;
+      const client = new HttpBlobClient({
+        l1ChainId: 1337,
+        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+      });
+      await expect(client.start()).rejects.toThrow('Failed to load beacon configuration');
+    });
+
+    it.each([1655733599n, 1655733625n])(
+      'rejects execution timestamp %s that cannot identify a slot',
+      async timestamp => {
+        await startConsensusHostServer();
+        const client = new HttpBlobClient({
+          l1ChainId: 11155111,
+          l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+        });
+        expect(
+          await client.getBlobSidecar('0x1234', testBlobsHashes, {
+            l1BlockTimestamp: timestamp,
+            isHistoricalSync: true,
+          }),
+        ).toEqual([]);
+      },
+    );
+
+    it('retrieves blobs after skipped slots when startup beacon configuration recovers', async () => {
+      await startConsensusHostServer();
+      genesisAvailable = false;
+      emptySlots = [2];
+      beaconSlot = 3;
+      const client = new HttpBlobClient({
+        l1ChainId: 1337,
+        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
+      });
+      try {
+        await expect(client.start()).rejects.toThrow('Failed to load beacon configuration');
+        genesisAvailable = true;
+        await client.start();
+        const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, {
+          l1BlockTimestamp: 1036n,
+        });
+        expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      } finally {
+        client.stop();
+      }
     });
 
     it('should handle when multiple consensus hosts are provided', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer();
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: ['invalidURL', `http://localhost:${consensusHostPort}`, 'invalidURL'],
       });
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
     });
@@ -237,6 +310,7 @@ describe('HttpBlobClient', () => {
       await startConsensusHostServer();
       laggingHostSlotNumber = 80;
       latestSlotNumber = 105;
+      beaconSlot = 100;
 
       const client = new HttpBlobClient({
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}/lagging`, `http://localhost:${consensusHostPort}`],
@@ -254,14 +328,13 @@ describe('HttpBlobClient', () => {
     });
 
     it('uses a consensus host that was down during testSources once it comes back up', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer();
       consensusHostDown = true;
 
       const reprobeIntervalMs = 50;
       const client = new HttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ChainId: 11155111,
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
           blobAllowEmptySources: true,
         },
@@ -277,7 +350,7 @@ describe('HttpBlobClient', () => {
         // isHistoricalSync keeps each unsuccessful poll short.
         const blobs = await retryUntil(
           async () => {
-            const fetched = await client.getBlobSidecar('0x1234', testBlobsHashes, { isHistoricalSync: true });
+            const fetched = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
             return fetched.length === testBlobsHashes.length ? fetched : undefined;
           },
           'blobs from recovered consensus host',
@@ -291,77 +364,85 @@ describe('HttpBlobClient', () => {
     });
 
     it('should handle API keys without headers', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer('test-api-key');
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: ['test-api-key'].map(k => new SecretValue(k)),
       });
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
 
       const clientWithNoKey = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: [].map(k => new SecretValue(k)),
       });
 
-      const retrievedBlobsWithNoKey = await clientWithNoKey.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobsWithNoKey = await clientWithNoKey.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobsWithNoKey).toEqual([]);
 
       const clientWithInvalidKey = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: ['invalid-key'].map(k => new SecretValue(k)),
       });
 
-      const retrievedBlobsWithInvalidKey = await clientWithInvalidKey.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobsWithInvalidKey = await clientWithInvalidKey.getBlobSidecar(
+        '0x1234',
+        testBlobsHashes,
+        blobOptions,
+      );
       expect(retrievedBlobsWithInvalidKey).toEqual([]);
     });
 
     it('should handle API keys in headers', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer('header-api-key', 'X-API-KEY');
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: ['header-api-key'].map(k => new SecretValue(k)),
         l1ConsensusHostApiKeyHeaders: ['X-API-KEY'],
       });
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
 
       const clientWithWrongHeader = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: ['header-api-key'].map(k => new SecretValue(k)),
         l1ConsensusHostApiKeyHeaders: ['WRONG-HEADER'],
       });
 
-      const retrievedBlobsWithWrongHeader = await clientWithWrongHeader.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobsWithWrongHeader = await clientWithWrongHeader.getBlobSidecar(
+        '0x1234',
+        testBlobsHashes,
+        blobOptions,
+      );
       expect(retrievedBlobsWithWrongHeader).toEqual([]);
 
       const clientWithWrongKey = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeys: ['invalid-key'].map(k => new SecretValue(k)),
         l1ConsensusHostApiKeyHeaders: ['X-API-KEY'],
       });
 
-      const retrievedBlobsWithWrongKey = await clientWithWrongKey.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobsWithWrongKey = await clientWithWrongKey.getBlobSidecar(
+        '0x1234',
+        testBlobsHashes,
+        blobOptions,
+      );
       expect(retrievedBlobsWithWrongKey).toEqual([]);
     });
 
     it('should handle multiple consensus hosts with different API key methods', async () => {
-      await startExecutionHostServer();
-
       // Create three separate servers for each API key scenario
       await startConsensusHostServer();
       const consensusPort1 = consensusHostPort;
@@ -374,7 +455,7 @@ describe('HttpBlobClient', () => {
 
       // Verify that the first consensus host works
       let client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [
           `http://localhost:${consensusPort1}`,
           `http://localhost:${consensusPort2}`,
@@ -384,14 +465,14 @@ describe('HttpBlobClient', () => {
         l1ConsensusHostApiKeyHeaders: ['', '', 'X-API-KEY'],
       });
 
-      let retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      let retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
 
       // Verify that the second consensus host works when the first host fails
       consensusServer1?.close();
       client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [
           `http://localhost:${consensusPort1}`,
           `http://localhost:${consensusPort2}`,
@@ -401,14 +482,14 @@ describe('HttpBlobClient', () => {
         l1ConsensusHostApiKeyHeaders: ['', '', 'X-API-KEY'],
       });
 
-      retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
 
       // Verify that the third consensus host works when the first and second hosts fail
       consensusServer2?.close();
       client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [
           `http://localhost:${consensusPort1}`,
           `http://localhost:${consensusPort2}`,
@@ -418,17 +499,16 @@ describe('HttpBlobClient', () => {
         l1ConsensusHostApiKeyHeaders: ['', '', 'X-API-KEY'],
       });
 
-      retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
     });
 
     it('accumulates successfully retrieved blobs even if some fail', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer();
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
 
@@ -439,11 +519,11 @@ describe('HttpBlobClient', () => {
       // Update blobData to include the incorrect blob
       blobData.push(incorrectBlob.toJSON());
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', [
-        testBlobsHashes[0],
-        incorrectBlobHash,
-        testBlobsHashes[1],
-      ]);
+      const retrievedBlobs = await client.getBlobSidecar(
+        '0x1234',
+        [testBlobsHashes[0], incorrectBlobHash, testBlobsHashes[1]],
+        blobOptions,
+      );
 
       // Should return the successfully retrieved blob, discarding the one that has mismatch data and commitment.
       expect(retrievedBlobs.length).toEqual(2);
@@ -461,13 +541,13 @@ describe('HttpBlobClient', () => {
       mockFileStore.addBlob(blobs[0]);
 
       // Blob 1 only in consensus host
-      await startExecutionHostServer();
+
       await startConsensusHostServer();
       blobData.push(blobs[1].toJSON());
 
       const client = new TestHttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ChainId: 11155111,
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
           archiveApiUrl: `https://api.blobscan.com`,
         },
@@ -479,7 +559,7 @@ describe('HttpBlobClient', () => {
       const archiveSpy = jest.spyOn(client.getArchiveClient(), 'getBlobsFromBlock').mockResolvedValue([blob3Json]);
 
       // Request all three blobs
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', blobHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', blobHashes, blobOptions);
 
       // Should accumulate all three blobs from different sources
       expect(retrievedBlobs).toHaveLength(3);
@@ -490,16 +570,19 @@ describe('HttpBlobClient', () => {
     });
 
     it('should return duplicate blobs when same hash is requested multiple times', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer();
 
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
 
       // Request the same blob hash twice
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', [testBlobsHashes[0], testBlobsHashes[0]]);
+      const retrievedBlobs = await client.getBlobSidecar(
+        '0x1234',
+        [testBlobsHashes[0], testBlobsHashes[0]],
+        blobOptions,
+      );
 
       // Should return two blobs with the same content
       expect(retrievedBlobs).toHaveLength(2);
@@ -519,12 +602,11 @@ describe('HttpBlobClient', () => {
       const client = new HttpBlobClient({}, { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] });
 
       // Request blobs in a specific order: blob3, blob1, blob2, blob1 (with duplicate)
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', [
-        blobHashes[2],
-        blobHashes[0],
-        blobHashes[1],
-        blobHashes[0],
-      ]);
+      const retrievedBlobs = await client.getBlobSidecar(
+        '0x1234',
+        [blobHashes[2], blobHashes[0], blobHashes[1], blobHashes[0]],
+        blobOptions,
+      );
 
       // Should return blobs in the exact order requested
       expect(retrievedBlobs).toHaveLength(4);
@@ -534,88 +616,27 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs[3].commitment).toEqual(blobs[0].commitment);
     });
 
-    it('should handle L1 missed slots', async () => {
-      latestSlotNumber = 50;
+    it('does not return blobs from a later slot when the requested slot is missing', async () => {
       missedSlots = [33];
-
-      await startExecutionHostServer();
-      await startConsensusHostServer();
-
+      await startConsensusHostServer('my-api-key', 'X-API-KEY');
       const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         l1ConsensusHostApiKeyHeaders: ['X-API-KEY'],
         l1ConsensusHostApiKeys: [new SecretValue('my-api-key')],
       });
-
-      const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
-
-      const retrievedBlobs = await client.getBlobSidecarFrom(
-        `http://localhost:${consensusHostPort}`,
-        33,
-        testBlobsHashes,
-        0,
+      expect(await client.getBlobSidecarFrom(`http://localhost:${consensusHostPort}`, 34, testBlobsHashes, 0)).toEqual(
+        testBlobs,
       );
-
-      expect(retrievedBlobs).toHaveLength(2);
-      expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
-
-      // Verify we hit the 404 for slot 33 before trying slot 34, and that we use the api key
-      // (see issue https://github.com/AztecProtocol/aztec-packages/issues/13415)
-      expect(fetchBlobSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`localhost:${consensusHostPort}`),
-        33,
-        0,
-        expect.anything(),
+      expect(await client.getBlobSidecarFrom(`http://localhost:${consensusHostPort}`, 33, testBlobsHashes, 0)).toEqual(
+        [],
       );
-      expect(fetchBlobSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`localhost:${consensusHostPort}`),
-        34,
-        0,
-        expect.anything(),
-      );
-    });
-
-    it('should handle L1 missed slots up to the latest slot', async () => {
-      latestSlotNumber = 38;
-      missedSlots = times(100, i => i);
-
-      await startExecutionHostServer();
-      await startConsensusHostServer();
-
-      const client = new HttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
-        l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
-      });
-
-      const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
-
-      const retrievedBlobs = await client.getBlobSidecarFrom(
-        `http://localhost:${consensusHostPort}`,
-        33,
-        testBlobsHashes,
-        0,
-      );
-
-      expect(retrievedBlobs).toEqual([]);
-
-      // Initial attempt + one call per slot up to latestSlotNumber
-      expect(fetchBlobSpy).toHaveBeenCalledTimes(latestSlotNumber - 33 + 1);
-      for (let i = 33; i <= latestSlotNumber; i++) {
-        expect(fetchBlobSpy).toHaveBeenCalledWith(
-          expect.stringContaining(`localhost:${consensusHostPort}`),
-          i,
-          0,
-          expect.anything(),
-        );
-      }
     });
 
     it('should fall back to archive client', async () => {
       const client = new TestHttpBlobClient({ archiveApiUrl: `https://api.blobscan.com` });
       const archiveSpy = jest.spyOn(client.getArchiveClient(), 'getBlobsFromBlock').mockResolvedValue(blobData);
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
       expect(archiveSpy).toHaveBeenCalledWith('0x1234');
@@ -632,7 +653,7 @@ describe('HttpBlobClient', () => {
         .spyOn(client.getArchiveClient(), 'getBlobsFromBlock')
         .mockResolvedValue(duplicateBlobData);
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', [blobHash]);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', [blobHash], blobOptions);
 
       // Should only return one blob despite two blobs with the same hash existing
       expect(retrievedBlobs).toHaveLength(1);
@@ -641,11 +662,10 @@ describe('HttpBlobClient', () => {
     });
 
     it('should return empty array from consensus host if it returns blob json with incorrect format', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer();
 
       const client = new TestHttpBlobClient({
-        l1RpcUrls: [`http://localhost:${executionHostPort}`],
+        l1ChainId: 11155111,
         l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
       });
 
@@ -663,16 +683,16 @@ describe('HttpBlobClient', () => {
           blob: 'abcdefghijk',
         },
       ];
-      expect(await client.getBlobSidecar('0x1234', [blobHash])).toEqual([]);
+      expect(await client.getBlobSidecar('0x1234', [blobHash], blobOptions)).toEqual([]);
 
       // Blob from a different hash, commitment is computed correctly but doesn't match requested hash.
       const otherBlob = await makeRandomBlob(3);
       blobData = [...originalBlobData, otherBlob.toJSON()];
-      expect(await client.getBlobSidecar('0x1234', [blobHash])).toEqual([]);
+      expect(await client.getBlobSidecar('0x1234', [blobHash], blobOptions)).toEqual([]);
 
       // Correct blob hex json.
       blobData = [...originalBlobData, blobJson];
-      const result = await client.getBlobSidecar('0x1234', [blobHash]);
+      const result = await client.getBlobSidecar('0x1234', [blobHash], blobOptions);
       expect(result).toHaveLength(1);
       expect(result[0].commitment).toEqual(blob.commitment);
     });
@@ -759,7 +779,7 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient({}, { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] });
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
@@ -783,7 +803,7 @@ describe('HttpBlobClient FileStore Integration', () => {
         },
       );
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
     });
@@ -806,7 +826,7 @@ describe('HttpBlobClient FileStore Integration', () => {
         },
       );
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
     });
@@ -826,7 +846,7 @@ describe('HttpBlobClient FileStore Integration', () => {
         },
       );
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
     });
@@ -881,7 +901,7 @@ describe('HttpBlobClient FileStore Integration', () => {
         },
       );
 
-      await client.getBlobSidecar('0x1234', testBlobsHashes);
+      await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       // Wait for async callback (1ms is enough since mock resolves immediately)
       await sleep(1);
@@ -904,7 +924,7 @@ describe('HttpBlobClient FileStore Integration', () => {
         },
       );
 
-      await client.getBlobSidecar('0x1234', testBlobsHashes);
+      await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       // Wait for async callback (1ms is enough since mock resolves immediately)
       await sleep(1);
@@ -970,7 +990,7 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient({}, { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] });
 
-      const promise = client.getBlobSidecar('0x1234', testBlobsHashes);
+      const promise = client.getBlobSidecar('0x1234', testBlobsHashes, { l1BlockTimestamp: 1655733624n });
 
       // Advance all timers to allow retries to complete
       await jest.runAllTimersAsync();
@@ -990,7 +1010,7 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient({}, { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] });
 
-      await client.getBlobSidecar('0x1234', testBlobsHashes);
+      await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       // Should only be called once since all blobs were found
       expect(getBlobsByHashesSpy).toHaveBeenCalledTimes(1);
@@ -998,30 +1018,27 @@ describe('HttpBlobClient FileStore Integration', () => {
   });
 
   describe('source ordering', () => {
-    let executionHostServer: http.Server | undefined;
-    let executionHostPort: number | undefined;
     let consensusHostServer: http.Server | undefined;
     let consensusHostPort: number | undefined;
 
-    const startExecutionHostServer = (): Promise<void> => {
-      executionHostServer = http.createServer((_req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result: { parentBeaconBlockRoot: '0x1234' } }));
-      });
-
-      return new Promise((resolve, _reject) => {
-        executionHostServer?.listen(0, () => {
-          executionHostPort = (executionHostServer?.address() as AddressInfo).port;
-          resolve();
-        });
-      });
-    };
-
     const startConsensusHostServer = (blobData: BlobJson[]): Promise<void> => {
       consensusHostServer = http.createServer((req, res) => {
-        if (req.url?.includes('/eth/v1/beacon/headers/')) {
+        if (req.url?.includes('/eth/v1/beacon/genesis')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"data":{"genesis_time":"1000"}}');
+        } else if (req.url?.includes('/eth/v1/config/spec')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
+        } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: { header: { message: { slot: 1 } } } }));
+        } else if (req.url?.includes('/eth/v1/beacon/blinded_blocks/')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              data: { message: { body: { ['execution_payload_header']: { ['block_hash']: '0x1234' } } } },
+            }),
+          );
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: blobData.map(b => b.blob) }));
@@ -1040,14 +1057,12 @@ describe('HttpBlobClient FileStore Integration', () => {
     };
 
     afterEach(() => {
-      executionHostServer?.close();
       consensusHostServer?.close();
-      executionHostPort = undefined;
+
       consensusHostPort = undefined;
     });
 
     it('should try consensus before filestore by default', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer(testBlobs.map(b => b.toJSON()));
 
       const mockFileStore = new MockFileStoreBlobClient();
@@ -1056,13 +1071,13 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ChainId: 11155111,
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         },
         { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] },
       );
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
       // Filestore should not be called since consensus had all blobs (default: consensus first)
@@ -1070,7 +1085,6 @@ describe('HttpBlobClient FileStore Integration', () => {
     });
 
     it('should try filestore before consensus when blobPreferFilestores is set', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer(testBlobs.map(b => b.toJSON()));
 
       const mockFileStore = new MockFileStoreBlobClient();
@@ -1078,7 +1092,7 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ChainId: 11155111,
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
           blobPreferFilestores: true,
         },
@@ -1087,7 +1101,7 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       expect(retrievedBlobs).toHaveLength(2);
       // Consensus should not be called for blobs since filestore had all blobs
@@ -1095,7 +1109,6 @@ describe('HttpBlobClient FileStore Integration', () => {
     });
 
     it('should fall back to consensus when filestore has partial blobs', async () => {
-      await startExecutionHostServer();
       await startConsensusHostServer(testBlobs.map(b => b.toJSON()));
 
       const mockFileStore = new MockFileStoreBlobClient();
@@ -1104,13 +1117,13 @@ describe('HttpBlobClient FileStore Integration', () => {
 
       const client = new HttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
+          l1ChainId: 11155111,
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
         },
         { fileStoreClients: [mockFileStore as unknown as FileStoreBlobClient] },
       );
 
-      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes);
+      const retrievedBlobs = await client.getBlobSidecar('0x1234', testBlobsHashes, blobOptions);
 
       // Should have both blobs - one from filestore, one from consensus
       expect(retrievedBlobs).toHaveLength(2);
