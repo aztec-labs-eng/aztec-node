@@ -240,7 +240,7 @@ mod test {
         let index: u32 = 3;
 
         env.private_context(|context| {
-            let _ = OracleMock::mock("aztec_prv_getAppTaggingSecret").returns(Option::some(secret));
+            let _ = OracleMock::mock("aztec_prv_getAppAddressDerivedTaggingSecret").returns(Option::some(secret));
             let _ = OracleMock::mock("aztec_prv_getNextTaggingIndex").returns(index);
             // The wallet's default resolution would yield a different secret, which the override must bypass.
             let resolve_oracle = OracleMock::mock("aztec_prv_resolveTaggingStrategy").returns(
