@@ -13,10 +13,13 @@ export type RecordingRpcServer = {
 
 /**
  * Starts a JSON-RPC server that records the method of every request it receives, so tests can assert on what a
- * client actually put on the wire. Requests are forwarded to `forwardTo` when given; otherwise the server answers
- * `eth_chainId` with the anvil chain id and rejects anything else.
+ * client actually put on the wire. Requests are forwarded to `forwardTo` when given. Otherwise, when `answer` is
+ * given, its return value is sent as the `result` of each request (`null` included). Without either, the server
+ * answers `eth_chainId` with the anvil chain id and rejects anything else.
  */
-export async function startRecordingRpcServer(opts: { forwardTo?: string } = {}): Promise<RecordingRpcServer> {
+export async function startRecordingRpcServer(
+  opts: { forwardTo?: string; answer?: (method: string) => unknown } = {},
+): Promise<RecordingRpcServer> {
   const methods: string[] = [];
 
   const server: Server = createServer((req, res) => {
@@ -46,8 +49,9 @@ export async function startRecordingRpcServer(opts: { forwardTo?: string } = {})
         }
 
         const id = (requests[0] as { id?: number } | undefined)?.id ?? 1;
-        const result =
-          methods[methods.length - 1] === 'eth_chainId'
+        const result = opts.answer
+          ? { jsonrpc: '2.0', id, result: opts.answer(methods[methods.length - 1]) ?? null }
+          : methods[methods.length - 1] === 'eth_chainId'
             ? { jsonrpc: '2.0', id, result: '0x7a69' }
             : { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not handled by test server' } };
         res.writeHead(200, { 'content-type': 'application/json' });
