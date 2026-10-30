@@ -16,6 +16,7 @@ import {
   GasSettings,
   TestRollupFeeConfigProvider,
   type TxAdmissionMinFeesProvider,
+  getNetworkTxGasLimits,
 } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
@@ -74,6 +75,7 @@ import {
 } from '../../msg_validators/tx_validator/factory.js';
 import type { PubSubLibp2p } from '../../util.js';
 import type { PeerManagerInterface } from '../peer-manager/interface.js';
+import { PeerScoreState, PeerScoring } from '../peer-manager/peer_scoring.js';
 import type { ReqRespInterface } from '../reqresp/interface.js';
 import { BitVector } from '../reqresp/protocols/block_txs/bitvector.js';
 import { BlockTxsRequest, BlockTxsResponse } from '../reqresp/protocols/block_txs/block_txs_reqresp.js';
@@ -502,6 +504,62 @@ describe('LibP2PService', () => {
 
         expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
         expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+      });
+    });
+
+    describe('network gas limits from a lagging mana limit', () => {
+      const timetableConfig = { blockDurationMs: 6000 };
+      const slotTiming = { l1GenesisTime: 0n, slotDuration: 72, ethereumSlotDuration: 12 };
+      // This node has not yet read a governance raise of the rollup's mana limit that the relayer has already seen.
+      const laggingLimits = getNetworkTxGasLimits(timetableConfig, slotTiming, { manaLimit: 10_000_000n });
+      const raisedLimits = getNetworkTxGasLimits(timetableConfig, slotTiming, { manaLimit: 20_000_000n });
+
+      function createMaxGasValidators(limits: Gas): Record<string, TransactionValidator<GossipValidationFailure>> {
+        const worldState = mock<WorldStateSynchronizer>();
+        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
+        const { maxGasLimitsValidator } = createFirstStageTxValidationsForGossipedTransactions(
+          0n,
+          BlockNumber(2),
+          worldState,
+          computeGossipMinFees(new GasFees(1, 1), new GasFees(1, 1)),
+          1,
+          1,
+          Fr.ZERO,
+          mock<ContractDataSource>(),
+          true,
+          [],
+          undefined,
+          { maxTxL2Gas: limits.l2Gas, maxTxDAGas: limits.daGas },
+        );
+        return { maxGasLimitsValidator };
+      }
+
+      async function mockTxDeclaring(gasLimits: Gas, seed: number) {
+        const tx = await mockTx(seed);
+        tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas: new GasFees(1, 1) });
+        await tx.recomputeHash();
+        return tx;
+      }
+
+      it('keeps an honest relayer connected while it forwards txs that fit the raised limit', async () => {
+        const gasLimits = new Gas(laggingLimits.daGas, Math.floor((laggingLimits.l2Gas + raisedLimits.l2Gas) / 2));
+        const raisedValidator = createMaxGasValidators(raisedLimits).maxGasLimitsValidator.validator;
+        expect((await raisedValidator.validateTx(await mockTxDeclaring(gasLimits, 1))).result).toBe('valid');
+
+        const peerScoring = new PeerScoring(getDefaultConfig(p2pConfigMappings));
+        txPeerManager.penalizePeer.mockImplementation((peerId, severity) => {
+          peerScoring.penalizePeer(peerId, severity);
+        });
+        txService.firstStageValidatorsOverride = createMaxGasValidators(laggingLimits);
+
+        for (let i = 1; i <= 6; i++) {
+          const tx = await mockTxDeclaring(gasLimits, i);
+          await txService.handleGossipedTx(tx.toBuffer(), `test-msg-id-${i}`, txPeerId);
+          expect(txReportSpy).toHaveBeenLastCalledWith(`test-msg-id-${i}`, MOCK_PEER_ID, TopicValidatorResult.Reject);
+        }
+
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+        expect(peerScoring.getScoreState(MOCK_PEER_ID)).toBe(PeerScoreState.Healthy);
       });
     });
   });
