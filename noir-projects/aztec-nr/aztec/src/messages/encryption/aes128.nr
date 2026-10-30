@@ -214,7 +214,7 @@ impl MessageEncryption for AES128 {
     /// ## Key Derivation
     ///
     /// The raw ECDH shared secret point is first app-siloed into a scalar `s_app` by hashing with the contract
-    /// address (see [`compute_app_siloed_shared_secret_from_point`]).
+    /// address (see [`crate::keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point`]).
     /// Two (key, IV) pairs are then derived from `s_app` via indexed Poseidon2 hashing: one pair for the body
     /// ciphertext and one for the header ciphertext.
     fn encrypt<let PlaintextLen: u32>(
