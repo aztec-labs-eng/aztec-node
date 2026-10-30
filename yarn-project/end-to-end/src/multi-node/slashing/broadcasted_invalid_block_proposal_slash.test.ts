@@ -44,6 +44,9 @@ describe('multi-node/slashing/broadcasted_invalid_block_proposal_slash', () => {
 
   beforeEach(async () => {
     test = await MultiNodeTestContext.setup({
+      // The invalid proposer's checkpoints never land, which can leave epochs unset on L1 and delay the next epoch's
+      // committee until its first slot's pipeline window has passed. Set epochs up early so those slots can vote.
+      keepEpochsSetUp: true,
       ...SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
       ...SENTINEL_TIMING,
       sentinelEnabled: false, // reuse only the fast 8s-slot timing; this test does not use the sentinel
