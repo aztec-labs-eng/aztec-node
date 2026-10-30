@@ -6,6 +6,16 @@ output "eso_service_account_email" {
   value = google_service_account.eso.email
 }
 
+output "observability_service_account_email" {
+  description = "GCP_SERVICE_ACCOUNT GitHub Actions variable for aztec-observability"
+  value       = google_service_account.observability_deployer.email
+}
+
+output "observability_workload_identity_provider" {
+  description = "GCP_WORKLOAD_IDENTITY_PROVIDER GitHub Actions variable for aztec-observability"
+  value       = google_iam_workload_identity_pool_provider.observability.name
+}
+
 output "ci_service_account_email" {
   value = google_service_account.ci.email
 }
