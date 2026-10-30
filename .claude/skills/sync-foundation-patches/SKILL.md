@@ -161,7 +161,6 @@ release's noir submodule, and the verification. The rewrite itself is:
 ```bash
 ./labs-aztec-toolchain/bootstrap.sh set-pins <bb-version> <noir-version>
 (cd yarn-project && yarn)
-(cd docs && yarn)
 git commit -m "chore: bump toolchain pins to <bb-version>"
 ```
 
@@ -172,9 +171,8 @@ compatibility choice. Report an intentional skew instead of silently downgrading
 
 `pins.mjs` rewrites manifests only — `BB_VERSION`/`NOIR_VERSION` in
 `labs-aztec-toolchain/bootstrap.sh`, the `yarn-project/package.json` resolutions,
-`docs/package.json`, every `Nargo.toml`, and `docs/examples/ts/*/config.yaml`. It never
-runs yarn, so `yarn-project/yarn.lock` and `docs/yarn.lock` are yours to refresh with a
-plain `yarn` (`yarn up` is the wrong tool: it rewrites dependency declarations, while the
+and every `Nargo.toml`. It never runs yarn, so `yarn-project/yarn.lock` is yours to refresh
+with a plain `yarn` (`yarn up` is the wrong tool: it rewrites dependency declarations, while the
 pins live in the resolutions block — a plain install after a resolutions edit re-resolves
 only the entries that changed, which is the targeted update the repo's lockfile discipline
 requires). Check that: the lockfile diff must be `@aztec-foundation/*` entries and what
@@ -243,7 +241,7 @@ skipped as disabled, or blocked and on what. Plus the pin versions and the build
 - **Every conflict resolution is explained in the PR body.** The reviewer is checking a
   merge they did not perform.
 - **`pins.mjs` owns pinned versions, not lockfiles.** `set-pins` rewrites the manifests;
-  refreshing `yarn-project/yarn.lock` and `docs/yarn.lock` is a separate `yarn` run.
+  refreshing `yarn-project/yarn.lock` is a separate `yarn` run.
 - **A patch that re-pins the standard contracts is not routine.** If the series moves
   `noir-projects/noir-contracts/pinned-standard-contracts.tar.gz` or
   `standard_addresses.nr`, it changes the canonical standard-contract addresses. Keep the

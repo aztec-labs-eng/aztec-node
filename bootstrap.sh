@@ -329,7 +329,6 @@ function install_hooks {
 set -euo pipefail
 ./yarn-project/precommit.sh
 ./noir-projects/precommit.sh
-./docs/examples/ts/precommit.sh
 EOF
   chmod +x $hooks_dir/pre-commit
 
@@ -961,15 +960,6 @@ case "$cmd" in
     ./bootstrap.sh release
     ;;
 
-  ##############
-  # CI SUBSETS #
-  ##############
-  "ci-docs")
-    export CI=1
-    export USE_TEST_CACHE=1
-    ./bootstrap.sh build yarn-project
-    docs/bootstrap.sh ci
-    ;;
   ##########################################
   # ROLLUP UPGRADE DEPLOYMENT              #
   ##########################################

@@ -1,6 +1,6 @@
 # Contributing Guidelines
 
-These guidelines apply to the entire repository. The [docs site](./docs/) has additional guidance on writing documentation in [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md).
+These guidelines apply to the entire repository. The docs site lives in [aztec-packages](https://github.com/AztecProtocol/aztec-packages/tree/next/docs), which has additional guidance on writing documentation in [docs/CONTRIBUTING.md](https://github.com/AztecProtocol/aztec-packages/blob/next/docs/CONTRIBUTING.md).
 
 Please read our [disclaimer](./DISCLAIMER.md) first. To report a vulnerability, follow [SECURITY.md](./SECURITY.md) instead of opening a public issue.
 
@@ -44,7 +44,7 @@ If you are unsure which bucket a change is in, it is not trivial.
 - New behavior comes with unit tests. If it crosses component boundaries (sequencer ↔ p2p ↔ archiver, L1 interaction, reorgs, pruning), add or extend an e2e test.
 - If a test is flaky, file an issue for it.
 
-**Keep docs in sync.** Update the `README.md` of any component whose design, invariants, or flow you changed. Update the [operator docs](./docs/docs-operate/) when you change anything an operator configures or observes. New config options need a description and a sensible default in the config mappings.
+**Keep docs in sync.** Update the `README.md` of any component whose design, invariants, or flow you changed. Update the [operator docs](https://github.com/AztecProtocol/aztec-packages/tree/next/docs/docs-operate/) in aztec-packages when you change anything an operator configures or observes. New config options need a description and a sensible default in the config mappings.
 
 **Keep it observable.** New code paths log at the right level (routine events at `debug`/`verbose`, not `info`), and new failure modes emit a metric or a `warn`/`error` log someone can alert on.
 
@@ -63,7 +63,7 @@ The description must include:
 
 ## Breaking changes
 
-Call these out explicitly in the description, say what breaks and what the migration path is, and add an entry to the [operator changelog](./docs/docs-operate/operators/reference/changelog/) when operators are affected:
+Call these out explicitly in the description, say what breaks and what the migration path is, and add an entry to the [operator changelog](https://github.com/AztecProtocol/aztec-packages/tree/next/docs/docs-operate/operators/reference/changelog/) in aztec-packages when operators are affected:
 
 - **P2P wire format**: gossip message encoding, topics, req/resp protocols, peer scoring. Nodes on the old and new version must still interoperate, or the PR must say they can't.
 - **Database schema**: archiver, world state, p2p, and slasher stores. Bump the schema version and say whether nodes need a resync.

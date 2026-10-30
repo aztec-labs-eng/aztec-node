@@ -88,18 +88,17 @@ the drift check — success is those update lines followed by no drift errors.
 
 ### 5. Refresh lockfiles
 
-`set-pins` edits manifests only. Run plain `yarn` in both projects — after a resolutions
+`set-pins` edits manifests only. Run plain `yarn` in `yarn-project` — after a resolutions
 edit it re-resolves only the changed entries, which is the targeted update the repo's
 lockfile discipline requires (`yarn up` is the wrong tool here: it edits dependency
 declarations, not resolutions):
 
 ```bash
 (cd yarn-project && yarn)
-(cd docs && yarn)
 ```
 
 Then confirm the diff is scoped to the bump: `git diff --stat` should show the files
-`set-pins` reported rewriting plus the two lockfiles, and the lockfile changes only
+`set-pins` reported rewriting plus the lockfile, and the lockfile changes only
 `@aztec/*` entries. Anything beyond that means something else was stale — stop and
 investigate rather than committing it. (The step-6 rebuild may additionally update
 tracked generated artifacts, e.g. under `noir-contracts.js`; report those, and never run

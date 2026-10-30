@@ -257,8 +257,6 @@ The following labels can be used to control CI behavior on pull requests:
 
 - **`ci-full`**: Forces a full CI run instead of the default fast run.
 
-- **`ci-docs`**: Runs only documentation-related CI checks.
-
 - **`ci-no-cache`**: Disables build caching for this CI run.
 
 - **`ci-no-fail-fast`**: Continues running all tests even if some fail.
