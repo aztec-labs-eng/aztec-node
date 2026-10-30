@@ -1,7 +1,7 @@
 import {
-  DEFAULT_TAGGING_SECRET_STRATEGY,
   type ResolveTaggingSecretStrategy,
   type TaggingSecretStrategy,
+  defaultTaggingSecretStrategy,
 } from '@aztec-labs/pxe/server';
 import type { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
@@ -11,7 +11,7 @@ export type TXETaggingSecretStrategies = Map<AppTaggingSecretKind, TaggingSecret
 /**
  * Builds the `resolveTaggingSecretStrategy` hook backing the `aztec_txe_setTaggingSecretStrategies` oracle. Returns
  * `undefined` when no strategy is configured, so PXE's own no-hook default path is exercised. When at least one mode
- * is configured, modes without an entry resolve to {@link DEFAULT_TAGGING_SECRET_STRATEGY}, matching what PXE would
+ * is configured, modes without an entry resolve to {@link defaultTaggingSecretStrategy}, matching what PXE would
  * apply without a hook.
  */
 export function makeResolveTaggingSecretStrategyHook(
@@ -21,5 +21,5 @@ export function makeResolveTaggingSecretStrategyHook(
     return undefined;
   }
 
-  return ({ deliveryMode }) => Promise.resolve(strategies.get(deliveryMode) ?? DEFAULT_TAGGING_SECRET_STRATEGY);
+  return request => Promise.resolve(strategies.get(request.deliveryMode) ?? defaultTaggingSecretStrategy(request));
 }

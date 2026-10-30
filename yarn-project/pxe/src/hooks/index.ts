@@ -14,7 +14,7 @@ export type {
 } from './resolve_expiration_and_padding.js';
 export { roundDownTxExpirationTimestamp } from '../private_kernel/hints/round_down_tx_expiration_timestamp.js';
 export {
-  DEFAULT_TAGGING_SECRET_STRATEGY,
+  defaultTaggingSecretStrategy,
   type ResolveTaggingSecretStrategy,
   type TaggingSecretStrategy,
   type TaggingSecretStrategyRequest,

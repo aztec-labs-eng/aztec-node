@@ -1,5 +1,7 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
 import { TokenContract, type Transfer } from '@aztec-labs/noir-contracts.js/Token';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 
 import { mintNotes } from '../../fixtures/token_utils.js';
 import { TokenContractTest } from './token_contract_test.js';
@@ -15,6 +17,12 @@ describe('automine/token/private_transfer_recursion', () => {
     t.applyBaseSnapshots();
     await t.setup();
     ({ asset, wallet, adminAddress, otherAddress, node } = t);
+
+    // The tests count every nullifier and note hash a transfer creates, so the transfers must reuse an existing
+    // handshake to the recipient instead of establishing one.
+    await HandshakeRegistryContract.at(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, wallet)
+      .methods.non_interactive_handshake(adminAddress, otherAddress)
+      .send({ from: adminAddress });
   });
 
   afterAll(async () => {
