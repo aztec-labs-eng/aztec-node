@@ -435,18 +435,18 @@ describe('PXE', () => {
     async function storeEvent(blockNumber?: number): Promise<PackedPrivateEvent> {
       const event = {
         packedEvent: [Fr.random(), Fr.random()],
+        randomness: Fr.random(),
         l2BlockNumber: BlockNumber(blockNumber ?? lastKnownBlockNumber),
         l2BlockHash,
         txHash: TxHash.random(),
         eventSelector,
       };
 
-      const randomness = Fr.random();
       const siloedEventCommitment = Fr.random();
 
       await privateEventStore.storePrivateEventLog(
         eventSelector,
-        randomness,
+        event.randomness,
         event.packedEvent,
         siloedEventCommitment,
         {

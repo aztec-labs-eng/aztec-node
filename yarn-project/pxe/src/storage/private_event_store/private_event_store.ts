@@ -198,6 +198,7 @@ export class PrivateEventStore extends BaseStagingStore<PrivateEventStoreChangeS
           eventIndexInTx: storedPrivateEvent.eventIndexInTx,
           event: {
             packedEvent: storedPrivateEvent.msgContent,
+            randomness: storedPrivateEvent.randomness,
             l2BlockNumber: BlockNumber(storedPrivateEvent.l2BlockNumber),
             txHash: storedPrivateEvent.txHash,
             l2BlockHash: storedPrivateEvent.l2BlockHash,

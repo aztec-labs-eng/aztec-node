@@ -3,24 +3,26 @@ import { BatchCall } from '@aztec-labs/aztec.js/contracts';
 import { getPublicEvents } from '@aztec-labs/aztec.js/events';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { CustomMessageContract, type MultiLogEvent } from '@aztec-labs/noir-test-contracts.js/CustomMessage';
 import { EventOnlyContract, type TestEvent } from '@aztec-labs/noir-test-contracts.js/EventOnly';
 import { type LargeEvent, LargePublicEventContract } from '@aztec-labs/noir-test-contracts.js/LargePublicEvent';
+import { computePrivateEventCommitment, siloNullifier } from '@aztec-labs/stdlib/hash';
 import { jest } from '@jest/globals';
 
+import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../automine_test_context.js';
 
 const TIMEOUT = 300_000;
 
 // Consolidated event emission/retrieval tests. A single automine node with one funded account deploys the
 // EventOnly, CustomMessage, and LargePublicEvent contracts in beforeAll; each per-contract describe below
-// exercises one event round-trip via wallet.getPrivateEvents / getPublicEvents.
+// exercises one event round-trip via wallet.getPrivateEvents / getPackedPrivateEvents / getPublicEvents.
 describe('automine/effects/events', () => {
   jest.setTimeout(TIMEOUT);
 
-  let wallet: Wallet;
+  let wallet: TestWallet;
   let aztecNode: AztecNode;
   let account: AztecAddress;
   let teardown: () => Promise<void>;
@@ -61,6 +63,28 @@ describe('automine/effects/events', () => {
 
       expect(events.length).toBe(1);
       expect(events[0].event.value).toBe(value.toBigInt());
+    });
+
+    // The randomness PXE returns, together with the event's selector and content, is all anyone needs to recompute the
+    // event commitment and find it in the nullifier tree, which is what lets a user disclose a single private event.
+    it('returns the randomness that opens the event commitment in the nullifier tree', async () => {
+      const value = Fr.random();
+      const { receipt: tx } = await eventOnlyContract.methods.emit_event_for_msg_sender(value).send({ from: account });
+
+      const events = await wallet.getPackedPrivateEvents(EventOnlyContract.events.TestEvent.eventSelector, {
+        contractAddress: eventOnlyContract.address,
+        fromBlock: BlockNumber(tx.blockNumber!),
+        toBlock: BlockNumber(tx.blockNumber! + 1),
+        scopes: [account],
+      });
+      expect(events).toHaveLength(1);
+      const [{ randomness, eventSelector, packedEvent }] = events;
+
+      const commitment = await computePrivateEventCommitment(randomness, eventSelector.toField(), packedEvent);
+      const siloedCommitment = await siloNullifier(eventOnlyContract.address, commitment);
+      const [leaf] = await aztecNode.findLeavesIndexes(tx.blockHash!, MerkleTreeId.NULLIFIER_TREE, [siloedCommitment]);
+
+      expect(leaf?.l2BlockHash).toEqual(tx.blockHash);
     });
   });
 
