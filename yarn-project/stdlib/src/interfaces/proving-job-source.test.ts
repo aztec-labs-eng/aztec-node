@@ -2,6 +2,7 @@ import { NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec-labs/constants
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { ProvingRequestType } from '../proofs/proving_request_type.js';
 import { makeRecursiveProof } from '../proofs/recursive_proof.js';
@@ -113,3 +114,9 @@ class MockProvingJobSource implements ProvingJobSource {
     return Promise.resolve();
   }
 }
+
+describe('ProvingJobSourceSchema parameters', () => {
+  it('bound every array and record before parsing their entries', () => {
+    expect(findUnboundedContainersInApi(ProvingJobSourceSchema)).toEqual([]);
+  });
+});
