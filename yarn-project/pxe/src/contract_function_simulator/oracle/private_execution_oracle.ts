@@ -278,7 +278,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       }
       case 'arbitrary-secret': {
         // App-silo the raw arbitrary secret point here so wallets never replicate the derivation.
-        const appTaggingSecret = await AppTaggingSecret.computeDirectional(
+        const appTaggingSecret = await AppTaggingSecret.computeFromArbitrarySecret(
           strategy.secret,
           this.contractAddress,
           recipient,
@@ -320,15 +320,15 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
 
     const senderCompleteAddress = await this.getCompleteAddressOrFail(sender);
     const senderIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(sender);
-    const extendedSecret = await AppTaggingSecret.computeViaEcdh(
-      senderCompleteAddress,
-      senderIvsk,
+    const appTaggingSecret = await AppTaggingSecret.computeAddressDerived({
+      localAddress: senderCompleteAddress,
+      localIvsk: senderIvsk,
+      externalAddress: recipient,
+      app: this.contractAddress,
       recipient,
-      this.contractAddress,
-      recipient,
-    );
+    });
 
-    return extendedSecret?.secret;
+    return appTaggingSecret?.secret;
   }
 
   /**
