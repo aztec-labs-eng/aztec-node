@@ -1,12 +1,14 @@
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
-import { getPublicEvents } from '@aztec-labs/aztec.js/events';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { type AllPublicEventsFilter, getAllPublicEvents } from '@aztec-labs/aztec.js/events';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import type { PrivateEventFilter, PublicEventFilter, Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { PrivateEventFilter, Wallet } from '@aztec-labs/aztec.js/wallet';
+import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { timesParallel } from '@aztec-labs/foundation/collection';
+import { chunk, times, timesParallel } from '@aztec-labs/foundation/collection';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
 import {
@@ -16,6 +18,7 @@ import {
   TestLogContract,
 } from '@aztec-labs/noir-test-contracts.js/TestLog';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';
@@ -23,7 +26,7 @@ import { AutomineTestContext } from '../automine_test_context.js';
 const TIMEOUT = 300_000;
 
 // Covers private-log event emission and retrieval (encrypted events via getPrivateEvents) and
-// public-log event emission and retrieval (unencrypted events via getPublicEvents), including nested
+// public-log event emission and retrieval (unencrypted events via getAllPublicEvents), including nested
 // events with struct fields and tagging-cache reconciliation against kernel squashing. Uses a single
 // automine node with two genesis-funded Schnorr accounts and a deployed TestLogContract.
 describe('automine/effects/event_logs', () => {
@@ -55,11 +58,11 @@ describe('automine/effects/event_logs', () => {
   afterAll(() => teardown());
 
   // Covers encrypted private-log emission, public unencrypted-log emission, and nested-event
-  // struct decoding. Verifies getPrivateEvents and getPublicEvents return correctly typed payloads.
+  // struct decoding. Verifies getPrivateEvents and getAllPublicEvents return correctly typed payloads.
   describe('functionality around emitting an encrypted log', () => {
     // Sends 5 emit_encrypted_events txs in parallel, then queries getPrivateEvents for two event
     // types and checks counts and field values. Also sends 5 unencrypted txs and verifies
-    // getPublicEvents round-trips correctly.
+    // getAllPublicEvents round-trips correctly.
     it('emits multiple events as private logs and decodes them', async () => {
       const preimages = makeTuple(5, makeTuple.bind(undefined, 4, Fr.random)) as Tuple<Tuple<Fr, 4>, 5>;
 
@@ -136,7 +139,7 @@ describe('automine/effects/event_logs', () => {
       );
     });
 
-    // Sends 5 emit_unencrypted_events txs and retrieves events via getPublicEvents; verifies
+    // Sends 5 emit_unencrypted_events txs and retrieves events via getAllPublicEvents; verifies
     // field values round-trip correctly for both ExampleEvent0 and ExampleEvent1.
     it('emits multiple unencrypted events as public logs and decodes them', async () => {
       const preimage = makeTuple(5, makeTuple.bind(undefined, 4, Fr.random)) as Tuple<Tuple<Fr, 4>, 5>;
@@ -153,19 +156,19 @@ describe('automine/effects/event_logs', () => {
         .send({ from: account1Address });
 
       // docs:start:get_public_events
-      const publicEventFilter: PublicEventFilter = {
+      const publicEventFilter: AllPublicEventsFilter = {
         contractAddress: testLogContract.address,
         fromBlock: BlockNumber(firstTx.blockNumber!),
         toBlock: BlockNumber(lastTx.blockNumber! + 1),
       };
 
-      const { events: collectedEvent0s } = await getPublicEvents<ExampleEvent0>(
+      const collectedEvent0s = await getAllPublicEvents<ExampleEvent0>(
         aztecNode,
         TestLogContract.events.ExampleEvent0,
         publicEventFilter,
       );
 
-      const { events: collectedEvent1s } = await getPublicEvents<ExampleEvent1>(
+      const collectedEvent1s = await getAllPublicEvents<ExampleEvent1>(
         aztecNode,
         TestLogContract.events.ExampleEvent1,
         publicEventFilter,
@@ -194,7 +197,28 @@ describe('automine/effects/event_logs', () => {
       );
     });
 
-    // Emits an ExampleNestedEvent with struct field and verifies that getPublicEvents correctly
+    // Emits one more ExampleEvent0 than a node page holds and verifies that getAllPublicEvents returns
+    // all of them
+    it('reads public events across node pages', async () => {
+      const preimages = times(MAX_LOGS_PER_TAG + 1, () => makeTuple(4, Fr.random));
+
+      const receipts = [];
+      for (const batch of chunk(preimages, APP_MAX_CALLS)) {
+        const calls = batch.map(preimage => testLogContract.methods.emit_unencrypted_events(preimage));
+        const { receipt } = await new BatchCall(wallet, calls).send({ from: account1Address });
+        receipts.push(receipt);
+      }
+
+      const events = await getAllPublicEvents<ExampleEvent0>(aztecNode, TestLogContract.events.ExampleEvent0, {
+        contractAddress: testLogContract.address,
+        fromBlock: BlockNumber(receipts[0].blockNumber!),
+        toBlock: BlockNumber(receipts[receipts.length - 1].blockNumber! + 1),
+      });
+
+      expect(events.map(e => e.event.value0)).toEqual(preimages.map(preimage => preimage[0].toBigInt()));
+    });
+
+    // Emits an ExampleNestedEvent with struct field and verifies that getAllPublicEvents correctly
     // decodes nested struct fields (a, b, c, extra_value).
     it('decodes public events with nested structs', async () => {
       const a = Fr.random();
@@ -206,7 +230,7 @@ describe('automine/effects/event_logs', () => {
         .emit_nested_event(a, b, c, extra)
         .send({ from: account1Address });
 
-      const { events: collectedEvents } = await getPublicEvents<ExampleNestedEvent>(
+      const collectedEvents = await getAllPublicEvents<ExampleNestedEvent>(
         aztecNode,
         TestLogContract.events.ExampleNestedEvent,
         {

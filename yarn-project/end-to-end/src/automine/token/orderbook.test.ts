@@ -1,9 +1,10 @@
 import type { FieldLike } from '@aztec-labs/aztec.js/abi';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
-import { getPublicEvents } from '@aztec-labs/aztec.js/events';
+import { getAllPublicEvents } from '@aztec-labs/aztec.js/events';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { type OrderCreated, type OrderFulfilled, OrderbookContract } from '@aztec-labs/noir-contracts.js/Orderbook';
 import type { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 import { jest } from '@jest/globals';
@@ -83,15 +84,15 @@ describe('automine/token/orderbook', () => {
       });
 
       // Create order
-      await orderbook.methods
+      const { receipt: createOrderTx } = await orderbook.methods
         .create_order(token0.address, token1.address, bidAmount, askAmount, nonceForAuthwits)
         .with({ authWitnesses: [makerAuthwit] })
         .send({ from: makerAddress });
 
-      const { events: orderCreatedEvents } = await getPublicEvents<OrderCreated>(
+      const orderCreatedEvents = await getAllPublicEvents<OrderCreated>(
         aztecNode,
         OrderbookContract.events.OrderCreated,
-        { contractAddress: orderbook.address },
+        { contractAddress: orderbook.address, fromBlock: BlockNumber(createOrderTx.blockNumber!) },
       );
       expect(orderCreatedEvents.length).toBe(1);
 
@@ -140,16 +141,16 @@ describe('automine/token/orderbook', () => {
       });
 
       // Fulfill order
-      await orderbook.methods
+      const { receipt: fulfillOrderTx } = await orderbook.methods
         .fulfill_order(orderId, nonceForAuthwits)
         .with({ authWitnesses: [takerAuthwit] })
         .send({ from: takerAddress });
 
       // Verify order was fulfilled by checking events
-      const { events: orderFulfilledEvents } = await getPublicEvents<OrderFulfilled>(
+      const orderFulfilledEvents = await getAllPublicEvents<OrderFulfilled>(
         aztecNode,
         OrderbookContract.events.OrderFulfilled,
-        { contractAddress: orderbook.address },
+        { contractAddress: orderbook.address, fromBlock: BlockNumber(fulfillOrderTx.blockNumber!) },
       );
       expect(orderFulfilledEvents.length).toBe(1);
       expect(orderFulfilledEvents[0].event.order_id).toEqual(orderId);

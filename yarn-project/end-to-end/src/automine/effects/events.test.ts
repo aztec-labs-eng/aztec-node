@@ -1,6 +1,6 @@
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { BatchCall } from '@aztec-labs/aztec.js/contracts';
-import { getPublicEvents } from '@aztec-labs/aztec.js/events';
+import { getAllPublicEvents } from '@aztec-labs/aztec.js/events';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
@@ -18,7 +18,7 @@ const TIMEOUT = 300_000;
 
 // Consolidated event emission/retrieval tests. A single automine node with one funded account deploys the
 // EventOnly, CustomMessage, and LargePublicEvent contracts in beforeAll; each per-contract describe below
-// exercises one event round-trip via wallet.getPrivateEvents / getPackedPrivateEvents / getPublicEvents.
+// exercises one event round-trip via wallet.getPrivateEvents / getPackedPrivateEvents / getAllPublicEvents.
 describe('automine/effects/events', () => {
   jest.setTimeout(TIMEOUT);
 
@@ -152,14 +152,14 @@ describe('automine/effects/events', () => {
 
   // Events exceeding MAX_EVENT_SERIALIZED_LEN can be emitted publicly and reassembled on retrieval.
   describe('LargePublicEvent', () => {
-    // Sends emit_large_event with 11 random Fr fields, retrieves via getPublicEvents, and asserts
+    // Sends emit_large_event with 11 random Fr fields, retrieves via getAllPublicEvents, and asserts
     // the returned event's data array matches.
     it('emits and retrieves a public event with more than MAX_EVENT_SERIALIZED_LEN fields', async () => {
       const data = Array.from({ length: 11 }, () => Fr.random());
 
       const { receipt: tx } = await largePublicEventContract.methods.emit_large_event(data).send({ from: account });
 
-      const { events } = await getPublicEvents<LargeEvent>(aztecNode, LargePublicEventContract.events.LargeEvent, {
+      const events = await getAllPublicEvents<LargeEvent>(aztecNode, LargePublicEventContract.events.LargeEvent, {
         contractAddress: largePublicEventContract.address,
         fromBlock: BlockNumber(tx.blockNumber!),
         toBlock: BlockNumber(tx.blockNumber! + 1),
