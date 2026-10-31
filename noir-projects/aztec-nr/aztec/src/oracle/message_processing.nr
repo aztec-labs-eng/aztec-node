@@ -9,14 +9,11 @@ use crate::protocol::address::AztecAddress;
 use crate::protocol::blob_data::TxEffect;
 use crate::protocol::traits::{Deserialize, Serialize};
 
-/// Finds new private logs that may have been sent to all registered accounts in PXE in the current contract and
-/// returns them in an ephemeral array with an oracle-allocated base slot.
+/// Finds new private logs that may have been sent to `scope` in the current contract.
 ///
-/// # Arguments
-///
-/// * `scope` - The account scope to search under.
-/// * `provided_secrets` - Tagging secrets the app supplies explicitly, searched alongside the secrets PXE manages
-///   internally. Used for secrets PXE cannot derive itself (e.g. handshake-derived ones).
+/// PXE searches for logs tagged with the secrets it manages for `scope` and with `provided_secrets`, which are secrets
+/// it cannot derive itself, such as those of the handshakes
+/// [`get_handshake_secrets`](crate::messages::delivery::handshake::get_handshake_secrets) discovers onchain.
 pub(crate) unconstrained fn get_pending_tagged_logs(
     scope: AztecAddress,
     provided_secrets: EphemeralArray<ProvidedSecret>,
