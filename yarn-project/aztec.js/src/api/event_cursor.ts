@@ -9,6 +9,8 @@ import { z } from 'zod';
  * fetch the next page.
  *
  * This is the public-events counterpart of the node-layer {@link LogCursor}
+ *
+ * @deprecated Use {@link getAllPublicEvents}, which returns every matching event without a cursor.
  **/
 export class EventCursor {
   constructor(

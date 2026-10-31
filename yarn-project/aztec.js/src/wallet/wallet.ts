@@ -184,6 +184,8 @@ export type PrivateEventFilter = EventFilterBase & {
 /**
  * Filter options when querying public events. The contract address is required because the public log index is
  * keyed on `(contract, tag)`; tag-only queries are not supported.
+ *
+ * @deprecated Use {@link AllPublicEventsFilter} with {@link getAllPublicEvents}.
  */
 export type PublicEventFilter = EventFilterBase & {
   /** The address of the contract that emitted the events. Required. */
@@ -395,6 +397,7 @@ export const PrivateEventFilterSchema = refineTxHashAndRange(
   }),
 );
 
+/** @deprecated Use {@link AllPublicEventsFilter} with {@link getAllPublicEvents}. */
 export const PublicEventFilterSchema = refineTxHashAndRange(
   z.object({
     ...eventFilterBaseShape,
