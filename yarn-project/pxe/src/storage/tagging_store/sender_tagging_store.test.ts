@@ -756,7 +756,11 @@ describe('SenderTaggingStore', () => {
       // this via the public construction path keeps the test independent of how the production code derives Frs.
       // Emit a tag using the *unconstrained* domain separator for the same Fr/index combination. This should NOT match.
       const wrongDomSepTag = await SiloedTag.compute({
-        extendedSecret: new AppTaggingSecret(constrainedSecret.secret, constrainedSecret.app),
+        extendedSecret: new AppTaggingSecret(
+          constrainedSecret.secret,
+          constrainedSecret.app,
+          OnchainDeliveryMode.UNCONSTRAINED,
+        ),
         index: 1,
       });
       const txEffect = makeTxEffect(txHash, [wrongDomSepTag]);
