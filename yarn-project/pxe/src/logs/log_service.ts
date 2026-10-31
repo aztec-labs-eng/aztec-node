@@ -1,6 +1,6 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
-import type { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { KeyStore } from '@aztec-labs/key-store';
@@ -8,13 +8,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import {
-  AppTaggingSecret,
-  type LogResult,
-  OnchainDeliveryMode,
-  SiloedTag,
-  computeSharedTaggingSecret,
-} from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecret, type LogResult, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
@@ -239,48 +233,55 @@ export class LogService {
     }
     const recipientIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
 
-    const [senderPoints, registeredSecrets] = await allToCompletion([
-      this.#getSecretsForSenders(recipientCompleteAddress, recipientIvsk),
+    const [senderSecrets, registeredSecrets] = await allToCompletion([
+      this.#getSecretsForSenders(recipientCompleteAddress, recipientIvsk, contractAddress),
       this.taggingSecretSourcesStore.getSharedSecretsForRecipient(recipient),
     ]);
-    return allToCompletion([
-      ...senderPoints.map(secret => AppTaggingSecret.computeDirectional(secret, contractAddress, recipient)),
-      ...registeredSecrets.flatMap(({ kind, secret }) => {
+    const registeredAppSecrets = await allToCompletion(
+      registeredSecrets.flatMap(({ kind, secret }) => {
         switch (kind) {
           case 'arbitrary-secret':
-            return [AppTaggingSecret.computeDirectional(secret, contractAddress, recipient)];
+            return [AppTaggingSecret.computeFromArbitrarySecret(secret, contractAddress, recipient)];
           case 'handshake':
             // A handshake-backed sender tags messages with the bare app-siloed secret, one tag domain per delivery
             // mode.
             return [
-              AppTaggingSecret.computeAppSiloed(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
-              AppTaggingSecret.computeAppSiloed(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
+              AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
+              AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
             ];
         }
       }),
-    ]);
+    );
+    return [...senderSecrets, ...registeredAppSecrets];
   }
 
   async #getSecretsForSenders(
     recipientCompleteAddress: CompleteAddress,
     recipientIvsk: GrumpkinScalar,
-  ): Promise<Point[]> {
+    contractAddress: AztecAddress,
+  ): Promise<AppTaggingSecret[]> {
     // We implicitly add all PXE accounts as senders, this helps us decrypt tags on notes that we send to ourselves
     // (recipient = us, sender = us).
     const allSenders = [...(await this.taggingSecretSourcesStore.getSenders()), ...(await this.keyStore.getAccounts())];
 
     return allToCompletion(
       allSenders.map(async sender => {
-        const taggingSecretPoint = await computeSharedTaggingSecret(recipientCompleteAddress, recipientIvsk, sender);
+        const secret = await AppTaggingSecret.computeAddressDerived({
+          localAddress: recipientCompleteAddress,
+          localIvsk: recipientIvsk,
+          externalAddress: sender,
+          app: contractAddress,
+          recipient: recipientCompleteAddress.address,
+        });
 
-        if (!taggingSecretPoint) {
+        if (!secret) {
           // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
           throw new Error(
             `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
           );
         }
 
-        return taggingSecretPoint;
+        return secret;
       }),
     );
   }

@@ -10,14 +10,7 @@ import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { deriveKeys } from '@aztec-labs/stdlib/keys';
-import {
-  AppTaggingSecret,
-  type LogResult,
-  OnchainDeliveryMode,
-  SiloedTag,
-  Tag,
-  computeSharedTaggingSecret,
-} from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecret, type LogResult, OnchainDeliveryMode, SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
 import { makeBlockHeader, makeL2Tips, randomPrivateLogResult } from '@aztec-labs/stdlib/testing';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -410,7 +403,7 @@ describe('LogService', () => {
       return Promise.all(
         [OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED].map(async deliveryMode =>
           SiloedTag.compute({
-            extendedSecret: await AppTaggingSecret.computeAppSiloed(secret, app, deliveryMode),
+            extendedSecret: await AppTaggingSecret.computeFromHandshakeSecret(secret, app, deliveryMode),
             index: 0,
           }),
         ),
@@ -418,7 +411,7 @@ describe('LogService', () => {
     }
 
     async function directionalTag(secret: Point, app: AztecAddress, directedTo: AztecAddress): Promise<SiloedTag> {
-      const directionalSecret = await AppTaggingSecret.computeDirectional(secret, app, directedTo);
+      const directionalSecret = await AppTaggingSecret.computeFromArbitrarySecret(secret, app, directedTo);
       return SiloedTag.compute({ extendedSecret: directionalSecret, index: 0 });
     }
   });
@@ -450,10 +443,14 @@ describe('LogService', () => {
       // Recompute, from the same ECDH inputs the service uses, the tag the recipient would scan for the sender's
       // first message. The node returns the sender's log only for this exact tag, so discovery proves the tag was
       // scanned, which only happens when the sender is registered.
-      const recipientIvsk = await keyStore.getMasterIncomingViewingSecretKey(recipient);
-      const sharedSecret = await computeSharedTaggingSecret(recipientCompleteAddress, recipientIvsk, sender);
-      const appSecret = await AppTaggingSecret.computeDirectional(sharedSecret!, contractAddress, recipient);
-      senderIndex0Tag = await SiloedTag.compute({ extendedSecret: appSecret, index: 0 });
+      const appSecret = await AppTaggingSecret.computeAddressDerived({
+        localAddress: recipientCompleteAddress,
+        localIvsk: await keyStore.getMasterIncomingViewingSecretKey(recipient),
+        externalAddress: sender,
+        app: contractAddress,
+        recipient,
+      });
+      senderIndex0Tag = await SiloedTag.compute({ extendedSecret: appSecret!, index: 0 });
 
       // Past the anchor block, so the log is unfinalized and the scan completes in a single round.
       senderLog = randomPrivateLogResult({ blockNumber: INITIAL_L2_BLOCK_NUM + 1, includeEffects: true });

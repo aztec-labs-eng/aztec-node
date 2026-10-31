@@ -573,8 +573,16 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       const changeSetId = 'fixture-change-set';
       recipientTaggingStore.beginChangeSet(changeSetId);
 
-      const secretA = new AppTaggingSecret(new Fr(2n), AztecAddress.fromBigIntUnsafe(3n));
-      const secretB = new AppTaggingSecret(new Fr(5n), AztecAddress.fromBigIntUnsafe(7n));
+      const secretA = new AppTaggingSecret(
+        new Fr(2n),
+        AztecAddress.fromBigIntUnsafe(3n),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+      const secretB = new AppTaggingSecret(
+        new Fr(5n),
+        AztecAddress.fromBigIntUnsafe(7n),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
       // A constrained secret keys under the `constrained:` prefix, so the snapshot pins both delivery modes together.
       const secretConstrained = new AppTaggingSecret(
         new Fr(19n),
@@ -635,9 +643,21 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
 
       const changeSetId = 'fixture-change-set';
       senderTaggingStore.beginChangeSet(changeSetId);
-      const secretA = new AppTaggingSecret(new Fr(2n), AztecAddress.fromBigIntUnsafe(3n));
-      const secretB = new AppTaggingSecret(new Fr(5n), AztecAddress.fromBigIntUnsafe(7n));
-      const secretC = new AppTaggingSecret(new Fr(11n), AztecAddress.fromBigIntUnsafe(13n));
+      const secretA = new AppTaggingSecret(
+        new Fr(2n),
+        AztecAddress.fromBigIntUnsafe(3n),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+      const secretB = new AppTaggingSecret(
+        new Fr(5n),
+        AztecAddress.fromBigIntUnsafe(7n),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+      const secretC = new AppTaggingSecret(
+        new Fr(11n),
+        AztecAddress.fromBigIntUnsafe(13n),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
       const secretConstrained = new AppTaggingSecret(
         new Fr(19n),
         AztecAddress.fromBigIntUnsafe(23n),

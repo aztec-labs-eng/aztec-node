@@ -48,6 +48,23 @@ Aztec is in active development. Each version may introduce breaking changes that
      : defaultTaggingSecretStrategy(request),
 ```
 
+### [PXE] `AppTaggingSecret` has one constructor per derivation
+
+`AppTaggingSecret`'s static constructors are renamed after the secret they derive, and the old names are removed. `computeAddressDerived` also takes its arguments as an object. The class constructor now requires `deliveryMode`, which used to default to unconstrained. The derived secrets are unchanged.
+
+**Migration:**
+
+```diff
+-await AppTaggingSecret.computeViaEcdh(localAddress, localIvsk, externalAddress, app, recipient);
++await AppTaggingSecret.computeAddressDerived({ localAddress, localIvsk, externalAddress, app, recipient });
+-await AppTaggingSecret.computeDirectional(point, app, recipient);
++await AppTaggingSecret.computeFromArbitrarySecret(point, app, recipient);
+-await AppTaggingSecret.computeAppSiloed(point, app, deliveryMode);
++await AppTaggingSecret.computeFromHandshakeSecret(point, app, deliveryMode);
+-new AppTaggingSecret(secret, app);
++new AppTaggingSecret(secret, app, OnchainDeliveryMode.UNCONSTRAINED);
+```
+
 ### [PXE] The `resolveTaggingSecretStrategy` hook also decides self-sends
 
 The PXE used to replace the hook's answer with an address-derived secret for unconstrained delivery to one of the wallet's own accounts. It now applies the hook's answer to every message, including those. `DEFAULT_TAGGING_SECRET_STRATEGY` is replaced by `defaultTaggingSecretStrategy`, which returns the strategy the PXE applies when no hook is configured.
