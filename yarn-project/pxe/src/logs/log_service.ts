@@ -33,6 +33,9 @@ import {
 type RangeKey = string;
 const rangeKey = (fromBlock?: BlockNumber, toBlock?: BlockNumber): RangeKey => `${fromBlock ?? ''}-${toBlock ?? ''}`;
 
+/** The recipient key material that tagging secret derivation needs. */
+type RecipientKeys = { completeAddress: CompleteAddress; ivsk: GrumpkinScalar };
+
 export class LogService {
   private log: Logger;
 
@@ -181,7 +184,13 @@ export class LogService {
     };
   }
 
-  /** Fetches the pending tagged logs for a recipient across all its tagging secrets for the contract. */
+  /**
+   * Fetches the pending tagged logs for a recipient across all its tagging secrets for the contract.
+   *
+   * @param providedSecrets - App-siloed secrets that PXE cannot enumerate itself, passed in by the contract as it
+   * syncs, such as those of the handshakes it discovers onchain. PXE searches them alongside the secrets derived from
+   * the recipient's keys and those registered for the recipient.
+   */
   public async fetchTaggedLogs(
     contractAddress: AztecAddress,
     recipient: AztecAddress,
@@ -195,13 +204,25 @@ export class LogService {
 
     const l2Tips = await this.l2TipsStore.getL2Tips();
 
-    // Secrets PXE can enumerate for this recipient (senders via ECDH + pre-shared store secrets), plus any the app
-    // supplies explicitly for secrets PXE cannot enumerate itself (e.g. handshake-derived ones). The latter arrive
-    // already computed and are searched even when the recipient's account is unknown locally, since they need no ECDH.
-    const combinedSecrets = [...(await this.#getPointDerivedSecrets(contractAddress, recipient)), ...providedSecrets];
+    // Without the recipient's keys we'd be unable to decrypt any messages found, so we skip them and only search for
+    // `providedSecrets`.
+    const recipientKeys = await this.#getRecipientKeys(recipient);
+    if (!recipientKeys) {
+      this.log.warn(`Searching only provided tagging secrets for ${recipient}, whose keys are not held`, {
+        recipient,
+        contractAddress,
+      });
+    }
+    const [keyDerivedSecrets, registeredSecrets] = recipientKeys
+      ? await allToCompletion([
+          this.#getSecretsDerivedFromRecipientKeys(recipientKeys, contractAddress),
+          this.#getSecretsRegisteredForRecipient(recipient, contractAddress),
+        ])
+      : [[], []];
 
-    // These sources can overlap (a sender that is also a PXE account, or a pre-shared secret that coincides with a
-    // sender-derived one), so we deduplicate the combined set.
+    // These can overlap (a sender that is also a PXE account, or a registered secret that coincides with a key-derived
+    // or provided one), so we deduplicate the combined set.
+    const combinedSecrets = [...keyDerivedSecrets, ...registeredSecrets, ...providedSecrets];
     const secrets = Array.from(new Map(combinedSecrets.map(secret => [secret.toString(), secret])).values());
 
     const logs = await syncTaggedPrivateLogs(
@@ -216,28 +237,58 @@ export class LogService {
     return logs.map(log => LogService.#toRetrievedTaggedLog(log));
   }
 
-  /**
-   * Computes the tagging secrets PXE can enumerate for a recipient: one per known sender (via ECDH) plus any
-   * pre-shared secrets registered directly for the recipient. Each registered secret is scanned under the tag
-   * streams its kind can back. Deriving the sender-based secrets requires the recipient's address preimage and keys,
-   * so returns an empty array when those are unavailable. App-supplied secrets (e.g. derived from discovered
-   * handshakes) are handled separately by the caller and do not go through here.
-   */
-  async #getPointDerivedSecrets(contractAddress: AztecAddress, recipient: AztecAddress): Promise<AppTaggingSecret[]> {
-    const recipientCompleteAddress = await this.addressStore.getCompleteAddress(recipient);
-    if (!recipientCompleteAddress || !(await this.keyStore.hasAccount(recipient))) {
-      this.log.warn(
-        `Skipping sender-derived tag retrieval for ${recipient.toString()} due to unknown address preimage`,
-      );
-      return [];
+  /** The recipient's key material, if PXE holds it. */
+  async #getRecipientKeys(recipient: AztecAddress): Promise<RecipientKeys | undefined> {
+    const completeAddress = await this.addressStore.getCompleteAddress(recipient);
+    if (!completeAddress || !(await this.keyStore.hasAccount(recipient))) {
+      return undefined;
     }
-    const recipientIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
+    return { completeAddress, ivsk: await this.keyStore.getMasterIncomingViewingSecretKey(recipient) };
+  }
 
-    const [senderSecrets, registeredSecrets] = await allToCompletion([
-      this.#getSecretsForSenders(recipientCompleteAddress, recipientIvsk, contractAddress),
-      this.taggingSecretSourcesStore.getSharedSecretsForRecipient(recipient),
-    ]);
-    const registeredAppSecrets = await allToCompletion(
+  /** Computes one tagging secret per known sender via ECDH. */
+  async #getSecretsDerivedFromRecipientKeys(
+    recipientKeys: RecipientKeys,
+    contractAddress: AztecAddress,
+  ): Promise<AppTaggingSecret[]> {
+    // We implicitly add all PXE accounts as senders, this helps us decrypt tags on notes that we send to ourselves
+    // (recipient = us, sender = us).
+    const allSenders = [...(await this.taggingSecretSourcesStore.getSenders()), ...(await this.keyStore.getAccounts())];
+
+    return allToCompletion(
+      allSenders.map(async sender => {
+        const secret = await AppTaggingSecret.computeAddressDerived({
+          localAddress: recipientKeys.completeAddress,
+          localIvsk: recipientKeys.ivsk,
+          externalAddress: sender,
+          app: contractAddress,
+          recipient: recipientKeys.completeAddress.address,
+        });
+
+        if (!secret) {
+          // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
+          throw new Error(
+            `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
+          );
+        }
+
+        return secret;
+      }),
+    );
+  }
+
+  /**
+   * Computes the tagging secrets registered for a recipient. An arbitrary secret is only used for unconstrained
+   * delivery, so it yields one app tagging secret, while a handshake can be used for either delivery mode and yields
+   * one for each.
+   */
+  async #getSecretsRegisteredForRecipient(
+    recipient: AztecAddress,
+    contractAddress: AztecAddress,
+  ): Promise<AppTaggingSecret[]> {
+    const registeredSecrets = await this.taggingSecretSourcesStore.getSharedSecretsForRecipient(recipient);
+
+    return allToCompletion(
       registeredSecrets.flatMap(({ kind, secret }) => {
         switch (kind) {
           case 'arbitrary-secret':
@@ -249,39 +300,11 @@ export class LogService {
               AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
               AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
             ];
+          default: {
+            const _exhaustive: never = kind;
+            throw new Error(`Unhandled shared secret kind: ${_exhaustive}`);
+          }
         }
-      }),
-    );
-    return [...senderSecrets, ...registeredAppSecrets];
-  }
-
-  async #getSecretsForSenders(
-    recipientCompleteAddress: CompleteAddress,
-    recipientIvsk: GrumpkinScalar,
-    contractAddress: AztecAddress,
-  ): Promise<AppTaggingSecret[]> {
-    // We implicitly add all PXE accounts as senders, this helps us decrypt tags on notes that we send to ourselves
-    // (recipient = us, sender = us).
-    const allSenders = [...(await this.taggingSecretSourcesStore.getSenders()), ...(await this.keyStore.getAccounts())];
-
-    return allToCompletion(
-      allSenders.map(async sender => {
-        const secret = await AppTaggingSecret.computeAddressDerived({
-          localAddress: recipientCompleteAddress,
-          localIvsk: recipientIvsk,
-          externalAddress: sender,
-          app: contractAddress,
-          recipient: recipientCompleteAddress.address,
-        });
-
-        if (!secret) {
-          // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
-          throw new Error(
-            `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
-          );
-        }
-
-        return secret;
       }),
     );
   }
