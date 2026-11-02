@@ -11,6 +11,20 @@ import { setAztecClientVersionEnrKey, setAztecEnrKey } from '../versioning.js';
 
 export { ENR };
 
+/**
+ * Creates an ENR for our own identity with a sequence number seeded from the wall clock.
+ *
+ * Peers only replace a stored ENR when they see a higher sequence, so a node restarting with the same identity at a new
+ * address must advertise a sequence above anything a previous run published. Seeding with the current time in ms
+ * guarantees that without persisting a counter (which a crash or a wiped data directory would lose), as long as a
+ * single run does not bump the sequence more times than milliseconds elapse before the next start.
+ */
+function createLocalEnr(peerId: PeerId): SignableENR {
+  const enr = SignableENR.createFromPeerId(peerId);
+  enr.seq = BigInt(Date.now());
+  return enr;
+}
+
 export async function createBootnodeENRandPeerId(
   privateKey: string,
   p2pIp: string,
@@ -18,7 +32,7 @@ export async function createBootnodeENRandPeerId(
   l1ChainId: number,
 ): Promise<{ enr: SignableENR; peerId: PeerId }> {
   const peerId = await createLibP2PPeerIdFromPrivateKey(privateKey);
-  const enr = SignableENR.createFromPeerId(peerId);
+  const enr = createLocalEnr(peerId);
   const publicAddr = multiaddr(convertToMultiaddr(p2pIp, p2pBroadcastPort, 'udp'));
   enr.setLocationMultiaddr(publicAddr);
 
@@ -39,7 +53,7 @@ export function createNodeENR(
   packageVersion: string,
 ): { enr: SignableENR; versions: ComponentsVersions } {
   // create ENR from PeerId
-  const enr = SignableENR.createFromPeerId(peerId);
+  const enr = createLocalEnr(peerId);
   // Add aztec identification to ENR
   const versions = setAztecEnrKey(enr, chainConfig);
   // Add aztec client version to ENR

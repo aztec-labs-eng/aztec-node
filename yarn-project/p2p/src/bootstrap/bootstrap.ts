@@ -171,7 +171,7 @@ export class BootstrapNode implements P2PBootstrapApi {
     return Promise.resolve(this.node!.enr.encodeTxt());
   }
 
-  public getRoutingTable() {
+  public getRoutingTable(): Promise<string[]> {
     this.assertNodeStarted();
     return Promise.resolve(this.node!.kadValues().map((enr: ENR) => enr.encodeTxt()));
   }
