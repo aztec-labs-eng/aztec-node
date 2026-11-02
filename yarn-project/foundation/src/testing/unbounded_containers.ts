@@ -28,14 +28,15 @@ export function findUnboundedContainers(schema: z.core.$ZodType, path = ''): str
 
 /**
  * Runs {@link findUnboundedContainers} on the parameters of every method in an API schema, which a server parses from
- * untrusted callers. Pass `returnValues` to also check what a client parses from the server. Paths start with the
- * method name, followed by `(n)` for the n-th parameter or `=>` for the return value.
+ * untrusted callers. Return values are deliberately left out: a client trusts the node or wallet it talks to, so what
+ * the server sends back needs no size bound. Paths start with the method name, followed by `(n)` for the n-th
+ * parameter or `(...)` for a rest parameter.
  */
-export function findUnboundedContainersInApi(api: ApiSchema, opts: { returnValues?: boolean } = {}): string[] {
+export function findUnboundedContainersInApi(api: ApiSchema): string[] {
   return Object.entries(api).flatMap(([method, fn]) => {
     const found: string[] = [];
     walkParameters(fn.def.input, method, found, new WeakSet(), 0);
-    return [...found, ...(opts.returnValues ? findUnboundedContainers(fn.def.output, `${method} =>`) : [])];
+    return found;
   });
 }
 
