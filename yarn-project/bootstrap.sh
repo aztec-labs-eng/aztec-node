@@ -465,7 +465,7 @@ function test_cmds {
   # Aztec CLI tests
   aztec/bootstrap.sh test_cmds
 
-  if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next))$ ]]; then
+  if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next)|release/.+)$ ]]; then
     local test=aztec/src/network_compatibility.test.ts
     echo "$(dep_hash "$test") yarn-project/scripts/run_test.sh $test"
   fi
