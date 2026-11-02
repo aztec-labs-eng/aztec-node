@@ -52,21 +52,28 @@ export interface AbiNamedValue {
   value: AbiValue;
 }
 
-const UnboundedAbiValueSchema: z.ZodType<AbiValue> = z.discriminatedUnion('kind', [
+/** Bounds every array but not nesting depth; parse through {@link AbiValueSchema}, which adds the depth guard. */
+const AbiValueSchemaWithoutDepthLimit: z.ZodType<AbiValue> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('boolean'), value: z.boolean() }),
   z.object({ kind: z.literal('string'), value: z.string() }),
-  z.object({ kind: z.literal('array'), value: z.array(z.lazy(() => UnboundedAbiValueSchema)).max(MAX_ABI_VALUE_LEN) }),
-  z.object({ kind: z.literal('tuple'), fields: z.array(z.lazy(() => UnboundedAbiValueSchema)).max(MAX_ABI_VALUE_LEN) }),
+  z.object({
+    kind: z.literal('array'),
+    value: z.array(z.lazy(() => AbiValueSchemaWithoutDepthLimit)).max(MAX_ABI_VALUE_LEN),
+  }),
+  z.object({
+    kind: z.literal('tuple'),
+    fields: z.array(z.lazy(() => AbiValueSchemaWithoutDepthLimit)).max(MAX_ABI_VALUE_LEN),
+  }),
   z.object({ kind: z.literal('integer'), value: z.string(), sign: z.boolean() }),
   z.object({
     kind: z.literal('struct'),
     fields: z
-      .array(z.object({ name: z.string(), value: z.lazy(() => UnboundedAbiValueSchema) }))
+      .array(z.object({ name: z.string(), value: z.lazy(() => AbiValueSchemaWithoutDepthLimit) }))
       .max(MAX_ABI_VALUE_LEN),
   }),
 ]);
 
-export const AbiValueSchema: z.ZodType<AbiValue> = withMaxDepth(UnboundedAbiValueSchema, MAX_ABI_NESTING_DEPTH);
+export const AbiValueSchema: z.ZodType<AbiValue> = withMaxDepth(AbiValueSchemaWithoutDepthLimit, MAX_ABI_NESTING_DEPTH);
 
 export const AbiNamedValueSchema: z.ZodType<AbiNamedValue> = z.object({
   name: z.string(),
@@ -118,26 +125,28 @@ export type AbiType =
 /** Fields of a struct or tuple type, and items of a format string error. */
 const MAX_ABI_TYPE_FIELDS = 1024;
 
-const UnboundedAbiTypeSchema: z.ZodType<AbiType> = z.discriminatedUnion('kind', [
+/** Bounds every array but not nesting depth; parse through {@link AbiTypeSchema}, which adds the depth guard. */
+const AbiTypeSchemaWithoutDepthLimit: z.ZodType<AbiType> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('field') }),
   z.object({ kind: z.literal('boolean') }),
   z.object({ kind: z.literal('integer'), sign: z.enum(Sign), width: z.number() }),
-  z.object({ kind: z.literal('array'), length: z.number(), type: z.lazy(() => UnboundedAbiTypeSchema) }),
+  z.object({ kind: z.literal('array'), length: z.number(), type: z.lazy(() => AbiTypeSchemaWithoutDepthLimit) }),
   z.object({ kind: z.literal('string'), length: z.number() }),
   z.object({
     kind: z.literal('struct'),
+    // Not ABIVariableSchema: its type is the depth-guarded schema, which would re-walk the subtree at every level.
     fields: z
-      .array(z.object({ name: z.string(), type: z.lazy(() => UnboundedAbiTypeSchema) }))
+      .array(z.object({ name: z.string(), type: z.lazy(() => AbiTypeSchemaWithoutDepthLimit) }))
       .max(MAX_ABI_TYPE_FIELDS),
     path: z.string(),
   }),
   z.object({
     kind: z.literal('tuple'),
-    fields: z.array(z.lazy(() => UnboundedAbiTypeSchema)).max(MAX_ABI_TYPE_FIELDS),
+    fields: z.array(z.lazy(() => AbiTypeSchemaWithoutDepthLimit)).max(MAX_ABI_TYPE_FIELDS),
   }),
 ]);
 
-export const AbiTypeSchema: z.ZodType<AbiType> = withMaxDepth(UnboundedAbiTypeSchema, MAX_ABI_NESTING_DEPTH);
+export const AbiTypeSchema: z.ZodType<AbiType> = withMaxDepth(AbiTypeSchemaWithoutDepthLimit, MAX_ABI_NESTING_DEPTH);
 
 /** A named type. */
 export const ABIVariableSchema = z.object({
