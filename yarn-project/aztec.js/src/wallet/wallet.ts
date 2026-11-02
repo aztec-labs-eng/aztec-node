@@ -450,7 +450,7 @@ export const AccountsCapabilitySchema = z.object({
 });
 
 export const GrantedAccountsCapabilitySchema = AccountsCapabilitySchema.extend({
-  accounts: z.array(z.object({ alias: z.string(), item: schemas.AztecAddress })).max(MAX_WALLET_LIST_LEN),
+  accounts: z.array(z.object({ alias: z.string(), item: schemas.AztecAddress })),
 });
 
 export const ContractsCapabilitySchema = z.object({
@@ -544,7 +544,7 @@ export const AppCapabilitiesSchema = z.object({
 
 export const WalletCapabilitiesSchema = z.object({
   version: z.literal('1.0'),
-  granted: z.array(GrantedCapabilitySchema).max(MAX_WALLET_LIST_LEN),
+  granted: z.array(GrantedCapabilitySchema),
   wallet: z.object({
     name: z.string(),
     version: z.string(),
@@ -552,23 +552,20 @@ export const WalletCapabilitiesSchema = z.object({
   expiresAt: optional(z.number()),
 });
 
-/** Offchain effects and messages a tx emits, and the fields in each one. */
-const MAX_OFFCHAIN_OUTPUT_LEN = 4096;
-
 const OffchainEffectSchema = z.object({
-  data: z.array(schemas.Fr).max(MAX_OFFCHAIN_OUTPUT_LEN),
+  data: z.array(schemas.Fr),
   contractAddress: schemas.AztecAddress,
 });
 
 const OffchainMessageSchema = z.object({
   recipient: schemas.AztecAddress,
-  payload: z.array(schemas.Fr).max(MAX_OFFCHAIN_OUTPUT_LEN),
+  payload: z.array(schemas.Fr),
   contractAddress: schemas.AztecAddress,
 });
 
 const OffchainOutputSchema = z.object({
-  offchainEffects: z.array(OffchainEffectSchema).max(MAX_OFFCHAIN_OUTPUT_LEN),
-  offchainMessages: z.array(OffchainMessageSchema).max(MAX_OFFCHAIN_OUTPUT_LEN),
+  offchainEffects: z.array(OffchainEffectSchema),
+  offchainMessages: z.array(OffchainMessageSchema),
 });
 
 /**

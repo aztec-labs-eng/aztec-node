@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { MAX_RPC_LEN } from '../../interfaces/api_limit.js';
 import { zodFor } from '../../schemas/schemas.js';
 import type { ProcessedTx } from '../processed_tx.js';
 import type { Tx } from '../tx.js';
@@ -25,6 +24,6 @@ export interface TxValidator<T = AnyTx> {
 export const TxValidationResultSchema = zodFor<TxValidationResult>()(
   z.discriminatedUnion('result', [
     z.object({ result: z.literal('valid') }),
-    z.object({ result: z.literal('invalid'), reason: z.array(z.string()).max(MAX_RPC_LEN) }),
+    z.object({ result: z.literal('invalid'), reason: z.array(z.string()) }),
   ]),
 );

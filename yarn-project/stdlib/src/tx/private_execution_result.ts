@@ -12,7 +12,6 @@ import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { NoteSelector } from '../abi/note_selector.js';
-import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 import { PrivateCircuitPublicInputs } from '../kernel/private_circuit_public_inputs.js';
 import type { IsEmpty } from '../kernel/utils/interfaces.js';
 import { sortByCounter } from '../kernel/utils/order_and_comparison.js';
@@ -173,11 +172,9 @@ export class PrivateCallExecutionResult {
         publicInputs: PrivateCircuitPublicInputs.schema,
         newNotes: z.array(NoteAndSlot.schema).max(MAX_NOTE_HASHES_PER_CALL),
         noteHashNullifierCounterMap: mapSchema(z.coerce.number(), z.number()),
-        returnValues: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
-        offchainEffects: z
-          .array(z.object({ data: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN) }))
-          .max(MAX_UNCAPPED_ARRAY_LEN),
-        taggingIndexRanges: z.array(TaggingIndexRangeSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        returnValues: z.array(schemas.Fr),
+        offchainEffects: z.array(z.object({ data: z.array(schemas.Fr) })),
+        taggingIndexRanges: z.array(TaggingIndexRangeSchema),
         nestedExecutionResults: z
           .array(z.lazy(() => PrivateCallExecutionResult.schema))
           .max(MAX_PRIVATE_CALL_STACK_LENGTH_PER_CALL),

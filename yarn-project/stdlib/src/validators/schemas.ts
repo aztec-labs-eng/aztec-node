@@ -10,9 +10,6 @@ import type {
   ValidatorsStats,
 } from './types.js';
 
-/** Slots or epochs of history reported per validator, and validators per history list. */
-const MAX_VALIDATOR_HISTORY_LEN = 2 ** 16;
-
 export const ValidatorStatusInSlotSchema = zodFor<ValidatorStatusInSlot>()(
   z.enum([
     'checkpoint-mined',
@@ -29,17 +26,15 @@ export const ValidatorStatusInSlotSchema = zodFor<ValidatorStatusInSlot>()(
 );
 
 export const ValidatorStatusHistorySchema = zodFor<ValidatorStatusHistory>()(
-  z
-    .array(
-      z.object({
-        slot: schemas.SlotNumber,
-        status: ValidatorStatusInSlotSchema,
-      }),
-    )
-    .max(MAX_VALIDATOR_HISTORY_LEN),
+  z.array(
+    z.object({
+      slot: schemas.SlotNumber,
+      status: ValidatorStatusInSlotSchema,
+    }),
+  ),
 );
 
-export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema).max(MAX_VALIDATOR_HISTORY_LEN);
+export const ValidatorStatusHistorySchemaArray = z.array(ValidatorStatusHistorySchema);
 
 export const ValidatorStatusHistorySchemaMap = z.record(z.string(), ValidatorStatusHistorySchemaArray);
 
@@ -82,15 +77,13 @@ export const ValidatorsStatsSchema = zodFor<ValidatorsStats>()(
 export const SingleValidatorStatsSchema = zodFor<SingleValidatorStats>()(
   z.object({
     validator: ValidatorStatsSchema,
-    allTimeEpochPerformance: z
-      .array(
-        z.object({
-          missed: schemas.Integer,
-          total: schemas.Integer,
-          epoch: schemas.EpochNumber,
-        }),
-      )
-      .max(MAX_VALIDATOR_HISTORY_LEN),
+    allTimeEpochPerformance: z.array(
+      z.object({
+        missed: schemas.Integer,
+        total: schemas.Integer,
+        epoch: schemas.EpochNumber,
+      }),
+    ),
     lastProcessedSlot: schemas.SlotNumber.optional(),
     initialSlot: schemas.SlotNumber.optional(),
     slotWindow: schemas.Integer,

@@ -1116,14 +1116,14 @@ export class CallStackMetadata {
         phase: z.nativeEnum(TxExecutionPhase),
         contractAddress: Fr.schema,
         callerPc: z.number(),
-        calldata: Fr.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        calldata: Fr.schema.array(),
         isStaticCall: z.boolean(),
         gasLimit: Gas.schema,
-        output: Fr.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
-        internalCallStackAtExit: z.number().array().max(MAX_AVM_EXECUTION_ENTRIES),
+        output: Fr.schema.array(),
+        internalCallStackAtExit: z.number().array(),
         haltingMessage: NullishToUndefined(z.string()),
         reverted: z.boolean(),
-        nested: CallStackMetadata.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
+        nested: CallStackMetadata.schema.array(),
         numNestedCalls: z.number(),
       })
       .transform(
@@ -1353,11 +1353,8 @@ export class PublicTxResult {
         revertCode: RevertCode.schema,
         revertReason: NullishToUndefined(SimulationError.schema),
         publicTxEffect: PublicTxEffect.schema,
-        callStackMetadata: z.union([
-          CallStackMetadata.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
-          NestedProcessReturnValues.schema.array().max(MAX_AVM_EXECUTION_ENTRIES),
-        ]),
-        logs: NullishToUndefined(DebugLog.schema.array().max(MAX_AVM_EXECUTION_ENTRIES)),
+        callStackMetadata: z.union([CallStackMetadata.schema.array(), NestedProcessReturnValues.schema.array()]),
+        logs: NullishToUndefined(DebugLog.schema.array()),
         // Missing/null coalesces to an empty map.
         stats: z
           .record(z.string(), z.string())

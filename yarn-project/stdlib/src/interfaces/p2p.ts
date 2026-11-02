@@ -16,21 +16,13 @@ export type PeerInfo =
   | { status: 'dialing'; dialStatus: string; id: string; addresses: string[] }
   | { status: 'cached'; id: string; addresses: string[]; enr: string; dialAttempts: number };
 
-/** Multiaddrs reported for a single peer. */
-const MAX_PEER_ADDRESSES = 64;
-
 export const PeerInfoSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('connected'), score: z.number(), id: z.string() }),
-  z.object({
-    status: z.literal('dialing'),
-    dialStatus: z.string(),
-    id: z.string(),
-    addresses: z.array(z.string()).max(MAX_PEER_ADDRESSES),
-  }),
+  z.object({ status: z.literal('dialing'), dialStatus: z.string(), id: z.string(), addresses: z.array(z.string()) }),
   z.object({
     status: z.literal('cached'),
     id: z.string(),
-    addresses: z.array(z.string()).max(MAX_PEER_ADDRESSES),
+    addresses: z.array(z.string()),
     enr: z.string(),
     dialAttempts: z.number(),
   }),
