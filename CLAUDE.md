@@ -45,7 +45,7 @@ Never bulk-update lockfiles (`Cargo.lock`, `yarn.lock`). Use targeted updates on
 </lockfile_discipline>
 
 <standard_contract_repin>
-Never run `noir-projects/noir-contracts/bootstrap.sh pin-standard-build` on your own initiative. The pin exists so ordinary source or bytecode changes do NOT move the standard contracts' canonical addresses, and CI does not fail when the bytecode drifts. A re-pin is a deliberate redeploy decision for a human to make: if a change seems to need one, leave the pin, rebuild against it, and ask. See the comment on `pin-standard-build` for why re-pinning is breaking.
+Never run `noir-projects/noir-contracts/bootstrap.sh pin-standard-build` on your own initiative. The pin exists so ordinary source or bytecode changes do NOT move the standard contracts' canonical addresses, and CI does not fail when the bytecode drifts. A re-pin is a deliberate redeploy decision for a human to make: if a change seems to need one, leave the pin, rebuild against it, and ask. See the "Pinned standard contracts" section of `noir-projects/noir-contracts/README.md` for why re-pinning is breaking.
 </standard_contract_repin>
 
 </git_workflow>
