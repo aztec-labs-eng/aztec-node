@@ -18,48 +18,46 @@ const OnchainDeliveryModeSchema = z.union([
 /**
  * Application tagging secret used for log tagging.
  *
- * It bundles a tagging secret with the app contract address. Unconstrained secrets are derived by the simulator from
- * `(sender, recipient, app)` via ECDH. Constrained secrets are supplied to the simulator by the caller as an
- * app-siloed shared secret retrieved from a handshake registry.
+ * It bundles a secret siloed to an app contract with the delivery mode whose tag stream it backs. Each way of deriving
+ * the secret has one constructor, so that the sending and the receiving side agree on it:
+ * {@link computeAddressDerived}, {@link computeFromArbitrarySecret} and {@link computeFromHandshakeSecret}. Only the
+ * receiving side derives a handshake secret, as the sender gets the app-siloed secret from the handshake registry.
+ *
+ * Secrets that arrive already derived, such as those supplied by a contract, are wrapped with the class constructor.
  */
 export class AppTaggingSecret {
   constructor(
     public readonly secret: Fr,
     public readonly app: AztecAddress,
-    public readonly deliveryMode: OnchainDeliveryMode = OnchainDeliveryMode.UNCONSTRAINED,
+    public readonly deliveryMode: OnchainDeliveryMode,
   ) {}
 
   /**
-   * Derives an app-siloed, recipient-directional tagging secret from a shared tagging secret point.
+   * Derives the tagging secret for an arbitrary shared secret point.
    *
-   * App-silos the point via {@link computeAppSiloedSharedSecretFromPoint}, then directs the result to `recipient`:
-   * `h([s_app, recipient])`. The directional step stops a symmetric shared secret (ECDH against an address, or an
-   * arbitrary registered point) from colliding bidirectionally, so two parties never share a tag sequence.
+   * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. The sender and the recipient
+   * agree on the point themselves.
    *
-   * The point is obtained either via {@link computeSharedTaggingSecret} (an ECDH key exchange against a sender) or
-   * registered directly as a pre-shared secret.
-   *
-   * @param taggingSecretPoint - The shared tagging secret point (ECDH output, or a directly registered pre-shared secret)
+   * @param taggingSecretPoint - The shared secret point
    * @param app - Contract address to silo the secret to
    * @param recipient - Recipient of the log. Defines the "direction of the secret".
    * @returns The secret that can be used along with an index to compute a tag to be included in a log.
    */
-  static async computeDirectional(
+  static computeFromArbitrarySecret(
     taggingSecretPoint: Point,
     app: AztecAddress,
     recipient: AztecAddress,
   ): Promise<AppTaggingSecret> {
-    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app);
-    const directionalAppTaggingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
-
-    return new AppTaggingSecret(directionalAppTaggingSecret, app);
+    return AppTaggingSecret.#computeDirectional(taggingSecretPoint, app, recipient);
   }
 
   /**
-   * Derives the bare app-siloed tagging secret from a shared secret point via
-   * {@link computeAppSiloedSharedSecretFromPoint}, under the given delivery mode.
+   * Derives the tagging secret for a handshake's shared secret point.
+   *
+   * The secret is the bare app-siloed value from {@link computeAppSiloedSharedSecretFromPoint}, under the given
+   * delivery mode.
    */
-  static async computeAppSiloed(
+  static async computeFromHandshakeSecret(
     taggingSecretPoint: Point,
     app: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
@@ -72,23 +70,37 @@ export class AppTaggingSecret {
   }
 
   /**
-   * Derives the tagging secret for `(externalAddress, recipient, app)` by performing an ECDH key exchange against
-   * `externalAddress` to obtain the shared point, then siloing and directing it via {@link computeDirectional}.
-   * Returns undefined if `externalAddress` is not a valid address.
+   * Derives the tagging secret two addresses share through ECDH.
+   *
+   * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. Each party derives the same
+   * secret using its own keys as the local side of the exchange.
+   *
+   * @returns The secret, or undefined if `externalAddress` is not a valid address.
    */
-  static async computeViaEcdh(
-    localAddress: CompleteAddress,
-    localIvsk: Fq,
-    externalAddress: AztecAddress,
-    app: AztecAddress,
-    recipient: AztecAddress,
-  ): Promise<AppTaggingSecret | undefined> {
+  static async computeAddressDerived({
+    localAddress,
+    localIvsk,
+    externalAddress,
+    app,
+    recipient,
+  }: {
+    /** The party whose keys are used for the exchange. */
+    localAddress: CompleteAddress;
+    /** The master incoming viewing secret key of `localAddress`. */
+    localIvsk: Fq;
+    /** The other party of the exchange. */
+    externalAddress: AztecAddress;
+    /** Contract address to silo the secret to. */
+    app: AztecAddress;
+    /** Recipient of the log, which is one of the two parties. Defines the "direction of the secret". */
+    recipient: AztecAddress;
+  }): Promise<AppTaggingSecret | undefined> {
     const taggingSecretPoint = await computeSharedTaggingSecret(localAddress, localIvsk, externalAddress);
     if (!taggingSecretPoint) {
       return undefined;
     }
 
-    return AppTaggingSecret.computeDirectional(taggingSecretPoint, app, recipient);
+    return AppTaggingSecret.#computeDirectional(taggingSecretPoint, app, recipient);
   }
 
   toString(): string {
@@ -106,6 +118,22 @@ export class AppTaggingSecret {
       AztecAddress.fromStringUnsafe(appStr),
       onchainDeliveryModeFromString(deliveryModeStr),
     );
+  }
+
+  /**
+   * App-silos a shared secret point via {@link computeAppSiloedSharedSecretFromPoint}, then directs the result to
+   * `recipient`: `h([s_app, recipient])`. The directional step stops a symmetric shared secret from colliding
+   * bidirectionally, so two parties never share a tag sequence.
+   */
+  static async #computeDirectional(
+    taggingSecretPoint: Point,
+    app: AztecAddress,
+    recipient: AztecAddress,
+  ): Promise<AppTaggingSecret> {
+    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app);
+    const directionalAppTaggingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
+
+    return new AppTaggingSecret(directionalAppTaggingSecret, app, OnchainDeliveryMode.UNCONSTRAINED);
   }
 }
 

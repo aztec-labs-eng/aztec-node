@@ -178,7 +178,7 @@ describe('PrivateExecutionOracle', () => {
       const point = await Point.random();
       const { oracle } = makeHookedOracle({ strategy: { type: 'arbitrary-secret', secret: point } });
 
-      const expected = await AppTaggingSecret.computeDirectional(point, contractAddress, recipient);
+      const expected = await AppTaggingSecret.computeFromArbitrarySecret(point, contractAddress, recipient);
       await expect(
         oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED),
       ).resolves.toEqual({ type: 'unconstrained-secret', secret: expected.secret });
@@ -226,13 +226,13 @@ describe('PrivateExecutionOracle', () => {
     };
 
     const addressDerivedSecret = async (account: Account, recipient: AztecAddress) => {
-      const secret = await AppTaggingSecret.computeViaEcdh(
-        account.completeAddress,
-        account.ivsk,
+      const secret = await AppTaggingSecret.computeAddressDerived({
+        localAddress: account.completeAddress,
+        localIvsk: account.ivsk,
+        externalAddress: recipient,
+        app: contractAddress,
         recipient,
-        contractAddress,
-        recipient,
-      );
+      });
       return secret!.secret;
     };
   });
