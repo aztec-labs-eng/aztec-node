@@ -307,13 +307,14 @@ describe('LogService', () => {
 
   describe('fetchTaggedLogs', () => {
     let recipient: AztecAddress;
+    let scopes: AztecAddress[];
     let sharedSecret: Point;
 
     beforeEach(async () => {
       contractAddress = await AztecAddress.random();
 
       const l2TipsProvider = mock<L2TipsProvider>();
-      const scopes: AztecAddress[] = [];
+      scopes = [];
       ({ aztecNode, keyStore, taggingSecretSourcesStore, addressStore, logService } = await createTestLogService(
         l2TipsProvider,
         scopes,
@@ -392,6 +393,46 @@ describe('LogService', () => {
       expect(txHashes).not.toContainEqual(directionalLog.txHash);
     });
 
+    it('returns a log once when a registered secret coincides with a provided one', async () => {
+      await taggingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
+      const providedSecret = await AppTaggingSecret.computeFromHandshakeSecret(
+        sharedSecret,
+        contractAddress,
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+
+      const log = randomPrivateLogResult({ includeEffects: true });
+      servePrivateLogsByTag(
+        aztecNode,
+        new Map([[(await SiloedTag.compute({ extendedSecret: providedSecret, index: 0 })).toString(), log]]),
+      );
+
+      const logs = await logService.fetchTaggedLogs(contractAddress, recipient, [providedSecret]);
+
+      expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
+    });
+
+    it('scans only provided secrets for a recipient whose keys are not held', async () => {
+      const keylessRecipient = await AztecAddress.random();
+      scopes.push(keylessRecipient);
+      await taggingSecretSourcesStore.addSharedSecret(keylessRecipient, 'arbitrary-secret', sharedSecret);
+      const providedSecret = new AppTaggingSecret(Fr.random(), contractAddress, OnchainDeliveryMode.UNCONSTRAINED);
+
+      const registeredLog = randomPrivateLogResult({ includeEffects: true });
+      const providedLog = randomPrivateLogResult({ includeEffects: true });
+      servePrivateLogsByTag(
+        aztecNode,
+        new Map([
+          [(await directionalTag(sharedSecret, contractAddress, keylessRecipient)).toString(), registeredLog],
+          [(await SiloedTag.compute({ extendedSecret: providedSecret, index: 0 })).toString(), providedLog],
+        ]),
+      );
+
+      const logs = await logService.fetchTaggedLogs(contractAddress, keylessRecipient, [providedSecret]);
+
+      expect(logs.map(l => l.txHash)).toEqual([providedLog.txHash]);
+    });
+
     it('rejects a recipient outside the allowed scopes', async () => {
       const outOfScope = await AztecAddress.random();
       await expect(logService.fetchTaggedLogs(contractAddress, outOfScope, [])).rejects.toThrow(
@@ -416,7 +457,7 @@ describe('LogService', () => {
     }
   });
 
-  describe('address-derived discovery requires a registered sender', () => {
+  describe('address-derived discovery', () => {
     let recipientCompleteAddress: CompleteAddress;
     let recipient: AztecAddress;
     let sender: AztecAddress;
@@ -443,14 +484,7 @@ describe('LogService', () => {
       // Recompute, from the same ECDH inputs the service uses, the tag the recipient would scan for the sender's
       // first message. The node returns the sender's log only for this exact tag, so discovery proves the tag was
       // scanned, which only happens when the sender is registered.
-      const appSecret = await AppTaggingSecret.computeAddressDerived({
-        localAddress: recipientCompleteAddress,
-        localIvsk: await keyStore.getMasterIncomingViewingSecretKey(recipient),
-        externalAddress: sender,
-        app: contractAddress,
-        recipient,
-      });
-      senderIndex0Tag = await SiloedTag.compute({ extendedSecret: appSecret!, index: 0 });
+      senderIndex0Tag = await addressDerivedTag(sender);
 
       // Past the anchor block, so the log is unfinalized and the scan completes in a single round.
       senderLog = randomPrivateLogResult({ blockNumber: INITIAL_L2_BLOCK_NUM + 1, includeEffects: true });
@@ -478,6 +512,26 @@ describe('LogService', () => {
       expect(discovered).toHaveLength(1);
       expect(discovered[0].txHash).toEqual(senderLog.txHash);
     });
+
+    it('discovers messages an account sends to itself without registering a sender', async () => {
+      const selfLog = randomPrivateLogResult({ blockNumber: INITIAL_L2_BLOCK_NUM + 1, includeEffects: true });
+      servePrivateLogsByTag(aztecNode, new Map([[(await addressDerivedTag(recipient)).toString(), selfLog]]));
+
+      const discovered = await logService.fetchTaggedLogs(contractAddress, recipient, []);
+
+      expect(discovered.map(l => l.txHash)).toEqual([selfLog.txHash]);
+    });
+
+    async function addressDerivedTag(externalAddress: AztecAddress): Promise<SiloedTag> {
+      const appSecret = await AppTaggingSecret.computeAddressDerived({
+        localAddress: recipientCompleteAddress,
+        localIvsk: await keyStore.getMasterIncomingViewingSecretKey(recipient),
+        externalAddress,
+        app: contractAddress,
+        recipient,
+      });
+      return SiloedTag.compute({ extendedSecret: appSecret!, index: 0 });
+    }
   });
 });
 
