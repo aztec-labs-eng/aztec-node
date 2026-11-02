@@ -125,7 +125,8 @@ export function setSchema<T>(value: ZodFor<T>, maxSize?: number): ZodFor<Set<T>>
 
 /**
  * Creates a record schema that rejects objects with more than `maxKeys` keys before parsing any entry. A record has no
- * size bound zod checks up front, and a `.refine` on the record would only run after every entry was parsed.
+ * size bound zod checks up front, and a `.refine` on the record would only run after every entry was parsed. Input that
+ * is not a plain object skips the key count and is rejected by the record itself, so an array is never enumerated.
  */
 export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends ZodTypeAny>(
   key: TKey,
@@ -133,7 +134,7 @@ export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends 
   maxKeys: number,
 ) {
   return z
-    .custom<object>(input => typeof input === 'object' && input !== null && Object.keys(input).length <= maxKeys, {
+    .custom<object>(input => !z.core.util.isPlainObject(input) || Object.keys(input).length <= maxKeys, {
       message: `Must have at most ${maxKeys} entries`,
     })
     .pipe(z.record(key, value));
@@ -151,8 +152,10 @@ export function withMaxDepth<T extends ZodTypeAny>(schema: T, maxDepth: number) 
     .pipe(schema);
 }
 
-// Runs before the inner schema's size caps, so it must not allocate per element: a wide input (millions of entries in
-// one array) would otherwise be queued in full before `.max()` gets to reject it. Recursion is bounded by `maxDepth`.
+// Runs before the inner schema's size caps. Arrays are walked by index, which allocates nothing per element, so a wide
+// array costs no memory before `.max()` rejects it. Objects are walked with `for…in`, for which V8 collects the full
+// key list before the first iteration, so a wide object costs memory proportional to its key count, the same order as
+// the parsed object itself. Recursion is bounded by `maxDepth`.
 function isNestedDeeperThan(value: unknown, maxDepth: number, depth = 0): boolean {
   if (value === null || typeof value !== 'object') {
     return false;

@@ -33,6 +33,17 @@ describe('schemas', () => {
       const input = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`k${i}`, 'not a number']));
       expect(schema.safeParse(input).error?.issues).toHaveLength(1);
     });
+
+    it('rejects an array as a type mismatch without enumerating its elements', () => {
+      const array = new Proxy(new Array(1_000_000).fill(0), {
+        ownKeys: () => {
+          throw new Error('enumerated the array');
+        },
+      });
+      expect(schema.safeParse(array).error?.issues).toEqual([
+        expect.objectContaining({ code: 'invalid_type', expected: 'record' }),
+      ]);
+    });
   });
 
   describe('withMaxDepth', () => {
