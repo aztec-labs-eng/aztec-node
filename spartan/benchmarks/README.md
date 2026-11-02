@@ -23,7 +23,7 @@ parallel job chains; they share only image selection and the CI3 wait gate.
 Every benchmark follows the same phases:
 
 1. **Select image.** Resolve the Docker image under test. With no `workflow_dispatch` input the tag
-   is `<version>-nightly.<YYYYMMDD>`, where `<version>` comes from `.release-please-manifest.json`,
+   is `<version>-nightly.<YYYYMMDD>`, where `<version>` comes from `.version-manifest.json`,
    giving image `azteclabs/aztec:<tag>`. The workflow then verifies `docker manifest inspect`
    succeeds, so a missing nightly build fails fast instead of producing `ImagePullBackOff` later.
    The benchmark code itself always comes from `main`: these jobs hold the `deployment`

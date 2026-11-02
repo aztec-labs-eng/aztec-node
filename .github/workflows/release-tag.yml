@@ -4,7 +4,7 @@
 # release-tag-nightly.yml, apart from this file.
 #
 # Every run tags the commit named by its full SHA and takes the version from
-# that commit's .release-please-manifest.json. The approval screen shows the
+# that commit's .version-manifest.json. The approval screen shows the
 # SHA, so the second person approves the exact commit that gets tagged, whatever
 # lands on the branch while the run waits.
 #
@@ -134,7 +134,7 @@ jobs:
           export LC_ALL=C
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
-          version=$(jq -r '."."' .release-please-manifest.json)
+          version=$(jq -r '."."' .version-manifest.json)
           # The whole tag name is built from this, so refuse anything that is not
           # a plain X.Y.Z before it reaches a ref name. Not echoed, like the
           # suffix below: the manifest is whatever the dispatched commit holds.
@@ -213,7 +213,7 @@ jobs:
             elif [ "$KIND" = rc ] || [ "$KIND" = private ]; then
               echo "::error::Another run cut $tag first. Dispatch again for the next number."
             else
-              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on the release line and tag a commit that has the bump."
+              echo "::error::Tag $tag already exists. Bump .version-manifest.json on the release line and tag a commit that has the bump."
             fi
             exit 1
           fi

@@ -51,7 +51,7 @@ jobs:
           if [[ -n "$INPUT_NIGHTLY_TAG" ]]; then
             nightly_tag="$INPUT_NIGHTLY_TAG"
           else
-            current_version=$(jq -r '."."' .release-please-manifest.json)
+            current_version=$(jq -r '."."' .version-manifest.json)
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
           # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
