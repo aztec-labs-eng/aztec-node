@@ -34,8 +34,8 @@ describe('findUnboundedContainers', () => {
     expect(findUnboundedContainers(z.set(z.number()).max(2))).toEqual([]);
   });
 
-  it('flags mapSchema and setSchema only when called without a size', () => {
-    expect(findUnboundedContainers(setSchema(z.number()))).toEqual(['[]']);
+  it('flags mapSchema and setSchema only when their size is Infinity', () => {
+    expect(findUnboundedContainers(setSchema(z.number(), Infinity))).toEqual(['[]']);
     expect(findUnboundedContainers(mapSchema(z.string(), z.number(), 10))).toEqual([]);
   });
 

@@ -5,7 +5,6 @@ import { type ContractArtifact, ContractArtifactSchema } from '@aztec-labs/stdli
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { type ContractInstanceWithAddress, ContractInstanceWithAddressSchema } from '@aztec-labs/stdlib/contract';
-import { MAX_UNCAPPED_ARRAY_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
 import { Buffer } from 'buffer';
 import { z } from 'zod';
 
@@ -162,7 +161,13 @@ export function toForeignCallResult(obj: (ForeignCallSingle | ForeignCallArray)[
 
 export const ForeignCallSingleSchema = z.string();
 
-export const ForeignCallArraySchema = z.array(z.string()).max(MAX_UNCAPPED_ARRAY_LEN);
+/**
+ * Bound for the arrays in a foreign call from the Noir test runner. Noir puts no limit on them; this is far above any
+ * real call and only makes an oversized array fail on its length before its entries are parsed.
+ */
+const MAX_FOREIGN_CALL_ARRAY_LEN = 2 ** 20;
+
+export const ForeignCallArraySchema = z.array(z.string()).max(MAX_FOREIGN_CALL_ARRAY_LEN);
 
 export const ForeignCallArgsSchema = z
   .array(
@@ -173,8 +178,8 @@ export const ForeignCallArgsSchema = z
       ContractInstanceWithAddressSchema,
     ]),
   )
-  .max(MAX_UNCAPPED_ARRAY_LEN);
+  .max(MAX_FOREIGN_CALL_ARRAY_LEN);
 
 export const ForeignCallResultSchema = z.object({
-  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])).max(MAX_UNCAPPED_ARRAY_LEN),
+  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])).max(MAX_FOREIGN_CALL_ARRAY_LEN),
 });
