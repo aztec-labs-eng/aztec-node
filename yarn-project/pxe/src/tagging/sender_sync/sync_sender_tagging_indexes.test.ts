@@ -4,7 +4,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
-import { AppTaggingSecretKind, type LogResult, PrivateLog } from '@aztec-labs/stdlib/logs';
+import { type LogResult, OnchainDeliveryMode, PrivateLog } from '@aztec-labs/stdlib/logs';
 import { randomAppTaggingSecret, randomPrivateLogResult } from '@aztec-labs/stdlib/testing';
 import { type MinedTxStatus, TxEffect, TxExecutionResult, TxHash, TxStatus } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -29,7 +29,7 @@ describe('syncSenderTaggingIndexes', () => {
   let taggingStore: SenderTaggingStore;
 
   async function setUp() {
-    secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     aztecNode = mock<AztecNode>();
     taggingStore = new SenderTaggingStore(await openTmpStore('test'));
@@ -53,7 +53,7 @@ describe('syncSenderTaggingIndexes', () => {
   it('updates the highest finalized index for a constrained secret', async () => {
     await setUp();
     // Override unconstrained secret from `setUp`
-    secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+    secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
     const finalizedIndex = 3;
 
@@ -353,7 +353,7 @@ describe('syncSenderTaggingIndexes', () => {
   it('leaves another secret pending when finalizing this one from the logs', async () => {
     await setUp();
 
-    const otherSecret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const otherSecret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
     const revertedTxHash = TxHash.random();
 
     // Prove-time persist: a log for the synced secret in the setup phase and one for another secret in app logic.
@@ -381,7 +381,7 @@ describe('syncSenderTaggingIndexes', () => {
   it('finalizes another secret too when the receipt reports the whole tx succeeded', async () => {
     await setUp();
 
-    const otherSecret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    const otherSecret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
     const txHash = TxHash.random();
 
     await taggingStore.storePendingIndexes(

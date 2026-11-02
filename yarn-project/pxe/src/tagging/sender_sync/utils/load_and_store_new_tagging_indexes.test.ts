@@ -4,7 +4,7 @@ import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type AppTaggingSecret,
-  AppTaggingSecretKind,
+  OnchainDeliveryMode,
   type PrivateLogsQuery,
   type SiloedTag,
   randomLogResult,
@@ -29,7 +29,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
   }
 
   beforeAll(async () => {
-    secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
   });
 
   beforeEach(() => {

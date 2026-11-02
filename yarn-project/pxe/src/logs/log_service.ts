@@ -10,8 +10,8 @@ import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   AppTaggingSecret,
-  AppTaggingSecretKind,
   type LogResult,
+  OnchainDeliveryMode,
   SiloedTag,
   computeSharedTaggingSecret,
 } from '@aztec-labs/stdlib/logs';
@@ -253,8 +253,8 @@ export class LogService {
             // A handshake-backed sender tags messages with the bare app-siloed secret, one tag domain per delivery
             // mode.
             return [
-              AppTaggingSecret.computeAppSiloed(secret, contractAddress, AppTaggingSecretKind.UNCONSTRAINED),
-              AppTaggingSecret.computeAppSiloed(secret, contractAddress, AppTaggingSecretKind.CONSTRAINED),
+              AppTaggingSecret.computeAppSiloed(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
+              AppTaggingSecret.computeAppSiloed(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
             ];
         }
       }),

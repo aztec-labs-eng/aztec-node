@@ -5,7 +5,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { AppTaggingSecretKind, type PrivateLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode, type PrivateLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
 import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { mkdir, writeFile } from 'fs/promises';
@@ -72,7 +72,7 @@ type BenchResult = { name: string; value: number; unit: string };
 
 type Scenario = {
   label: string;
-  kind: AppTaggingSecretKind;
+  deliveryMode: OnchainDeliveryMode;
   /** Number of secrets the recipient holds for this directional app. */
   secretCount: number;
   /** New contiguous finalized logs available per secret since the last sync (0 = steady state). */
@@ -101,7 +101,7 @@ const SCENARIOS: Scenario[] = [
   // first-miss wins by roughly the window size.
   ...[1, 10, 100, 1000].map(secretCount => ({
     label: `constrained/steady-state/secrets=${secretCount}`,
-    kind: AppTaggingSecretKind.CONSTRAINED,
+    deliveryMode: OnchainDeliveryMode.CONSTRAINED,
     secretCount,
     newLogs: 0,
   })),
@@ -110,7 +110,7 @@ const SCENARIOS: Scenario[] = [
   ...[100, 1000].flatMap(secretCount =>
     [1, 3].map(newLogs => ({
       label: `constrained/catch-up-${newLogs}/secrets=${secretCount}`,
-      kind: AppTaggingSecretKind.CONSTRAINED,
+      deliveryMode: OnchainDeliveryMode.CONSTRAINED,
       secretCount,
       newLogs,
     })),
@@ -122,7 +122,7 @@ const SCENARIOS: Scenario[] = [
   ...[100, 1000].flatMap(secretCount =>
     [UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, 50, 100].map(newLogs => ({
       label: `constrained/catch-up-${newLogs}/secrets=${secretCount}`,
-      kind: AppTaggingSecretKind.CONSTRAINED,
+      deliveryMode: OnchainDeliveryMode.CONSTRAINED,
       secretCount,
       newLogs,
     })),
@@ -132,7 +132,7 @@ const SCENARIOS: Scenario[] = [
   // round, so the round count equals the deepest secret's), so round-trips match catch-up-100.
   {
     label: `constrained/mixed/secrets=1000`,
-    kind: AppTaggingSecretKind.CONSTRAINED,
+    deliveryMode: OnchainDeliveryMode.CONSTRAINED,
     secretCount: 1000,
     newLogs: 0,
     deepCohort: { count: 1, newLogs: 100 },
@@ -140,7 +140,7 @@ const SCENARIOS: Scenario[] = [
   // Control: unconstrained steady state is unaffected by the optimization (windowed scan cannot first-miss).
   {
     label: `unconstrained/steady-state/secrets=100`,
-    kind: AppTaggingSecretKind.UNCONSTRAINED,
+    deliveryMode: OnchainDeliveryMode.UNCONSTRAINED,
     secretCount: 100,
     newLogs: 0,
   },
@@ -158,20 +158,20 @@ describeBench('syncTaggedPrivateLogs constrained-sync bench', () => {
   }
 
   async function runScenario(scenario: Scenario) {
-    const { kind, secretCount } = scenario;
+    const { deliveryMode, secretCount } = scenario;
     const perSecretNewLogs = newLogsPerSecret(scenario);
 
     aztecNode.getPrivateLogsByTags.mockReset();
     const taggingStore = new RecipientTaggingStore(await openTmpStore('bench'));
     taggingStore.beginChangeSet(CHANGE_SET_ID);
-    const secrets = await Promise.all(Array.from({ length: secretCount }, () => randomAppTaggingSecret(kind)));
+    const secrets = await Promise.all(Array.from({ length: secretCount }, () => randomAppTaggingSecret(deliveryMode)));
 
     // Seed the persisted finalized indexes to simulate a recipient that already synced prior finalized messages. The
     // per-secret writes are independent, so run them concurrently.
     await Promise.all(
       secrets.map(async secret => {
         await taggingStore.updateHighestFinalizedIndex(secret, PRIOR_FINALIZED_INDEX, CHANGE_SET_ID);
-        if (kind === AppTaggingSecretKind.UNCONSTRAINED) {
+        if (deliveryMode === OnchainDeliveryMode.UNCONSTRAINED) {
           await taggingStore.updateHighestAgedIndex(secret, PRIOR_FINALIZED_INDEX, CHANGE_SET_ID);
         }
       }),
@@ -217,7 +217,7 @@ describeBench('syncTaggedPrivateLogs constrained-sync bench', () => {
     // First-miss floor: each secret pays its K hits + 1 miss. Unconstrained cannot first-miss, so its floor is
     // its current cost.
     const firstMissOptimum =
-      kind === AppTaggingSecretKind.CONSTRAINED ? sum(perSecretNewLogs.map(k => k + 1)) : tagQueries;
+      deliveryMode === OnchainDeliveryMode.CONSTRAINED ? sum(perSecretNewLogs.map(k => k + 1)) : tagQueries;
 
     return {
       ...scenario,

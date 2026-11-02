@@ -2,25 +2,26 @@ import { DomainSeparator } from '@aztec-labs/constants';
 import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { CompleteAddress } from '../contract/complete_address.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
 import { deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
 import { randomAppTaggingSecret } from '../tests/factories.js';
-import { AppTaggingSecret, computeSharedTaggingSecret } from './app_tagging_secret.js';
-import { AppTaggingSecretKind } from './app_tagging_secret_kind.js';
+import { AppTaggingSecret, AppTaggingSecretSchema, computeSharedTaggingSecret } from './app_tagging_secret.js';
+import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
 import { SiloedTag } from './siloed_tag.js';
 import { TaggingIndexRangeSchema } from './tagging_index_range.js';
 
 describe('AppTaggingSecret', () => {
   describe('TaggingIndexRangeSchema', () => {
-    it('preserves constrained secret kind when parsing a TaggingIndexRange', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+    it('preserves the constrained delivery mode when parsing a TaggingIndexRange', async () => {
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       const parsed = TaggingIndexRangeSchema.parse({
         extendedSecret: {
-          kind: AppTaggingSecretKind.CONSTRAINED,
+          deliveryMode: OnchainDeliveryMode.CONSTRAINED,
           secret: original.secret.toString(),
           app: original.app.toString(),
         },
@@ -29,23 +30,40 @@ describe('AppTaggingSecret', () => {
       });
 
       expect(parsed.extendedSecret).toBeInstanceOf(AppTaggingSecret);
-      expect(parsed.extendedSecret.kind).toBe(AppTaggingSecretKind.CONSTRAINED);
+      expect(parsed.extendedSecret.deliveryMode).toBe(OnchainDeliveryMode.CONSTRAINED);
     });
 
-    it('defaults missing secret kind to unconstrained when parsing a TaggingIndexRange', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    it('rejects a TaggingIndexRange with no delivery mode', async () => {
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
-      const parsed = TaggingIndexRangeSchema.parse({
-        extendedSecret: {
-          secret: original.secret.toString(),
-          app: original.app.toString(),
-        },
-        lowestIndex: 0,
-        highestIndex: 3,
-      });
+      expect(() =>
+        TaggingIndexRangeSchema.parse({
+          extendedSecret: {
+            secret: original.secret.toString(),
+            app: original.app.toString(),
+          },
+          lowestIndex: 0,
+          highestIndex: 3,
+        }),
+      ).toThrow();
+    });
+  });
 
-      expect(parsed.extendedSecret).toBeInstanceOf(AppTaggingSecret);
-      expect(parsed.extendedSecret.kind).toBe(AppTaggingSecretKind.UNCONSTRAINED);
+  describe('AppTaggingSecretSchema', () => {
+    it('round-trips a constrained secret through JSON', async () => {
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+
+      const parsed = AppTaggingSecretSchema.parse(JSON.parse(jsonStringify(original)));
+
+      expect(parsed).toEqual(original);
+    });
+
+    it('round-trips an unconstrained secret through JSON', async () => {
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+
+      const parsed = AppTaggingSecretSchema.parse(JSON.parse(jsonStringify(original)));
+
+      expect(parsed).toEqual(original);
     });
   });
 
@@ -111,43 +129,43 @@ describe('AppTaggingSecret', () => {
 
   describe('fromString', () => {
     it('round-trips an unconstrained secret', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
       const parsed = AppTaggingSecret.fromString(original.toString());
 
       expect(parsed).toBeInstanceOf(AppTaggingSecret);
-      expect(parsed.kind).toBe(AppTaggingSecretKind.UNCONSTRAINED);
+      expect(parsed.deliveryMode).toBe(OnchainDeliveryMode.UNCONSTRAINED);
       expect(parsed.toString()).toBe(original.toString());
     });
 
     it('round-trips a constrained secret', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const parsed = AppTaggingSecret.fromString(original.toString());
 
       expect(parsed).toBeInstanceOf(AppTaggingSecret);
-      expect(parsed.kind).toBe(AppTaggingSecretKind.CONSTRAINED);
+      expect(parsed.deliveryMode).toBe(OnchainDeliveryMode.CONSTRAINED);
       expect(parsed.toString()).toBe(original.toString());
     });
 
     it('rejects a string that is not three-part', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       expect(() => AppTaggingSecret.fromString(`${original.secret.toString()}:${original.app.toString()}`)).toThrow(
         /Invalid AppTaggingSecret string/,
       );
     });
 
-    it('rejects unknown kind prefixes', async () => {
-      const original = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    it('rejects unknown delivery mode prefixes', async () => {
+      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       expect(() =>
         AppTaggingSecret.fromString(`invalid:${original.secret.toString()}:${original.app.toString()}`),
-      ).toThrow(/Invalid AppTaggingSecret kind/);
+      ).toThrow(/Invalid AppTaggingSecret delivery mode/);
     });
   });
 
   describe('SiloedTag.compute', () => {
     it('matches the manual constrained-tag formula for a constrained secret', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const index = 7;
 
       const computed = await SiloedTag.compute({ extendedSecret: secret, index });
@@ -160,7 +178,7 @@ describe('AppTaggingSecret', () => {
     });
 
     it('matches the unconstrained-tag formula for an unconstrained secret', async () => {
-      const secret = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
       const index = 7;
 
       const computed = await SiloedTag.compute({ extendedSecret: secret, index });
@@ -173,7 +191,7 @@ describe('AppTaggingSecret', () => {
     });
 
     it('produces different tags for the two flavors even when the underlying Fr matches', async () => {
-      const constrained = await randomAppTaggingSecret(AppTaggingSecretKind.CONSTRAINED);
+      const constrained = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
       const unconstrained = new AppTaggingSecret(constrained.secret, constrained.app);
 
       const unconstrainedTag = await SiloedTag.compute({ extendedSecret: unconstrained, index: 0 });

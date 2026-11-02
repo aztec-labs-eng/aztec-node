@@ -1,7 +1,7 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
@@ -47,7 +47,7 @@ export function defaultTaggingSecretStrategy({
   recipient,
   deliveryMode,
 }: Pick<TaggingSecretStrategyRequest, 'sender' | 'recipient' | 'deliveryMode'>): TaggingSecretStrategy {
-  return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED && recipient.equals(sender)
+  return deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && recipient.equals(sender)
     ? { type: 'address-derived' }
     : { type: 'non-interactive-handshake' };
 }
@@ -61,7 +61,7 @@ export type TaggingSecretStrategyRequest = {
   contractClassId: Fr;
   sender: AztecAddress;
   recipient: AztecAddress;
-  deliveryMode: AppTaggingSecretKind;
+  deliveryMode: OnchainDeliveryMode;
 };
 
 /**

@@ -1,5 +1,5 @@
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
-import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
 
 import { RecipientTaggingStore } from './recipient_tagging_store.js';
@@ -11,8 +11,8 @@ describe('RecipientTaggingStore', () => {
 
   beforeEach(async () => {
     taggingStore = new RecipientTaggingStore(await openTmpStore('test'));
-    secret1 = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
-    secret2 = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    secret1 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret2 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     // Leave a change set open for the tests to operate under: every store operation requires one.
     taggingStore.beginChangeSet('change-set-1');
@@ -83,15 +83,15 @@ describe('RecipientTaggingStore', () => {
   });
 
   // A single handshake shared secret is scanned under both delivery modes (constrained + unconstrained). The two
-  // share the same underlying Fr and app but differ in kind, so they must be tracked as independent index sequences:
-  // advancing one mode's finalized index must not clobber the other's.
+  // share the same underlying Fr and app but differ in delivery mode, so they must be tracked as independent index
+  // sequences: advancing one mode's finalized index must not clobber the other's.
   describe('mode independence', () => {
-    it('tracks the same secret under different kinds independently', async () => {
-      const unconstrained = await randomAppTaggingSecret(AppTaggingSecretKind.UNCONSTRAINED);
+    it('tracks the same secret under different delivery modes independently', async () => {
+      const unconstrained = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
       const constrained = new AppTaggingSecret(
         unconstrained.secret,
         unconstrained.app,
-        AppTaggingSecretKind.CONSTRAINED,
+        OnchainDeliveryMode.CONSTRAINED,
       );
 
       await taggingStore.updateHighestFinalizedIndex(unconstrained, 4, 'change-set-1');

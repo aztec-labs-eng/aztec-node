@@ -26,7 +26,7 @@ import { TestTokenContract as BananaCoin, TestTokenContract } from '@aztec-labs/
 import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/server';
 import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 import {
   AUTOMINE_E2E_OPTS,
@@ -238,7 +238,7 @@ export class ClientFlowsBenchmark {
       hooks: {
         resolveTaggingSecretStrategy: ({ deliveryMode }) =>
           Promise.resolve(
-            deliveryMode === AppTaggingSecretKind.UNCONSTRAINED
+            deliveryMode === OnchainDeliveryMode.UNCONSTRAINED
               ? { type: 'address-derived' }
               : { type: 'non-interactive-handshake' },
           ),

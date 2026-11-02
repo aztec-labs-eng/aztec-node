@@ -30,7 +30,7 @@ import {
 import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { AppTaggingSecret, AppTaggingSecretKind, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
 import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
@@ -622,14 +622,14 @@ describe('Utility Execution test suite', () => {
 
       it("uses the provided secret's delivery mode when querying pending log tags", async () => {
         const sharedSecret = Fr.random();
-        const providedMode = AppTaggingSecretKind.CONSTRAINED;
+        const providedMode = OnchainDeliveryMode.CONSTRAINED;
         const providedSecrets: ProvidedSecret[] = [{ secret: sharedSecret, mode: providedMode }];
         const constrainedModeTag = await SiloedTag.compute({
           extendedSecret: new AppTaggingSecret(sharedSecret, contractAddress, providedMode),
           index: 0,
         });
         const sameSecretUnconstrainedModeTag = await SiloedTag.compute({
-          extendedSecret: new AppTaggingSecret(sharedSecret, contractAddress, AppTaggingSecretKind.UNCONSTRAINED),
+          extendedSecret: new AppTaggingSecret(sharedSecret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
           index: 0,
         });
         expect(constrainedModeTag.equals(sameSecretUnconstrainedModeTag)).toBe(false);
@@ -1021,7 +1021,7 @@ describe('Utility Execution test suite', () => {
         const { request, uniqueNoteHash } = await makeNoteRequest(txHash);
 
         const secret = Fr.random();
-        const mode = AppTaggingSecretKind.CONSTRAINED;
+        const mode = OnchainDeliveryMode.CONSTRAINED;
         const tag = await SiloedTag.compute({
           extendedSecret: new AppTaggingSecret(secret, contractAddress, mode),
           index: 0,

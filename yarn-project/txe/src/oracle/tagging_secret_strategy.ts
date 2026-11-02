@@ -3,10 +3,10 @@ import {
   type TaggingSecretStrategy,
   defaultTaggingSecretStrategy,
 } from '@aztec-labs/pxe/server';
-import type { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import type { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 /** The tagging secret strategies a TXE test has configured, keyed by delivery mode. Absence means "not configured". */
-export type TXETaggingSecretStrategies = Map<AppTaggingSecretKind, TaggingSecretStrategy>;
+export type TXETaggingSecretStrategies = Map<OnchainDeliveryMode, TaggingSecretStrategy>;
 
 /**
  * Builds the `resolveTaggingSecretStrategy` hook backing the `aztec_txe_setTaggingSecretStrategies` oracle. Returns

@@ -27,14 +27,23 @@ pub fn derive_ecdh_shared_secret(secret: Scalar, public_key: EmbeddedCurvePoint)
     multi_scalar_mul([public_key], [secret])
 }
 
-/// Computes an app-siloed shared secret from a raw ECDH shared secret point and a contract address.
+/// Computes an app-siloed shared secret from a shared secret point and a contract address.
 ///
 /// `s_app = h(DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, S.x, S.y, contract_address)`
-pub fn compute_app_siloed_shared_secret(shared_secret: EmbeddedCurvePoint, contract_address: AztecAddress) -> Field {
+pub fn compute_app_siloed_shared_secret_from_point(
+    shared_secret: EmbeddedCurvePoint,
+    contract_address: AztecAddress,
+) -> Field {
+    // The separator name is ECDH-specific, but this silos any shared secret point, not only ECDH ones.
     poseidon2_hash_with_separator(
         [shared_secret.x, shared_secret.y, contract_address.to_field()],
         DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET,
     )
+}
+
+#[deprecated("use compute_app_siloed_shared_secret_from_point")]
+pub fn compute_app_siloed_shared_secret(shared_secret: EmbeddedCurvePoint, contract_address: AztecAddress) -> Field {
+    compute_app_siloed_shared_secret_from_point(shared_secret, contract_address)
 }
 
 /// Derives an indexed subkey from an app-siloed shared secret, used for AES key/IV derivation.
@@ -128,8 +137,8 @@ unconstrained fn test_app_siloed_shared_secret_differs_per_contract() {
     let contract_a = AztecAddress::from_field(0xAAAA);
     let contract_b = AztecAddress::from_field(0xBBBB);
 
-    let s_app_a = compute_app_siloed_shared_secret(shared_secret, contract_a);
-    let s_app_b = compute_app_siloed_shared_secret(shared_secret, contract_b);
+    let s_app_a = compute_app_siloed_shared_secret_from_point(shared_secret, contract_a);
+    let s_app_b = compute_app_siloed_shared_secret_from_point(shared_secret, contract_b);
 
     assert(s_app_a != s_app_b, "app-siloed secrets must differ for different contracts");
 }

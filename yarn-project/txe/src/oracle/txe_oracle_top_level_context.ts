@@ -76,7 +76,7 @@ import {
   PublicCallRequest,
 } from '@aztec-labs/stdlib/kernel';
 import { deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { L1Actor, L1ToL2Message, L2Actor } from '@aztec-labs/stdlib/messaging';
 import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import { makeGlobalVariables } from '@aztec-labs/stdlib/testing';
@@ -395,15 +395,15 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     unconstrainedStrategy: Option<TaggingSecretStrategy>,
     constrainedStrategy: Option<TaggingSecretStrategy>,
   ): void {
-    const apply = (mode: AppTaggingSecretKind, strategy: Option<TaggingSecretStrategy>) => {
+    const apply = (mode: OnchainDeliveryMode, strategy: Option<TaggingSecretStrategy>) => {
       if (strategy.isSome()) {
         this.taggingSecretStrategies.set(mode, strategy.value);
       } else {
         this.taggingSecretStrategies.delete(mode);
       }
     };
-    apply(AppTaggingSecretKind.UNCONSTRAINED, unconstrainedStrategy);
-    apply(AppTaggingSecretKind.CONSTRAINED, constrainedStrategy);
+    apply(OnchainDeliveryMode.UNCONSTRAINED, unconstrainedStrategy);
+    apply(OnchainDeliveryMode.CONSTRAINED, constrainedStrategy);
   }
 
   setAuthorizeAllUtilityCallTargets(authorizeAll: boolean): void {
