@@ -1248,11 +1248,11 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_prv_getAppTaggingSecret(...inputs: ForeignCallArgs) {
+  aztec_prv_getAppAddressDerivedTaggingSecret(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_prv_getAppTaggingSecret',
+      oracle: 'aztec_prv_getAppAddressDerivedTaggingSecret',
       inputs,
-      handler: ([sender, recipient]) => this.handlerAsPrivate().getAppTaggingSecret(sender, recipient),
+      handler: ([sender, recipient]) => this.handlerAsPrivate().getAppAddressDerivedTaggingSecret(sender, recipient),
     });
   }
 

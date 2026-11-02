@@ -719,6 +719,12 @@ export function makeAztecAddress(seed = 1): AztecAddress {
   return AztecAddress.fromFieldUnsafe(fr(seed));
 }
 
+/** Makes an aztec address that fails {@link AztecAddress.isValid}. */
+export function makeInvalidAztecAddress(): AztecAddress {
+  // x = 3 is not a valid x-coordinate on the Grumpkin curve (y^2 = x^3 - 17 = 10 has no square root in Fr)
+  return AztecAddress.fromFieldUnsafe(new Fr(3));
+}
+
 function makeBlockConstantData(seed = 1, globalVariables?: GlobalVariables) {
   return new BlockConstantData(
     makeAppendOnlyTreeSnapshot(seed + 0x100),

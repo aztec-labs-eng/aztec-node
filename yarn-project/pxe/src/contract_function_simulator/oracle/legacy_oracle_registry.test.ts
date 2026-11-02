@@ -107,6 +107,20 @@ describe('legacy oracle dispatch', () => {
     );
   });
 
+  it('serves the retired getAppTaggingSecret name from the address-derived handler over the same wire', async () => {
+    const secret = Fr.random();
+    const handler = {
+      isPrivate: true,
+      getAppAddressDerivedTaggingSecret: () => Promise.resolve(Option.some(secret)),
+    } as unknown as Handler;
+    const inputs = [[toACVMField(await AztecAddress.random())], [toACVMField(await AztecAddress.random())]];
+
+    const callback = buildACIRCallback(handler);
+
+    const legacyWire = await callback['aztec_prv_getAppTaggingSecret'](...inputs);
+    expect(legacyWire).toEqual(await callback['aztec_prv_getAppAddressDerivedTaggingSecret'](...inputs));
+  });
+
   it('rejects a legacy name that collides with a live oracle', () => {
     const handler = { isMisc: true, getRandomField: () => Promise.resolve(new Fr(0)) } as Handler;
     const legacyRegistry: Record<string, LegacyOracleEntry> = {

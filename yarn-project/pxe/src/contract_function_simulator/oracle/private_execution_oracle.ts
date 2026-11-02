@@ -268,8 +268,14 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
         return { type: 'non-interactive-handshake' };
       case 'interactive-handshake':
         return { type: 'interactive-handshake' };
-      case 'address-derived':
-        return this.#addressDerivedSecret(sender, recipient);
+      case 'address-derived': {
+        const secret = await this.#computeAddressDerivedSecret(sender, recipient);
+        if (secret === undefined) {
+          // Callers must validate the recipient before reaching here, so an invalid one is unexpected.
+          throw new Error(`Cannot derive an address-derived tagging secret for invalid recipient ${recipient}`);
+        }
+        return { type: 'unconstrained-secret', secret };
+      }
       case 'arbitrary-secret': {
         // App-silo the raw arbitrary secret point here so wallets never replicate the derivation.
         const appTaggingSecret = await AppTaggingSecret.computeDirectional(
@@ -283,28 +289,33 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   }
 
   /**
-   * The app-siloed, recipient-directional secret derived from the sender's and recipient's address keys via ECDH,
-   * ready to hand to the contract. Callers must validate the recipient in-circuit before reaching here, so an invalid one is unexpected.
-   */
-  async #addressDerivedSecret(sender: AztecAddress, recipient: AztecAddress): Promise<ResolvedTaggingStrategy> {
-    const secret = await this.getAppTaggingSecret(sender, recipient);
-    if (!secret.isSome()) {
-      throw new Error(`Cannot derive an address-derived tagging secret for invalid recipient ${recipient}`);
-    }
-    return { type: 'unconstrained-secret', secret: secret.value };
-  }
-
-  /**
-   * Returns the sender-side app tagging secret for a `(sender, recipient)` pair.
+   * Returns the sender-side address-derived app tagging secret for `(sender, recipient)`.
    *
    * The caller obtains an index via {@link getNextTaggingIndex} and computes the final tag itself.
    * The only expected `None` case is an invalid recipient address; missing sender data fails while deriving.
    *
    * @param sender - The address sending the log
    * @param recipient - The address receiving the log
-   * @returns The app tagging secret, or `None` if the recipient is invalid.
+   * @returns The address-derived app tagging secret, or `None` if the recipient is invalid.
    */
-  public async getAppTaggingSecret(sender: AztecAddress, recipient: AztecAddress): Promise<Option<Fr>> {
+  public async getAppAddressDerivedTaggingSecret(sender: AztecAddress, recipient: AztecAddress): Promise<Option<Fr>> {
+    const secret = await this.#computeAddressDerivedSecret(sender, recipient);
+
+    if (secret === undefined) {
+      this.logger.warn(`Computing a tagging secret for invalid recipient ${recipient} - returning no secret`, {
+        contractAddress: this.contractAddress,
+      });
+      return Option.none();
+    }
+
+    return Option.some(secret);
+  }
+
+  /**
+   * Derives the app-siloed, recipient-directional secret from the sender's and recipient's address keys via ECDH.
+   * Returns undefined if the recipient is not a valid address.
+   */
+  async #computeAddressDerivedSecret(sender: AztecAddress, recipient: AztecAddress): Promise<Fr | undefined> {
     assertAllowedScope(sender, this.scopes);
 
     const senderCompleteAddress = await this.getCompleteAddressOrFail(sender);
@@ -317,14 +328,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       recipient,
     );
 
-    if (!extendedSecret) {
-      this.logger.warn(`Computing a tagging secret for invalid recipient ${recipient} - returning no secret`, {
-        contractAddress: this.contractAddress,
-      });
-      return Option.none();
-    }
-
-    return Option.some(extendedSecret.secret);
+    return extendedSecret?.secret;
   }
 
   /**
