@@ -151,18 +151,26 @@ export function withMaxDepth<T extends ZodTypeAny>(schema: T, maxDepth: number) 
     .pipe(schema);
 }
 
-function isNestedDeeperThan(input: unknown, maxDepth: number): boolean {
-  const pending: [unknown, number][] = [[input, 0]];
-  while (pending.length > 0) {
-    const [value, depth] = pending.pop()!;
-    if (value === null || typeof value !== 'object') {
-      continue;
+// Runs before the inner schema's size caps, so it must not allocate per element: a wide input (millions of entries in
+// one array) would otherwise be queued in full before `.max()` gets to reject it. Recursion is bounded by `maxDepth`.
+function isNestedDeeperThan(value: unknown, maxDepth: number, depth = 0): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  if (depth >= maxDepth) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (isNestedDeeperThan(value[i], maxDepth, depth + 1)) {
+        return true;
+      }
     }
-    if (depth >= maxDepth) {
+    return false;
+  }
+  for (const key in value) {
+    if (Object.hasOwn(value, key) && isNestedDeeperThan(Reflect.get(value, key), maxDepth, depth + 1)) {
       return true;
-    }
-    for (const child of Object.values(value)) {
-      pending.push([child, depth + 1]);
     }
   }
   return false;

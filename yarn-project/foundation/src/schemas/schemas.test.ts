@@ -54,6 +54,21 @@ describe('schemas', () => {
       expect(() => tree.safeParse(nest(20_000))).toThrow(RangeError);
       expect(withMaxDepth(tree, 64).safeParse(nest(20_000)).success).toBe(false);
     });
+
+    it('counts the root as depth zero for both arrays and objects', () => {
+      expect(withMaxDepth(z.unknown(), 4).safeParse({ a: { b: { c: {} } } }).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 3).safeParse({ a: { b: { c: {} } } }).success).toBe(false);
+      expect(withMaxDepth(z.unknown(), 3).safeParse([[[]]]).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 2).safeParse([[[]]]).success).toBe(false);
+    });
+
+    it('accepts wide shallow input and rejects one deep element among many', () => {
+      const schema = withMaxDepth(z.unknown(), 4);
+      const wide: unknown[] = Array.from({ length: 100_000 }, () => ({ a: [] }));
+      expect(schema.safeParse(wide).success).toBe(true);
+      wide.splice(50_000, 0, { a: [[[]]] });
+      expect(schema.safeParse(wide).success).toBe(false);
+    });
   });
 
   describe('Buffer32', () => {
