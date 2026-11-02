@@ -9,7 +9,7 @@ import {
   type EventMetadataDefinition,
   FunctionCall,
 } from '@aztec-labs/stdlib/abi';
-import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AuthWitness, MAX_AUTH_WITNESSES_PER_TX } from '@aztec-labs/stdlib/auth-witness';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractInstancePreimage,
@@ -33,6 +33,8 @@ import type { ExecutionPayload, InTx } from '@aztec-labs/stdlib/tx';
 import {
   Capsule,
   HashedValues,
+  MAX_CAPSULES_PER_TX,
+  MAX_HASHED_ARGS_PER_TX,
   SimulationOverrides,
   TxHash,
   TxProfileResult,
@@ -58,9 +60,9 @@ import type { AppCapabilities, WalletCapabilities } from './capabilities.js';
 import { TxSimulationResultWithAppOffset } from './tx_simulation_result_with_app_offset.js';
 
 /**
- * Bound for the lists a dApp sends to the wallet (calls, authwits, capsules, scopes, capabilities, batched methods).
- * None has a protocol limit and real requests carry a handful of entries; the bound only makes an oversized list
- * fail on its length before its entries are parsed.
+ * Bound for the other lists a dApp sends to the wallet (calls, scopes, event field names, capabilities, batched
+ * methods). None has a protocol limit and real requests carry a handful of entries; the bound only makes an oversized
+ * list fail on its length before its entries are parsed.
  */
 const MAX_WALLET_LIST_LEN = 1024;
 
@@ -316,9 +318,9 @@ export type Wallet = {
 
 export const ExecutionPayloadSchema = z.object({
   calls: z.array(FunctionCall.schema).max(MAX_WALLET_LIST_LEN),
-  authWitnesses: z.array(AuthWitness.schema).max(MAX_WALLET_LIST_LEN),
-  capsules: z.array(Capsule.schema).max(MAX_WALLET_LIST_LEN),
-  extraHashedArgs: z.array(HashedValues.schema).max(MAX_WALLET_LIST_LEN),
+  authWitnesses: z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX),
+  capsules: z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX),
+  extraHashedArgs: z.array(HashedValues.schema).max(MAX_HASHED_ARGS_PER_TX),
   feePayer: optional(schemas.AztecAddress),
 });
 
@@ -346,8 +348,8 @@ const FromSchema = z.union([schemas.AztecAddress, z.literal(NO_FROM)]);
 
 export const SendOptionsSchema = z.object({
   from: FromSchema,
-  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_WALLET_LIST_LEN)),
-  capsules: optional(z.array(Capsule.schema).max(MAX_WALLET_LIST_LEN)),
+  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
+  capsules: optional(z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX)),
   fee: optional(GasSettingsOptionSchema),
   wait: optional(z.union([z.literal(NO_WAIT), WaitOptsSchema])),
   additionalScopes: optional(z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN)),
@@ -356,8 +358,8 @@ export const SendOptionsSchema = z.object({
 
 export const SimulateOptionsSchema = z.object({
   from: FromSchema,
-  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_WALLET_LIST_LEN)),
-  capsules: optional(z.array(Capsule.schema).max(MAX_WALLET_LIST_LEN)),
+  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
+  capsules: optional(z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX)),
   fee: optional(GasSettingsOptionSchema),
   skipTxValidation: optional(z.boolean()),
   skipFeeEnforcement: optional(z.boolean()),
@@ -606,7 +608,7 @@ const WalletMethodSchemas = {
       FunctionCall.schema,
       z.object({
         scopes: z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN),
-        authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_WALLET_LIST_LEN)),
+        authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
       }),
     ]),
     output: UtilityExecutionResult.schema,

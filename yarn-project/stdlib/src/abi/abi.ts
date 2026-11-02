@@ -6,15 +6,25 @@ import { Buffer } from 'buffer';
 import { inflate } from 'pako';
 import { z } from 'zod';
 
-import {
-  MAX_ABI_RETURN_TYPES,
-  MAX_ABI_VALUE_LEN,
-  MAX_CONTRACT_FUNCTIONS,
-  MAX_SCHEMA_NESTING_DEPTH,
-  MAX_UNCAPPED_ARRAY_LEN,
-} from '../interfaces/api_limit.js';
 import { DEV_VERSION } from '../update-checker/dev_version.js';
 import { FunctionSelector } from './function_selector.js';
+
+/**
+ * Bound for arrays in contract artifacts and their debug metadata, whose length no protocol constant caps. It is far
+ * above anything well-formed and only makes an oversized array fail on its length before zod parses its elements.
+ */
+const MAX_ARTIFACT_ARRAY_LEN = 2 ** 20;
+/** Functions in a contract artifact. */
+const MAX_CONTRACT_FUNCTIONS = 4096;
+/** Return types listed for a function. Well-formed artifacts list at most one. */
+export const MAX_ABI_RETURN_TYPES = 256;
+/** Elements of an ABI-encoded array, tuple or struct value. */
+const MAX_ABI_VALUE_LEN = 2 ** 16;
+/**
+ * JSON nesting depth accepted by recursive ABI type and value schemas before they recurse. Real contract artifacts stay
+ * under 30 levels; parsing input thousands of levels deep overflows the stack.
+ */
+const MAX_ABI_NESTING_DEPTH = 256;
 
 /** A basic value. */
 export interface BasicValue<T extends string, V> {
@@ -56,7 +66,7 @@ const UnboundedAbiValueSchema: z.ZodType<AbiValue> = z.discriminatedUnion('kind'
   }),
 ]);
 
-export const AbiValueSchema: z.ZodType<AbiValue> = withMaxDepth(UnboundedAbiValueSchema, MAX_SCHEMA_NESTING_DEPTH);
+export const AbiValueSchema: z.ZodType<AbiValue> = withMaxDepth(UnboundedAbiValueSchema, MAX_ABI_NESTING_DEPTH);
 
 export const AbiNamedValueSchema: z.ZodType<AbiNamedValue> = z.object({
   name: z.string(),
@@ -127,7 +137,7 @@ const UnboundedAbiTypeSchema: z.ZodType<AbiType> = z.discriminatedUnion('kind', 
   }),
 ]);
 
-export const AbiTypeSchema: z.ZodType<AbiType> = withMaxDepth(UnboundedAbiTypeSchema, MAX_SCHEMA_NESTING_DEPTH);
+export const AbiTypeSchema: z.ZodType<AbiType> = withMaxDepth(UnboundedAbiTypeSchema, MAX_ABI_NESTING_DEPTH);
 
 /** A named type. */
 export const ABIVariableSchema = z.object({
@@ -291,13 +301,13 @@ export const FunctionDebugMetadataSchema = z.object({
             }),
           }),
         )
-        .max(MAX_UNCAPPED_ARRAY_LEN),
+        .max(MAX_ARTIFACT_ARRAY_LEN),
     }),
-    acir_locations: boundedRecord(z.string(), z.number(), MAX_UNCAPPED_ARRAY_LEN),
+    acir_locations: boundedRecord(z.string(), z.number(), MAX_ARTIFACT_ARRAY_LEN),
     brillig_locations: boundedRecord(
       z.string(),
-      boundedRecord(z.string(), z.number(), MAX_UNCAPPED_ARRAY_LEN),
-      MAX_UNCAPPED_ARRAY_LEN,
+      boundedRecord(z.string(), z.number(), MAX_ARTIFACT_ARRAY_LEN),
+      MAX_ARTIFACT_ARRAY_LEN,
     ),
   }),
   files: boundedRecord(
@@ -305,7 +315,7 @@ export const FunctionDebugMetadataSchema = z.object({
     z.object({
       source: z.string(),
       path: z.string(),
-      function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_UNCAPPED_ARRAY_LEN),
+      function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_ARTIFACT_ARRAY_LEN),
     }),
     MAX_ARTIFACT_RECORD_KEYS,
   ),
@@ -455,7 +465,7 @@ export const ContractArtifactSchema = zodFor<ContractArtifact>()(
     outputs: z.object({
       structs: boundedRecord(
         z.string(),
-        z.array(AbiTypeSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        z.array(AbiTypeSchema).max(MAX_ARTIFACT_ARRAY_LEN),
         MAX_ARTIFACT_RECORD_KEYS,
       ).transform(structs => {
         for (const [key, value] of Object.entries(structs)) {
@@ -471,7 +481,7 @@ export const ContractArtifactSchema = zodFor<ContractArtifact>()(
       }),
       globals: boundedRecord(
         z.string(),
-        z.array(AbiNamedValueSchema).max(MAX_UNCAPPED_ARRAY_LEN),
+        z.array(AbiNamedValueSchema).max(MAX_ARTIFACT_ARRAY_LEN),
         MAX_ARTIFACT_RECORD_KEYS,
       ),
     }),
@@ -481,7 +491,7 @@ export const ContractArtifactSchema = zodFor<ContractArtifact>()(
       z.object({
         source: z.string(),
         path: z.string(),
-        function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_UNCAPPED_ARRAY_LEN),
+        function_locations: z.array(z.object({ start: z.number(), name: z.string() })).max(MAX_ARTIFACT_ARRAY_LEN),
       }),
       MAX_ARTIFACT_RECORD_KEYS,
     ),

@@ -9,6 +9,12 @@ import { hexSchemaFor } from '../schemas/schemas.js';
 import { Vector } from '../types/shared.js';
 
 /**
+ * Bound for the auth witnesses a single tx request carries. The protocol sets none, since contracts fetch witnesses
+ * through an oracle by message hash; real requests carry a handful.
+ */
+export const MAX_AUTH_WITNESSES_PER_TX = 1024;
+
+/**
  * An authentication witness. Used to authorize an action by a user.
  */
 export class AuthWitness {

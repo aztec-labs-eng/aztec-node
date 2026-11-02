@@ -4,10 +4,18 @@ import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
-import { MAX_ABI_RETURN_TYPES } from '../interfaces/api_limit.js';
 import { schemas } from '../schemas/index.js';
-import { type AbiType, AbiTypeSchema, FunctionType, getFunctionReturnType } from './abi.js';
+import { type AbiType, AbiTypeSchema, FunctionType, MAX_ABI_RETURN_TYPES, getFunctionReturnType } from './abi.js';
 import { FunctionSelector } from './function_selector.js';
+
+/**
+ * Bound for the arguments of a single function call, and for any hashed argument preimage: private call arguments,
+ * utility call arguments and authwit preimages. The protocol caps only public calldata, through
+ * `MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS`. Private arguments are circuit inputs folded into an args hash of any length,
+ * and utility arguments never reach a circuit, so this is a sanity bound far above any real function signature. It
+ * never drops below the public calldata cap, since public calls carry their arguments in the same field.
+ */
+export const MAX_FUNCTION_ARGS_LEN = Math.max(2 ** 14, MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS);
 
 /** A request to call a function on a contract. */
 export class FunctionCall {
@@ -56,7 +64,7 @@ export class FunctionCall {
         type: z.nativeEnum(FunctionType),
         isStatic: z.boolean(),
         hideMsgSender: z.boolean(),
-        args: z.array(schemas.Fr).max(MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS),
+        args: z.array(schemas.Fr).max(MAX_FUNCTION_ARGS_LEN),
         returnType: AbiTypeSchema.optional(),
         // Old consumers send `returnTypes`, not `returnType`. So we accept both for now, until we can safely remove
         // the old version.
