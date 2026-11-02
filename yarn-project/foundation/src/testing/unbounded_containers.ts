@@ -32,12 +32,24 @@ export function findUnboundedContainers(schema: z.core.$ZodType, path = ''): str
  * method name, followed by `(n)` for the n-th parameter or `=>` for the return value.
  */
 export function findUnboundedContainersInApi(api: ApiSchema, opts: { returnValues?: boolean } = {}): string[] {
-  return Object.entries(api).flatMap(([method, fn]) => [
-    ...(fn.def.input?._zod.def.items ?? []).flatMap((param: z.core.$ZodType, i: number) =>
-      findUnboundedContainers(param, `${method}(${i})`),
-    ),
-    ...(opts.returnValues ? findUnboundedContainers(fn.def.output, `${method} =>`) : []),
-  ]);
+  return Object.entries(api).flatMap(([method, fn]) => {
+    const found: string[] = [];
+    walkParameters(fn.def.input, method, found, new WeakSet(), 0);
+    return [...found, ...(opts.returnValues ? findUnboundedContainers(fn.def.output, `${method} =>`) : [])];
+  });
+}
+
+/** Walks a function's parameter tuple, labelling each parameter `(n)` and a rest parameter `(...)`. */
+function walkParameters(
+  input: z.core.$ZodType | undefined,
+  path: string,
+  found: string[],
+  visited: WeakSet<z.core.$ZodType>,
+  depth: number,
+): void {
+  if (input) {
+    walk(input, path, found, visited, depth, (index: number | '...') => `${path}(${index})`);
+  }
 }
 
 function walk(
@@ -46,6 +58,7 @@ function walk(
   found: string[],
   visited: WeakSet<z.core.$ZodType>,
   depth: number,
+  tupleElementPath = (index: number | '...') => `${path}[${index}]`,
 ): void {
   if (visited.has(schema)) {
     return;
@@ -80,11 +93,11 @@ function walk(
       }
       return next(def.catchall, `${path}.*`);
     case 'tuple':
-      (def.items as z.core.$ZodType[]).forEach((item, i) => next(item, `${path}[${i}]`));
+      (def.items as z.core.$ZodType[]).forEach((item, i) => next(item, tupleElementPath(i)));
       if (def.rest) {
-        found.push(`${path}[...]`);
+        found.push(tupleElementPath('...'));
       }
-      return next(def.rest, `${path}[...]`);
+      return next(def.rest, tupleElementPath('...'));
     case 'union':
       return (def.options as z.core.$ZodType[]).forEach(option => next(option, path));
     case 'intersection':
@@ -102,7 +115,7 @@ function walk(
       return next(inner, path);
     }
     case 'function':
-      (def.input?._zod.def.items ?? []).forEach((param: z.core.$ZodType, i: number) => next(param, `${path}(${i})`));
+      walkParameters(def.input, path, found, visited, depth + 1);
       return next(def.output, `${path} =>`);
     case 'optional':
     case 'nullable':

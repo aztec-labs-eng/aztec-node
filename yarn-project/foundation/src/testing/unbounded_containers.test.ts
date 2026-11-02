@@ -106,6 +106,12 @@ describe('findUnboundedContainersInApi', () => {
     expect(findUnboundedContainersInApi(api)).toEqual(['get(0)[]']);
   });
 
+  it('reports a rest parameter, which takes any number of extra arguments', () => {
+    const variadic = { log: z.function({ input: z.tuple([z.string()]).rest(z.number()), output: z.void() }) };
+    expect(findUnboundedContainersInApi(variadic)).toEqual(['log(...)']);
+    expect(findUnboundedContainers(z.object({ log: variadic.log }))).toEqual(['.log(...)']);
+  });
+
   it('reports return values when asked to', () => {
     expect(findUnboundedContainersInApi(api, { returnValues: true })).toEqual(['get(0)[]', 'get =>[]']);
   });
