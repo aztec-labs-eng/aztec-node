@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiSchema } from '../schemas/api.js';
-import { sizeCheckedBeforeParse } from '../schemas/utils.js';
+import { sizeCheckedBeforeParse } from '../schemas/size_checked_before_parse.js';
 
 /**
  * Depth past which the walk stops expanding lazy schemas, whose getter may build a new schema on every call. Only lazy
@@ -81,7 +81,7 @@ function walk(
       next(def.keyType, `${path}{key}`);
       return next(def.valueType, `${path}{}`);
     case 'record':
-      if (!sizeCheckedBeforeParse.has(schema) && !hasFiniteKeys(def.keyType)) {
+      if (!hasFiniteKeys(def.keyType)) {
         found.push(`${path}{}`);
       }
       return next(def.valueType, `${path}{}`);
@@ -89,7 +89,7 @@ function walk(
       for (const [key, value] of Object.entries(def.shape as Record<string, z.core.$ZodType>)) {
         next(value, `${path}.${key}`);
       }
-      if (def.catchall && def.catchall._zod.def.type !== 'never' && !sizeCheckedBeforeParse.has(schema)) {
+      if (def.catchall && def.catchall._zod.def.type !== 'never') {
         found.push(`${path}.*`);
       }
       return next(def.catchall, `${path}.*`);
@@ -106,6 +106,11 @@ function walk(
       return next(def.right, path);
     case 'pipe':
       next(def.in, path);
+      if (sizeCheckedBeforeParse.has(schema) && def.out._zod.def.type === 'record') {
+        // The guard has checked the record's size, so only its entries are left to walk. The record itself is not
+        // marked visited, so reaching it again without the guard still flags it.
+        return next(def.out._zod.def.valueType, `${path}{}`);
+      }
       return next(def.out, path);
     case 'lazy': {
       const inner: z.core.$ZodType = def.getter();

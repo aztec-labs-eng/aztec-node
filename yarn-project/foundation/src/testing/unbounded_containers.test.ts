@@ -53,6 +53,12 @@ describe('findUnboundedContainers', () => {
     expect(findUnboundedContainers(z.record(z.enum(['a', 'b']), z.number()))).toEqual([]);
   });
 
+  it('flags the record inside boundedRecord once it is taken out of its size guard', () => {
+    const guarded = boundedRecord(z.string(), z.number(), 10);
+    expect(findUnboundedContainers(guarded.out)).toEqual(['{}']);
+    expect(findUnboundedContainers(z.object({ a: guarded, b: guarded.out }))).toEqual(['.b{}']);
+  });
+
   it('walks through wrappers, unions and transforms', () => {
     const schema = z.union([
       z.object({ x: z.array(z.number()).optional() }),

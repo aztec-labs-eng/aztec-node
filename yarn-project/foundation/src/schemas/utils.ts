@@ -3,6 +3,7 @@ import { type ZodObject, type ZodRawShape, type ZodType, type ZodTypeAny, z } fr
 
 import { pick } from '../collection/object.js';
 import { isHex, withoutHexPrefix } from '../string/index.js';
+import { sizeCheckedBeforeParse } from './size_checked_before_parse.js';
 import type { ZodFor } from './types.js';
 
 export const hexSchema = z.string().refine(isHex, 'Not a valid hex string').transform(withoutHexPrefix);
@@ -137,20 +138,14 @@ export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends 
   value: TValue,
   maxKeys: number,
 ) {
-  const record = z.record(key, value);
-  sizeCheckedBeforeParse.add(record);
-  return z
+  const guarded = z
     .custom<object>(input => !z.core.util.isPlainObject(input) || Object.keys(input).length <= maxKeys, {
       message: `Must have at most ${maxKeys} entries`,
     })
-    .pipe(record);
+    .pipe(z.record(key, value));
+  sizeCheckedBeforeParse.add(guarded);
+  return guarded;
 }
-
-/**
- * Containers whose size a guard in front of them checks before they parse their entries, where zod's own checks cannot
- * show it. Schema walkers that look for unbounded containers treat these as bounded.
- */
-export const sizeCheckedBeforeParse = new WeakSet<z.core.$ZodType>();
 
 /**
  * Wraps a recursive schema so that input nested more than `maxDepth` arrays or objects deep fails before zod recurses
