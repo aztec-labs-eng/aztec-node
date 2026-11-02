@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Parses the network config fetched from the URL the operator configured, which is trusted like local config.
+// Parses the network config published by Aztec, or fetched from a location the operator sets. The source is trusted.
 export const NetworkConfigSchema = z
   .object({
     bootnodes: z.array(z.string()),
