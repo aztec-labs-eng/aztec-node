@@ -4,11 +4,7 @@ import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
-
-// Excessive memory reads due to debug logging can open a DOS vector to nodes that perform public tx simulation for users.
-// This default limit (4MB) can be configured further by node runners via the `RPC_SIMULATE_PUBLIC_MAX_DEBUG_LOG_MEMORY_READS` environment variable.
-// It also bounds the fields a client accepts in a single debug log.
-export const DEFAULT_MAX_DEBUG_LOG_MEMORY_READS = 125000;
+import { MAX_UNCAPPED_ARRAY_LEN } from '../interfaces/api_limit.js';
 
 /*
  * Represents a debug log emitted by public bytecode.
@@ -27,7 +23,7 @@ export class DebugLog {
         contractAddress: AztecAddress.schema,
         level: z.enum(LogLevels),
         message: z.string(),
-        fields: z.array(schemas.Fr).max(DEFAULT_MAX_DEBUG_LOG_MEMORY_READS),
+        fields: z.array(schemas.Fr).max(MAX_UNCAPPED_ARRAY_LEN),
       })
       .transform(
         ({ contractAddress, level, message, fields }) => new DebugLog(contractAddress, level, message, fields),
