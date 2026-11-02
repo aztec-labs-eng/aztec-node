@@ -18,7 +18,7 @@ variable "service_account" {
 }
 
 variable "node_version" {
-  default = "1.33.10-gke.1067000"
+  default = "1.33.13-gke.2207000"
 }
 
 variable "enable_workload_identity" {
