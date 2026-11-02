@@ -3,15 +3,7 @@
 
 set -e
 
-VERSION_FILE="/usr/src/.version-manifest.json"
-
 declare -A attrs_map
-
-attrs_map["service.version"]="0.0.0";
-if [[ -f "$VERSION_FILE" ]]; then
-  # there's a single version of the whole monocontainer
-  attrs_map["service.version"]=$(jq -r '.["."]' "$VERSION_FILE")
-fi
 
 export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-unknown_service}"
 attrs_map["service.name"]="$OTEL_SERVICE_NAME"
