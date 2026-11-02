@@ -236,6 +236,68 @@ describe('Discv5Service', () => {
     await stopNodes(node1, node2, node3);
   });
 
+  it('refreshes a restarted peer address through an existing bootstrap node', async () => {
+    const peerId = await createSecp256k1PeerId();
+    const port = ++basePort;
+    const makeNode = (ip: string) => {
+      const node = new DiscV5Service(
+        peerId,
+        {
+          ...getP2PDefaultConfig(),
+          ...emptyChainConfig,
+          p2pIp: ip,
+          listenAddress: ip,
+          p2pPort: port,
+          bootstrapNodes: [bootNode.getENR().encodeTxt()],
+        },
+        testPackageVersion,
+        undefined,
+        undefined,
+        store,
+      );
+      createdNodes.push(node);
+      return node;
+    };
+
+    const original = makeNode('127.0.0.1');
+    await original.start();
+    const originalEnr = original.getEnr();
+    await retryUntil(
+      async () => {
+        await original.runRandomNodesQuery();
+        return (await bootNode.getRoutingTable()).some(record => ENR.decodeTxt(record).nodeId === originalEnr.nodeId);
+      },
+      'bootstrap learns original peer',
+      15,
+      0.2,
+    );
+    // Publish the replacement before shutdown can persist anything from the original process.
+    const restarted = makeNode('127.0.0.2');
+    await restarted.start();
+    expect(restarted.getEnr().nodeId).toEqual(originalEnr.nodeId);
+    expect(restarted.getEnr().seq).toBeGreaterThan(originalEnr.seq);
+    await original.stop();
+
+    await retryUntil(
+      async () => {
+        await restarted.runRandomNodesQuery();
+        return (await bootNode.getRoutingTable()).some(record => {
+          const enr = ENR.decodeTxt(record);
+          return enr.nodeId === originalEnr.nodeId && enr.ip === '127.0.0.2';
+        });
+      },
+      'bootstrap learns restarted peer address',
+      15,
+      0.2,
+    );
+
+    const observer = await createNode();
+    await observer.start();
+    await runDiscoveryUntil([restarted, observer], () =>
+      observer.getKadValues().some(enr => enr.nodeId === originalEnr.nodeId && enr.ip === '127.0.0.2'),
+    );
+  });
+
   it('resurrects persisted peers from the store on restart with no bootnode', async () => {
     const peerIdA = await createSecp256k1PeerId();
     const portA = ++basePort;
