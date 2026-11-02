@@ -34,9 +34,9 @@ import { SENTINEL_TIMING, awaitCommitteeExists, findUpcomingProposerSlot } from 
  *
  *   2. `checkpoint-invalid` (case 4) — one validator runs with
  *      `broadcastInvalidCheckpointProposalOnly`, so its block proposals stay valid (pushed to
- *      observers' archivers) but its checkpoint proposal carries a random archive. Observers
- *      load the last block, find an archive mismatch, and record `invalid`; the sentinel
- *      slashes the proposer for inactivity.
+ *      observers' archivers) but its checkpoint proposal carries a random epoch out hash. Observers
+ *      load the last block, rebuild the checkpoint, find a header mismatch, and record `invalid`; the
+ *      sentinel slashes the proposer for inactivity.
  *
  *   3. Successful re-execution + missing attestor (case 5) — all six validators start
  *      honest, then one is stopped mid-test. The stopped node misses its own proposer slots
@@ -117,7 +117,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
   });
 
   // Cases 1 and 2 share the same body (spawn 1 malicious + 5 honest, warp near the malicious proposer
-  // slot, assert observers agree on the fault status, malicious self-records `checkpoint-valid`, and an
+  // slot, assert observers agree on the fault status, malicious self-records a valid proposal, and an
   // INACTIVITY offense follows). They differ only in the malicious-node config flag and the fault status
   // observers record. Kept as unrolled its (no it.each) so each stays its own CI job under the parallel
   // convention. See {@link runProposerFaultScenario}.
@@ -131,7 +131,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
     }));
 
   // broadcastInvalidCheckpointProposalOnly: block proposals stay valid (land in archivers) but the
-  // checkpoint proposal carries a random archive → observers detect header_mismatch and record `invalid`.
+  // checkpoint proposal carries a random epoch out hash → observers detect header_mismatch and record `invalid`.
   it('slashes the proposer with INACTIVITY when checkpoint validation records invalid', () =>
     runProposerFaultScenario({
       maliciousOverride: { broadcastInvalidCheckpointProposalOnly: true },
@@ -165,7 +165,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
    * Runs a single-malicious-proposer fault scenario: spawns the malicious node (with the given config
    * override) and 5 honest observers, warps near the malicious proposer's slot, and asserts every honest
    * observer records `expectedStatus` at the discovered fault slot while the malicious node self-records
-   * `checkpoint-valid`, then that an INACTIVITY offense follows. We discover the fault slot rather than
+   * a valid proposal, then that an INACTIVITY offense follows. We discover the fault slot rather than
    * assuming it is the warped block-proposer slot: the re-execution outcome is keyed by the checkpoint
    * proposal's slot, which only closes a checkpoint (and so records the fault) on some proposer slots.
    */
@@ -181,10 +181,19 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
     // nodes[0] is the malicious node; honest observers are nodes[1..].
     const honestObservers = nodes.slice(1);
     const faultSlot = await findObservedStatusSlot(honestObservers, targetAddress, expectedStatus);
-    await assertAllObserversSentinelStatus(honestObservers, targetAddress, faultSlot, expectedStatus);
-    // The malicious node self-records `checkpoint-valid` for that slot using its locally computed
-    // archive (the invalid-broadcast flags corrupt only the broadcast, not the proposer's local state).
-    await assertAllObserversSentinelStatus([nodes[0]], targetAddress, faultSlot, 'checkpoint-valid');
+    await assertAllObserversSentinelStatus(honestObservers, targetAddress, faultSlot, [expectedStatus]);
+    // The malicious node self-records a valid proposal for that slot using its locally computed archive (the
+    // invalid-broadcast flags corrupt only the broadcast, not the proposer's local state). No honest node attests, so
+    // the proposal never lands: it is `checkpoint-valid` when it built on a parent on L1, and `checkpoint-orphaned`
+    // when its parent was missing from L1 or replaced there by the time the sentinel classified the slot, as happens
+    // when it pipelined on the malicious node's own previous-slot proposal. The
+    // fault slot is not always the malicious node's first proposal: when the observers do not all record the fault for
+    // that one (for example, it went out before they were all up), the search moves on to a later slot, which may be
+    // built on it.
+    await assertAllObserversSentinelStatus([nodes[0]], targetAddress, faultSlot, [
+      'checkpoint-valid',
+      'checkpoint-orphaned',
+    ]);
     await assertInactivityOffenseFor(targetAddress, nodes[1]);
   }
 
@@ -279,14 +288,14 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
   }
 
   /**
-   * Polls every honest observer node until each has its sentinel record `expectedStatus` for the
-   * target at the given slot. Asserts the recorded status matches exactly on every observer.
+   * Polls every given observer node until each has a sentinel record for the target at the given slot, and
+   * asserts that the recorded status is one of `acceptedStatuses` on every observer.
    */
   async function assertAllObserversSentinelStatus(
     observerNodes: AztecNodeService[],
     targetAddress: EthAddress,
     slot: SlotNumber,
-    expectedStatus: ValidatorStatusInSlot,
+    acceptedStatuses: ValidatorStatusInSlot[],
   ): Promise<void> {
     for (const observerNode of observerNodes) {
       const status = await retryUntil(
@@ -299,11 +308,10 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
         `sentinel status for ${targetAddress} at slot ${slot}`,
         AZTEC_SLOT_DURATION * 10,
       );
-      expect(status).toEqual(expectedStatus);
+      expect(acceptedStatuses).toContain(status);
     }
-    test.logger.warn(
-      `All ${observerNodes.length} observers recorded ${expectedStatus} for ${targetAddress} at slot ${slot}`,
-    );
+    const recorded = acceptedStatuses.join(' or ');
+    test.logger.warn(`All ${observerNodes.length} observers recorded ${recorded} for ${targetAddress} at slot ${slot}`);
   }
 
   /**
