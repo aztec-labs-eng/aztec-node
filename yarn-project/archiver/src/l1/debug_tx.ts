@@ -1,15 +1,23 @@
 import type { DebugCallTrace, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
-import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, schemas, withMaxDepth } from '@aztec-labs/foundation/schemas';
 import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 
 import { type CallInfo, MAX_L1_TRACE_LEN } from './types.js';
 
-/** Zod schema for validating call trace from debug_traceTransaction */
-export const callTraceSchema: ZodFor<DebugCallTrace> = z.lazy(() =>
+/** The EVM stops nesting calls 1024 frames below the top-level call. */
+const EVM_MAX_CALL_DEPTH = 1024;
+
+/**
+ * JSON nesting of a call trace whose calls go as deep as the EVM allows: every frame sits one object and one `calls`
+ * array below its parent, and the deepest frame may carry an empty `calls` array of its own.
+ */
+const MAX_CALL_TRACE_JSON_DEPTH = 2 * (EVM_MAX_CALL_DEPTH + 1);
+
+const callTraceSchemaWithoutDepthLimit: ZodFor<DebugCallTrace> = z.lazy(() =>
   z.object({
     from: schemas.HexStringWith0x,
     to: schemas.HexStringWith0x.optional(),
@@ -20,8 +28,14 @@ export const callTraceSchema: ZodFor<DebugCallTrace> = z.lazy(() =>
     gasUsed: schemas.HexStringWith0x.optional(),
     value: schemas.HexStringWith0x.optional(),
     error: z.string().optional(),
-    calls: z.array(callTraceSchema).max(MAX_L1_TRACE_LEN).optional(),
+    calls: z.array(callTraceSchemaWithoutDepthLimit).max(MAX_L1_TRACE_LEN).optional(),
   }),
+);
+
+/** Zod schema for validating call trace from debug_traceTransaction */
+export const callTraceSchema: ZodFor<DebugCallTrace> = withMaxDepth(
+  callTraceSchemaWithoutDepthLimit,
+  MAX_CALL_TRACE_JSON_DEPTH,
 );
 
 /**

@@ -5,7 +5,7 @@ import type { Hex } from 'viem';
 
 import debugTraceMultipleProposeFixture from '../test/fixtures/debug_traceTransaction-multiplePropose.json' with { type: 'json' };
 import debugTraceFixture from '../test/fixtures/debug_traceTransaction-proxied.json' with { type: 'json' };
-import { getSuccessfulCallsFromDebug } from './debug_tx.js';
+import { callTraceSchema, getSuccessfulCallsFromDebug } from './debug_tx.js';
 
 describe('getSuccessfulCallsFromDebug', () => {
   let mockClient: MockProxy<ViemPublicClient>;
@@ -289,5 +289,23 @@ describe('getSuccessfulCallsFromDebug', () => {
     expect(results).toHaveLength(1);
     expect(results[0].from).toEqual(EthAddress.fromString('0xca11bde05977b3631167028862be2a173976ca11'));
     expect(results[0].gasUsed).toBe(BigInt('0x3eb5a'));
+  });
+
+  describe('callTraceSchema', () => {
+    const nestedTrace = (frames: number) => {
+      let trace: DebugCallTrace = { from: '0x01', type: 'CALL', calls: [] };
+      for (let i = 1; i < frames; i++) {
+        trace = { from: '0x01', type: 'CALL', calls: [trace] };
+      }
+      return trace;
+    };
+
+    it('accepts a deeply nested trace', () => {
+      expect(callTraceSchema.safeParse(nestedTrace(100)).success).toBe(true);
+    });
+
+    it('rejects a deeply nested trace without overflowing the stack', () => {
+      expect(callTraceSchema.safeParse(nestedTrace(50_000)).success).toBe(false);
+    });
   });
 });
