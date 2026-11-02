@@ -103,24 +103,28 @@ export function bufferSchemaFor<TClass extends { fromBuffer(buf: Buffer): any }>
 
 /**
  * Creates a schema for a js Map type that matches the serialization used in jsonStringify.
- * @param maxSize - Maximum number of entries. Required when parsing untrusted input; omit only for trusted local data.
+ * @param maxSize - Maximum number of entries. `Infinity` leaves the entry list unbounded, for data that is never parsed
+ * from untrusted input.
  */
 export function mapSchema<TKey, TValue>(
   key: ZodFor<TKey>,
   value: ZodFor<TValue>,
-  maxSize?: number,
+  maxSize: number,
 ): ZodFor<Map<TKey, TValue>> {
-  const entries = z.array(z.tuple([key, value]));
-  return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Map(parsed));
+  return boundedArray(z.tuple([key, value]), maxSize).transform(parsed => new Map(parsed));
 }
 
 /**
  * Creates a schema for a js Set type that matches the serialization used in jsonStringify.
- * @param maxSize - Maximum number of entries. Required when parsing untrusted input; omit only for trusted local data.
+ * @param maxSize - Maximum number of entries. `Infinity` leaves the entry list unbounded, for data that is never parsed
+ * from untrusted input.
  */
-export function setSchema<T>(value: ZodFor<T>, maxSize?: number): ZodFor<Set<T>> {
-  const entries = z.array(value);
-  return (maxSize === undefined ? entries : entries.max(maxSize)).transform(parsed => new Set(parsed));
+export function setSchema<T>(value: ZodFor<T>, maxSize: number): ZodFor<Set<T>> {
+  return boundedArray(value, maxSize).transform(parsed => new Set(parsed));
+}
+
+function boundedArray<T extends ZodTypeAny>(item: T, maxSize: number) {
+  return Number.isFinite(maxSize) ? z.array(item).max(maxSize) : z.array(item);
 }
 
 /**

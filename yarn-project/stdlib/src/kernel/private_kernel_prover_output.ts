@@ -14,7 +14,7 @@ export const PrivateExecutionStepSchema = z.object({
   functionName: z.string(),
   gateCount: z.number().optional(),
   bytecode: bufferSchema,
-  witness: mapSchema(z.number(), z.string()),
+  witness: mapSchema(z.number(), z.string(), Infinity),
   vk: bufferSchema,
   kind: z.nativeEnum(CircuitKind),
   timings: z.object({

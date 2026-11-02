@@ -168,10 +168,10 @@ export class PrivateCallExecutionResult {
       .object({
         acir: schemas.Buffer,
         vk: schemas.Buffer,
-        partialWitness: mapSchema(z.coerce.number(), z.string()),
+        partialWitness: mapSchema(z.coerce.number(), z.string(), Infinity),
         publicInputs: PrivateCircuitPublicInputs.schema,
         newNotes: z.array(NoteAndSlot.schema).max(MAX_NOTE_HASHES_PER_CALL),
-        noteHashNullifierCounterMap: mapSchema(z.coerce.number(), z.number()),
+        noteHashNullifierCounterMap: mapSchema(z.coerce.number(), z.number(), Infinity),
         returnValues: z.array(schemas.Fr),
         offchainEffects: z.array(z.object({ data: z.array(schemas.Fr) })),
         taggingIndexRanges: z.array(TaggingIndexRangeSchema),

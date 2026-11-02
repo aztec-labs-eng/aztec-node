@@ -36,12 +36,12 @@ describe('jsonStringify', () => {
       ['a', 10],
       ['b', 20],
     ]);
-    test(values, mapSchema(z.string(), z.number()));
+    test(values, mapSchema(z.string(), z.number(), 100));
   });
 
   it('handles sets', () => {
     const values = new Set([10, 20]);
-    test(values, setSchema(z.number()));
+    test(values, setSchema(z.number(), 100));
   });
 
   it('handles buffers', () => {
