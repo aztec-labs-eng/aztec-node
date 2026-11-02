@@ -3,7 +3,11 @@ import { z } from 'zod';
 import type { ApiSchema } from '../schemas/api.js';
 import { sizeCheckedBeforeParse } from '../schemas/utils.js';
 
-/** Recursion limit for walking lazy schemas whose getter builds a new schema on every call. */
+/**
+ * Depth past which the walk stops expanding lazy schemas, whose getter may build a new schema on every call. Only lazy
+ * schemas can make a walk unbounded, so other schemas past it are still walked. A lazy schema left unexpanded is
+ * reported rather than passed, since its unvisited part may hold unbounded containers.
+ */
 const MAX_WALK_DEPTH = 64;
 
 /**
@@ -11,7 +15,10 @@ const MAX_WALK_DEPTH = 64;
  * parsed. zod records one issue per invalid entry, so an oversized container of junk at any of these paths makes a
  * parse allocate memory proportional to the input. zod only checks the leading size checks of an array, set or map
  * before parsing it, so a bound added after a refinement does not count; records need a guard such as `boundedRecord`.
- * Custom schemas are opaque and treated as bounded.
+ * Objects with a catchall (including passthrough and loose objects) run it over every undeclared key, and tuples with a
+ * rest element run it over every extra element, with no size check zod can apply first, so both are reported. Paths
+ * the walk gives up on past its depth limit are reported as too deep to inspect. Custom schemas are opaque and treated
+ * as bounded.
  */
 export function findUnboundedContainers(schema: z.core.$ZodType, path = ''): string[] {
   const found: string[] = [];
@@ -40,7 +47,7 @@ function walk(
   visited: WeakSet<z.core.$ZodType>,
   depth: number,
 ): void {
-  if (visited.has(schema) || depth > MAX_WALK_DEPTH) {
+  if (visited.has(schema)) {
     return;
   }
   visited.add(schema);
@@ -68,9 +75,15 @@ function walk(
       for (const [key, value] of Object.entries(def.shape as Record<string, z.core.$ZodType>)) {
         next(value, `${path}.${key}`);
       }
+      if (def.catchall && def.catchall._zod.def.type !== 'never' && !sizeCheckedBeforeParse.has(schema)) {
+        found.push(`${path}.*`);
+      }
       return next(def.catchall, `${path}.*`);
     case 'tuple':
       (def.items as z.core.$ZodType[]).forEach((item, i) => next(item, `${path}[${i}]`));
+      if (def.rest) {
+        found.push(`${path}[...]`);
+      }
       return next(def.rest, `${path}[...]`);
     case 'union':
       return (def.options as z.core.$ZodType[]).forEach(option => next(option, path));
@@ -80,8 +93,14 @@ function walk(
     case 'pipe':
       next(def.in, path);
       return next(def.out, path);
-    case 'lazy':
-      return next(def.getter(), path);
+    case 'lazy': {
+      const inner: z.core.$ZodType = def.getter();
+      if (!visited.has(inner) && depth >= MAX_WALK_DEPTH) {
+        found.push(`${path} (too deep to inspect)`);
+        return;
+      }
+      return next(inner, path);
+    }
     case 'function':
       (def.input?._zod.def.items ?? []).forEach((param: z.core.$ZodType, i: number) => next(param, `${path}(${i})`));
       return next(def.output, `${path} =>`);

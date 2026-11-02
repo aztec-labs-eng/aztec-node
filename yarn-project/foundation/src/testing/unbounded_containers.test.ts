@@ -70,9 +70,25 @@ describe('findUnboundedContainers', () => {
     expect(findUnboundedContainers(tree)).toEqual(['.children[]']);
   });
 
-  it('terminates on lazy schemas that build a new schema on every call', () => {
+  it('reports lazy schemas that build a new schema on every call as too deep to inspect', () => {
     const build = (): z.ZodType => z.object({ next: z.lazy(build), items: z.array(z.number()).max(1) });
-    expect(findUnboundedContainers(build())).toEqual([]);
+    expect(findUnboundedContainers(build())).toEqual([expect.stringMatching(/^(\.next)+ \(too deep to inspect\)$/)]);
+  });
+
+  it('flags objects that parse undeclared keys through a catchall', () => {
+    expect(findUnboundedContainers(z.object({ a: z.number() }).catchall(z.number()))).toEqual(['.*']);
+    expect(findUnboundedContainers(z.looseObject({ a: z.number() }))).toEqual(['.*']);
+    expect(findUnboundedContainers(z.object({ a: z.number() }).passthrough())).toEqual(['.*']);
+  });
+
+  it('accepts objects that strip or reject undeclared keys', () => {
+    expect(findUnboundedContainers(z.object({ a: z.number() }))).toEqual([]);
+    expect(findUnboundedContainers(z.strictObject({ a: z.number() }))).toEqual([]);
+  });
+
+  it('flags tuples with a rest element', () => {
+    expect(findUnboundedContainers(z.tuple([z.string()]).rest(z.number()))).toEqual(['[...]']);
+    expect(findUnboundedContainers(z.tuple([z.string(), z.number()]))).toEqual([]);
   });
 
   it('treats custom schemas as opaque', () => {
