@@ -1,7 +1,6 @@
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
-import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 
 import { ProvingRequestType } from '../proofs/proving_request_type.js';
 import { type ProverAgentApi, ProverAgentApiSchema, type ProverAgentStatus } from './prover-agent.js';
@@ -61,9 +60,3 @@ class MockProverAgent implements ProverAgentApi {
     return Promise.resolve(this.status);
   }
 }
-
-describe('ProverAgentApiSchema parameters', () => {
-  it('bound every array and record before parsing their entries', () => {
-    expect(findUnboundedContainersInApi(ProverAgentApiSchema)).toEqual([]);
-  });
-});

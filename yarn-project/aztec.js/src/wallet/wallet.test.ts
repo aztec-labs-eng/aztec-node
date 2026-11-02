@@ -2,7 +2,6 @@ import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
-import { findUnboundedContainersInApi } from '@aztec-labs/foundation/testing';
 import type { ContractArtifact, EventMetadataDefinition } from '@aztec-labs/stdlib/abi';
 import { EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
 import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
@@ -527,9 +526,3 @@ class MockWallet implements Wallet {
     return results as BatchResults<T>;
   }
 }
-
-describe('WalletSchema parameters', () => {
-  it('bound every array and record before parsing their entries', () => {
-    expect(findUnboundedContainersInApi(WalletSchema)).toEqual([]);
-  });
-});

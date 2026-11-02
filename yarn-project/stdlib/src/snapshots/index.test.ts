@@ -2,12 +2,19 @@ import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { findUnboundedContainers } from '@aztec-labs/foundation/testing';
 import type { FileStore } from '@aztec-labs/stdlib/file-store';
 import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { getLatestSnapshotMetadata } from './download.js';
-import type { SnapshotDataUrls, SnapshotMetadata, SnapshotsIndex, SnapshotsIndexMetadata } from './types.js';
+import {
+  type SnapshotDataUrls,
+  type SnapshotMetadata,
+  type SnapshotsIndex,
+  type SnapshotsIndexMetadata,
+  SnapshotsIndexSchema,
+} from './types.js';
 import { uploadSnapshotToIndex } from './upload.js';
 
 describe('snapshots', () => {
@@ -136,5 +143,11 @@ describe('snapshots', () => {
       expect(store.exists).toHaveBeenCalledWith(`aztec-1-2-${rollup.toString()}/index.json`);
       expect(store.upload).toHaveBeenCalledTimes(6);
     });
+  });
+});
+
+describe('SnapshotsIndexSchema', () => {
+  it('bounds every container before parsing its entries', () => {
+    expect(findUnboundedContainers(SnapshotsIndexSchema)).toEqual([]);
   });
 });
