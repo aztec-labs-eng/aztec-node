@@ -212,6 +212,42 @@ describe('LibP2PService', () => {
       txPool.hasTxs.mockResolvedValue([false]);
     });
 
+    /** The named entries of the real first-stage gossip validators, for a node with the given fees and gas limits. */
+    function realFirstStageValidators(
+      names: string[],
+      opts: { minFees?: GasFees; gasLimits?: Gas } = {},
+    ): Record<string, TransactionValidator<GossipValidationFailure>> {
+      const minFees = opts.minFees ?? new GasFees(1, 1);
+      const worldState = mock<WorldStateSynchronizer>();
+      worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
+      const validators = createFirstStageTxValidationsForGossipedTransactions(
+        0n,
+        BlockNumber(2),
+        worldState,
+        computeGossipMinFees(minFees, minFees),
+        1,
+        1,
+        Fr.ZERO,
+        mock<ContractDataSource>(),
+        true,
+        [],
+        undefined,
+        opts.gasLimits && { maxTxL2Gas: opts.gasLimits.l2Gas, maxTxDAGas: opts.gasLimits.daGas },
+      );
+      return Object.fromEntries(Object.entries(validators).filter(([name]) => names.includes(name)));
+    }
+
+    /**
+     * A tx paying `maxFeesPerGas` over `gasLimits`. An empty gas limit means a zero fee limit, which the mock fee payer
+     * covers despite reading as unfunded.
+     */
+    async function mockTxWithGas(gasLimits: Gas, maxFeesPerGas: GasFees, seed?: number) {
+      const tx = await mockTx(seed);
+      tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas });
+      await tx.recomputeHash();
+      return tx;
+    }
+
     it('should Ignore before validation when the tx is already in the pool', async () => {
       const tx = await mockTx();
       txPool.hasTxs.mockResolvedValue([true]);
@@ -423,51 +459,18 @@ describe('LibP2PService', () => {
       const localMinFees = new GasFees(10, 10);
 
       /**
-       * The real first-stage fee validators for a node whose admission and L1-forward fees are both `localMinFees`,
-       * which puts the penalty floor at (5, 5). Only the fee entries are injected, so the gossip outcome is decided
-       * by the fee checks alone.
+       * Only the fee entries are injected, for a node whose admission and L1-forward fees are both `localMinFees`,
+       * which puts the penalty floor at (5, 5). The gossip outcome is then decided by the fee checks alone.
        */
-      function createGossipFeeValidators(): Record<string, TransactionValidator<GossipValidationFailure>> {
-        const worldState = mock<WorldStateSynchronizer>();
-        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
-        const validators = createFirstStageTxValidationsForGossipedTransactions(
-          0n,
-          BlockNumber(2),
-          worldState,
-          computeGossipMinFees(localMinFees, localMinFees),
-          1,
-          1,
-          Fr.ZERO,
-          mock<ContractDataSource>(),
-          true,
-        );
-        return Object.fromEntries(
-          Object.entries(validators).filter(
-            ([name]) =>
-              name === 'maxFeePerGasValidator' ||
-              name === 'maxFeePerGasFloorValidator' ||
-              name === 'feePayerBalanceValidator',
-          ),
-        );
-      }
-
-      /**
-       * A tx paying `maxFeesPerGas` over `gasLimits`. An empty gas limit means a zero fee limit, which the
-       * mock fee payer covers despite reading as unfunded.
-       */
-      async function mockTxPaying(gasLimits: Gas, maxFeesPerGas: GasFees) {
-        const tx = await mockTx();
-        tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas });
-        await tx.recomputeHash();
-        return tx;
-      }
-
       beforeEach(() => {
-        txService.firstStageValidatorsOverride = createGossipFeeValidators();
+        txService.firstStageValidatorsOverride = realFirstStageValidators(
+          ['maxFeePerGasValidator', 'maxFeePerGasFloorValidator', 'feePayerBalanceValidator'],
+          { minFees: localMinFees },
+        );
       });
 
       it('ignores a tx priced between the penalty floor and the admission fee without penalizing the peer', async () => {
-        const tx = await mockTxPaying(Gas.empty(), new GasFees(6, 6));
+        const tx = await mockTxWithGas(Gas.empty(), new GasFees(6, 6));
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -478,7 +481,7 @@ describe('LibP2PService', () => {
       });
 
       it('rejects and penalizes a zero-fee tx, whose zero fee limit passes the balance check', async () => {
-        const tx = await mockTxPaying(new Gas(100, 100), GasFees.empty());
+        const tx = await mockTxWithGas(new Gas(100, 100), GasFees.empty());
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -488,7 +491,7 @@ describe('LibP2PService', () => {
       });
 
       it('rejects and penalizes a tx whose fee payer cannot cover its fee limit', async () => {
-        const tx = await mockTxPaying(new Gas(100, 100), localMinFees);
+        const tx = await mockTxWithGas(new Gas(100, 100), localMinFees);
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -498,7 +501,7 @@ describe('LibP2PService', () => {
       });
 
       it('rejects and penalizes an unfunded fee payer even when its fee alone would only be ignored', async () => {
-        const tx = await mockTxPaying(new Gas(100, 100), new GasFees(6, 6));
+        const tx = await mockTxWithGas(new Gas(100, 100), new GasFees(6, 6));
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -597,43 +600,20 @@ describe('LibP2PService', () => {
       const laggingLimits = getNetworkTxGasLimits(timetableConfig, slotTiming, { manaLimit: 10_000_000n });
       const raisedLimits = getNetworkTxGasLimits(timetableConfig, slotTiming, { manaLimit: 20_000_000n });
 
-      function createMaxGasValidators(limits: Gas): Record<string, TransactionValidator<GossipValidationFailure>> {
-        const worldState = mock<WorldStateSynchronizer>();
-        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
-        const { maxGasLimitsValidator } = createFirstStageTxValidationsForGossipedTransactions(
-          0n,
-          BlockNumber(2),
-          worldState,
-          computeGossipMinFees(new GasFees(1, 1), new GasFees(1, 1)),
-          1,
-          1,
-          Fr.ZERO,
-          mock<ContractDataSource>(),
-          true,
-          [],
-          undefined,
-          { maxTxL2Gas: limits.l2Gas, maxTxDAGas: limits.daGas },
-        );
-        return { maxGasLimitsValidator };
-      }
+      const maxGasValidators = (limits: Gas) =>
+        realFirstStageValidators(['maxGasLimitsValidator'], { gasLimits: limits });
+      const mockTxDeclaring = (gasLimits: Gas, seed: number) => mockTxWithGas(gasLimits, new GasFees(1, 1), seed);
 
-      async function mockTxDeclaring(gasLimits: Gas, seed: number) {
-        const tx = await mockTx(seed);
-        tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas: new GasFees(1, 1) });
-        await tx.recomputeHash();
-        return tx;
-      }
-
-      it('keeps an honest relayer connected while it forwards txs that fit the raised limit', async () => {
+      it('keeps the application score of an honest relayer healthy while it forwards txs that fit the raised limit', async () => {
         const gasLimits = new Gas(laggingLimits.daGas, Math.floor((laggingLimits.l2Gas + raisedLimits.l2Gas) / 2));
-        const raisedValidator = createMaxGasValidators(raisedLimits).maxGasLimitsValidator.validator;
+        const raisedValidator = maxGasValidators(raisedLimits).maxGasLimitsValidator.validator;
         expect((await raisedValidator.validateTx(await mockTxDeclaring(gasLimits, 1))).result).toBe('valid');
 
         const peerScoring = new PeerScoring(getDefaultConfig(p2pConfigMappings));
         txPeerManager.penalizePeer.mockImplementation((peerId, severity) => {
           peerScoring.penalizePeer(peerId, severity);
         });
-        txService.firstStageValidatorsOverride = createMaxGasValidators(laggingLimits);
+        txService.firstStageValidatorsOverride = maxGasValidators(laggingLimits);
 
         for (let i = 1; i <= 6; i++) {
           const tx = await mockTxDeclaring(gasLimits, i);
