@@ -25,5 +25,3 @@ The standard contracts under `contracts/standard/` (`AuthRegistry`, `HandshakeRe
 Some changes leave the pinned artifacts incompatible with the rest of the stack, and so need a re-pin, which is a human decision: an oracle interface version the PXE no longer accepts, a verification-key format barretenberg no longer accepts, or a change to data compiled into the bytecode, such as the block header layout or the address domain separator.
 
 After a re-pin, the next yarn-project build regenerates `standard_contract_data.ts` and `standard_addresses.nr` from the new artifacts, then stops with a "Standard contract addresses have changed" error that lists the changed values and how to rebuild the contracts that depend on them. Commit the regenerated files together with the archive.
-
-`pin-standard-build` deletes the archive first and writes fresh standard artifacts into `target/`. To undo a run, failed or not, restore the archive with `git checkout pinned-standard-contracts.tar.gz` and rerun `./bootstrap.sh` here so `target/` holds the pinned artifacts again.
