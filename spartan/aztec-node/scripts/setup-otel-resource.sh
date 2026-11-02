@@ -3,7 +3,7 @@
 
 set -e
 
-VERSION_FILE="/usr/src/.release-please-manifest.json"
+VERSION_FILE="/usr/src/.version-manifest.json"
 
 declare -A attrs_map
 

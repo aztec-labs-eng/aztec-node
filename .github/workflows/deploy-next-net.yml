@@ -57,7 +57,7 @@ jobs:
             SEMVER="${SEMVER#v}"
             SEMVER="${SEMVER%-amd64}"
           else
-            current_version=$(jq -r '."."' .release-please-manifest.json)
+            current_version=$(jq -r '."."' .version-manifest.json)
             echo "Current version: $current_version"
             SEMVER="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi

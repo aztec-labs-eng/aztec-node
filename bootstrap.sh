@@ -576,7 +576,7 @@ function check_compat_artifacts_tracked {
   local compat_min_version="6.0.0"
 
   local current_version major
-  current_version=$(jq -r '."."' .release-please-manifest.json)
+  current_version=$(jq -r '."."' .version-manifest.json)
   major=$(semver major "$current_version")
   if [ "$major" != "$compat_major" ]; then
     echo "Compat artifact tracking only applies to v${compat_major}. Current major: v${major}. Skipping."
