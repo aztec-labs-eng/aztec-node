@@ -22,5 +22,17 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "aztec-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "aztec-labs-eng/aztec-agent-skills"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "review@aztec-agent-skills": true
   }
 }
