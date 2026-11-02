@@ -49,3 +49,23 @@ resource "google_compute_firewall" "tcp_egress" {
   destination_ranges = ["0.0.0.0/0"]
   target_tags        = ["aztec-gke-node"]
 }
+
+resource "google_compute_firewall" "ethereum_p2p" {
+  name    = "aztec-gke-public-ethereum-p2p"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["32200", "32201", "32300", "32301"]
+  }
+
+  allow {
+    protocol = "udp"
+    ports    = ["32201", "32301"]
+  }
+
+  direction     = "INGRESS"
+  source_ranges = ["0.0.0.0/0"]
+  # GKE assigns this tag for the lifetime of the public cluster.
+  target_tags = ["gke-aztec-gke-public-a3f31f5b-node"]
+}
