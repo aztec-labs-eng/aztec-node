@@ -1093,6 +1093,8 @@ export class AvmCircuitInputs {
   }
 }
 
+let callStackMetadataSchema: ZodFor<CallStackMetadata> | undefined;
+
 // Metadata about a given (enqueued or external) call.
 export class CallStackMetadata {
   constructor(
@@ -1110,8 +1112,10 @@ export class CallStackMetadata {
     public numNestedCalls: number, // This will be different from the size of the nested vector if we went past some limit.
   ) {}
 
+  // Built once, with the self-reference behind z.lazy: reading the getter eagerly inside its own body recursed forever,
+  // and a fresh instance per access makes zod >= 4.5 walk the cycle until the stack overflows.
   static get schema(): ZodFor<CallStackMetadata> {
-    return z
+    return (callStackMetadataSchema ??= z
       .object({
         phase: z.nativeEnum(TxExecutionPhase),
         contractAddress: Fr.schema,
@@ -1123,7 +1127,7 @@ export class CallStackMetadata {
         internalCallStackAtExit: z.number().array(),
         haltingMessage: NullishToUndefined(z.string()),
         reverted: z.boolean(),
-        nested: CallStackMetadata.schema.array(),
+        nested: z.array(z.lazy(() => CallStackMetadata.schema)),
         numNestedCalls: z.number(),
       })
       .transform(
@@ -1155,7 +1159,7 @@ export class CallStackMetadata {
             nested,
             numNestedCalls,
           ),
-      );
+      ));
   }
 
   /**
