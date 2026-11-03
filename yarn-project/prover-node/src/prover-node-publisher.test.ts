@@ -438,6 +438,28 @@ describe('prover-node-publisher', () => {
     });
   });
 
+  describe('proof submission deadline', () => {
+    it('keeps monitoring until the deadline with the configured speed-up cap', async () => {
+      const deadline = new Date(Date.now() + 60_000);
+
+      await publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline });
+
+      const [, overrides] = l1Utils.sendAndMonitorTransaction.mock.calls[0];
+      expect(overrides).toEqual({
+        txTimeoutAt: deadline,
+        txTimeoutMs: 0,
+        cancelTxOnTimeout: true,
+      });
+    });
+
+    it('uses the default monitoring configuration without a deadline', async () => {
+      await publisher.submitEpochProof(setupPublishData(65, 32, 33, 64));
+
+      const [, overrides] = l1Utils.sendAndMonitorTransaction.mock.calls[0];
+      expect(overrides).toEqual({});
+    });
+  });
+
   describe('proof submission target', () => {
     it('defaults the submit tx target to the rollup address', async () => {
       const rollupAddress = EthAddress.random().toString();
@@ -582,7 +604,12 @@ describe('prover-node-publisher', () => {
 
       const [[first], [retry, retryConfig]] = l1Utils.sendAndMonitorTransaction.mock.calls;
       expect(retry).toEqual(first);
-      expect(retryConfig).toEqual({ gasLimit: 1_500_000n, txTimeoutAt: deadline });
+      expect(retryConfig).toEqual({
+        gasLimit: 1_500_000n,
+        txTimeoutAt: deadline,
+        txTimeoutMs: 0,
+        cancelTxOnTimeout: true,
+      });
     });
 
     it('does not resend a proof the rollup would reject again', async () => {
