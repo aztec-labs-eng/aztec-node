@@ -443,6 +443,45 @@ describe('NextBlockFeeCache', () => {
       expect(globalVariableBuilder.buildCheckpointGlobalVariables).toHaveBeenCalledTimes(1);
     });
 
+    /** Makes every later pricing return a different fee, as an L1 fee oracle update that does not move the key would. */
+    const moveL1Fees = () =>
+      globalVariableBuilder.buildCheckpointGlobalVariables.mockImplementation((_c, _f, slotNumber) =>
+        Promise.resolve(globalsFor(slotNumber, slotNumber * 1000 + 1)),
+      );
+
+    it("re-prices a record priced before the frontier's L1 block, though the key did not move", async () => {
+      setFrontier({ l1SyncPoint: syncPoint(1) });
+      await cache.refresh();
+      moveL1Fees();
+      setFrontier({ l1SyncPoint: syncPoint(2) });
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(20), parentOf(BlockNumber(5)));
+
+      expect(fees).toEqual(new GasFees(0, 20_001));
+    });
+
+    it('re-prices a record priced at an L1 block that a reorg replaced at the same height', async () => {
+      setFrontier({ l1SyncPoint: syncPoint(1) });
+      await cache.refresh();
+      moveL1Fees();
+      setFrontier({ l1SyncPoint: { blockNumber: 1n, blockHash: Buffer32.fromField(new Fr(99)) } });
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(20), parentOf(BlockNumber(5)));
+
+      expect(fees).toEqual(new GasFees(0, 20_001));
+    });
+
+    it("serves a record priced at a later L1 block than the frontier's", async () => {
+      setFrontier({ l1SyncPoint: syncPoint(2) });
+      await cache.refresh();
+      moveL1Fees();
+      setFrontier({ l1SyncPoint: syncPoint(1) });
+
+      const fees = await cache.getCheckpointOpeningGasFees(SlotNumber(20), parentOf(BlockNumber(5)));
+
+      expect(fees).toEqual(new GasFees(0, 20_000));
+    });
+
     it('has no price when the proposed tip is not the proposal parent', async () => {
       setFrontier();
 
