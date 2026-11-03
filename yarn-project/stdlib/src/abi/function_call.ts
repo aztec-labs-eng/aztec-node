@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { schemas } from '../schemas/index.js';
-import { type AbiType, AbiTypeSchema, FunctionType, getFunctionReturnType } from './abi.js';
+import { type AbiType, AbiTypeSchema, FunctionType, MAX_ABI_RETURN_TYPES, getFunctionReturnType } from './abi.js';
 import { FunctionSelector } from './function_selector.js';
 
 /**
@@ -68,7 +68,7 @@ export class FunctionCall {
         returnType: AbiTypeSchema.optional(),
         // Old consumers send `returnTypes`, not `returnType`. So we accept both for now, until we can safely remove
         // the old version.
-        returnTypes: z.array(AbiTypeSchema).optional(),
+        returnTypes: z.array(AbiTypeSchema).max(MAX_ABI_RETURN_TYPES).optional(),
       })
       .transform(({ returnType, returnTypes, ...fields }) =>
         FunctionCall.from({ ...fields, returnType: getFunctionReturnType({ returnType, returnTypes }) }),

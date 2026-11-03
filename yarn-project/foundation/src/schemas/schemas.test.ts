@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { Buffer32 } from '../buffer/buffer32.js';
 import { schemas } from './schemas.js';
-import { boundedRecord, optional } from './utils.js';
+import { boundedRecord, optional, withMaxDepth } from './utils.js';
 
 describe('schemas', () => {
   describe('optional', () => {
@@ -43,6 +43,42 @@ describe('schemas', () => {
       expect(schema.safeParse(array).error?.issues).toEqual([
         expect.objectContaining({ code: 'invalid_type', expected: 'record' }),
       ]);
+    });
+  });
+
+  describe('withMaxDepth', () => {
+    type Tree = { children: Tree[] };
+    const tree: z.ZodType<Tree> = z.object({ children: z.array(z.lazy(() => tree)).max(10) });
+    const nest = (depth: number): Tree => {
+      let node: Tree = { children: [] };
+      for (let i = 0; i < depth; i++) {
+        node = { children: [node] };
+      }
+      return node;
+    };
+
+    it('parses input within the depth bound', () => {
+      expect(withMaxDepth(tree, 64).parse(nest(10))).toEqual(nest(10));
+    });
+
+    it('rejects input nested past the bound without recursing into it', () => {
+      expect(() => tree.safeParse(nest(20_000))).toThrow(RangeError);
+      expect(withMaxDepth(tree, 64).safeParse(nest(20_000)).success).toBe(false);
+    });
+
+    it('counts the root as depth zero for both arrays and objects', () => {
+      expect(withMaxDepth(z.unknown(), 4).safeParse({ a: { b: { c: {} } } }).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 3).safeParse({ a: { b: { c: {} } } }).success).toBe(false);
+      expect(withMaxDepth(z.unknown(), 3).safeParse([[[]]]).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 2).safeParse([[[]]]).success).toBe(false);
+    });
+
+    it('accepts wide shallow input and rejects one deep element among many', () => {
+      const schema = withMaxDepth(z.unknown(), 4);
+      const wide: unknown[] = Array.from({ length: 100_000 }, () => ({ a: [] }));
+      expect(schema.safeParse(wide).success).toBe(true);
+      wide.splice(50_000, 0, { a: [[[]]] });
+      expect(schema.safeParse(wide).success).toBe(false);
     });
   });
 
