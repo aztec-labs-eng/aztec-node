@@ -1,5 +1,6 @@
 import { type ArchiverConfig, archiverConfigMappings } from '@aztec-labs/archiver/config';
 import { type GenesisStateConfig, genesisStateConfigMappings } from '@aztec-labs/ethereum/config';
+import { type L1RpcGraderConfig, l1RpcGraderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import { type ConfigMappingsType, booleanConfigHelper, getConfigFromMappings } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
@@ -50,7 +51,8 @@ export type AztecNodeConfig = ArchiverConfig &
   GenesisStateConfig &
   NodeRPCConfig &
   SlasherConfig &
-  ProverNodeConfig & {
+  ProverNodeConfig &
+  L1RpcGraderConfig & {
     /** Whether the validator is disabled for this node */
     disableValidator: boolean;
     /** Whether to skip waiting for the archiver to be fully synced before starting other services */
@@ -92,6 +94,7 @@ export const aztecNodeConfigMappings: ConfigMappingsType<AztecNodeConfig> = {
   ...nodeRpcConfigMappings,
   ...slasherConfigMappings,
   ...specificProverNodeConfigMappings,
+  ...l1RpcGraderConfigMappings,
   disableValidator: {
     env: 'VALIDATOR_DISABLED',
     description: 'Whether the validator is disabled for this node.',

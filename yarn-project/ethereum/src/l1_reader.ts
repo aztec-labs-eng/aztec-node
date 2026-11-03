@@ -20,12 +20,11 @@ export type L1ReaderConfig = {
   viemPollingIntervalMS: number;
   /** Timeout for HTTP requests to the L1 RPC node in ms. */
   l1HttpTimeoutMS?: number;
-} & L1RpcGraderConfig &
-  L1ContractAddresses;
+} & L1ContractAddresses;
 
 /**
  * Settings of the grader that probes each L1 RPC URL and stops sending requests to the ones that lag behind or do not
- * answer. It only runs in the node, and only when two or more URLs are configured.
+ * answer. It only runs in the node, and only for a list of two or more URLs.
  */
 export type L1RpcGraderConfig = {
   /** Interval in ms between rounds in which the grader asks every L1 RPC URL for its latest block number. */
@@ -113,7 +112,6 @@ export const l1ReaderConfigMappings: ConfigMappingsType<L1ReaderConfig> = {
     description: 'Timeout for HTTP requests to the L1 RPC node in ms.',
     ...optionalNumberConfigHelper(),
   },
-  ...l1RpcGraderConfigMappings,
   ...l1ContractAddressesMapping,
 };
 
