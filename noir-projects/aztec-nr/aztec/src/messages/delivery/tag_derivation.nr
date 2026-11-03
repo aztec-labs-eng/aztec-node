@@ -11,6 +11,9 @@ global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
 global ADDRESS_DERIVED: u8 = 2;
 global INTERACTIVE_HANDSHAKE: u8 = 3;
 
+/// Domain separator for the tagging secret derived from a recipient's app-siloed tagging key.
+pub(crate) global DOM_SEP__RECIPIENT_TSK_SECRET: u32 = 1256167324;
+
 /// A contract's choice of tag-secret derivation.
 ///
 /// Selected through the on-chain delivery builder's `via_*` methods. On-chain delivery tags every message from a

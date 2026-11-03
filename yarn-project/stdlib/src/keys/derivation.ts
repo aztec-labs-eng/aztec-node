@@ -18,6 +18,11 @@ export function computeAppNullifierHidingKey(
   return computeAppSecretKey(masterNullifierHidingSecretKey, app, 'n'); // 'n' is the key prefix for nullifier hiding key
 }
 
+/** Derives the tagging secret key `app` gets from an account's master tagging secret key. */
+export function computeAppTaggingSecretKey(masterTaggingSecretKey: GrumpkinScalar, app: AztecAddress): Promise<Fr> {
+  return computeAppSecretKey(masterTaggingSecretKey, app, 't'); // 't' is the key prefix for the tagging key
+}
+
 export function computeAppSecretKey(skM: GrumpkinScalar, app: AztecAddress, keyPrefix: KeyPrefix): Promise<Fr> {
   const generator = getKeyGenerator(keyPrefix);
   return poseidon2HashWithSeparator([skM.hi, skM.lo, app], generator);

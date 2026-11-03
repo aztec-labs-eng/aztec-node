@@ -393,6 +393,32 @@ describe('LogService', () => {
       expect(txHashes).not.toContainEqual(directionalLog.txHash);
     });
 
+    it('scans the secret derived from the recipient tsk without registering a sender', async () => {
+      const log = randomPrivateLogResult({ includeEffects: true });
+      servePrivateLogsByTag(aztecNode, new Map([[(await recipientTskTag(recipient)).toString(), log]]));
+
+      const logs = await logService.fetchTaggedLogs(contractAddress, recipient, []);
+
+      expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
+    });
+
+    it('keeps the messages of accounts that share a tsk apart', async () => {
+      const keys = await deriveKeys(Fr.random());
+      const firstAccount = await keyStore.addAccount(keys, Fr.random());
+      const secondAccount = await keyStore.addAccount(keys, Fr.random());
+      await addressStore.addCompleteAddress(firstAccount);
+      await addressStore.addCompleteAddress(secondAccount);
+      scopes.push(firstAccount.address, secondAccount.address);
+
+      const log = randomPrivateLogResult({ includeEffects: true });
+      servePrivateLogsByTag(aztecNode, new Map([[(await recipientTskTag(secondAccount.address)).toString(), log]]));
+
+      expect(await logService.fetchTaggedLogs(contractAddress, firstAccount.address, [])).toEqual([]);
+
+      const logs = await logService.fetchTaggedLogs(contractAddress, secondAccount.address, []);
+      expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
+    });
+
     it('returns a log once when a registered secret coincides with a provided one', async () => {
       await taggingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
       const providedSecret = await AppTaggingSecret.computeFromHandshakeSecret(
@@ -454,6 +480,15 @@ describe('LogService', () => {
     async function directionalTag(secret: Point, app: AztecAddress, directedTo: AztecAddress): Promise<SiloedTag> {
       const directionalSecret = await AppTaggingSecret.computeFromArbitrarySecret(secret, app, directedTo);
       return SiloedTag.compute({ extendedSecret: directionalSecret, index: 0 });
+    }
+
+    async function recipientTskTag(taggedRecipient: AztecAddress): Promise<SiloedTag> {
+      const extendedSecret = await AppTaggingSecret.computeFromRecipientTsk(
+        await keyStore.getMasterTaggingSecretKey(taggedRecipient),
+        contractAddress,
+        taggedRecipient,
+      );
+      return SiloedTag.compute({ extendedSecret, index: 0 });
     }
   });
 

@@ -37,7 +37,7 @@ import {
   defaultTaggingSecretStrategy,
 } from '../../hooks/resolve_tagging_secret_strategy.js';
 import { NoteService } from '../../notes/note_service.js';
-import { assertAllowedScope } from '../../storage/allowed_scopes.js';
+import { assertAllowedScope, isAllowedScope } from '../../storage/allowed_scopes.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
 import { syncSenderTaggingIndexes } from '../../tagging/index.js';
 import type { ExecutionNoteCache } from '../execution_note_cache.js';
@@ -227,9 +227,11 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     recipient: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
   ): Promise<TaggingSecretStrategy> {
+    const recipientTskAvailable = isAllowedScope(recipient, this.scopes) && (await this.keyStore.hasAccount(recipient));
+
     const hook: ResolveTaggingSecretStrategy | undefined = this.hooks?.resolveTaggingSecretStrategy;
     if (!hook) {
-      return defaultTaggingSecretStrategy({ sender, recipient, deliveryMode });
+      return defaultTaggingSecretStrategy({ deliveryMode, recipientTskAvailable });
     }
 
     const contractClassId = await this.#getCurrentContractClassId(this.contractAddress);
@@ -239,6 +241,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       sender,
       recipient,
       deliveryMode,
+      recipientTskAvailable,
     });
   }
 
@@ -275,6 +278,16 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
           throw new Error(`Cannot derive an address-derived tagging secret for invalid recipient ${recipient}`);
         }
         return { type: 'unconstrained-secret', secret };
+      }
+      case 'recipient-tsk': {
+        assertAllowedScope(recipient, this.scopes);
+        const recipientTsk = await this.keyStore.getMasterTaggingSecretKey(recipient);
+        const appTaggingSecret = await AppTaggingSecret.computeFromRecipientTsk(
+          recipientTsk,
+          this.contractAddress,
+          recipient,
+        );
+        return { type: 'unconstrained-secret', secret: appTaggingSecret.secret };
       }
       case 'arbitrary-secret': {
         // App-silo the raw arbitrary secret point here so wallets never replicate the derivation.

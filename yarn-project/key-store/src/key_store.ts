@@ -221,6 +221,14 @@ export class KeyStore {
   }
 
   /**
+   * Retrieves master tagging secret key.
+   * @throws If the account does not exist in the key store.
+   */
+  public async getMasterTaggingSecretKey(account: AztecAddress): Promise<GrumpkinScalar> {
+    return GrumpkinScalar.fromBuffer(await this.#getMasterKeyBuffer(account, 'tsk_m'));
+  }
+
+  /**
    * Retrieves the four privacy secret keys the key store holds for an account. Paired with {@link addAccount}, this
    * allows exporting an account's privacy secret keys, e.g. to re-register it on another PXE. The message-signing and
    * fallback secret keys are not held by the key store and so are not returned.

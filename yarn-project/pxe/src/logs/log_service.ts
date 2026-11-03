@@ -34,7 +34,7 @@ type RangeKey = string;
 const rangeKey = (fromBlock?: BlockNumber, toBlock?: BlockNumber): RangeKey => `${fromBlock ?? ''}-${toBlock ?? ''}`;
 
 /** The recipient key material that tagging secret derivation needs. */
-type RecipientKeys = { completeAddress: CompleteAddress; ivsk: GrumpkinScalar };
+type RecipientKeys = { completeAddress: CompleteAddress; ivsk: GrumpkinScalar; tsk: GrumpkinScalar };
 
 export class LogService {
   private log: Logger;
@@ -243,38 +243,47 @@ export class LogService {
     if (!completeAddress || !(await this.keyStore.hasAccount(recipient))) {
       return undefined;
     }
-    return { completeAddress, ivsk: await this.keyStore.getMasterIncomingViewingSecretKey(recipient) };
+    return {
+      completeAddress,
+      ivsk: await this.keyStore.getMasterIncomingViewingSecretKey(recipient),
+      tsk: await this.keyStore.getMasterTaggingSecretKey(recipient),
+    };
   }
 
-  /** Computes one tagging secret per known sender via ECDH. */
+  /** Computes the recipient-tsk secret and one address-derived secret per known sender. */
   async #getSecretsDerivedFromRecipientKeys(
     recipientKeys: RecipientKeys,
     contractAddress: AztecAddress,
   ): Promise<AppTaggingSecret[]> {
-    // We implicitly add all PXE accounts as senders, this helps us decrypt tags on notes that we send to ourselves
-    // (recipient = us, sender = us).
+    // We implicitly add all PXE accounts as senders, so that we find address-derived messages between them, including
+    // those an account sends to itself (recipient = us, sender = us).
     const allSenders = [...(await this.taggingSecretSourcesStore.getSenders()), ...(await this.keyStore.getAccounts())];
 
-    return allToCompletion(
-      allSenders.map(async sender => {
-        const secret = await AppTaggingSecret.computeAddressDerived({
-          localAddress: recipientKeys.completeAddress,
-          localIvsk: recipientKeys.ivsk,
-          externalAddress: sender,
-          app: contractAddress,
-          recipient: recipientKeys.completeAddress.address,
-        });
-
-        if (!secret) {
-          // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
-          throw new Error(
-            `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
-          );
-        }
-
-        return secret;
-      }),
+    const recipientTskSecret = AppTaggingSecret.computeFromRecipientTsk(
+      recipientKeys.tsk,
+      contractAddress,
+      recipientKeys.completeAddress.address,
     );
+    const addressDerivedSecrets = allSenders.map(async sender => {
+      const secret = await AppTaggingSecret.computeAddressDerived({
+        localAddress: recipientKeys.completeAddress,
+        localIvsk: recipientKeys.ivsk,
+        externalAddress: sender,
+        app: contractAddress,
+        recipient: recipientKeys.completeAddress.address,
+      });
+
+      if (!secret) {
+        // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
+        throw new Error(
+          `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
+        );
+      }
+
+      return secret;
+    });
+
+    return allToCompletion([recipientTskSecret, ...addressDerivedSecrets]);
   }
 
   /**

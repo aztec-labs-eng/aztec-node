@@ -89,6 +89,7 @@ const STRATEGY_NON_INTERACTIVE_HANDSHAKE = 1;
 const STRATEGY_ARBITRARY_SECRET = 2;
 const STRATEGY_ADDRESS_DERIVED = 3;
 const STRATEGY_INTERACTIVE_HANDSHAKE = 4;
+const STRATEGY_RECIPIENT_TSK = 5;
 
 const TAGGING_SECRET_STRATEGY: TypeMapping<TaggingSecretStrategy> = LEAF({
   kind: 'tagging-secret-strategy',
@@ -101,6 +102,8 @@ const TAGGING_SECRET_STRATEGY: TypeMapping<TaggingSecretStrategy> = LEAF({
           return [new Fr(STRATEGY_INTERACTIVE_HANDSHAKE), Fr.ZERO, Fr.ZERO];
         case 'address-derived':
           return [new Fr(STRATEGY_ADDRESS_DERIVED), Fr.ZERO, Fr.ZERO];
+        case 'recipient-tsk':
+          return [new Fr(STRATEGY_RECIPIENT_TSK), Fr.ZERO, Fr.ZERO];
         case 'arbitrary-secret':
           return [new Fr(STRATEGY_ARBITRARY_SECRET), strategy.secret.x, strategy.secret.y];
       }
@@ -117,6 +120,8 @@ const TAGGING_SECRET_STRATEGY: TypeMapping<TaggingSecretStrategy> = LEAF({
           return { type: 'interactive-handshake' };
         case STRATEGY_ADDRESS_DERIVED:
           return { type: 'address-derived' };
+        case STRATEGY_RECIPIENT_TSK:
+          return { type: 'recipient-tsk' };
         case STRATEGY_ARBITRARY_SECRET:
           return { type: 'arbitrary-secret', secret: Point.fromFields([x, y]) };
         default:
