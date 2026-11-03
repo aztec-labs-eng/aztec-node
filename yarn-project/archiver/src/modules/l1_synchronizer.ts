@@ -937,7 +937,8 @@ export class ArchiverL1Synchronizer implements Traceable {
    * A rejected checkpoint moves the sync point past its L1 block, so it only counts as seen while it is still the
    * pending tip. If an L1 reorg replaced it with a different same-numbered checkpoint at an earlier L1 block, its
    * stale marker must not hide that gap. The entry is matched on the pending tip's number and archive root, so neither
-   * a stale higher-numbered marker (e.g. a dropped descendant) nor a replaced same-numbered one counts.
+   * a stale higher-numbered marker (e.g. a dropped descendant) nor a same-numbered replacement with a different root
+   * counts.
    */
   private async getLocalProgressCheckpoint(
     status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,

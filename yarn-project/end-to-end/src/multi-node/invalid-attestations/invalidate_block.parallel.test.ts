@@ -1183,6 +1183,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
 
   it('keeps the honest proposed checkpoint when a non-broadcast invalid checkpoint with the same number lands after it was gossiped', async () => {
     await runLateNonBroadcastCheckpointTest('honest-proposal-stored');
+  });
 
   // A checkpoint with insufficient attestations claims its parent's archive root as its own, so L1's pending tip keeps
   // the root of the checkpoint the nodes already hold. Nodes must still fetch and reject it so a proposer invalidates
