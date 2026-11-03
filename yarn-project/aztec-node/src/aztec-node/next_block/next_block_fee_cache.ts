@@ -4,16 +4,18 @@ import {
   SimulationOverridesBuilder,
   type SimulationOverridesPlan,
 } from '@aztec-labs/ethereum/contracts';
-import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { type DateProvider, executeTimeout } from '@aztec-labs/foundation/timer';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
+import type { L1SyncPoint, L2BlockId, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
 import { buildCheckpointSimulationOverridesPlan } from '@aztec-labs/stdlib/checkpoint';
+import type { GasFees } from '@aztec-labs/stdlib/gas';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type { CheckpointGlobalVariables, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
+import type { CheckpointOpeningFeeSource } from '@aztec-labs/validator-client';
 
 import {
   type BoundaryFeeKey,
@@ -83,7 +85,7 @@ export interface NextBlockFeeCacheDeps {
  * Before {@link start} (or after {@link stop}) requests still price inline through the same refresh path, which
  * is what tests and TXE-like environments rely on.
  */
-export class NextBlockFeeCache {
+export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
   private readonly blockSource: L2BlockSource;
   private readonly globalVariableBuilder: GlobalVariableBuilder;
   private readonly rollupContract: RollupContract | undefined;
@@ -137,36 +139,69 @@ export class NextBlockFeeCache {
    * shared refresh: a simulation waits for it and surfaces its failure, while a quote passes `maxWaitMs` and
    * falls back to whatever the cache already holds rather than turning an L1 outage into a multi-second RPC.
    */
-  public async getBoundaryGlobals(
+  public getBoundaryGlobals(
     key: BoundaryFeeKey,
     frontier: L2Frontier,
     opts?: { maxWaitMs?: number },
   ): Promise<CheckpointGlobalVariables | undefined> {
-    const maxWaitMs = opts?.maxWaitMs;
-    // An uncapped reader gets more than one attempt because the refresh it joins may be one that started from an
-    // older frontier and therefore priced a different boundary; the next pass is its own. Still never concurrent.
-    const attempts = maxWaitMs === undefined ? MAX_REFRESH_ATTEMPTS : 1;
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const hit = this.findRecord(key);
-      if (hit) {
-        return hit.globals;
-      }
-      const refresh = this.refresh(frontier);
-      await (maxWaitMs === undefined ? refresh : this.waitFor(refresh, maxWaitMs));
+    return this.findOrPrice(key, frontier, opts?.maxWaitMs);
+  }
+
+  /**
+   * The gas fees the first block of a checkpoint at `slot` built on `parent` must carry, for checking a block proposal
+   * against. Keyed on the proposal's slot and parent rather than on the slot this node's clock would plan: the frontier
+   * must end at `parent`, and the boundary is planned for `slot` from it. A matching record is served from memory; on
+   * a miss the request joins the refresh in flight and then runs a pass planned on `slot`, so it gets the exact price
+   * and not a fallback.
+   *
+   * Undefined when this node's view does not hold the data to produce the price the proposer computes yet: the
+   * frontier does not end at `parent` (the parent's checkpoint proposal has not been processed, or the chain moved
+   * on), or the checkpointed tip has not reached the parent's parent, whose fee state the pipelined plan reads from
+   * L1 (see {@link pricesAsProposer}). The caller waits for a later archiver sync rather than accepting the pinned-tips
+   * approximation. Throws when the L1 read fails.
+   *
+   * Only a record priced at the frontier's L1 block, or at a later one, is served. The L1 fee oracle can change without
+   * moving the frontier (anyone may call its update), and the background loop only catches up within a refresh
+   * interval, so an older record could carry a price the proposer has already moved past.
+   */
+  public async getCheckpointOpeningGasFees(slot: SlotNumber, parent: L2BlockId): Promise<GasFees | undefined> {
+    const frontier = await this.blockSource.getL2Frontier();
+    const tip = frontier.tips.proposed;
+    if (tip.number !== parent.number || tip.hash !== parent.hash) {
+      this.log.debug(`Cannot price the checkpoint opened at slot ${slot}: the proposed tip is not its parent`, {
+        slot,
+        parent,
+        tip,
+      });
+      return undefined;
     }
-    return this.findRecord(key)?.globals;
+    const plan = planNextBlock(frontier, slot);
+    const newCheckpoint = plan.newCheckpoint;
+    if (!newCheckpoint || newCheckpoint.targetSlot !== slot || !this.pricesAsProposer(frontier, newCheckpoint)) {
+      this.log.debug(`Cannot price the checkpoint opened at slot ${slot} as its proposer does from this frontier`, {
+        slot,
+        parent,
+        targetSlot: newCheckpoint?.targetSlot,
+        proposedCheckpointNumber: newCheckpoint?.proposedCheckpointData?.checkpointNumber,
+        checkpointedCheckpointNumber: newCheckpoint?.checkpointedCheckpointNumber,
+      });
+      return undefined;
+    }
+    const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
+    return key && (await this.findOrPrice(key, frontier, undefined, slot, frontier.l1SyncPoint))?.gasFees;
   }
 
   /**
    * Runs one refresh pass, or joins the one already running. Single-flight is what keeps a burst of requests
    * during a transition down to a single L1 round trip, shared with the background loop.
    * @param frontier - Snapshot to plan from; read fresh from the archiver when omitted, as the loop does.
+   * @param slot - Slot to plan the boundary for in place of this node's clock slot.
    */
-  public refresh(frontier?: L2Frontier): Promise<void> {
+  public refresh(frontier?: L2Frontier, slot?: SlotNumber): Promise<void> {
     if (this.inFlightRefresh) {
       return this.inFlightRefresh;
     }
-    const refresh = this.runRefresh(frontier).finally(() => {
+    const refresh = this.runRefresh(frontier, slot).finally(() => {
       this.inFlightRefresh = undefined;
     });
     // Every caller awaits the returned promise and reports its failure, but the stored copy may only be awaited by
@@ -176,9 +211,35 @@ export class NextBlockFeeCache {
     return refresh;
   }
 
-  private async runRefresh(frontier?: L2Frontier): Promise<void> {
+  /**
+   * Serves the record matching `key`, or joins the shared refresh to produce it, as {@link getBoundaryGlobals}
+   * describes. `slot` plans a refresh this reader starts for that slot rather than for the clock slot.
+   * `minL1SyncPoint`, when set, skips records priced before that L1 block (see {@link pricedAtOrAfter}).
+   */
+  private async findOrPrice(
+    key: BoundaryFeeKey,
+    frontier: L2Frontier,
+    maxWaitMs: number | undefined,
+    slot?: SlotNumber,
+    minL1SyncPoint?: L1SyncPoint,
+  ): Promise<CheckpointGlobalVariables | undefined> {
+    // An uncapped reader gets more than one attempt because the refresh it joins may be one that started from an
+    // older frontier and therefore priced a different boundary; the next pass is its own. Still never concurrent.
+    const attempts = maxWaitMs === undefined ? MAX_REFRESH_ATTEMPTS : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const hit = this.findRecord(key, minL1SyncPoint);
+      if (hit) {
+        return hit.globals;
+      }
+      const refresh = this.refresh(frontier, slot);
+      await (maxWaitMs === undefined ? refresh : this.waitFor(refresh, maxWaitMs));
+    }
+    return this.findRecord(key, minL1SyncPoint)?.globals;
+  }
+
+  private async runRefresh(frontier?: L2Frontier, slot?: SlotNumber): Promise<void> {
     const snapshot = frontier ?? (await this.blockSource.getL2Frontier());
-    const plan = planNextBlock(snapshot, getClockSlot(this.epochCache));
+    const plan = planNextBlock(snapshot, slot ?? getClockSlot(this.epochCache));
     const key = computeBoundaryFeeKey(plan, snapshot.pendingChainValidationStatus);
     if (!key || !plan.newCheckpoint) {
       // Mid-checkpoint: the fee is frozen in the in-progress checkpoint's header, so there is nothing to price.
@@ -215,12 +276,19 @@ export class NextBlockFeeCache {
     this.current = record;
   }
 
-  /** The freshest record matching `key`, or undefined when none is recent enough to trust. */
-  private findRecord(key: BoundaryFeeKey): BoundaryFeeRecord | undefined {
+  /**
+   * The freshest record matching `key`, or undefined when none is recent enough to trust. With `minL1SyncPoint`, a
+   * record also has to be priced at that L1 block or a later one.
+   */
+  private findRecord(key: BoundaryFeeKey, minL1SyncPoint?: L1SyncPoint): BoundaryFeeRecord | undefined {
     const maxAgeMs = MAX_AGE_INTERVALS * this.refreshIntervalMs;
     const now = this.dateProvider.now();
     return [this.current, this.previous].find(
-      record => record !== undefined && boundaryFeeKeyEquals(record.key, key) && now - record.refreshedAtMs < maxAgeMs,
+      record =>
+        record !== undefined &&
+        boundaryFeeKeyEquals(record.key, key) &&
+        now - record.refreshedAtMs < maxAgeMs &&
+        (minL1SyncPoint === undefined || pricedAtOrAfter(record.l1SyncPoint, minL1SyncPoint)),
     );
   }
 
@@ -229,6 +297,24 @@ export class NextBlockFeeCache {
     return executeTimeout(() => promise, maxWaitMs).catch(err =>
       this.log.debug(`Refreshing the next-block boundary fee failed or timed out`, err),
     );
+  }
+
+  /**
+   * Whether {@link buildOverridesPlan} prices `newCheckpoint` with the plan its proposer uses, rather than with the
+   * pinned-tips fallback. The sequencer never builds on a proposed parent more than one checkpoint ahead of its
+   * checkpointed tip, so a frontier in that state trails L1: the parent's parent, whose fee header the pipelined plan
+   * reads, is not checkpointed in it yet, and the fallback price is not one a proposer would have used.
+   */
+  private pricesAsProposer(frontier: L2Frontier, newCheckpoint: NewCheckpointPlan): boolean {
+    const { proposedCheckpointData, checkpointedCheckpointNumber } = newCheckpoint;
+    if (proposedCheckpointData) {
+      return (
+        this.rollupContract !== undefined &&
+        proposedCheckpointData.checkpointNumber === checkpointedCheckpointNumber + 1
+      );
+    }
+    // On a valid chain with no proposed parent the pinned-tips plan is the one the proposer builds.
+    return this.rollupContract !== undefined || frontier.pendingChainValidationStatus.valid;
   }
 
   /**
@@ -308,4 +394,15 @@ export class NextBlockFeeCache {
 
 function l1SyncPointEquals(a: L1SyncPoint | undefined, b: L1SyncPoint | undefined): boolean {
   return a === undefined || b === undefined ? a === b : a.blockHash.equals(b.blockHash);
+}
+
+/**
+ * Whether a record priced at `pricedAt` reflects L1 at least as recent as `min`. At the same height the hashes must
+ * match, since a reorg that replaces that block can carry different fee state.
+ */
+function pricedAtOrAfter(pricedAt: L1SyncPoint | undefined, min: L1SyncPoint): boolean {
+  if (pricedAt === undefined || pricedAt.blockNumber < min.blockNumber) {
+    return false;
+  }
+  return pricedAt.blockNumber > min.blockNumber || pricedAt.blockHash.equals(min.blockHash);
 }
