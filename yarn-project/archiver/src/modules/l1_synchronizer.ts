@@ -942,8 +942,10 @@ export class ArchiverL1Synchronizer implements Traceable {
    * stale higher-numbered record (e.g. a dropped descendant) and a same-numbered replacement with a different root do
    * not count. Nor does a record whose L1 block, or the L1 block of any rejected ancestor it was rejected for, was
    * reorged out (past the given head, or now carrying another hash): an L1 reorg may have republished that checkpoint
-   * with valid attestations behind the sync point. This only runs on a pass whose L1 head moved past the sync point,
-   * so a reorg that replaces the head block holding a rejected checkpoint is noticed one L1 block later.
+   * with valid attestations behind the sync point. At a head that does not advance past the sync point this runs only
+   * when {@link checkpointedChainNeedsReconciliation} fires for another reason (the speculation gate, the message log,
+   * or the accepted tip's L1 block), so a reorg that replaces only the block holding a rejected checkpoint is noticed
+   * once the head advances on a pass with no prune pending and no checkpoint read.
    */
   private async getLocalProgressCheckpoint(
     status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,
@@ -967,7 +969,9 @@ export class ArchiverL1Synchronizer implements Traceable {
   private async rejectedChainStillOnL1(tip: RejectedCheckpoint, currentL1BlockNumber: bigint): Promise<boolean> {
     let record: RejectedCheckpoint | undefined = tip;
     while (record) {
-      if (!(await this.rejectedRecordStillOnL1(record, currentL1BlockNumber))) {
+      // Unlike the accepted tip's check, which waits for L1 to grow back, a record past the head counts as stale: the
+      // sync point may sit below it, and a rescan from there re-reads whatever L1 now holds.
+      if (record.l1.blockNumber > currentL1BlockNumber || !(await this.l1BlockStillHasHash(record.l1))) {
         return false;
       }
       record = await this.stores.blocks.getRejectedCheckpoint(
@@ -976,14 +980,6 @@ export class ArchiverL1Synchronizer implements Traceable {
       );
     }
     return true;
-  }
-
-  /**
-   * Whether the L1 block a rejected checkpoint was recorded from is still canonical as seen from the given head: within
-   * it and still carrying the recorded hash. Queries L1 for that block.
-   */
-  private async rejectedRecordStillOnL1(rejected: RejectedCheckpoint, currentL1BlockNumber: bigint): Promise<boolean> {
-    return rejected.l1.blockNumber <= currentL1BlockNumber && (await this.l1BlockStillHasHash(rejected.l1));
   }
 
   private async getCheckpointHeader(number: CheckpointNumber) {
