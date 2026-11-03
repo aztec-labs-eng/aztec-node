@@ -198,6 +198,18 @@ describe('makeL1HttpTransport with an RPC that answers null', () => {
     }
   });
 
+  it('does not retry a request whose caller disables retries, as viem does for sends', async () => {
+    const { client, nullServer, otherServer } = await startServers({ secondAnswersNull: true });
+
+    const error = await client
+      .request({ method: 'eth_sendRawTransaction', params: ['0x01'] }, { retryCount: 0 })
+      .catch(err => err);
+
+    expect(getErrorCause(error, L1RpcNullResultError)).toBeDefined();
+    expect(nullServer.methods).toEqual(['eth_sendRawTransaction']);
+    expect(otherServer.methods).toEqual(['eth_sendRawTransaction']);
+  });
+
   it('keeps every URL visible to getRpcUrlsFromClient', async () => {
     const { client, nullServer, otherServer } = await startServers();
 

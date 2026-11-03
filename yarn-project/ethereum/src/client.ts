@@ -140,9 +140,9 @@ export function getL1RpcErrorCode(err: unknown): number | undefined {
 function wrapL1RpcTransport(transport: FallbackTransport<HttpTransport[]>): FallbackTransport<HttpTransport[]> {
   const wrappedTransport: FallbackTransport<HttpTransport[]> = parameters => {
     const fallbackTransport = transport(parameters);
-    const request: typeof fallbackTransport.request = async args => {
+    const request: typeof fallbackTransport.request = async (args, options) => {
       try {
-        return await fallbackTransport.request(args);
+        return await fallbackTransport.request(args, options);
       } catch (err) {
         throw err instanceof L1RpcError ? err : new L1RpcError('L1 RPC request failed', { cause: err });
       }
