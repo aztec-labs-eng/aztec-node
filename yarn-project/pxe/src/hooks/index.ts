@@ -14,8 +14,12 @@ export type {
 } from './resolve_expiration_and_padding.js';
 export { roundDownTxExpirationTimestamp } from '../private_kernel/hints/round_down_tx_expiration_timestamp.js';
 export {
+  defaultMessagingSecretStrategy,
   defaultTaggingSecretStrategy,
+  type ResolveMessagingSecretStrategy,
   type ResolveTaggingSecretStrategy,
+  type MessagingSecretStrategy,
+  type MessagingSecretStrategyRequest,
   type TaggingSecretStrategy,
   type TaggingSecretStrategyRequest,
-} from './resolve_tagging_secret_strategy.js';
+} from './resolve_messaging_secret_strategy.js';

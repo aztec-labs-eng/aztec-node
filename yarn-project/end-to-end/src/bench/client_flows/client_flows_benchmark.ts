@@ -231,12 +231,12 @@ export class ClientFlowsBenchmark {
         prover: this.proxyLogger.createLogger('pxe:bb:wasm:bundle:proxied'),
       },
       // The benchmark measures steady-state app cost, not first-send discovery cost. Reproduce the pre-handshake-default
-      // behavior of unconstrained delivery: derive the tagging secret from the (sender, recipient) key pair via ECDH
+      // behavior of unconstrained delivery: derive the messaging secret from the (sender, recipient) key pair via ECDH
       // instead of taking the current default (a non-interactive handshake, which injects two extra private app
       // executions and a nullifier per cold chain). Constrained delivery is unaffected: the Noir circuit rejects
       // address-derived for constrained, so the hook falls through to a handshake there.
       hooks: {
-        resolveTaggingSecretStrategy: ({ deliveryMode }) =>
+        resolveMessagingSecretStrategy: ({ deliveryMode }) =>
           Promise.resolve(
             deliveryMode === OnchainDeliveryMode.UNCONSTRAINED
               ? { type: 'address-derived' }

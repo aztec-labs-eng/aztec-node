@@ -1,6 +1,6 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import type { AppTaggingSecret } from '@aztec-labs/stdlib/logs';
+import type { MessagingSecret } from '@aztec-labs/stdlib/logs';
 
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
@@ -12,7 +12,7 @@ import { resolvePendingTxs } from './utils/resolve_pending_txs.js';
 /**
  * Syncs tagging indexes. This function needs to be called whenever a private log is being sent.
  *
- * @param secret - The sender-side tagging `AppTaggingSecret`.
+ * @param secret - The sender-side `MessagingSecret`.
  * @param finalizedBlockNumber - The locally-synced finalized tip, used to tell whether the block a discovered log
  * sits in is finalized.
  * @remarks When syncing the indexes as sender we don't care about the log contents - we only care about the highest
@@ -22,7 +22,7 @@ import { resolvePendingTxs } from './utils/resolve_pending_txs.js';
  * updates its status accordingly.
  */
 export async function syncSenderTaggingIndexes(
-  secret: AppTaggingSecret,
+  secret: MessagingSecret,
   aztecNode: AztecNode,
   taggingStore: SenderTaggingStore,
   finalizedBlockNumber: BlockNumber,

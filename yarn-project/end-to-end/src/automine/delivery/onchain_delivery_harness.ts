@@ -9,7 +9,7 @@ import {
   type DeliveryEvent,
   OnchainDeliveryTestContract,
 } from '@aztec-labs/noir-test-contracts.js/OnchainDeliveryTest';
-import type { CustomRequest, ResolveCustomRequest, ResolveTaggingSecretStrategy } from '@aztec-labs/pxe/config';
+import type { CustomRequest, ResolveCustomRequest, ResolveMessagingSecretStrategy } from '@aztec-labs/pxe/config';
 import type { AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 
@@ -34,20 +34,20 @@ export type DeliveryMode = Mode | { events: Mode; notes: Mode };
 const formatMode = (mode: DeliveryMode): string => (typeof mode === 'string' ? mode : `${mode.events}->${mode.notes}`);
 
 // Onchain private delivery has two orthogonal axes: the delivery MODE (constrained = nullifier-chained sequence;
-// unconstrained = no nullifier, windowed scan) and the tagging-secret SOURCE, which the wallet's
-// `resolveTaggingSecretStrategy` hook selects. This harness exercises (strategy, mode) cells end to end across two
+// unconstrained = no nullifier, windowed scan) and the messaging-secret SOURCE, which the wallet's
+// `resolveMessagingSecretStrategy` hook selects. This harness exercises (strategy, mode) cells end to end across two
 // PXEs that share only a node: the sender PXE sends, the recipient PXE discovers purely from onchain logs plus the
 // HandshakeRegistry.
 //
 // Cross-PXE is the meaningful setup: the recipient PXE holds no sender state, so a cell only "discovers" a message if
 // the source truly reached it.
 export function buildMessageDeliveryTest(opts: {
-  // Names the tagging-secret source, e.g. 'non-interactive handshake' or 'arbitrary secret'. The describe title is
+  // Names the messaging-secret source, e.g. 'non-interactive handshake' or 'arbitrary secret'. The describe title is
   // derived as `${strategy} x ${mode}`.
   strategy: string;
   mode: DeliveryMode;
   // Required: every cell states its source explicitly rather than leaning on the PXE default (covered by unit tests).
-  senderHook: ResolveTaggingSecretStrategy;
+  senderHook: ResolveMessagingSecretStrategy;
   // Recipient-side setup the source requires (e.g. registering a raw arbitrary secret); runs once after deployment.
   recipientRegistration?: (
     recipient: TestWallet,
@@ -113,7 +113,7 @@ export function buildMessageDeliveryTest(opts: {
     let customRequestCount = 0;
 
     beforeAll(async () => {
-      // The sender PXE holds the sender and carries this cell's tagging-secret-strategy hook. The recipient is funded
+      // The sender PXE holds the sender and carries this cell's messaging-secret-strategy hook. The recipient is funded
       // at genesis here but created and deployed on the isolated recipient PXE below, so it carries no sender state
       // from other cells.
       ({
@@ -127,7 +127,7 @@ export function buildMessageDeliveryTest(opts: {
         additionallyFundedAccounts: await generateSchnorrAccounts(1, 'schnorr'),
         pxeCreationOptions: {
           hooks: {
-            resolveTaggingSecretStrategy: senderHook,
+            resolveMessagingSecretStrategy: senderHook,
             resolveCustomRequest: async (request: CustomRequest) => {
               if (!customRequestResponder) {
                 throw new Error('A custom request arrived but this test cell has no customRequestResponder configured');
@@ -237,7 +237,7 @@ export function buildMessageDeliveryTest(opts: {
     });
 
     if (customRequestResponder) {
-      it('the custom request hook fires exactly once, on the send that bootstraps the tagging secret', () => {
+      it('the custom request hook fires exactly once, on the send that bootstraps the messaging secret', () => {
         expect(customRequestCount).toBe(1);
       });
     }

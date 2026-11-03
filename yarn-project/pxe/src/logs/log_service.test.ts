@@ -10,7 +10,7 @@ import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { deriveKeys } from '@aztec-labs/stdlib/keys';
-import { AppTaggingSecret, type LogResult, OnchainDeliveryMode, SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
+import { type LogResult, MessagingSecret, OnchainDeliveryMode, SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
 import { makeBlockHeader, makeL2Tips, randomPrivateLogResult } from '@aztec-labs/stdlib/testing';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -20,8 +20,8 @@ import {
 } from '../contract_function_simulator/noir-structs/log_retrieval_request.js';
 import { Option } from '../contract_function_simulator/noir-structs/option.js';
 import { AddressStore } from '../storage/address_store/address_store.js';
+import { MessagingSecretSourcesStore } from '../storage/tagging_store/messaging_secret_sources_store.js';
 import { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
-import { TaggingSecretSourcesStore } from '../storage/tagging_store/tagging_secret_sources_store.js';
 import { LogService } from './log_service.js';
 
 describe('LogService', () => {
@@ -29,7 +29,7 @@ describe('LogService', () => {
   let aztecNode: MockProxy<AztecNode>;
   let keyStore: KeyStore;
   let addressStore: AddressStore;
-  let taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  let messagingSecretSourcesStore: MessagingSecretSourcesStore;
   let logService: LogService;
 
   describe('fetchLogsByTag', () => {
@@ -37,7 +37,7 @@ describe('LogService', () => {
 
     beforeEach(async () => {
       contractAddress = await AztecAddress.random();
-      ({ aztecNode, keyStore, taggingSecretSourcesStore, addressStore, logService } = await createTestLogService());
+      ({ aztecNode, keyStore, messagingSecretSourcesStore, addressStore, logService } = await createTestLogService());
 
       aztecNode.getPrivateLogsByTags.mockReset();
       aztecNode.getPublicLogsByTags.mockReset();
@@ -315,7 +315,7 @@ describe('LogService', () => {
 
       const l2TipsProvider = mock<L2TipsProvider>();
       scopes = [];
-      ({ aztecNode, keyStore, taggingSecretSourcesStore, addressStore, logService } = await createTestLogService(
+      ({ aztecNode, keyStore, messagingSecretSourcesStore, addressStore, logService } = await createTestLogService(
         l2TipsProvider,
         scopes,
       ));
@@ -330,7 +330,7 @@ describe('LogService', () => {
     });
 
     it('scans handshake secrets under the handshake derivation for both delivery modes', async () => {
-      await taggingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
+      await messagingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
       const [unconstrainedTag, constrainedTag] = await handshakeTags(sharedSecret, contractAddress);
 
       const unconstrainedLog = randomPrivateLogResult({ includeEffects: true });
@@ -351,7 +351,7 @@ describe('LogService', () => {
     });
 
     it('does not scan arbitrary secrets under the handshake derivation', async () => {
-      await taggingSecretSourcesStore.addSharedSecret(recipient, 'arbitrary-secret', sharedSecret);
+      await messagingSecretSourcesStore.addSharedSecret(recipient, 'arbitrary-secret', sharedSecret);
       const [unconstrainedTag, constrainedTag] = await handshakeTags(sharedSecret, contractAddress);
 
       const directionalLog = randomPrivateLogResult({ includeEffects: true });
@@ -373,7 +373,7 @@ describe('LogService', () => {
     });
 
     it('does not scan handshake secrets under the directional derivation', async () => {
-      await taggingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
+      await messagingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
       const [unconstrainedTag] = await handshakeTags(sharedSecret, contractAddress);
 
       const handshakeStreamLog = randomPrivateLogResult({ includeEffects: true });
@@ -420,8 +420,8 @@ describe('LogService', () => {
     });
 
     it('returns a log once when a registered secret coincides with a provided one', async () => {
-      await taggingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
-      const providedSecret = await AppTaggingSecret.computeFromHandshakeSecret(
+      await messagingSecretSourcesStore.addSharedSecret(recipient, 'handshake', sharedSecret);
+      const providedSecret = await MessagingSecret.computeFromHandshakeSecret(
         sharedSecret,
         contractAddress,
         OnchainDeliveryMode.UNCONSTRAINED,
@@ -441,8 +441,8 @@ describe('LogService', () => {
     it('scans only provided secrets for a recipient whose keys are not held', async () => {
       const keylessRecipient = await AztecAddress.random();
       scopes.push(keylessRecipient);
-      await taggingSecretSourcesStore.addSharedSecret(keylessRecipient, 'arbitrary-secret', sharedSecret);
-      const providedSecret = new AppTaggingSecret(Fr.random(), contractAddress, OnchainDeliveryMode.UNCONSTRAINED);
+      await messagingSecretSourcesStore.addSharedSecret(keylessRecipient, 'arbitrary-secret', sharedSecret);
+      const providedSecret = new MessagingSecret(Fr.random(), contractAddress, OnchainDeliveryMode.UNCONSTRAINED);
 
       const registeredLog = randomPrivateLogResult({ includeEffects: true });
       const providedLog = randomPrivateLogResult({ includeEffects: true });
@@ -470,7 +470,7 @@ describe('LogService', () => {
       return Promise.all(
         [OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED].map(async deliveryMode =>
           SiloedTag.compute({
-            extendedSecret: await AppTaggingSecret.computeFromHandshakeSecret(secret, app, deliveryMode),
+            extendedSecret: await MessagingSecret.computeFromHandshakeSecret(secret, app, deliveryMode),
             index: 0,
           }),
         ),
@@ -478,12 +478,12 @@ describe('LogService', () => {
     }
 
     async function directionalTag(secret: Point, app: AztecAddress, directedTo: AztecAddress): Promise<SiloedTag> {
-      const directionalSecret = await AppTaggingSecret.computeFromArbitrarySecret(secret, app, directedTo);
+      const directionalSecret = await MessagingSecret.computeFromArbitrarySecret(secret, app, directedTo);
       return SiloedTag.compute({ extendedSecret: directionalSecret, index: 0 });
     }
 
     async function recipientTskTag(taggedRecipient: AztecAddress): Promise<SiloedTag> {
-      const extendedSecret = await AppTaggingSecret.computeFromRecipientTsk(
+      const extendedSecret = await MessagingSecret.computeFromRecipientTsk(
         await keyStore.getMasterTaggingSecretKey(taggedRecipient),
         contractAddress,
         taggedRecipient,
@@ -505,7 +505,7 @@ describe('LogService', () => {
       const l2TipsProvider = mock<L2TipsProvider>();
       const scopes: AztecAddress[] = [];
       const testContext = await createTestLogService(l2TipsProvider, scopes);
-      ({ aztecNode, keyStore, taggingSecretSourcesStore, addressStore, logService } = testContext);
+      ({ aztecNode, keyStore, messagingSecretSourcesStore, addressStore, logService } = testContext);
       l2TipsProvider.getL2Tips.mockResolvedValue(makeL2Tips(testContext.anchorBlockHeader.globalVariables.blockNumber));
 
       // A real recipient account, so the ECDH tag derivation has the keys and address preimage it needs.
@@ -540,7 +540,7 @@ describe('LogService', () => {
     });
 
     it('discovers the sender messages once the sender is registered', async () => {
-      await taggingSecretSourcesStore.addSender(sender);
+      await messagingSecretSourcesStore.addSender(sender);
 
       const discovered = await logService.fetchTaggedLogs(contractAddress, recipient, []);
 
@@ -558,7 +558,7 @@ describe('LogService', () => {
     });
 
     async function addressDerivedTag(externalAddress: AztecAddress): Promise<SiloedTag> {
-      const appSecret = await AppTaggingSecret.computeAddressDerived({
+      const appSecret = await MessagingSecret.computeAddressDerived({
         localAddress: recipientCompleteAddress,
         localIvsk: await keyStore.getMasterIncomingViewingSecretKey(recipient),
         externalAddress,
@@ -581,7 +581,7 @@ async function createTestLogService(
   const keyStore = new KeyStore(await openTmpStore('test'));
   const recipientTaggingStore = new RecipientTaggingStore(await openTmpStore('test'));
   recipientTaggingStore.beginChangeSet('test');
-  const taggingSecretSourcesStore = new TaggingSecretSourcesStore(await openTmpStore('test'));
+  const messagingSecretSourcesStore = new MessagingSecretSourcesStore(await openTmpStore('test'));
   const addressStore = new AddressStore(await openTmpStore('test'));
   const aztecNode = mock<AztecNode>();
   // Anchor block header is required for bulkRetrieveLogs.
@@ -593,7 +593,7 @@ async function createTestLogService(
     l2TipsProvider,
     keyStore,
     recipientTaggingStore,
-    taggingSecretSourcesStore,
+    messagingSecretSourcesStore,
     addressStore,
     scopes,
     'test',
@@ -603,7 +603,7 @@ async function createTestLogService(
     aztecNode,
     keyStore,
     recipientTaggingStore,
-    taggingSecretSourcesStore,
+    messagingSecretSourcesStore,
     addressStore,
     anchorBlockHeader,
     logService,

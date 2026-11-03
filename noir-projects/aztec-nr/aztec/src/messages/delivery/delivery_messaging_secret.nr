@@ -11,21 +11,23 @@ global NEW_NON_INTERACTIVE_HANDSHAKE: u8 = 2;
 global UNCONSTRAINED_SECRET: u8 = 3;
 global NEW_INTERACTIVE_HANDSHAKE: u8 = 4;
 
-/// How a message's tag secret is sourced and, for constrained delivery, constrained.
+/// The messaging secret a delivery uses.
+///
+/// Records how the secret was obtained and, for constrained delivery, how it is constrained.
 #[derive(Eq)]
-pub(crate) struct TagSecretSource {
+pub(crate) struct DeliveryMessagingSecret {
     kind: u8,
-    /// The secret the message tag derives from. Every source resolves to exactly one.
-    tag_secret: Field,
+    /// The secret the message tag derives from. Every kind resolves to exactly one.
+    secret: Field,
     /// The handshake sender-only secret, folded into the constrained-delivery sequence nullifier. Only meaningful
-    /// for handshake-backed sources.
+    /// for handshake-backed kinds.
     sender_only: Field,
 }
 
-impl TagSecretSource {
+impl DeliveryMessagingSecret {
     /// Reuses the secrets of a handshake already registered for the pair (mode-agnostic).
     pub(crate) fn existing_handshake(secrets: AppSiloedHandshakeSecrets) -> Self {
-        Self { kind: EXISTING_HANDSHAKE, tag_secret: secrets.shared, sender_only: secrets.sender_only }
+        Self { kind: EXISTING_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
     }
 
     /// Establishes a fresh non-interactive handshake, publishing information about the recipient onchain.
@@ -40,7 +42,7 @@ impl TagSecretSource {
             sender,
             recipient,
         );
-        Self { kind: NEW_NON_INTERACTIVE_HANDSHAKE, tag_secret: secrets.shared, sender_only: secrets.sender_only }
+        Self { kind: NEW_NON_INTERACTIVE_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
     }
 
     /// Establishes a fresh interactive handshake, publishing nothing about the recipient onchain.
@@ -55,24 +57,24 @@ impl TagSecretSource {
             sender,
             recipient,
         );
-        Self { kind: NEW_INTERACTIVE_HANDSHAKE, tag_secret: secrets.shared, sender_only: secrets.sender_only }
+        Self { kind: NEW_INTERACTIVE_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
     }
 
     /// A ready-to-use unconstrained secret the wallet resolved. Sound only for unconstrained delivery, which never
     /// anchors a sequence, so no sender-only secret is involved.
     pub(crate) fn unconstrained_secret(secret: Field) -> Self {
-        Self { kind: UNCONSTRAINED_SECRET, tag_secret: secret, sender_only: 0 }
+        Self { kind: UNCONSTRAINED_SECRET, secret, sender_only: 0 }
     }
 
     /// The secret the message tag derives from.
-    pub(crate) fn tag_secret(self) -> Field {
-        self.tag_secret
+    pub(crate) fn secret(self) -> Field {
+        self.secret
     }
 
-    /// Constrains `(tag secret, index)` for constrained delivery and emits the sequence nullifier, each source
-    /// proving its secrets its own way. A source that cannot back constrained delivery rejects it here. Only called
+    /// Constrains `(messaging secret, index)` for constrained delivery and emits the sequence nullifier, each kind
+    /// proving its secrets its own way. A kind that cannot back constrained delivery rejects it here. Only called
     /// for constrained delivery.
-    pub(crate) fn constrain_tag_secret(
+    pub(crate) fn constrain(
         self,
         context: &mut PrivateContext,
         sender: AztecAddress,
@@ -94,18 +96,18 @@ impl TagSecretSource {
             assert(index == 0, "freshly bootstrapped secret must start at index 0");
         } else {
             panic(
-                "an unconstrained tagging secret cannot back constrained delivery",
+                "an unconstrained messaging secret cannot back constrained delivery",
             );
         }
         emit_sequence_nullifier(context, sender, recipient, secrets, index);
     }
 }
 
-/// The handshake-secrets view of a source. For a source that is not handshake-backed the sender-only secret is a
-/// filler zero, which constrained delivery (the only consumer of it) rejects.
-impl From<TagSecretSource> for AppSiloedHandshakeSecrets {
-    fn from(source: TagSecretSource) -> Self {
-        Self { shared: source.tag_secret, sender_only: source.sender_only }
+/// The handshake-secrets view of a delivery messaging secret. For a kind that is not handshake-backed the sender-only
+/// secret is a filler zero, which constrained delivery (the only consumer of it) rejects.
+impl From<DeliveryMessagingSecret> for AppSiloedHandshakeSecrets {
+    fn from(delivery_messaging_secret: DeliveryMessagingSecret) -> Self {
+        Self { shared: delivery_messaging_secret.secret, sender_only: delivery_messaging_secret.sender_only }
     }
 }
 
@@ -117,7 +119,7 @@ mod test {
     use crate::oracle::execution_cache;
     use crate::protocol::{address::AztecAddress, traits::{FromField, Serialize}};
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::TagSecretSource;
+    use super::DeliveryMessagingSecret;
     use std::test::OracleMock;
 
     global SENDER: AztecAddress = AztecAddress::from_field(1);
@@ -132,17 +134,17 @@ mod test {
         env.private_context(|context| {
             let _ = OracleMock::mock("aztec_prv_isNullifierPending").returns(false).times(1);
 
-            let source = TagSecretSource::existing_handshake(secrets);
-            assert_eq(source.tag_secret(), secrets.shared);
+            let delivery_messaging_secret = DeliveryMessagingSecret::existing_handshake(secrets);
+            assert_eq(delivery_messaging_secret.secret(), secrets.shared);
 
-            source.constrain_tag_secret(context, SENDER, RECIPIENT, index);
+            delivery_messaging_secret.constrain(context, SENDER, RECIPIENT, index);
             assert_emitted_sequence_nullifier(context, secrets, index);
         });
     }
 
     #[test]
     unconstrained fn unconstrained_secret_holds_its_secret() {
-        assert_eq(TagSecretSource::unconstrained_secret(42).tag_secret(), 42);
+        assert_eq(DeliveryMessagingSecret::unconstrained_secret(42).secret(), 42);
     }
 
     #[test]
@@ -153,10 +155,11 @@ mod test {
         env.private_context(|context| {
             mock_handshake_creation(context, secrets);
 
-            let source = TagSecretSource::new_non_interactive_handshake(context, SENDER, RECIPIENT);
-            assert_eq(source.tag_secret(), secrets.shared);
+            let delivery_messaging_secret =
+                DeliveryMessagingSecret::new_non_interactive_handshake(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret.secret(), secrets.shared);
 
-            source.constrain_tag_secret(context, SENDER, RECIPIENT, 0);
+            delivery_messaging_secret.constrain(context, SENDER, RECIPIENT, 0);
             assert_emitted_sequence_nullifier(context, secrets, 0);
         });
     }
@@ -169,10 +172,11 @@ mod test {
         env.private_context(|context| {
             mock_handshake_creation(context, secrets);
 
-            let source = TagSecretSource::new_interactive_handshake(context, SENDER, RECIPIENT);
-            assert_eq(source.tag_secret(), secrets.shared);
+            let delivery_messaging_secret =
+                DeliveryMessagingSecret::new_interactive_handshake(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret.secret(), secrets.shared);
 
-            source.constrain_tag_secret(context, SENDER, RECIPIENT, 0);
+            delivery_messaging_secret.constrain(context, SENDER, RECIPIENT, 0);
             assert_emitted_sequence_nullifier(context, secrets, 0);
         });
     }
@@ -187,7 +191,7 @@ mod test {
                 AppSiloedHandshakeSecrets { shared: 0, sender_only: 0 },
             );
 
-            TagSecretSource::new_non_interactive_handshake(context, SENDER, RECIPIENT).constrain_tag_secret(
+            DeliveryMessagingSecret::new_non_interactive_handshake(context, SENDER, RECIPIENT).constrain(
                 context,
                 SENDER,
                 RECIPIENT,
@@ -205,7 +209,7 @@ mod test {
                 AppSiloedHandshakeSecrets { shared: 0, sender_only: 0 },
             );
 
-            TagSecretSource::new_interactive_handshake(context, SENDER, RECIPIENT).constrain_tag_secret(
+            DeliveryMessagingSecret::new_interactive_handshake(context, SENDER, RECIPIENT).constrain(
                 context,
                 SENDER,
                 RECIPIENT,
@@ -214,11 +218,11 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "an unconstrained tagging secret cannot back constrained delivery")]
+    #[test(should_fail_with = "an unconstrained messaging secret cannot back constrained delivery")]
     unconstrained fn unconstrained_secret_cannot_back_constrained_delivery() {
         let env = TestEnvironment::new();
         env.private_context(|context| {
-            TagSecretSource::unconstrained_secret(7).constrain_tag_secret(
+            DeliveryMessagingSecret::unconstrained_secret(7).constrain(
                 context,
                 AztecAddress::zero(),
                 AztecAddress::zero(),

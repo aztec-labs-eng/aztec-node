@@ -1,20 +1,22 @@
 use crate::context::PrivateContext;
 use crate::protocol::{address::AztecAddress, traits::{Deserialize, Serialize}, utils::reader::Reader};
-use super::tag_secret_source::TagSecretSource;
+use super::delivery_messaging_secret::DeliveryMessagingSecret;
 
 global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
 global UNCONSTRAINED_SECRET: u8 = 2;
 global INTERACTIVE_HANDSHAKE: u8 = 3;
 
-/// The tagging secret the PXE hands to the contract after applying the wallet's tagging secret strategy. It is already
-/// app-siloed, so the contract uses it directly to derive the message tag and never sees raw key material.
+/// The outcome of the wallet's messaging secret strategy.
+///
+/// It is either a handshake for the contract to establish, or a messaging secret ready to use. Messaging secrets are
+/// already app-siloed, so the contract derives the message tag from it directly and never sees raw key material.
 #[derive(Eq, Serialize)]
-pub struct ResolvedTaggingStrategy {
+pub struct ResolvedMessagingSecretStrategy {
     kind: u8,
     secret: Field,
 }
 
-impl ResolvedTaggingStrategy {
+impl ResolvedMessagingSecretStrategy {
     /// A non-interactive handshake: the recipient re-derives the secret from the onchain handshake registry.
     pub fn non_interactive_handshake() -> Self {
         Self { kind: NON_INTERACTIVE_HANDSHAKE, secret: 0 }
@@ -34,19 +36,19 @@ impl ResolvedTaggingStrategy {
         self.kind == UNCONSTRAINED_SECRET
     }
 
-    /// Resolves this strategy into the [`TagSecretSource`] backing the message tag.
-    pub(crate) fn into_tag_secret_source(
+    /// Resolves this strategy into the [`DeliveryMessagingSecret`] backing the message tag.
+    pub(crate) fn into_delivery_messaging_secret(
         self,
         context: &mut PrivateContext,
         sender: AztecAddress,
         recipient: AztecAddress,
-    ) -> TagSecretSource {
+    ) -> DeliveryMessagingSecret {
         if self.kind == NON_INTERACTIVE_HANDSHAKE {
-            TagSecretSource::new_non_interactive_handshake(context, sender, recipient)
+            DeliveryMessagingSecret::new_non_interactive_handshake(context, sender, recipient)
         } else if self.kind == INTERACTIVE_HANDSHAKE {
-            TagSecretSource::new_interactive_handshake(context, sender, recipient)
+            DeliveryMessagingSecret::new_interactive_handshake(context, sender, recipient)
         } else {
-            TagSecretSource::unconstrained_secret(self.secret)
+            DeliveryMessagingSecret::unconstrained_secret(self.secret)
         }
     }
 
@@ -56,13 +58,13 @@ impl ResolvedTaggingStrategy {
         assert(
             (((kind == NON_INTERACTIVE_HANDSHAKE) | (kind == INTERACTIVE_HANDSHAKE)) & (secret == 0))
                 | (kind == UNCONSTRAINED_SECRET),
-            f"unrecognized resolved tagging strategy kind: {kind}",
+            f"unrecognized resolved messaging secret strategy kind: {kind}",
         );
         resolved
     }
 }
 
-impl Deserialize for ResolvedTaggingStrategy {
+impl Deserialize for ResolvedMessagingSecretStrategy {
     let N: u32 = 2;
 
     fn deserialize(fields: [Field; Self::N]) -> Self {
@@ -78,31 +80,31 @@ impl Deserialize for ResolvedTaggingStrategy {
 
 mod test {
     use crate::protocol::traits::{Deserialize, Serialize};
-    use super::ResolvedTaggingStrategy;
+    use super::ResolvedMessagingSecretStrategy;
 
     #[test]
     fn resolved_roundtrips_through_serialization() {
-        let non_interactive = ResolvedTaggingStrategy::non_interactive_handshake();
-        let unconstrained_secret = ResolvedTaggingStrategy::unconstrained_secret(42);
-        let interactive = ResolvedTaggingStrategy::interactive_handshake();
+        let non_interactive = ResolvedMessagingSecretStrategy::non_interactive_handshake();
+        let unconstrained_secret = ResolvedMessagingSecretStrategy::unconstrained_secret(42);
+        let interactive = ResolvedMessagingSecretStrategy::interactive_handshake();
 
-        assert(ResolvedTaggingStrategy::deserialize(non_interactive.serialize()) == non_interactive);
-        assert(ResolvedTaggingStrategy::deserialize(unconstrained_secret.serialize()) == unconstrained_secret);
-        assert(ResolvedTaggingStrategy::deserialize(interactive.serialize()) == interactive);
+        assert(ResolvedMessagingSecretStrategy::deserialize(non_interactive.serialize()) == non_interactive);
+        assert(ResolvedMessagingSecretStrategy::deserialize(unconstrained_secret.serialize()) == unconstrained_secret);
+        assert(ResolvedMessagingSecretStrategy::deserialize(interactive.serialize()) == interactive);
     }
 
-    #[test(should_fail_with = "unrecognized resolved tagging strategy kind")]
+    #[test(should_fail_with = "unrecognized resolved messaging secret strategy kind")]
     fn deserializing_invalid_kind_fails() {
-        let _ = ResolvedTaggingStrategy::deserialize([99, 0]);
+        let _ = ResolvedMessagingSecretStrategy::deserialize([99, 0]);
     }
 
-    #[test(should_fail_with = "unrecognized resolved tagging strategy kind")]
+    #[test(should_fail_with = "unrecognized resolved messaging secret strategy kind")]
     fn deserializing_handshake_with_nonzero_secret_fails() {
-        let _ = ResolvedTaggingStrategy::deserialize([1, 123]);
+        let _ = ResolvedMessagingSecretStrategy::deserialize([1, 123]);
     }
 
-    #[test(should_fail_with = "unrecognized resolved tagging strategy kind")]
+    #[test(should_fail_with = "unrecognized resolved messaging secret strategy kind")]
     fn deserializing_interactive_handshake_with_nonzero_secret_fails() {
-        let _ = ResolvedTaggingStrategy::deserialize([3, 123]);
+        let _ = ResolvedMessagingSecretStrategy::deserialize([3, 123]);
     }
 }

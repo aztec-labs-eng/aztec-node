@@ -79,10 +79,10 @@ import type { PendingTaggedLog } from '../noir-structs/pending_tagged_log.js';
 import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
 import type { PublicDataWitnessData } from '../noir-structs/public_data_witness_data.js';
 import {
-  type ResolvedTaggingStrategy,
-  resolvedTaggingStrategyFromFields,
-  resolvedTaggingStrategyToFields,
-} from '../noir-structs/resolved_tagging_strategy.js';
+  type ResolvedMessagingSecretStrategy,
+  resolvedMessagingSecretStrategyFromFields,
+  resolvedMessagingSecretStrategyToFields,
+} from '../noir-structs/resolved_messaging_secret_strategy.js';
 import type { ResolvedTx } from '../noir-structs/resolved_tx.js';
 import type { TxEffectData } from '../noir-structs/tx_effect_data.js';
 import type { TxEffectWithBlockData } from '../noir-structs/tx_effect_with_block_data.js';
@@ -230,12 +230,12 @@ export const DELIVERY_MODE: TypeMapping<OnchainDeliveryMode> = SCALAR({
   },
 });
 
-export const RESOLVED_TAGGING_STRATEGY: TypeMapping<ResolvedTaggingStrategy> = LEAF({
-  kind: 'resolved-tagging-strategy',
-  serialization: { fn: resolved => resolvedTaggingStrategyToFields(resolved) },
+export const RESOLVED_MESSAGING_SECRET_STRATEGY: TypeMapping<ResolvedMessagingSecretStrategy> = LEAF({
+  kind: 'resolved-messaging-secret-strategy',
+  serialization: { fn: resolved => resolvedMessagingSecretStrategyToFields(resolved) },
   deserialization: {
     fn: ([kindReader, secretReader]) =>
-      resolvedTaggingStrategyFromFields(kindReader.readField().toNumber(), secretReader.readField()),
+      resolvedMessagingSecretStrategyFromFields(kindReader.readField().toNumber(), secretReader.readField()),
   },
   shape: ['scalar', 'scalar'],
 });

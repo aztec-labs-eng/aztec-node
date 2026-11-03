@@ -1,17 +1,17 @@
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
-import { type AppTaggingSecret, AppTaggingSecretSchema } from './app_tagging_secret.js';
+import { type MessagingSecret, MessagingSecretSchema } from './messaging_secret.js';
 
-/** Represents a range of tagging indexes for a given app tagging secret. */
+/** Represents a range of tagging indexes for a given messaging secret. */
 export type TaggingIndexRange = {
-  extendedSecret: AppTaggingSecret;
+  extendedSecret: MessagingSecret;
   lowestIndex: number;
   highestIndex: number;
 };
 
 export const TaggingIndexRangeSchema = z.object({
-  extendedSecret: AppTaggingSecretSchema,
+  extendedSecret: MessagingSecretSchema,
   lowestIndex: schemas.Integer,
   highestIndex: schemas.Integer,
 });

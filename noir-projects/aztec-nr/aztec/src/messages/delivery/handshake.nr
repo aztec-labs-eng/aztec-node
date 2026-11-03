@@ -115,7 +115,7 @@ pub fn forgery_protected_eph_pk(eph_pk: EmbeddedCurvePoint, recipient_point: Emb
 /// Reads the existing app-siloed handshake secrets for `(sender, recipient)` from the registry.
 ///
 /// Returns `None` when no handshake has been registered for the pair yet, in which case the caller decides how to
-/// source a tagging secret (see [`super::tag::derive_log_tag`]).
+/// source a messaging secret (see [`super::tag::derive_log_tag`]).
 ///
 /// ## Batching
 ///
@@ -171,7 +171,7 @@ pub(crate) fn create_interactive_handshake(
         .get_preimage()
 }
 
-/// Fetches discovered handshakes from the HandshakeRegistry and derives app-siloed tagging secrets for each,
+/// Fetches discovered handshakes from the HandshakeRegistry and derives app-siloed messaging secrets for each,
 /// returning them so that [`get_pending_tagged_logs`](crate::oracle::message_processing::get_pending_tagged_logs)
 /// searches for logs tagged with these secrets.
 pub(crate) unconstrained fn get_handshake_secrets(

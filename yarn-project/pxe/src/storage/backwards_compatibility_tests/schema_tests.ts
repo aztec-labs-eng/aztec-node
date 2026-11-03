@@ -29,9 +29,9 @@ import { CompleteAddress, SerializableContractInstance } from '@aztec-labs/stdli
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import { PublicKey, PublicKeys, deriveKeys } from '@aztec-labs/stdlib/keys';
 import {
-  AppTaggingSecret,
   ContractClassLog,
   ContractClassLogFields,
+  MessagingSecret,
   OnchainDeliveryMode,
   PrivateLog,
   PublicLog,
@@ -59,7 +59,7 @@ import { FactStore } from '../fact_store/fact_store.js';
 import { FactCollectionKey } from '../fact_store/fact_store_keys.js';
 import { NoteStore } from '../note_store/note_store.js';
 import { PrivateEventStore } from '../private_event_store/private_event_store.js';
-import { RecipientTaggingStore, SenderTaggingStore, TaggingSecretSourcesStore } from '../tagging_store/index.js';
+import { MessagingSecretSourcesStore, RecipientTaggingStore, SenderTaggingStore } from '../tagging_store/index.js';
 import { snapshotArray, snapshotMap, snapshotSingleton } from './kv_store_snapshot.js';
 
 /**
@@ -573,18 +573,18 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       const changeSetId = 'fixture-change-set';
       recipientTaggingStore.beginChangeSet(changeSetId);
 
-      const secretA = new AppTaggingSecret(
+      const secretA = new MessagingSecret(
         new Fr(2n),
         AztecAddress.fromBigIntUnsafe(3n),
         OnchainDeliveryMode.UNCONSTRAINED,
       );
-      const secretB = new AppTaggingSecret(
+      const secretB = new MessagingSecret(
         new Fr(5n),
         AztecAddress.fromBigIntUnsafe(7n),
         OnchainDeliveryMode.UNCONSTRAINED,
       );
       // A constrained secret keys under the `constrained:` prefix, so the snapshot pins both delivery modes together.
-      const secretConstrained = new AppTaggingSecret(
+      const secretConstrained = new MessagingSecret(
         new Fr(19n),
         AztecAddress.fromBigIntUnsafe(23n),
         OnchainDeliveryMode.CONSTRAINED,
@@ -604,25 +604,25 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
   },
 
   {
-    name: 'TaggingSecretSourcesStore',
+    name: 'MessagingSecretSourcesStore',
     writeToStore: async kvStore => {
-      const taggingSecretSourcesStore = new TaggingSecretSourcesStore(kvStore);
+      const messagingSecretSourcesStore = new MessagingSecretSourcesStore(kvStore);
 
-      await taggingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(2n));
-      await taggingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(3n));
-      await taggingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(5n));
+      await messagingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(2n));
+      await messagingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(3n));
+      await messagingSecretSourcesStore.addSender(AztecAddress.fromBigIntUnsafe(5n));
 
-      await taggingSecretSourcesStore.addSharedSecret(
+      await messagingSecretSourcesStore.addSharedSecret(
         AztecAddress.fromBigIntUnsafe(7n),
         'arbitrary-secret',
         new Point(new Fr(2n), new Fr(3n)),
       );
-      await taggingSecretSourcesStore.addSharedSecret(
+      await messagingSecretSourcesStore.addSharedSecret(
         AztecAddress.fromBigIntUnsafe(7n),
         'handshake',
         new Point(new Fr(5n), new Fr(7n)),
       );
-      await taggingSecretSourcesStore.addSharedSecret(
+      await messagingSecretSourcesStore.addSharedSecret(
         AztecAddress.fromBigIntUnsafe(11n),
         'arbitrary-secret',
         new Point(new Fr(13n), new Fr(17n)),
@@ -643,22 +643,22 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
 
       const changeSetId = 'fixture-change-set';
       senderTaggingStore.beginChangeSet(changeSetId);
-      const secretA = new AppTaggingSecret(
+      const secretA = new MessagingSecret(
         new Fr(2n),
         AztecAddress.fromBigIntUnsafe(3n),
         OnchainDeliveryMode.UNCONSTRAINED,
       );
-      const secretB = new AppTaggingSecret(
+      const secretB = new MessagingSecret(
         new Fr(5n),
         AztecAddress.fromBigIntUnsafe(7n),
         OnchainDeliveryMode.UNCONSTRAINED,
       );
-      const secretC = new AppTaggingSecret(
+      const secretC = new MessagingSecret(
         new Fr(11n),
         AztecAddress.fromBigIntUnsafe(13n),
         OnchainDeliveryMode.UNCONSTRAINED,
       );
-      const secretConstrained = new AppTaggingSecret(
+      const secretConstrained = new MessagingSecret(
         new Fr(19n),
         AztecAddress.fromBigIntUnsafe(23n),
         OnchainDeliveryMode.CONSTRAINED,

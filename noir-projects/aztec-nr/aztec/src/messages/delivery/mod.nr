@@ -1,9 +1,9 @@
 mod builder;
 mod mode;
-mod resolved_tagging_strategy;
+mod resolved_messaging_secret_strategy;
 mod tag;
-pub(crate) mod tag_derivation;
-pub(crate) mod tag_secret_source;
+pub(crate) mod messaging_secret_derivation;
+pub(crate) mod delivery_messaging_secret;
 
 pub mod constrained_delivery;
 pub mod handshake;
@@ -18,15 +18,18 @@ use crate::{
     utils::remove_constraints::remove_constraints_if,
 };
 use crate::protocol::address::AztecAddress;
+use messaging_secret_derivation::MessagingSecretDerivation;
 use mode::DeliveryMode;
 use tag::derive_log_tag;
-use tag_derivation::TagDerivation;
 
 pub use builder::{
     MessageDelivery, MessageDeliveryBuilder, OffchainDelivery, OnchainConstrainedDelivery, OnchainUnconstrainedDelivery,
 };
 pub use mode::OnchainDeliveryMode;
-pub use resolved_tagging_strategy::ResolvedTaggingStrategy;
+pub use resolved_messaging_secret_strategy::ResolvedMessagingSecretStrategy;
+
+/// Deprecated: use [`ResolvedMessagingSecretStrategy`].
+pub type ResolvedTaggingStrategy = ResolvedMessagingSecretStrategy;
 
 /// Performs private delivery of a message to `recipient` according to `delivery_mode`.
 ///
@@ -67,7 +70,7 @@ where
     assert_constant(deliver_as_offchain_message);
 
     let sender_override = delivery.sender_override();
-    let tag_derivation = delivery.tag_derivation();
+    let messaging_secret_derivation = delivery.messaging_secret_derivation();
 
     if deliver_as_offchain_message {
         let contract_address = context.this_address();
@@ -85,7 +88,7 @@ where
             recipient,
             mode,
             sender_override,
-            tag_derivation,
+            messaging_secret_derivation,
         );
     }
 }
@@ -97,16 +100,16 @@ fn do_onchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
     recipient: AztecAddress,
     mode: DeliveryMode,
     sender_override: Option<AztecAddress>,
-    tag_derivation: Option<TagDerivation>,
+    messaging_secret_derivation: Option<MessagingSecretDerivation>,
 ) {
     let is_constrained = mode == DeliveryMode::onchain_constrained();
     assert_constant(is_constrained);
 
-    // The tag derivation, both whether one is set and which variant it is, must be a compile-time constant so unused
-    // derivations are eliminated.
-    assert_constant(tag_derivation.is_some());
-    if tag_derivation.is_some() {
-        tag_derivation.unwrap_unchecked().assert_kind_is_constant();
+    // The messaging secret derivation, both whether one is set and which variant it is, must be a compile-time
+    // constant so unused derivations are eliminated.
+    assert_constant(messaging_secret_derivation.is_some());
+    if messaging_secret_derivation.is_some() {
+        messaging_secret_derivation.unwrap_unchecked().assert_kind_is_constant();
     }
 
     let onchain_mode = to_onchain_delivery_mode(mode);
@@ -119,7 +122,13 @@ fn do_onchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
         || AES128::encrypt(encode_into_message_plaintext(), recipient, contract_address),
     );
 
-    let log_tag = derive_log_tag(context, onchain_mode, sender, recipient, tag_derivation);
+    let log_tag = derive_log_tag(
+        context,
+        onchain_mode,
+        sender,
+        recipient,
+        messaging_secret_derivation,
+    );
 
     // This value must be constant to avoid predicating the context calls below, which might result in
     // the context's arrays having unknown compile time write indices and hence dramatically increasing constraints

@@ -89,7 +89,13 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
     },
   }),
   aztec_prv_getAppTaggingSecret: legacyOracle({
-    modernOracle: 'aztec_prv_getAppAddressDerivedTaggingSecret',
+    modernOracle: 'aztec_prv_getAddressDerivedMessagingSecret',
+  }),
+  aztec_prv_getAppAddressDerivedTaggingSecret: legacyOracle({
+    modernOracle: 'aztec_prv_getAddressDerivedMessagingSecret',
+  }),
+  aztec_prv_resolveTaggingStrategy: legacyOracle({
+    modernOracle: 'aztec_prv_resolveMessagingSecretStrategy',
   }),
 };
 

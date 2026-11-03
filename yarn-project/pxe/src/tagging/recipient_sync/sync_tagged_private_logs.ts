@@ -2,7 +2,7 @@ import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { isDefined } from '@aztec-labs/foundation/types';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
-import type { AppTaggingSecret, LogResult } from '@aztec-labs/stdlib/logs';
+import type { LogResult, MessagingSecret } from '@aztec-labs/stdlib/logs';
 import { OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
@@ -84,7 +84,7 @@ import { findHighestIndexes } from './utils/find_highest_indexes.js';
  * advanced are kept for the next iteration.
  */
 export async function syncTaggedPrivateLogs(
-  secrets: AppTaggingSecret[],
+  secrets: MessagingSecret[],
   aztecNode: AztecNode,
   taggingStore: RecipientTaggingStore,
   anchorBlockHeader: BlockHeader,
@@ -146,7 +146,7 @@ export async function syncTaggedPrivateLogs(
 
 /** Reads stored indexes for each secret and computes the initial index range to query. */
 function getIndexRangesForSecrets(
-  secrets: AppTaggingSecret[],
+  secrets: MessagingSecret[],
   taggingStore: RecipientTaggingStore,
   changeSetId: ChangeSetId,
 ): Promise<PendingSecret[]> {
@@ -329,7 +329,7 @@ async function processUnconstrainedResults(
 
 /** Working scan state common to both delivery modes: the half-open [start, end) tag-index range to query this round. */
 type PendingSecretBase = {
-  secret: AppTaggingSecret;
+  secret: MessagingSecret;
   start: number;
   end: number;
 };

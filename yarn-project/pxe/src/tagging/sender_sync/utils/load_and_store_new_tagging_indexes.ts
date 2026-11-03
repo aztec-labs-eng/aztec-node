@@ -1,7 +1,7 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { type AppTaggingSecret, type LogResult, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { type LogResult, type MessagingSecret, SiloedTag } from '@aztec-labs/stdlib/logs';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../../../storage/staged_write_coordinator.js';
@@ -14,7 +14,7 @@ import { type LogQueryAnchor, getAllPrivateLogsByTags } from '../../get_all_logs
  * so the caller can classify their finalization status without further node queries.
  * @remarks This function is one of two places by which a pending index can get to the tagging data provider. The other
  * place is when a tx is being sent from this PXE.
- * @param extendedSecret - The app tagging secret whose indexes are being synced.
+ * @param extendedSecret - The messaging secret whose indexes are being synced.
  * @param start - The starting index (inclusive) of the window to process.
  * @param end - The ending index (exclusive) of the window to process.
  * @param aztecNode - The Aztec node instance to query for logs.
@@ -24,7 +24,7 @@ import { type LogQueryAnchor, getAllPrivateLogsByTags } from '../../get_all_logs
  * integrity preserving way.
  */
 export async function loadAndStoreNewTaggingIndexes(
-  extendedSecret: AppTaggingSecret,
+  extendedSecret: MessagingSecret,
   start: number,
   end: number,
   aztecNode: AztecNode,

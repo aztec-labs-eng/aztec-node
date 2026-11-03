@@ -1,8 +1,8 @@
 use crate::context::PrivateContext;
 use crate::messages::delivery::{
-    handshake::get_existing_app_siloed_handshake_secrets, tag_secret_source::TagSecretSource,
+    delivery_messaging_secret::DeliveryMessagingSecret, handshake::get_existing_app_siloed_handshake_secrets,
 };
-use crate::oracle::notes::get_app_address_derived_tagging_secret;
+use crate::oracle::notes::get_address_derived_messaging_secret;
 use crate::oracle::random::random;
 use crate::protocol::address::AztecAddress;
 use crate::standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS;
@@ -11,22 +11,22 @@ global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
 global ADDRESS_DERIVED: u8 = 2;
 global INTERACTIVE_HANDSHAKE: u8 = 3;
 
-/// Domain separator for the tagging secret derived from a recipient's app-siloed tagging key.
+/// Domain separator for the messaging secret derived from a recipient's app-siloed tagging key.
 pub(crate) global DOM_SEP__RECIPIENT_TSK_SECRET: u32 = 1256167324;
 
-/// A contract's choice of tag-secret derivation.
+/// A contract's choice of messaging-secret derivation.
 ///
 /// Selected through the on-chain delivery builder's `via_*` methods. On-chain delivery tags every message from a
 /// secret shared between the sender and the recipient, and there is
-/// [more than one way][`crate::messages::delivery::ResolvedTaggingStrategy`] to establish it.
+/// [more than one way][`crate::messages::delivery::ResolvedMessagingSecretStrategy`] to establish it.
 /// Selecting a derivation instead lets the contract fix it, and its choice is honored over the wallet-resolved
 /// strategy.
 #[derive(Eq)]
-pub(crate) struct TagDerivation {
+pub(crate) struct MessagingSecretDerivation {
     kind: u8,
 }
 
-impl TagDerivation {
+impl MessagingSecretDerivation {
     /// Reuses an existing handshake for the pair, creating a fresh non-interactive one only when none exists.
     pub(crate) fn non_interactive_handshake() -> Self {
         Self { kind: NON_INTERACTIVE_HANDSHAKE }
@@ -48,35 +48,34 @@ impl TagDerivation {
         assert_constant(self.kind as Field);
     }
 
-    /// Resolves this choice into the [`TagSecretSource`] backing the message tag.
-    pub(crate) fn into_tag_secret_source(
+    /// Resolves this choice into the [`DeliveryMessagingSecret`] backing the message tag.
+    pub(crate) fn into_delivery_messaging_secret(
         self,
         context: &mut PrivateContext,
         sender: AztecAddress,
         recipient: AztecAddress,
-    ) -> TagSecretSource {
+    ) -> DeliveryMessagingSecret {
         if self.kind == NON_INTERACTIVE_HANDSHAKE {
             existing_handshake_secrets_or_else(
                 sender,
                 recipient,
-                || TagSecretSource::new_non_interactive_handshake(context, sender, recipient),
+                || DeliveryMessagingSecret::new_non_interactive_handshake(context, sender, recipient),
             )
         } else if self.kind == INTERACTIVE_HANDSHAKE {
             existing_handshake_secrets_or_else(
                 sender,
                 recipient,
-                || TagSecretSource::new_interactive_handshake(context, sender, recipient),
+                || DeliveryMessagingSecret::new_interactive_handshake(context, sender, recipient),
             )
         } else if self.kind == ADDRESS_DERIVED {
             // Safety: the secret is untrusted, but address-derived tagging is unconstrained-only, where a wrong
             // secret only yields an undiscoverable tag. An invalid recipient has no shared secret, so we fall back
             // to a random (undiscoverable) secret rather than failing the send.
-            let secret =
-                unsafe { get_app_address_derived_tagging_secret(sender, recipient).unwrap_or_else(|| random()) };
-            TagSecretSource::unconstrained_secret(secret)
+            let secret = unsafe { get_address_derived_messaging_secret(sender, recipient).unwrap_or_else(|| random()) };
+            DeliveryMessagingSecret::unconstrained_secret(secret)
         } else {
             let kind = self.kind;
-            panic(f"unknown tag derivation kind: {kind}")
+            panic(f"unknown messaging secret derivation kind: {kind}")
         }
     }
 }
@@ -86,40 +85,41 @@ impl TagDerivation {
 pub(crate) fn existing_handshake_secrets_or_else<Env>(
     sender: AztecAddress,
     recipient: AztecAddress,
-    fallback: fn[Env]() -> TagSecretSource,
-) -> TagSecretSource {
-    // Safety: this only selects which source backs the tag. A reused handshake's secrets are constrained against
-    // the registry before a constrained tag is emitted; the fallback source constrains (or rejects) its own secret
+    fallback: fn[Env]() -> DeliveryMessagingSecret,
+) -> DeliveryMessagingSecret {
+    // Safety: this only selects which messaging secret backs the tag. A reused handshake's secrets are constrained
+    // against the registry before a constrained tag is emitted; the fallback constrains (or rejects) its own secret
     // the same way.
     let existing =
         unsafe { get_existing_app_siloed_handshake_secrets(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, sender, recipient) };
-    existing.map_or_else(fallback, |secrets| TagSecretSource::existing_handshake(secrets))
+    existing.map_or_else(fallback, |secrets| DeliveryMessagingSecret::existing_handshake(secrets))
 }
 
 mod test {
     use crate::context::PrivateContext;
     use crate::hash::hash_args;
+    use crate::messages::delivery::delivery_messaging_secret::DeliveryMessagingSecret;
     use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
-    use crate::messages::delivery::tag_secret_source::TagSecretSource;
     use crate::oracle::execution_cache;
     use crate::protocol::{address::AztecAddress, traits::{FromField, Serialize}};
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::TagDerivation;
+    use super::MessagingSecretDerivation;
     use std::test::OracleMock;
 
     global SENDER: AztecAddress = AztecAddress::from_field(1);
     global RECIPIENT: AztecAddress = AztecAddress::from_field(8);
 
     #[test]
-    unconstrained fn address_derived_uses_the_app_tagging_secret() {
+    unconstrained fn address_derived_uses_the_address_derived_secret() {
         let env = TestEnvironment::new();
         let secret: Field = 7;
 
         env.private_context(|context| {
-            let _ = OracleMock::mock("aztec_prv_getAppAddressDerivedTaggingSecret").returns(Option::some(secret));
+            let _ = OracleMock::mock("aztec_prv_getAddressDerivedMessagingSecret").returns(Option::some(secret));
 
-            let source = TagDerivation::address_derived().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source, TagSecretSource::unconstrained_secret(secret));
+            let delivery_messaging_secret = MessagingSecretDerivation::address_derived()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret, DeliveryMessagingSecret::unconstrained_secret(secret));
         });
     }
 
@@ -129,11 +129,12 @@ mod test {
         let random_secret: Field = 999;
 
         env.private_context(|context| {
-            let _ = OracleMock::mock("aztec_prv_getAppAddressDerivedTaggingSecret").returns(Option::<Field>::none());
+            let _ = OracleMock::mock("aztec_prv_getAddressDerivedMessagingSecret").returns(Option::<Field>::none());
             let _ = OracleMock::mock("aztec_misc_getRandomField").returns(random_secret);
 
-            let source = TagDerivation::address_derived().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source, TagSecretSource::unconstrained_secret(random_secret));
+            let delivery_messaging_secret = MessagingSecretDerivation::address_derived()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret, DeliveryMessagingSecret::unconstrained_secret(random_secret));
         });
     }
 
@@ -145,8 +146,9 @@ mod test {
         env.private_context(|context| {
             mock_existing_handshake_secrets(Option::some(secrets));
 
-            let source = TagDerivation::non_interactive_handshake().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source, TagSecretSource::existing_handshake(secrets));
+            let delivery_messaging_secret = MessagingSecretDerivation::non_interactive_handshake()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret, DeliveryMessagingSecret::existing_handshake(secrets));
         });
     }
 
@@ -159,8 +161,9 @@ mod test {
             mock_existing_handshake_secrets(Option::none());
             mock_handshake_creation(context, secrets);
 
-            let source = TagDerivation::non_interactive_handshake().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source.tag_secret(), secrets.shared);
+            let delivery_messaging_secret = MessagingSecretDerivation::non_interactive_handshake()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret.secret(), secrets.shared);
         });
     }
 
@@ -172,8 +175,9 @@ mod test {
         env.private_context(|context| {
             mock_existing_handshake_secrets(Option::some(secrets));
 
-            let source = TagDerivation::interactive_handshake().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source, TagSecretSource::existing_handshake(secrets));
+            let delivery_messaging_secret = MessagingSecretDerivation::interactive_handshake()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret, DeliveryMessagingSecret::existing_handshake(secrets));
         });
     }
 
@@ -186,8 +190,9 @@ mod test {
             mock_existing_handshake_secrets(Option::none());
             mock_handshake_creation(context, secrets);
 
-            let source = TagDerivation::interactive_handshake().into_tag_secret_source(context, SENDER, RECIPIENT);
-            assert_eq(source.tag_secret(), secrets.shared);
+            let delivery_messaging_secret = MessagingSecretDerivation::interactive_handshake()
+                .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
+            assert_eq(delivery_messaging_secret.secret(), secrets.shared);
         });
     }
 

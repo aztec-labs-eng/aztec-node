@@ -1,11 +1,11 @@
-import { type AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import { type MessagingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 
 /**
  * Reconciles tagging index ranges recorded by the PXE during private execution against the set of siloed tags whose
  * private logs survived to the final kernel output.
  *
  * Each input range is the contiguous `[lowestIndex, highestIndex]` set of indexes that the tagging index cache
- * reserved for a given tagging secret while a tx was being executed. The kernel may then squash some of those logs
+ * reserved for a given messaging secret while a tx was being executed. The kernel may then squash some of those logs
  * (e.g. when a note is created and nullified within the same tx, taking its log with it), so the actual on-chain
  * footprint can be a strict subset of what was reserved.
  *
@@ -71,7 +71,7 @@ export async function reconcileTaggingIndexRangesAgainstSurvivingTags(
 
 /** Scans `[start, end]` ascending and returns the first index whose siloed tag is in `survivingTags`. */
 async function findFirstSurvivingIndex(
-  secret: AppTaggingSecret,
+  secret: MessagingSecret,
   start: number,
   end: number,
   survivingTags: Set<string>,
@@ -87,7 +87,7 @@ async function findFirstSurvivingIndex(
 
 /** Scans `[start, end]` descending and returns the first index whose siloed tag is in `survivingTags`. */
 async function findLastSurvivingIndex(
-  secret: AppTaggingSecret,
+  secret: MessagingSecret,
   start: number,
   end: number,
   survivingTags: Set<string>,

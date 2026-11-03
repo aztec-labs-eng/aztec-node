@@ -1,18 +1,18 @@
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
-import { AppTaggingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { MessagingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
+import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 
 import { RecipientTaggingStore } from './recipient_tagging_store.js';
 
 describe('RecipientTaggingStore', () => {
   let taggingStore: RecipientTaggingStore;
-  let secret1: AppTaggingSecret;
-  let secret2: AppTaggingSecret;
+  let secret1: MessagingSecret;
+  let secret2: MessagingSecret;
 
   beforeEach(async () => {
     taggingStore = new RecipientTaggingStore(await openTmpStore('test'));
-    secret1 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
-    secret2 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret1 = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret2 = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     // Leave a change set open for the tests to operate under: every store operation requires one.
     taggingStore.beginChangeSet('change-set-1');
@@ -87,12 +87,8 @@ describe('RecipientTaggingStore', () => {
   // sequences: advancing one mode's finalized index must not clobber the other's.
   describe('mode independence', () => {
     it('tracks the same secret under different delivery modes independently', async () => {
-      const unconstrained = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
-      const constrained = new AppTaggingSecret(
-        unconstrained.secret,
-        unconstrained.app,
-        OnchainDeliveryMode.CONSTRAINED,
-      );
+      const unconstrained = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const constrained = new MessagingSecret(unconstrained.secret, unconstrained.app, OnchainDeliveryMode.CONSTRAINED);
 
       await taggingStore.updateHighestFinalizedIndex(unconstrained, 4, 'change-set-1');
       await taggingStore.updateHighestFinalizedIndex(constrained, 9, 'change-set-1');

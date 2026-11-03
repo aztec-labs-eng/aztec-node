@@ -57,10 +57,10 @@ pub mod resolve_custom_request;
     @[
         // TODO: needs a hand-written multi-scenario synthesizer entry (enum-like type with private fields,
         // one named scenario per constructor) on both sides.
-        quote { resolve_tagging_strategy_oracle },
+        quote { resolve_messaging_secret_strategy_oracle },
     ],
 )]
-pub mod resolve_tagging_strategy;
+pub mod resolve_messaging_secret_strategy;
 #[generate_oracle_tests]
 pub mod tx_phase;
 #[generate_oracle_tests]

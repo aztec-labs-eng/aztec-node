@@ -114,9 +114,9 @@ import type { FactStore } from '../storage/fact_store/index.js';
 import type { NoteStore } from '../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../storage/staged_write_coordinator.js';
+import type { MessagingSecretSourcesStore } from '../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
 import type { SenderTaggingStore } from '../storage/tagging_store/sender_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../storage/tagging_store/tagging_secret_sources_store.js';
 import { AnchoredContractData } from './anchored_contract_data.js';
 import { ExecutionNoteCache } from './execution_note_cache.js';
 import { ExecutionTaggingIndexCache } from './execution_tagging_index_cache.js';
@@ -154,7 +154,7 @@ export type ContractFunctionSimulatorArgs = {
   l2TipsStore: L2TipsProvider;
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
-  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  messagingSecretSourcesStore: MessagingSecretSourcesStore;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;
@@ -179,7 +179,7 @@ export class ContractFunctionSimulator {
   private readonly l2TipsStore: L2TipsProvider;
   private readonly senderTaggingStore: SenderTaggingStore;
   private readonly recipientTaggingStore: RecipientTaggingStore;
-  private readonly taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  private readonly messagingSecretSourcesStore: MessagingSecretSourcesStore;
   private readonly capsuleStore: CapsuleStore;
   private readonly factStore: FactStore;
   private readonly privateEventStore: PrivateEventStore;
@@ -199,7 +199,7 @@ export class ContractFunctionSimulator {
     this.l2TipsStore = args.l2TipsStore;
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
-    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -298,7 +298,7 @@ export class ContractFunctionSimulator {
       aztecNode: this.aztecNode,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,
@@ -413,7 +413,7 @@ export class ContractFunctionSimulator {
       addressStore: this.addressStore,
       aztecNode: this.aztecNode,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,

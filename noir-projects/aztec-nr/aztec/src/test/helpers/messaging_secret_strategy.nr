@@ -13,19 +13,19 @@ global ADDRESS_DERIVED: u8 = 3;
 global INTERACTIVE_HANDSHAKE: u8 = 4;
 global RECIPIENT_TSK: u8 = 5;
 
-/// How a message's tagging secret is chosen: the wallet's strategy.
+/// How a message's messaging secret is chosen: the wallet's strategy.
 ///
-/// This type only exists for tests: a Noir test sets it via `with_default_tag_secret_strategy` on
+/// This type only exists for tests: a Noir test sets it via `with_default_messaging_secret_strategy` on
 /// [`TestEnvironmentOptions`](crate::test::helpers::test_environment::TestEnvironmentOptions).
 /// Production wallets express the strategy in PXE; the Noir path only consumes the resolved
-/// [`ResolvedTaggingStrategy`](crate::messages::delivery::ResolvedTaggingStrategy).
+/// [`ResolvedMessagingSecretStrategy`](crate::messages::delivery::ResolvedMessagingSecretStrategy).
 #[derive(Eq, Serialize)]
-pub struct TaggingSecretStrategy {
+pub struct MessagingSecretStrategy {
     kind: u8,
     secret: EmbeddedCurvePoint,
 }
 
-impl TaggingSecretStrategy {
+impl MessagingSecretStrategy {
     /// A secret established through a non-interactive handshake.
     pub fn non_interactive_handshake() -> Self {
         Self { kind: NON_INTERACTIVE_HANDSHAKE, secret: EmbeddedCurvePoint { x: 0, y: 0 } }
@@ -63,27 +63,27 @@ impl TaggingSecretStrategy {
             | (kind == RECIPIENT_TSK);
         assert(
             is_no_payload_strategy | (kind == ARBITRARY_SECRET),
-            f"unrecognized tagging secret strategy kind: {kind}",
+            f"unrecognized messaging secret strategy kind: {kind}",
         );
         assert(
             !is_no_payload_strategy | secret.is_infinite(),
-            f"tagging secret strategy kind {kind} takes no secret, got {secret}",
+            f"messaging secret strategy kind {kind} takes no secret, got {secret}",
         );
         Self { kind, secret }
     }
 }
 
-/// Computes the directional tagging secret PXE derives from an arbitrary shared secret point: the point is app-siloed
-/// and the recipient is folded in for direction. Mirrors `AppTaggingSecret.computeFromArbitrarySecret` on the PXE
+/// Computes the directional messaging secret PXE derives from an arbitrary shared secret point: the point is app-siloed
+/// and the recipient is folded in for direction. Mirrors `MessagingSecret.computeFromArbitrarySecret` on the PXE
 /// side; tests use it to derive the secret they expect an
-/// [`arbitrary_secret`](TaggingSecretStrategy::arbitrary_secret) strategy to produce.
+/// [`arbitrary_secret`](MessagingSecretStrategy::arbitrary_secret) strategy to produce.
 pub fn compute_directional_app_secret(secret: EmbeddedCurvePoint, app: AztecAddress, recipient: AztecAddress) -> Field {
     poseidon2_hash(
         [compute_app_siloed_shared_secret_from_point(secret, app), recipient.to_field()],
     )
 }
 
-impl Deserialize for TaggingSecretStrategy {
+impl Deserialize for MessagingSecretStrategy {
     let N: u32 = 3;
 
     fn deserialize(fields: [Field; Self::N]) -> Self {
@@ -102,32 +102,32 @@ impl Deserialize for TaggingSecretStrategy {
 
 mod test {
     use crate::protocol::{point::EmbeddedCurvePoint, traits::{Deserialize, Serialize}};
-    use super::TaggingSecretStrategy;
+    use super::MessagingSecretStrategy;
 
     #[test]
     fn strategy_roundtrips_through_serialization() {
-        let non_interactive = TaggingSecretStrategy::non_interactive_handshake();
-        let interactive = TaggingSecretStrategy::interactive_handshake();
-        let address = TaggingSecretStrategy::address_derived();
-        let recipient_tsk = TaggingSecretStrategy::recipient_tsk();
-        let provided = TaggingSecretStrategy::arbitrary_secret(EmbeddedCurvePoint { x: 7, y: 11 });
+        let non_interactive = MessagingSecretStrategy::non_interactive_handshake();
+        let interactive = MessagingSecretStrategy::interactive_handshake();
+        let address = MessagingSecretStrategy::address_derived();
+        let recipient_tsk = MessagingSecretStrategy::recipient_tsk();
+        let provided = MessagingSecretStrategy::arbitrary_secret(EmbeddedCurvePoint { x: 7, y: 11 });
 
-        assert(TaggingSecretStrategy::deserialize(non_interactive.serialize()) == non_interactive);
-        assert(TaggingSecretStrategy::deserialize(interactive.serialize()) == interactive);
-        assert(TaggingSecretStrategy::deserialize(address.serialize()) == address);
-        assert(TaggingSecretStrategy::deserialize(recipient_tsk.serialize()) == recipient_tsk);
-        assert(TaggingSecretStrategy::deserialize(provided.serialize()) == provided);
+        assert(MessagingSecretStrategy::deserialize(non_interactive.serialize()) == non_interactive);
+        assert(MessagingSecretStrategy::deserialize(interactive.serialize()) == interactive);
+        assert(MessagingSecretStrategy::deserialize(address.serialize()) == address);
+        assert(MessagingSecretStrategy::deserialize(recipient_tsk.serialize()) == recipient_tsk);
+        assert(MessagingSecretStrategy::deserialize(provided.serialize()) == provided);
     }
 
-    #[test(should_fail_with = "unrecognized tagging secret strategy kind")]
+    #[test(should_fail_with = "unrecognized messaging secret strategy kind")]
     fn deserializing_invalid_kind_fails() {
-        let _ = TaggingSecretStrategy::deserialize([99, 0, 0]);
+        let _ = MessagingSecretStrategy::deserialize([99, 0, 0]);
     }
 
     #[test(should_fail_with = "takes no secret")]
     fn deserializing_handshake_with_noninfinite_point_fails() {
-        let _ = TaggingSecretStrategy::deserialize([
-            TaggingSecretStrategy::non_interactive_handshake().kind as Field,
+        let _ = MessagingSecretStrategy::deserialize([
+            MessagingSecretStrategy::non_interactive_handshake().kind as Field,
             7,
             11,
         ]);
@@ -135,20 +135,24 @@ mod test {
 
     #[test(should_fail_with = "takes no secret")]
     fn deserializing_address_derived_with_noninfinite_point_fails() {
-        let _ = TaggingSecretStrategy::deserialize(
-            [TaggingSecretStrategy::address_derived().kind as Field, 7, 11],
+        let _ = MessagingSecretStrategy::deserialize(
+            [MessagingSecretStrategy::address_derived().kind as Field, 7, 11],
         );
     }
 
     #[test(should_fail_with = "takes no secret")]
     fn deserializing_recipient_tsk_with_noninfinite_point_fails() {
-        let _ = TaggingSecretStrategy::deserialize(
-            [TaggingSecretStrategy::recipient_tsk().kind as Field, 7, 11],
+        let _ = MessagingSecretStrategy::deserialize(
+            [MessagingSecretStrategy::recipient_tsk().kind as Field, 7, 11],
         );
     }
 
     #[test(should_fail_with = "takes no secret")]
     fn deserializing_interactive_handshake_with_noninfinite_point_fails() {
-        let _ = TaggingSecretStrategy::deserialize([TaggingSecretStrategy::interactive_handshake().kind as Field, 7, 11]);
+        let _ = MessagingSecretStrategy::deserialize([
+            MessagingSecretStrategy::interactive_handshake().kind as Field,
+            7,
+            11,
+        ]);
     }
 }

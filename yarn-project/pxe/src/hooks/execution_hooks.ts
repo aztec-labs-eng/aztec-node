@@ -1,9 +1,9 @@
 import type { AuthorizeUtilityCall } from './authorize_utility_call.js';
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
 import type { ResolveExpirationAndPadding } from './resolve_expiration_and_padding.js';
-import type { ResolveTaggingSecretStrategy } from './resolve_tagging_secret_strategy.js';
+import type { ResolveMessagingSecretStrategy } from './resolve_messaging_secret_strategy.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
-import type { defaultTaggingSecretStrategy } from './resolve_tagging_secret_strategy.js';
+import type { defaultMessagingSecretStrategy } from './resolve_messaging_secret_strategy.js';
 
 /**
  * Hooks that PXE invokes while simulating and proving transactions to gate or steer operations that the protocol
@@ -34,10 +34,10 @@ import type { defaultTaggingSecretStrategy } from './resolve_tagging_secret_stra
  *     },
  *     // Apply per-recipient policy: reach a known contact via their address keys (no onchain trace) and apply PXE's
  *     // default to everyone else.
- *     resolveTaggingSecretStrategy: async request =>
+ *     resolveMessagingSecretStrategy: async request =>
  *       knownContacts.has(request.recipient.toString())
  *         ? { type: 'address-derived' }
- *         : defaultTaggingSecretStrategy(request),
+ *         : defaultMessagingSecretStrategy(request),
  *   },
  * });
  * ```
@@ -46,11 +46,11 @@ export interface ExecutionHooks {
   /** Called when a contract attempts a cross-contract utility call. Calls are denied when absent. */
   authorizeUtilityCall?: AuthorizeUtilityCall;
   /**
-   * Resolves a message's tagging secret when none is already established for the sender/recipient pair, letting the
-   * wallet apply per-recipient policy. PXE applies {@link defaultTaggingSecretStrategy} when absent.
-   * See {@link ResolveTaggingSecretStrategy} for the request shape.
+   * Resolves a message's messaging secret when none is already established for the sender/recipient pair, letting the
+   * wallet apply per-recipient policy. PXE applies {@link defaultMessagingSecretStrategy} when absent.
+   * See {@link ResolveMessagingSecretStrategy} for the request shape.
    */
-  resolveTaggingSecretStrategy?: ResolveTaggingSecretStrategy;
+  resolveMessagingSecretStrategy?: ResolveMessagingSecretStrategy;
   /**
    * Resolves a custom, caller-defined request a circuit cannot serve from local state. Any contract can issue one, so
    * an implementor should verify both the request `kind` and the issuing contract (its address and class ID) before

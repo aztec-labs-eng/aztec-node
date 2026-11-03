@@ -124,9 +124,9 @@ import {
   PublicCallRequestArrayLengths,
 } from '../kernel/public_call_request.js';
 import { PublicKey, PublicKeys, computeAddress, hashPublicKey } from '../keys/index.js';
-import { AppTaggingSecret } from '../logs/app_tagging_secret.js';
 import { ContractClassLog, ContractClassLogFields } from '../logs/index.js';
 import type { LogResult } from '../logs/log_result.js';
+import { MessagingSecret } from '../logs/messaging_secret.js';
 import { OnchainDeliveryMode } from '../logs/onchain_delivery_mode.js';
 import { PrivateLog } from '../logs/private_log.js';
 import { FlatPublicLogs, PublicLog } from '../logs/public_log.js';
@@ -1731,7 +1731,7 @@ export function makeL2Tips(
   };
 }
 
-export async function randomAppTaggingSecret(deliveryMode: OnchainDeliveryMode): Promise<AppTaggingSecret> {
+export async function randomMessagingSecret(deliveryMode: OnchainDeliveryMode): Promise<MessagingSecret> {
   const resolvedApp = await AztecAddress.random();
-  return new AppTaggingSecret(Fr.random(), resolvedApp, deliveryMode);
+  return new MessagingSecret(Fr.random(), resolvedApp, deliveryMode);
 }

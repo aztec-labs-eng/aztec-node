@@ -88,12 +88,12 @@ import { NoteStore } from './storage/note_store/note_store.js';
 import { openPxeStores } from './storage/open_pxe_stores.js';
 import { PrivateEventStore } from './storage/private_event_store/private_event_store.js';
 import { type ChangeSetId, StagedWriteCoordinator } from './storage/staged_write_coordinator.js';
+import {
+  MessagingSecretSourcesStore,
+  type SharedSecretKind,
+} from './storage/tagging_store/messaging_secret_sources_store.js';
 import { RecipientTaggingStore } from './storage/tagging_store/recipient_tagging_store.js';
 import { SenderTaggingStore } from './storage/tagging_store/sender_tagging_store.js';
-import {
-  type SharedSecretKind,
-  TaggingSecretSourcesStore,
-} from './storage/tagging_store/tagging_secret_sources_store.js';
 import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
 
 export type PackedPrivateEvent = InTx & {
@@ -211,8 +211,8 @@ export type PXECreateArgs = {
   hooks?: ExecutionHooks;
 };
 
-/** A source from which PXE derives the tagging secrets it scans for to discover incoming private logs. */
-export type TaggingSecretSource =
+/** A source from which PXE derives the messaging secrets it scans for to discover incoming private logs. */
+export type MessagingSecretSource =
   /**
    * Derives a shared secret via ECDH from an external `sender` address against every account registered in this PXE
    * (present and future), so registering one sender applies it to all of them. The address is not secret, so unlike
@@ -232,12 +232,17 @@ export type TaggingSecretSource =
   | { kind: 'handshake'; recipient: AztecAddress; ephPk: Fr };
 
 /**
- * The registered form of a {@link TaggingSecretSource}.
+ * The registered form of a {@link MessagingSecretSource}.
  */
-export type RegisteredTaggingSecretSource =
-  | Exclude<TaggingSecretSource, { kind: 'handshake' }>
+export type RegisteredMessagingSecretSource =
+  | Exclude<MessagingSecretSource, { kind: 'handshake' }>
   /** A handshake's resolved shared secret, derived at registration from the handshake's ephemeral key. */
   | { kind: 'handshake'; recipient: AztecAddress; secret: Point };
+
+/** @deprecated Use {@link MessagingSecretSource}. */
+export type TaggingSecretSource = MessagingSecretSource;
+/** @deprecated Use {@link RegisteredMessagingSecretSource}. */
+export type RegisteredTaggingSecretSource = RegisteredMessagingSecretSource;
 
 /**
  * Private eXecution Environment (PXE) is a library used by wallets to simulate private phase of transactions and to
@@ -256,7 +261,7 @@ export class PXE {
     private factStore: FactStore,
     private anchorBlockStore: AnchorBlockStore,
     private senderTaggingStore: SenderTaggingStore,
-    private taggingSecretSourcesStore: TaggingSecretSourcesStore,
+    private messagingSecretSourcesStore: MessagingSecretSourcesStore,
     private recipientTaggingStore: RecipientTaggingStore,
     private addressStore: AddressStore,
     private privateEventStore: PrivateEventStore,
@@ -321,7 +326,7 @@ export class PXE {
       noteStore,
       anchorBlockStore,
       senderTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       recipientTaggingStore,
       capsuleStore,
       keyStore,
@@ -393,7 +398,7 @@ export class PXE {
       factStore,
       anchorBlockStore,
       senderTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       recipientTaggingStore,
       addressStore,
       privateEventStore,
@@ -439,7 +444,7 @@ export class PXE {
       l2TipsStore: this.l2TipsStore,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleStore: this.capsuleStore,
       factStore: this.factStore,
       privateEventStore: this.privateEventStore,
@@ -957,14 +962,15 @@ export class PXE {
   }
 
   /**
-   * Registers a source from which this PXE derives the tagging secrets it scans for to discover incoming private logs.
-   * See {@link TaggingSecretSource} for the meaning of each variant. Does nothing if the source is already registered.
+   * Registers a source from which this PXE derives the messaging secrets it scans for to discover incoming private
+   * logs. See {@link MessagingSecretSource} for the meaning of each variant. Does nothing if the source is already
+   * registered.
    *
    * After a new source is added we clear the cache tracking which contracts have finished syncing, so every contract
    * re-syncs against the new source's logs (whose notes/events could belong to any contract). Already-discovered
    * notes/events are not discarded.
    */
-  public async registerTaggingSecretSource(source: TaggingSecretSource): Promise<void> {
+  public async registerMessagingSecretSource(source: MessagingSecretSource): Promise<void> {
     let wasAdded: boolean;
 
     switch (source.kind) {
@@ -983,7 +989,7 @@ export class PXE {
         break;
       default: {
         const _: never = source;
-        throw new Error('Unhandled tagging secret source kind');
+        throw new Error('Unhandled messaging secret source kind');
       }
     }
 
@@ -994,14 +1000,14 @@ export class PXE {
   }
 
   /**
-   * Removes a previously registered tagging secret source, identified by its registered form (see
-   * {@link getTaggingSecretSources}). Does nothing if it was not registered.
+   * Removes a previously registered messaging secret source, identified by its registered form (see
+   * {@link getMessagingSecretSources}). Does nothing if it was not registered.
    */
-  public async removeTaggingSecretSource(source: RegisteredTaggingSecretSource): Promise<void> {
+  public async removeMessagingSecretSource(source: RegisteredMessagingSecretSource): Promise<void> {
     switch (source.kind) {
       case 'address-derived': {
         const { sender } = source;
-        const wasRemoved = await this.taggingSecretSourcesStore.removeSender(sender);
+        const wasRemoved = await this.messagingSecretSourcesStore.removeSender(sender);
         this.log.info(
           wasRemoved
             ? `Removed sender:\n ${sender.toString()}`
@@ -1012,7 +1018,7 @@ export class PXE {
       case 'arbitrary-secret':
       case 'handshake': {
         const { kind, recipient, secret } = source;
-        const wasRemoved = await this.taggingSecretSourcesStore.removeSharedSecret(recipient, kind, secret);
+        const wasRemoved = await this.messagingSecretSourcesStore.removeSharedSecret(recipient, kind, secret);
         this.log.info(
           wasRemoved
             ? `Removed ${kind} shared secret for recipient:\n ${recipient.toString()}`
@@ -1022,33 +1028,55 @@ export class PXE {
       }
       default: {
         const _: never = source;
-        throw new Error('Unhandled tagging secret source kind');
+        throw new Error('Unhandled messaging secret source kind');
       }
     }
   }
 
   /**
-   * Retrieves the tagging secret sources registered in this PXE, in their registered form. Without a filter it
-   * returns every source; pass `{ kind }` to narrow to a single variant. See {@link RegisteredTaggingSecretSource}.
+   * Retrieves the messaging secret sources registered in this PXE, in their registered form. Without a filter it
+   * returns every source; pass `{ kind }` to narrow to a single variant. See {@link RegisteredMessagingSecretSource}.
    */
-  public getTaggingSecretSources<K extends RegisteredTaggingSecretSource['kind']>(filter: {
+  public getMessagingSecretSources<K extends RegisteredMessagingSecretSource['kind']>(filter: {
     kind: K;
-  }): Promise<Extract<RegisteredTaggingSecretSource, { kind: K }>[]>;
-  public getTaggingSecretSources(): Promise<RegisteredTaggingSecretSource[]>;
-  public async getTaggingSecretSources(filter?: {
-    kind?: RegisteredTaggingSecretSource['kind'];
-  }): Promise<RegisteredTaggingSecretSource[]> {
+  }): Promise<Extract<RegisteredMessagingSecretSource, { kind: K }>[]>;
+  public getMessagingSecretSources(): Promise<RegisteredMessagingSecretSource[]>;
+  public async getMessagingSecretSources(filter?: {
+    kind?: RegisteredMessagingSecretSource['kind'];
+  }): Promise<RegisteredMessagingSecretSource[]> {
     const [senders, secrets] = await allToCompletion([
-      this.taggingSecretSourcesStore.getSenders(),
-      this.taggingSecretSourcesStore.getAllSharedSecrets(),
+      this.messagingSecretSourcesStore.getSenders(),
+      this.messagingSecretSourcesStore.getAllSharedSecrets(),
     ]);
 
-    const sources: RegisteredTaggingSecretSource[] = [
-      ...senders.map((sender): RegisteredTaggingSecretSource => ({ kind: 'address-derived', sender })),
-      ...secrets.map(({ recipient, kind, secret }): RegisteredTaggingSecretSource => ({ kind, recipient, secret })),
+    const sources: RegisteredMessagingSecretSource[] = [
+      ...senders.map((sender): RegisteredMessagingSecretSource => ({ kind: 'address-derived', sender })),
+      ...secrets.map(({ recipient, kind, secret }): RegisteredMessagingSecretSource => ({ kind, recipient, secret })),
     ];
 
     return filter?.kind ? sources.filter(source => source.kind === filter.kind) : sources;
+  }
+
+  /** @deprecated Use {@link registerMessagingSecretSource}. */
+  public registerTaggingSecretSource(source: MessagingSecretSource): Promise<void> {
+    return this.registerMessagingSecretSource(source);
+  }
+
+  /** @deprecated Use {@link removeMessagingSecretSource}. */
+  public removeTaggingSecretSource(source: RegisteredMessagingSecretSource): Promise<void> {
+    return this.removeMessagingSecretSource(source);
+  }
+
+  /** @deprecated Use {@link getMessagingSecretSources}. */
+  public getTaggingSecretSources<K extends RegisteredMessagingSecretSource['kind']>(filter: {
+    kind: K;
+  }): Promise<Extract<RegisteredMessagingSecretSource, { kind: K }>[]>;
+  /** @deprecated Use {@link getMessagingSecretSources}. */
+  public getTaggingSecretSources(): Promise<RegisteredMessagingSecretSource[]>;
+  public getTaggingSecretSources(filter?: {
+    kind: RegisteredMessagingSecretSource['kind'];
+  }): Promise<RegisteredMessagingSecretSource[]> {
+    return filter ? this.getMessagingSecretSources(filter) : this.getMessagingSecretSources();
   }
 
   /** Registers a sender, skipping addresses that belong to a local account. Returns whether it was newly added. */
@@ -1065,7 +1093,7 @@ export class PXE {
       return false;
     }
 
-    const wasAdded = await this.taggingSecretSourcesStore.addSender(address);
+    const wasAdded = await this.messagingSecretSourcesStore.addSender(address);
     this.log.info(
       wasAdded ? `Added sender:\n ${address.toString()}` : `Sender:\n "${address.toString()}"\n already registered.`,
     );
@@ -1115,7 +1143,7 @@ export class PXE {
       throw new Error(`Shared secret ${secret} is not a valid non-zero point on the Grumpkin curve.`);
     }
 
-    const wasAdded = await this.taggingSecretSourcesStore.addSharedSecret(recipient, kind, secret);
+    const wasAdded = await this.messagingSecretSourcesStore.addSharedSecret(recipient, kind, secret);
     this.log.info(
       wasAdded
         ? `Added ${kind} shared secret for recipient:\n ${recipient.toString()}`

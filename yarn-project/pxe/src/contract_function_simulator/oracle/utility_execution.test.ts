@@ -30,7 +30,7 @@ import {
 import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { AppTaggingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { MessagingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
 import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
@@ -59,9 +59,9 @@ import { FactService, FactStore } from '../../storage/fact_store/index.js';
 import { type BlockReference, type FactScope, OriginBlockState } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
+import type { MessagingSecretSourcesStore } from '../../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../../storage/tagging_store/tagging_secret_sources_store.js';
 import { AnchoredContractData } from '../anchored_contract_data.js';
 import { ContractFunctionSimulator } from '../contract_function_simulator.js';
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
@@ -88,7 +88,7 @@ describe('Utility Execution test suite', () => {
   let aztecNode: ReturnType<typeof mock<AztecNode>>;
   let senderTaggingStore: ReturnType<typeof mock<SenderTaggingStore>>;
   let recipientTaggingStore: ReturnType<typeof mock<RecipientTaggingStore>>;
-  let taggingSecretSourcesStore: ReturnType<typeof mock<TaggingSecretSourcesStore>>;
+  let messagingSecretSourcesStore: ReturnType<typeof mock<MessagingSecretSourcesStore>>;
   let capsuleStore: ReturnType<typeof mock<CapsuleStore>>;
   let factStore: FactStore;
   let privateEventStore: ReturnType<typeof mock<PrivateEventStore>>;
@@ -115,7 +115,7 @@ describe('Utility Execution test suite', () => {
     aztecNode = mock<AztecNode>();
     senderTaggingStore = mock<SenderTaggingStore>();
     recipientTaggingStore = mock<RecipientTaggingStore>();
-    taggingSecretSourcesStore = mock<TaggingSecretSourcesStore>();
+    messagingSecretSourcesStore = mock<MessagingSecretSourcesStore>();
     capsuleStore = mock<CapsuleStore>();
     factStore = new FactStore(await openTmpStore('utility-exec-fact-test'));
     factStore.beginChangeSet('test-change-set-id');
@@ -129,8 +129,8 @@ describe('Utility Execution test suite', () => {
     senderTaggingStore.getLastUsedIndex.mockResolvedValue(undefined);
     senderTaggingStore.getPendingTxs.mockResolvedValue([]);
     senderTaggingStore.storePendingIndexes.mockResolvedValue();
-    taggingSecretSourcesStore.getSenders.mockResolvedValue([]);
-    taggingSecretSourcesStore.getSharedSecretsForRecipient.mockResolvedValue([]);
+    messagingSecretSourcesStore.getSenders.mockResolvedValue([]);
+    messagingSecretSourcesStore.getSharedSecretsForRecipient.mockResolvedValue([]);
 
     l2TipsStore.getL2Tips.mockResolvedValue(makeL2Tips(anchorBlockHeader.globalVariables.blockNumber));
     aztecNode.getPrivateLogsByTags.mockImplementation(query => Promise.resolve(query.tags.map(() => [])));
@@ -152,7 +152,7 @@ describe('Utility Execution test suite', () => {
       l2TipsStore,
       senderTaggingStore,
       recipientTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       capsuleStore,
       factStore,
       privateEventStore,
@@ -171,7 +171,7 @@ describe('Utility Execution test suite', () => {
     keyStore.getAccounts.mockResolvedValue([owner]);
 
     // Mock getMasterIncomingViewingSecretKey to return a valid scalar
-    // This is needed when LogService tries to compute directional app tagging secrets
+    // This is needed when LogService tries to compute directional messaging secrets
     keyStore.getMasterIncomingViewingSecretKey.mockImplementation((address: AztecAddress) => {
       if (address.equals(owner)) {
         return Promise.resolve(ownerIvskM);
@@ -625,11 +625,11 @@ describe('Utility Execution test suite', () => {
         const providedMode = OnchainDeliveryMode.CONSTRAINED;
         const providedSecrets: ProvidedSecret[] = [{ secret: sharedSecret, mode: providedMode }];
         const constrainedModeTag = await SiloedTag.compute({
-          extendedSecret: new AppTaggingSecret(sharedSecret, contractAddress, providedMode),
+          extendedSecret: new MessagingSecret(sharedSecret, contractAddress, providedMode),
           index: 0,
         });
         const sameSecretUnconstrainedModeTag = await SiloedTag.compute({
-          extendedSecret: new AppTaggingSecret(sharedSecret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
+          extendedSecret: new MessagingSecret(sharedSecret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
           index: 0,
         });
         expect(constrainedModeTag.equals(sameSecretUnconstrainedModeTag)).toBe(false);
@@ -1023,7 +1023,7 @@ describe('Utility Execution test suite', () => {
         const secret = Fr.random();
         const mode = OnchainDeliveryMode.CONSTRAINED;
         const tag = await SiloedTag.compute({
-          extendedSecret: new AppTaggingSecret(secret, contractAddress, mode),
+          extendedSecret: new MessagingSecret(secret, contractAddress, mode),
           index: 0,
         });
         const log = {
@@ -1281,7 +1281,7 @@ describe('Utility Execution test suite', () => {
         addressStore,
         aztecNode,
         recipientTaggingStore,
-        taggingSecretSourcesStore,
+        messagingSecretSourcesStore,
         capsuleService: new CapsuleService(capsuleStore, scopes),
         factService: new FactService(factStore, scopes),
         privateEventStore,

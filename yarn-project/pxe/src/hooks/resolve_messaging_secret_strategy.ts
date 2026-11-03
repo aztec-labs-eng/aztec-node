@@ -7,11 +7,11 @@ import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
 
 /**
- * How a message's tagging secret is chosen: the wallet's strategy, returned by the `resolveTaggingSecretStrategy` hook
- * when no onchain handshake has been registered for the sender/recipient pair. This is intent (plus, for an arbitrary
- * secret, the raw material); PXE resolves it into the secret it hands the contract.
+ * How a message's messaging secret is chosen: the wallet's strategy, returned by the `resolveMessagingSecretStrategy`
+ * hook when no onchain handshake has been registered for the sender/recipient pair. This is intent (plus, for an
+ * arbitrary secret, the raw material); PXE resolves it into the secret it hands the contract.
  */
-export type TaggingSecretStrategy =
+export type MessagingSecretStrategy =
   | {
       /** Establish a fresh non-interactive handshake via the onchain registry; reveals the recipient onchain. */
       type: 'non-interactive-handshake';
@@ -31,7 +31,7 @@ export type TaggingSecretStrategy =
   | {
       /**
        * Derive the secret from the recipient's tagging secret key, regardless of the sender. PXE computes and silos
-       * it. Only usable when {@link TaggingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
+       * it. Only usable when {@link MessagingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
        * account such as the sender itself - the send fails otherwise. Only sound for unconstrained delivery, since
        * nothing proves that the secret comes from that key.
        *
@@ -52,20 +52,27 @@ export type TaggingSecretStrategy =
       secret: Point;
     };
 
+/** @deprecated Use {@link MessagingSecretStrategy}. */
+export type TaggingSecretStrategy = MessagingSecretStrategy;
+
 /**
- * The strategy PXE applies when no {@link ResolveTaggingSecretStrategy} hook is configured, for a hook to fall back to.
+ * The strategy PXE applies when no {@link ResolveMessagingSecretStrategy} hook is configured, for a hook to fall back
+ * to.
  */
-export function defaultTaggingSecretStrategy({
+export function defaultMessagingSecretStrategy({
   deliveryMode,
   recipientTskAvailable,
-}: Pick<TaggingSecretStrategyRequest, 'deliveryMode' | 'recipientTskAvailable'>): TaggingSecretStrategy {
+}: Pick<MessagingSecretStrategyRequest, 'deliveryMode' | 'recipientTskAvailable'>): MessagingSecretStrategy {
   return deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && recipientTskAvailable
     ? { type: 'recipient-tsk' }
     : { type: 'non-interactive-handshake' };
 }
 
-/** Information about the message delivery requesting a tagging secret strategy. */
-export type TaggingSecretStrategyRequest = {
+/** @deprecated Use {@link defaultMessagingSecretStrategy}. */
+export const defaultTaggingSecretStrategy = defaultMessagingSecretStrategy;
+
+/** Information about the message delivery requesting a messaging secret strategy. */
+export type MessagingSecretStrategyRequest = {
   contractAddress: AztecAddress;
   /**
    * The contract class ID of the executing contract, so wallets can apply class-level (not just per-address) policy.
@@ -81,10 +88,18 @@ export type TaggingSecretStrategyRequest = {
   recipientTskAvailable: boolean;
 };
 
+/** @deprecated Use {@link MessagingSecretStrategyRequest}. */
+export type TaggingSecretStrategyRequest = MessagingSecretStrategyRequest;
+
 /**
- * Hook returning the {@link TaggingSecretStrategy} for an outgoing message.
+ * Hook returning the {@link MessagingSecretStrategy} for an outgoing message.
  *
  * PXE applies the returned strategy to every message without a registered handshake, including self-sends. A hook
- * with no policy for some messages can return {@link defaultTaggingSecretStrategy} for them.
+ * with no policy for some messages can return {@link defaultMessagingSecretStrategy} for them.
  */
-export type ResolveTaggingSecretStrategy = (request: TaggingSecretStrategyRequest) => Promise<TaggingSecretStrategy>;
+export type ResolveMessagingSecretStrategy = (
+  request: MessagingSecretStrategyRequest,
+) => Promise<MessagingSecretStrategy>;
+
+/** @deprecated Use {@link ResolveMessagingSecretStrategy}. */
+export type ResolveTaggingSecretStrategy = ResolveMessagingSecretStrategy;

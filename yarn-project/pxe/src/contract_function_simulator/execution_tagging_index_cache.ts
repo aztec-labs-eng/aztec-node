@@ -1,14 +1,14 @@
-import { AppTaggingSecret, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import { MessagingSecret, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 
-/** A map that stores the tagging index range for a given app tagging secret. */
+/** A map that stores the tagging index range for a given messaging secret. */
 export class ExecutionTaggingIndexCache {
   private taggingIndexMap: Map<string, { lowestIndex: number; highestIndex: number }> = new Map();
 
-  public getLastUsedIndex(secret: AppTaggingSecret): number | undefined {
+  public getLastUsedIndex(secret: MessagingSecret): number | undefined {
     return this.taggingIndexMap.get(secret.toString())?.highestIndex;
   }
 
-  public setLastUsedIndex(secret: AppTaggingSecret, index: number) {
+  public setLastUsedIndex(secret: MessagingSecret, index: number) {
     const currentValue = this.taggingIndexMap.get(secret.toString());
     if (currentValue !== undefined && currentValue.highestIndex !== index - 1) {
       throw new Error(`Invalid tagging index update. Current value: ${currentValue.highestIndex}, new value: ${index}`);
@@ -25,7 +25,7 @@ export class ExecutionTaggingIndexCache {
    */
   public getUsedTaggingIndexRanges(): TaggingIndexRange[] {
     return Array.from(this.taggingIndexMap.entries()).map(([secret, { lowestIndex, highestIndex }]) => ({
-      extendedSecret: AppTaggingSecret.fromString(secret),
+      extendedSecret: MessagingSecret.fromString(secret),
       lowestIndex,
       highestIndex,
     }));

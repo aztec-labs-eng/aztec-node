@@ -42,7 +42,7 @@ import {
   PROVIDED_SECRET,
   PUBLIC_DATA_WITNESS,
   PUBLIC_KEYS_AND_PARTIAL_ADDRESS,
-  RESOLVED_TAGGING_STRATEGY,
+  RESOLVED_MESSAGING_SECRET_STRATEGY,
   RESOLVED_TX,
   STR,
   TX_EFFECT,
@@ -66,7 +66,7 @@ export {
   BOUNDED_VEC,
   U8,
   DELIVERY_MODE,
-  RESOLVED_TAGGING_STRATEGY,
+  RESOLVED_MESSAGING_SECRET_STRATEGY,
   EPHEMERAL_ARRAY,
   EVENT_VALIDATION_REQUEST,
   FIELD,
@@ -573,7 +573,7 @@ export const ORACLE_REGISTRY = {
     returnType: BOOL,
   }),
 
-  aztec_prv_getAppAddressDerivedTaggingSecret: makeEntry({
+  aztec_prv_getAddressDerivedMessagingSecret: makeEntry({
     params: [
       { name: 'sender', type: AZTEC_ADDRESS },
       { name: 'recipient', type: AZTEC_ADDRESS },
@@ -591,13 +591,13 @@ export const ORACLE_REGISTRY = {
 
   aztec_prv_getSenderForTags: makeEntry({ returnType: OPTION(AZTEC_ADDRESS) }),
 
-  aztec_prv_resolveTaggingStrategy: makeEntry({
+  aztec_prv_resolveMessagingSecretStrategy: makeEntry({
     params: [
       { name: 'sender', type: AZTEC_ADDRESS },
       { name: 'recipient', type: AZTEC_ADDRESS },
       { name: 'deliveryMode', type: DELIVERY_MODE },
     ],
-    returnType: RESOLVED_TAGGING_STRATEGY,
+    returnType: RESOLVED_MESSAGING_SECRET_STRATEGY,
   }),
 
   aztec_prv_resolveCustomRequest: makeEntry({

@@ -8,7 +8,7 @@ import { EphemeralArrayService } from '../ephemeral_array_service.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import { type LogRetrievalRequest, LogSource } from '../noir-structs/log_retrieval_request.js';
 import { Option } from '../noir-structs/option.js';
-import type { ResolvedTaggingStrategy } from '../noir-structs/resolved_tagging_strategy.js';
+import type { ResolvedMessagingSecretStrategy } from '../noir-structs/resolved_messaging_secret_strategy.js';
 import {
   ARRAY,
   AZTEC_ADDRESS,
@@ -20,7 +20,7 @@ import {
   MEMBERSHIP_WITNESS,
   OPTION,
   POINT,
-  RESOLVED_TAGGING_STRATEGY,
+  RESOLVED_MESSAGING_SECRET_STRATEGY,
   type SlotShape,
   type TypeMapping,
   U8,
@@ -97,22 +97,27 @@ describe('oracle type mappings', () => {
     });
   });
 
-  describe('RESOLVED_TAGGING_STRATEGY', () => {
+  describe('RESOLVED_MESSAGING_SECRET_STRATEGY', () => {
     const secret = new Fr(42);
 
     it('rejects an unknown strategy kind', () => {
-      expect(() => deserializeStrategy(new Fr(99), Fr.ZERO)).toThrow('Unrecognized resolved tagging strategy kind');
+      expect(() => deserializeStrategy(new Fr(99), Fr.ZERO)).toThrow(
+        'Unrecognized resolved messaging secret strategy kind',
+      );
     });
 
     it.each([
       ['non-interactive handshake', new Fr(1)],
       ['interactive handshake', new Fr(3)],
     ])('rejects %s with a nonzero secret', (_name, kind) => {
-      expect(() => deserializeStrategy(kind, secret)).toThrow(`Resolved tagging strategy ${kind.toNumber()}`);
+      expect(() => deserializeStrategy(kind, secret)).toThrow(`Resolved messaging secret strategy ${kind.toNumber()}`);
     });
 
-    function deserializeStrategy(kind: Fr, secret: Fr): ResolvedTaggingStrategy {
-      return RESOLVED_TAGGING_STRATEGY.deserialization!.fn([new FieldReader([kind]), new FieldReader([secret])]);
+    function deserializeStrategy(kind: Fr, secret: Fr): ResolvedMessagingSecretStrategy {
+      return RESOLVED_MESSAGING_SECRET_STRATEGY.deserialization!.fn([
+        new FieldReader([kind]),
+        new FieldReader([secret]),
+      ]);
     }
   });
 

@@ -133,17 +133,17 @@ export class EmbeddedWallet extends BaseWallet {
 
   override async registerSender(address: AztecAddress, alias: string) {
     await this.walletDB.storeSender(address, alias);
-    await this.pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: address });
+    await this.pxe.registerMessagingSecretSource({ kind: 'address-derived', sender: address });
     return address;
   }
 
   override async getAddressBook(): Promise<Aliased<AztecAddress>[]> {
-    const sources = await this.pxe.getTaggingSecretSources({ kind: 'address-derived' });
+    const sources = await this.pxe.getMessagingSecretSources({ kind: 'address-derived' });
     const senders = sources.map(source => source.sender);
     const storedSenders = await this.walletDB.listSenders();
     for (const storedSender of storedSenders) {
       if (senders.findIndex(sender => sender.equals(storedSender.item)) === -1) {
-        await this.pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: storedSender.item });
+        await this.pxe.registerMessagingSecretSource({ kind: 'address-derived', sender: storedSender.item });
       }
     }
     return storedSenders;

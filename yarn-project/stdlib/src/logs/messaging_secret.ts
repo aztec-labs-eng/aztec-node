@@ -19,7 +19,7 @@ const OnchainDeliveryModeSchema = z.union([
 const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
 
 /**
- * Application tagging secret used for log tagging.
+ * Messaging secret used for log tagging.
  *
  * It bundles a secret siloed to an app contract with the delivery mode whose tag stream it backs. Each way of deriving
  * the secret has one constructor, so that the sending and the receiving side agree on it:
@@ -29,7 +29,7 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  *
  * Secrets that arrive already derived, such as those supplied by a contract, are wrapped with the class constructor.
  *
- * ## From raw secret to app tagging secret
+ * ## From raw secret to messaging secret
  *
  * Every mechanism starts from a raw secret that apps never see, and silos it to an app so that an app can only compute
  * its own tags. Shared secret points are siloed with {@link computeAppSiloedSharedSecretFromPoint}, and the recipient's
@@ -47,7 +47,7 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  *   `tsk_m`. It is app-siloed into `tsk_app` and directed to `recipient`. It only backs unconstrained delivery. The
  *   kernel can validate `tsk_app`, by recomputing it from `tsk_m` for the calling contract.
  *
- * ## From app tagging secret to tag
+ * ## From messaging secret to tag
  *
  * Each log uses the next `index` of the stream of its secret, app and delivery mode. In the formulas below `h` is
  * poseidon2, and a leading `DOM_SEP__` input is its domain separator:
@@ -63,7 +63,7 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  * The separator depends on the delivery mode because a handshake secret backs both, each with its own index sequence.
  * Mechanisms need no separators of their own at this step, as different derivations already yield different secrets.
  */
-export class AppTaggingSecret {
+export class MessagingSecret {
   constructor(
     public readonly secret: Fr,
     public readonly app: AztecAddress,
@@ -71,44 +71,40 @@ export class AppTaggingSecret {
   ) {}
 
   /**
-   * Derives the tagging secret for an arbitrary shared secret point.
+   * Derives the messaging secret for an arbitrary shared secret point.
    *
    * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. The sender and the recipient
    * agree on the point themselves.
    *
-   * @param taggingSecretPoint - The shared secret point
+   * @param sharedSecretPoint - The shared secret point
    * @param app - Contract address to silo the secret to
    * @param recipient - Recipient of the log. Defines the "direction of the secret".
    * @returns The secret that can be used along with an index to compute a tag to be included in a log.
    */
   static computeFromArbitrarySecret(
-    taggingSecretPoint: Point,
+    sharedSecretPoint: Point,
     app: AztecAddress,
     recipient: AztecAddress,
-  ): Promise<AppTaggingSecret> {
-    return AppTaggingSecret.#computeDirectional(taggingSecretPoint, app, recipient);
+  ): Promise<MessagingSecret> {
+    return MessagingSecret.#computeDirectional(sharedSecretPoint, app, recipient);
   }
 
   /**
-   * Derives the tagging secret for a handshake's shared secret point.
+   * Derives the messaging secret for a handshake's shared secret point.
    *
    * The secret is the bare app-siloed value from {@link computeAppSiloedSharedSecretFromPoint}, under the given
    * delivery mode.
    */
   static async computeFromHandshakeSecret(
-    taggingSecretPoint: Point,
+    sharedSecretPoint: Point,
     app: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
-  ): Promise<AppTaggingSecret> {
-    return new AppTaggingSecret(
-      await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app),
-      app,
-      deliveryMode,
-    );
+  ): Promise<MessagingSecret> {
+    return new MessagingSecret(await computeAppSiloedSharedSecretFromPoint(sharedSecretPoint, app), app, deliveryMode);
   }
 
   /**
-   * Derives the tagging secret two addresses share through ECDH.
+   * Derives the messaging secret two addresses share through ECDH.
    *
    * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. Each party derives the same
    * secret using its own keys as the local side of the exchange.
@@ -132,17 +128,17 @@ export class AppTaggingSecret {
     app: AztecAddress;
     /** Recipient of the log, which is one of the two parties. Defines the "direction of the secret". */
     recipient: AztecAddress;
-  }): Promise<AppTaggingSecret | undefined> {
-    const taggingSecretPoint = await computeSharedTaggingSecret(localAddress, localIvsk, externalAddress);
-    if (!taggingSecretPoint) {
+  }): Promise<MessagingSecret | undefined> {
+    const sharedSecretPoint = await computeAddressDerivedSharedSecretPoint(localAddress, localIvsk, externalAddress);
+    if (!sharedSecretPoint) {
       return undefined;
     }
 
-    return AppTaggingSecret.#computeDirectional(taggingSecretPoint, app, recipient);
+    return MessagingSecret.#computeDirectional(sharedSecretPoint, app, recipient);
   }
 
   /**
-   * Derives the tagging secret from the recipient's tagging secret key.
+   * Derives the messaging secret from the recipient's tagging secret key.
    *
    * The secret is the recipient's app-siloed tagging key hashed with their address, for unconstrained delivery. Hashing
    * in the address gives accounts that share a tagging key separate tag streams. The secret is a property of the
@@ -153,24 +149,24 @@ export class AppTaggingSecret {
     recipientTsk: Fq,
     app: AztecAddress,
     recipient: AztecAddress,
-  ): Promise<AppTaggingSecret> {
+  ): Promise<MessagingSecret> {
     const tskApp = await computeAppTaggingSecretKey(recipientTsk, app);
     const secret = await poseidon2HashWithSeparator([tskApp, recipient], DOM_SEP__RECIPIENT_TSK_SECRET);
 
-    return new AppTaggingSecret(secret, app, OnchainDeliveryMode.UNCONSTRAINED);
+    return new MessagingSecret(secret, app, OnchainDeliveryMode.UNCONSTRAINED);
   }
 
   toString(): string {
     return `${this.deliveryMode}:${this.secret.toString()}:${this.app.toString()}`;
   }
 
-  static fromString(str: string): AppTaggingSecret {
+  static fromString(str: string): MessagingSecret {
     const parts = str.split(':');
     if (parts.length !== 3) {
-      throw new Error(`Invalid AppTaggingSecret string: ${str}`);
+      throw new Error(`Invalid MessagingSecret string: ${str}`);
     }
     const [deliveryModeStr, secretStr, appStr] = parts;
-    return new AppTaggingSecret(
+    return new MessagingSecret(
       Fr.fromString(secretStr),
       AztecAddress.fromStringUnsafe(appStr),
       onchainDeliveryModeFromString(deliveryModeStr),
@@ -183,31 +179,42 @@ export class AppTaggingSecret {
    * bidirectionally, so two parties never share a tag sequence.
    */
   static async #computeDirectional(
-    taggingSecretPoint: Point,
+    sharedSecretPoint: Point,
     app: AztecAddress,
     recipient: AztecAddress,
-  ): Promise<AppTaggingSecret> {
-    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(taggingSecretPoint, app);
-    const directionalAppTaggingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
+  ): Promise<MessagingSecret> {
+    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(sharedSecretPoint, app);
+    const directionalMessagingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
 
-    return new AppTaggingSecret(directionalAppTaggingSecret, app, OnchainDeliveryMode.UNCONSTRAINED);
+    return new MessagingSecret(directionalMessagingSecret, app, OnchainDeliveryMode.UNCONSTRAINED);
   }
 }
 
+/** @deprecated Use {@link MessagingSecret}. */
+export const AppTaggingSecret = MessagingSecret;
+/** @deprecated Use {@link MessagingSecret}. */
+export type AppTaggingSecret = MessagingSecret;
+
 /**
- * Parses a stored `AppTaggingSecret` string key.
+ * Parses a stored `MessagingSecret` string key.
  */
-export function appTaggingSecretFromString(str: string): AppTaggingSecret {
-  return AppTaggingSecret.fromString(str);
+export function messagingSecretFromString(str: string): MessagingSecret {
+  return MessagingSecret.fromString(str);
 }
 
-export const AppTaggingSecretSchema = z
+/** @deprecated Use {@link messagingSecretFromString}. */
+export const appTaggingSecretFromString = messagingSecretFromString;
+
+export const MessagingSecretSchema = z
   .object({
     deliveryMode: OnchainDeliveryModeSchema,
     secret: Fr.schema,
     app: AztecAddress.schema,
   })
-  .transform(({ deliveryMode, secret, app }) => new AppTaggingSecret(secret, app, deliveryMode));
+  .transform(({ deliveryMode, secret, app }) => new MessagingSecret(secret, app, deliveryMode));
+
+/** @deprecated Use {@link MessagingSecretSchema}. */
+export const AppTaggingSecretSchema = MessagingSecretSchema;
 
 function onchainDeliveryModeFromString(deliveryMode: string): OnchainDeliveryMode {
   switch (deliveryMode) {
@@ -216,17 +223,17 @@ function onchainDeliveryModeFromString(deliveryMode: string): OnchainDeliveryMod
     case OnchainDeliveryMode.UNCONSTRAINED:
       return OnchainDeliveryMode.UNCONSTRAINED;
     default:
-      throw new Error(`Invalid AppTaggingSecret delivery mode: ${deliveryMode}`);
+      throw new Error(`Invalid MessagingSecret delivery mode: ${deliveryMode}`);
   }
 }
 
 /**
- * Computes the shared tagging secret point between a local address (i.e. one for which the privacy keys are known) and
+ * Computes the shared secret point between a local address (i.e. one for which the privacy keys are known) and
  * an external one via a Diffie-Hellman key exchange.
  *
  * Returns undefined if `externalAddress` is an invalid address.
  */
-export async function computeSharedTaggingSecret(
+export async function computeAddressDerivedSharedSecretPoint(
   localAddress: CompleteAddress,
   localIvsk: Fq,
   externalAddress: AztecAddress,
@@ -241,8 +248,11 @@ export async function computeSharedTaggingSecret(
   const localPreaddress = await computePreaddress(await localAddress.publicKeys.hash(), localAddress.partialAddress);
   const localAddressSecret = await computeAddressSecret(localPreaddress, localIvsk);
 
-  // For a given local address A and external address B, the shared tagging secret S is (h_A + ivsk_A) * Addr_Point_B
+  // For a given local address A and external address B, the shared secret point S is (h_A + ivsk_A) * Addr_Point_B
   // (conceptually, in reality we don't use h_A + ivsk_A directly but rather the actual address secret, which is the
   // same but with an optional sign adjustment to prevent A's address point from having a negative y-coordinate).
   return Grumpkin.mul(externalAddressPoint, localAddressSecret);
 }
+
+/** @deprecated Use {@link computeAddressDerivedSharedSecretPoint}. */
+export const computeSharedTaggingSecret = computeAddressDerivedSharedSecretPoint;

@@ -293,12 +293,12 @@ describe('automine/effects/event_logs', () => {
     // The PXE's tagging cache reserves an index for every log emission attempted during private execution, but the
     // kernel may then squash some of those logs (e.g. when a note is created and nullified in the same tx, taking
     // its delivery log with it). The PXE must reconcile the recorded ranges against the kernel's surviving private
-    // logs before persisting them, otherwise a subsequent tx sharing the same tagging secret hits a
+    // logs before persisting them, otherwise a subsequent tx sharing the same messaging secret hits a
     // `Conflicting range` error when its tagging sync re-derives the range from on-chain data and notices a mismatch.
-    // Calls deliver_squashed_and_surviving_notes twice in sequence (same tagging secret for both).
+    // Calls deliver_squashed_and_surviving_notes twice in sequence (same messaging secret for both).
     // Verifies no Conflicting range error on the second call after the first squashes a log index.
-    it('does not throw `Conflicting range` across consecutive squashing txs sharing a tagging secret', async () => {
-      // Each call reserves two indexes for the (sender, sender, contract) tagging secret and squashes the first
+    it('does not throw `Conflicting range` across consecutive squashing txs sharing a messaging secret', async () => {
+      // Each call reserves two indexes for the (sender, sender, contract) messaging secret and squashes the first
       // delivery's (note, nullifier, log) triple. Pre-fix, the second call's tagging sync would observe that the
       // first tx had recorded `[N, N+1]` while only `[N+1]` actually landed on chain, and throw.
       // Using `account1Address` for both sender and recipient mirrors the original repro from #22949

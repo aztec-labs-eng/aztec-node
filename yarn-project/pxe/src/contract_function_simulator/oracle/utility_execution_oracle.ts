@@ -31,7 +31,7 @@ import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
+import { FlatPublicLogs, MessagingSecret, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
 import {
   type UnsiloedMessageNullifier,
   getL1ToL2MessageWitness,
@@ -67,8 +67,8 @@ import type { BlockReference, FactScope, FactService } from '../../storage/fact_
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
+import type { MessagingSecretSourcesStore } from '../../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../../storage/tagging_store/tagging_secret_sources_store.js';
 import type { AnchoredContractData } from '../anchored_contract_data.js';
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
@@ -112,7 +112,7 @@ export type UtilityExecutionOracleArgs = {
   addressStore: AddressStore;
   aztecNode: AztecNode;
   recipientTaggingStore: RecipientTaggingStore;
-  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  messagingSecretSourcesStore: MessagingSecretSourcesStore;
   capsuleService: CapsuleService;
   factService: FactService;
   privateEventStore: PrivateEventStore;
@@ -164,7 +164,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   protected readonly addressStore: AddressStore;
   protected readonly aztecNode: AztecNode;
   protected readonly recipientTaggingStore: RecipientTaggingStore;
-  protected readonly taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  protected readonly messagingSecretSourcesStore: MessagingSecretSourcesStore;
   protected readonly capsuleService: CapsuleService;
   protected readonly factService: FactService;
   protected readonly privateEventStore: PrivateEventStore;
@@ -189,7 +189,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     this.addressStore = args.addressStore;
     this.aztecNode = args.aztecNode;
     this.recipientTaggingStore = args.recipientTaggingStore;
-    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
     this.capsuleService = args.capsuleService;
     this.factService = args.factService;
     this.privateEventStore = args.privateEventStore;
@@ -696,7 +696,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   ): Promise<EphemeralArray<PendingTaggedLog>> {
     const secrets = providedSecrets
       .readAll(this.ephemeralArrayService)
-      .map(ps => new AppTaggingSecret(ps.secret, this.contractAddress, ps.mode));
+      .map(ps => new MessagingSecret(ps.secret, this.contractAddress, ps.mode));
 
     const logService = this.#createLogService();
     const retrievedLogs = await logService.fetchTaggedLogs(this.contractAddress, scope, secrets);
@@ -713,7 +713,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       this.l2TipsStore,
       this.keyStore,
       this.recipientTaggingStore,
-      this.taggingSecretSourcesStore,
+      this.messagingSecretSourcesStore,
       this.addressStore,
       this.scopes,
       this.changeSetId,
@@ -1171,7 +1171,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       addressStore: this.addressStore,
       aztecNode: this.aztecNode,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: this.capsuleService,
       factService: this.factService,
       privateEventStore: this.privateEventStore,

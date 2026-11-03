@@ -3,13 +3,13 @@ import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
-  type AppTaggingSecret,
+  type MessagingSecret,
   OnchainDeliveryMode,
   type PrivateLogsQuery,
   type SiloedTag,
   randomLogResult,
 } from '@aztec-labs/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -20,7 +20,7 @@ import { loadAndStoreNewTaggingIndexes } from './load_and_store_new_tagging_inde
 const MOCK_ANCHOR = { hash: BlockHash.random(), number: BlockNumber(100) };
 
 describe('loadAndStoreNewTaggingIndexes', () => {
-  let secret: AppTaggingSecret;
+  let secret: MessagingSecret;
   let aztecNode: MockProxy<AztecNode>;
   let taggingStore: MockProxy<SenderTaggingStore>;
 
@@ -29,7 +29,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
   }
 
   beforeAll(async () => {
-    secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
   });
 
   beforeEach(() => {

@@ -10,16 +10,16 @@ import { AztecAddress } from '../aztec-address/index.js';
 import { CompleteAddress } from '../contract/complete_address.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
 import { computeAppTaggingSecretKey, deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
-import { makeInvalidAztecAddress, randomAppTaggingSecret } from '../tests/factories.js';
-import { AppTaggingSecret, AppTaggingSecretSchema, computeSharedTaggingSecret } from './app_tagging_secret.js';
+import { makeInvalidAztecAddress, randomMessagingSecret } from '../tests/factories.js';
+import { MessagingSecret, MessagingSecretSchema, computeAddressDerivedSharedSecretPoint } from './messaging_secret.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
 import { SiloedTag } from './siloed_tag.js';
 import { TaggingIndexRangeSchema } from './tagging_index_range.js';
 
-describe('AppTaggingSecret', () => {
+describe('MessagingSecret', () => {
   describe('TaggingIndexRangeSchema', () => {
     it('preserves the constrained delivery mode when parsing a TaggingIndexRange', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       const parsed = TaggingIndexRangeSchema.parse({
         extendedSecret: {
@@ -31,12 +31,12 @@ describe('AppTaggingSecret', () => {
         highestIndex: 3,
       });
 
-      expect(parsed.extendedSecret).toBeInstanceOf(AppTaggingSecret);
+      expect(parsed.extendedSecret).toBeInstanceOf(MessagingSecret);
       expect(parsed.extendedSecret.deliveryMode).toBe(OnchainDeliveryMode.CONSTRAINED);
     });
 
     it('rejects a TaggingIndexRange with no delivery mode', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       expect(() =>
         TaggingIndexRangeSchema.parse({
@@ -51,19 +51,19 @@ describe('AppTaggingSecret', () => {
     });
   });
 
-  describe('AppTaggingSecretSchema', () => {
+  describe('MessagingSecretSchema', () => {
     it('round-trips a constrained secret through JSON', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
 
-      const parsed = AppTaggingSecretSchema.parse(JSON.parse(jsonStringify(original)));
+      const parsed = MessagingSecretSchema.parse(JSON.parse(jsonStringify(original)));
 
       expect(parsed).toEqual(original);
     });
 
     it('round-trips an unconstrained secret through JSON', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
-      const parsed = AppTaggingSecretSchema.parse(JSON.parse(jsonStringify(original)));
+      const parsed = MessagingSecretSchema.parse(JSON.parse(jsonStringify(original)));
 
       expect(parsed).toEqual(original);
     });
@@ -79,14 +79,14 @@ describe('AppTaggingSecret', () => {
       const bobSecretKey = new Fr(3);
       const bob = await CompleteAddress.fromSecretKeyAndPartialAddress(bobSecretKey, new Fr(4));
 
-      const toBob = await AppTaggingSecret.computeAddressDerived({
+      const toBob = await MessagingSecret.computeAddressDerived({
         localAddress: alice,
         localIvsk: deriveMasterIncomingViewingSecretKey(aliceSecretKey),
         externalAddress: bob.address,
         app,
         recipient: bob.address,
       });
-      const toAlice = await AppTaggingSecret.computeAddressDerived({
+      const toAlice = await MessagingSecret.computeAddressDerived({
         localAddress: bob,
         localIvsk: deriveMasterIncomingViewingSecretKey(bobSecretKey),
         externalAddress: alice.address,
@@ -95,14 +95,14 @@ describe('AppTaggingSecret', () => {
       });
 
       expect(toBob).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x1d459a547ae9f4f9722f87f546f68f95c39f8a8d5e39b1c74987861f022d8996'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
         ),
       );
       expect(toAlice).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x13248ff9c26fb866d1e19fb9751a63de581e3da206ad9852fb7adeb8a778f272'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
@@ -115,18 +115,18 @@ describe('AppTaggingSecret', () => {
       const alice = AztecAddress.fromNumberUnsafe(43);
       const bob = AztecAddress.fromNumberUnsafe(44);
 
-      const toAlice = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, alice);
-      const toBob = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, bob);
+      const toAlice = await MessagingSecret.computeFromRecipientTsk(tsk, app, alice);
+      const toBob = await MessagingSecret.computeFromRecipientTsk(tsk, app, bob);
 
       expect(toAlice).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x1fb21a244a36cc14cfcf44a11fe2d0f3965309ad678715aebf405cabad862848'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
         ),
       );
       expect(toBob).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x252eb528c954d640dd1e1039f1e8de12f56b08fe3cdfd1742e2c56c5fdbb202b'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
@@ -138,18 +138,18 @@ describe('AppTaggingSecret', () => {
       const alice = AztecAddress.fromNumberUnsafe(43);
       const bob = AztecAddress.fromNumberUnsafe(44);
 
-      const toAlice = await AppTaggingSecret.computeFromArbitrarySecret(Grumpkin.generator, app, alice);
-      const toBob = await AppTaggingSecret.computeFromArbitrarySecret(Grumpkin.generator, app, bob);
+      const toAlice = await MessagingSecret.computeFromArbitrarySecret(Grumpkin.generator, app, alice);
+      const toBob = await MessagingSecret.computeFromArbitrarySecret(Grumpkin.generator, app, bob);
 
       expect(toAlice).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x13dab2df9c5620bf35513fd9507f3e1fde9e3216f9aaf8f81e63a734100001e2'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
         ),
       );
       expect(toBob).toEqual(
-        new AppTaggingSecret(
+        new MessagingSecret(
           Fr.fromString('0x058478bb8005f81e295a50ff31f199b9823d5c2dbd2ba7d4bdd45a6103baae25'),
           app,
           OnchainDeliveryMode.UNCONSTRAINED,
@@ -160,10 +160,10 @@ describe('AppTaggingSecret', () => {
     it.each([OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED])(
       'keeps the handshake secret under %s delivery',
       async deliveryMode => {
-        const secret = await AppTaggingSecret.computeFromHandshakeSecret(Grumpkin.generator, app, deliveryMode);
+        const secret = await MessagingSecret.computeFromHandshakeSecret(Grumpkin.generator, app, deliveryMode);
 
         expect(secret).toEqual(
-          new AppTaggingSecret(
+          new MessagingSecret(
             Fr.fromString('0x1468ba5a8215f9b6144892815d1e629017837b65534223792f1840485f5aff80'),
             app,
             deliveryMode,
@@ -179,14 +179,14 @@ describe('AppTaggingSecret', () => {
       const app = await AztecAddress.random();
       const recipient = await AztecAddress.random();
 
-      const a = await AppTaggingSecret.computeFromArbitrarySecret(point, app, recipient);
-      const b = await AppTaggingSecret.computeFromArbitrarySecret(point, app, recipient);
+      const a = await MessagingSecret.computeFromArbitrarySecret(point, app, recipient);
+      const b = await MessagingSecret.computeFromArbitrarySecret(point, app, recipient);
       expect(b.secret).toEqual(a.secret);
 
-      const otherApp = await AppTaggingSecret.computeFromArbitrarySecret(point, await AztecAddress.random(), recipient);
+      const otherApp = await MessagingSecret.computeFromArbitrarySecret(point, await AztecAddress.random(), recipient);
       expect(otherApp.secret).not.toEqual(a.secret);
 
-      const otherRecipient = await AppTaggingSecret.computeFromArbitrarySecret(point, app, await AztecAddress.random());
+      const otherRecipient = await MessagingSecret.computeFromArbitrarySecret(point, app, await AztecAddress.random());
       expect(otherRecipient.secret).not.toEqual(a.secret);
     });
   });
@@ -200,7 +200,7 @@ describe('AppTaggingSecret', () => {
       const nameHash = await poseidon2HashBytes(Buffer.from('az_dom_sep__recipient_tsk_secret'));
       const separator = Number(nameHash.toBigInt() & 0xffffffffn);
 
-      const { secret } = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, recipient);
+      const { secret } = await MessagingSecret.computeFromRecipientTsk(tsk, app, recipient);
 
       const tskApp = await computeAppTaggingSecretKey(tsk, app);
       expect(secret).toEqual(await poseidon2HashWithSeparator([tskApp, recipient], separator));
@@ -210,8 +210,8 @@ describe('AppTaggingSecret', () => {
       const tsk = GrumpkinScalar.random();
       const app = await AztecAddress.random();
 
-      const a = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
-      const b = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
+      const a = await MessagingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
+      const b = await MessagingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
 
       expect(b.secret).not.toEqual(a.secret);
     });
@@ -237,14 +237,14 @@ describe('AppTaggingSecret', () => {
     });
 
     it('derives the same secret on the sending and the receiving side', async () => {
-      const onSendingSide = await AppTaggingSecret.computeAddressDerived({
+      const onSendingSide = await MessagingSecret.computeAddressDerived({
         localAddress: sender,
         localIvsk: senderIvsk,
         externalAddress: recipient.address,
         app,
         recipient: recipient.address,
       });
-      const onReceivingSide = await AppTaggingSecret.computeAddressDerived({
+      const onReceivingSide = await MessagingSecret.computeAddressDerived({
         localAddress: recipient,
         localIvsk: recipientIvsk,
         externalAddress: sender.address,
@@ -257,14 +257,14 @@ describe('AppTaggingSecret', () => {
     });
 
     it('derives a different secret for each direction', async () => {
-      const toRecipient = await AppTaggingSecret.computeAddressDerived({
+      const toRecipient = await MessagingSecret.computeAddressDerived({
         localAddress: sender,
         localIvsk: senderIvsk,
         externalAddress: recipient.address,
         app,
         recipient: recipient.address,
       });
-      const toSender = await AppTaggingSecret.computeAddressDerived({
+      const toSender = await MessagingSecret.computeAddressDerived({
         localAddress: sender,
         localIvsk: senderIvsk,
         externalAddress: recipient.address,
@@ -275,20 +275,20 @@ describe('AppTaggingSecret', () => {
       expect(toRecipient!.secret).not.toEqual(toSender!.secret);
     });
 
-    // Registering a pre-shared tagging secret point directly must yield the same directional secret as the ECDH-derived
+    // Registering a shared secret point directly must yield the same directional secret as the ECDH-derived
     // sender path. Both sides of the Diffie-Hellman exchange compute the same shared point, so a recipient that
     // registers that point discovers exactly the tags a sender would emit.
     it('a directly registered shared point matches the ECDH-derived sender secret', async () => {
-      const pointFromRecipient = await computeSharedTaggingSecret(recipient, recipientIvsk, sender.address);
+      const pointFromRecipient = await computeAddressDerivedSharedSecretPoint(recipient, recipientIvsk, sender.address);
 
-      const secretViaEcdh = await AppTaggingSecret.computeAddressDerived({
+      const secretViaEcdh = await MessagingSecret.computeAddressDerived({
         localAddress: sender,
         localIvsk: senderIvsk,
         externalAddress: recipient.address,
         app,
         recipient: recipient.address,
       });
-      const secretViaRegistration = await AppTaggingSecret.computeFromArbitrarySecret(
+      const secretViaRegistration = await MessagingSecret.computeFromArbitrarySecret(
         pointFromRecipient!,
         app,
         recipient.address,
@@ -300,7 +300,7 @@ describe('AppTaggingSecret', () => {
     it('returns undefined for an invalid external address', async () => {
       const invalidAddress = makeInvalidAztecAddress();
 
-      const secret = await AppTaggingSecret.computeAddressDerived({
+      const secret = await MessagingSecret.computeAddressDerived({
         localAddress: sender,
         localIvsk: senderIvsk,
         externalAddress: invalidAddress,
@@ -314,43 +314,43 @@ describe('AppTaggingSecret', () => {
 
   describe('fromString', () => {
     it('round-trips an unconstrained secret', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
-      const parsed = AppTaggingSecret.fromString(original.toString());
+      const original = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const parsed = MessagingSecret.fromString(original.toString());
 
-      expect(parsed).toBeInstanceOf(AppTaggingSecret);
+      expect(parsed).toBeInstanceOf(MessagingSecret);
       expect(parsed.deliveryMode).toBe(OnchainDeliveryMode.UNCONSTRAINED);
       expect(parsed.toString()).toBe(original.toString());
     });
 
     it('round-trips a constrained secret', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
-      const parsed = AppTaggingSecret.fromString(original.toString());
+      const original = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const parsed = MessagingSecret.fromString(original.toString());
 
-      expect(parsed).toBeInstanceOf(AppTaggingSecret);
+      expect(parsed).toBeInstanceOf(MessagingSecret);
       expect(parsed.deliveryMode).toBe(OnchainDeliveryMode.CONSTRAINED);
       expect(parsed.toString()).toBe(original.toString());
     });
 
     it('rejects a string that is not three-part', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
-      expect(() => AppTaggingSecret.fromString(`${original.secret.toString()}:${original.app.toString()}`)).toThrow(
-        /Invalid AppTaggingSecret string/,
+      expect(() => MessagingSecret.fromString(`${original.secret.toString()}:${original.app.toString()}`)).toThrow(
+        /Invalid MessagingSecret string/,
       );
     });
 
     it('rejects unknown delivery mode prefixes', async () => {
-      const original = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const original = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
       expect(() =>
-        AppTaggingSecret.fromString(`invalid:${original.secret.toString()}:${original.app.toString()}`),
-      ).toThrow(/Invalid AppTaggingSecret delivery mode/);
+        MessagingSecret.fromString(`invalid:${original.secret.toString()}:${original.app.toString()}`),
+      ).toThrow(/Invalid MessagingSecret delivery mode/);
     });
   });
 
   describe('SiloedTag.compute', () => {
     it('matches the manual constrained-tag formula for a constrained secret', async () => {
-      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const secret = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
       const index = 7;
 
       const computed = await SiloedTag.compute({ extendedSecret: secret, index });
@@ -363,7 +363,7 @@ describe('AppTaggingSecret', () => {
     });
 
     it('matches the unconstrained-tag formula for an unconstrained secret', async () => {
-      const secret = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+      const secret = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
       const index = 7;
 
       const computed = await SiloedTag.compute({ extendedSecret: secret, index });
@@ -376,12 +376,8 @@ describe('AppTaggingSecret', () => {
     });
 
     it('produces different tags for the two flavors even when the underlying Fr matches', async () => {
-      const constrained = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
-      const unconstrained = new AppTaggingSecret(
-        constrained.secret,
-        constrained.app,
-        OnchainDeliveryMode.UNCONSTRAINED,
-      );
+      const constrained = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const unconstrained = new MessagingSecret(constrained.secret, constrained.app, OnchainDeliveryMode.UNCONSTRAINED);
 
       const unconstrainedTag = await SiloedTag.compute({ extendedSecret: unconstrained, index: 0 });
       const constrainedTag = await SiloedTag.compute({ extendedSecret: constrained, index: 0 });

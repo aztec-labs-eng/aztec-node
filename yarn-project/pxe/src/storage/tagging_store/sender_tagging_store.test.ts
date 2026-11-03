@@ -3,13 +3,13 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import {
-  AppTaggingSecret,
+  MessagingSecret,
   OnchainDeliveryMode,
   PrivateLog,
   SiloedTag,
   type TaggingIndexRange,
 } from '@aztec-labs/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
@@ -17,19 +17,19 @@ import type { ChangeSetId } from '../staged_write_coordinator.js';
 import { SenderTaggingStore, windowExceededError } from './sender_tagging_store.js';
 
 /** Helper to create a single-index range (lowestIndex === highestIndex). */
-function range(secret: AppTaggingSecret, lowest: number, highest?: number): TaggingIndexRange {
+function range(secret: MessagingSecret, lowest: number, highest?: number): TaggingIndexRange {
   return { extendedSecret: secret, lowestIndex: lowest, highestIndex: highest ?? lowest };
 }
 
 describe('SenderTaggingStore', () => {
   let taggingStore: SenderTaggingStore;
-  let secret1: AppTaggingSecret;
-  let secret2: AppTaggingSecret;
+  let secret1: MessagingSecret;
+  let secret2: MessagingSecret;
 
   beforeEach(async () => {
     taggingStore = new SenderTaggingStore(await openTmpStore('test'));
-    secret1 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
-    secret2 = await randomAppTaggingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret1 = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
+    secret2 = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 
     // Leave a change set open for the tests to operate under: every store operation requires one.
     taggingStore.beginChangeSet('test');
@@ -727,7 +727,7 @@ describe('SenderTaggingStore', () => {
     });
 
     it('recomputes siloed tags via the constrained domain separator for constrained-delivery secrets', async () => {
-      const constrainedSecret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const constrainedSecret = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
       const txHash = TxHash.random();
 
       await taggingStore.storePendingIndexes([range(constrainedSecret, 3, 5)], txHash, 'test');
@@ -747,7 +747,7 @@ describe('SenderTaggingStore', () => {
     // finalizer must not treat it as a surviving constrained-tag. The onchain emission would have used the
     // constrained domain separator, so the values are different.
     it('does not cross-match a tag computed under the wrong domain separator', async () => {
-      const constrainedSecret = await randomAppTaggingSecret(OnchainDeliveryMode.CONSTRAINED);
+      const constrainedSecret = await randomMessagingSecret(OnchainDeliveryMode.CONSTRAINED);
 
       const txHash = TxHash.random();
       await taggingStore.storePendingIndexes([range(constrainedSecret, 0, 2)], txHash, 'test');
@@ -756,7 +756,7 @@ describe('SenderTaggingStore', () => {
       // this via the public construction path keeps the test independent of how the production code derives Frs.
       // Emit a tag using the *unconstrained* domain separator for the same Fr/index combination. This should NOT match.
       const wrongDomSepTag = await SiloedTag.compute({
-        extendedSecret: new AppTaggingSecret(
+        extendedSecret: new MessagingSecret(
           constrainedSecret.secret,
           constrainedSecret.app,
           OnchainDeliveryMode.UNCONSTRAINED,
@@ -824,7 +824,7 @@ describe('SenderTaggingStore', () => {
 
   /** The tx hashes of the txs pending in [startIndex, endIndex). */
   async function pendingTxHashes(
-    secret: AppTaggingSecret,
+    secret: MessagingSecret,
     startIndex: number,
     endIndex: number,
     changeSetId: ChangeSetId,
