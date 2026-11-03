@@ -1382,7 +1382,9 @@ describe('CheckpointProposalJob', () => {
       // happens together with the proposal.
       it('proposes without a second invalidation when the build-time invalidation targets the bad checkpoint', async () => {
         const buildTimeInvalidation = makeInvalidateRequest(CheckpointNumber(2));
-        const pipelinedJob = await createPipelinedJobWithBlock(undefined, { invalidateCheckpoint: buildTimeInvalidation });
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined, {
+          invalidateCheckpoint: buildTimeInvalidation,
+        });
         mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
         l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
 
