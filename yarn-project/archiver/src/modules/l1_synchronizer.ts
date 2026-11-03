@@ -951,14 +951,18 @@ export class ArchiverL1Synchronizer implements Traceable {
       status.pendingCheckpointNumber,
       status.pendingArchive,
     );
-    if (
-      rejectedPendingTip &&
-      rejectedPendingTip.l1.blockNumber <= currentL1BlockNumber &&
-      (await this.l1BlockStillHasHash(rejectedPendingTip.l1))
-    ) {
+    if (rejectedPendingTip && (await this.rejectedRecordStillOnL1(rejectedPendingTip, currentL1BlockNumber))) {
       return rejectedPendingTip;
     }
     return await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber());
+  }
+
+  /**
+   * Whether the L1 block a rejected checkpoint was recorded from is still canonical as seen from the given head: within
+   * it and still carrying the recorded hash. Queries L1 for that block.
+   */
+  private async rejectedRecordStillOnL1(rejected: RejectedCheckpoint, currentL1BlockNumber: bigint): Promise<boolean> {
+    return rejected.l1.blockNumber <= currentL1BlockNumber && (await this.l1BlockStillHasHash(rejected.l1));
   }
 
   private async getCheckpointHeader(number: CheckpointNumber) {
