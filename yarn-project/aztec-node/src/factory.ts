@@ -9,6 +9,7 @@ import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -176,6 +177,17 @@ export async function createAztecNodeService(
     pollingInterval: config.viemPollingIntervalMS,
   });
 
+  // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
+  // or trace calls.
+  const debugClient =
+    config.l1DebugRpcUrls.length > 0
+      ? (createPublicClient({
+          chain: ethereumChain.chainInfo,
+          transport: makeL1HttpTransport(config.l1DebugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
+          pollingInterval: config.viemPollingIntervalMS,
+        }) as ViemPublicDebugClient)
+      : undefined;
+
   const l1ContractsAddresses = await RegistryContract.collectAddresses(
     publicClient,
     config.registryAddress,
@@ -244,7 +256,15 @@ export async function createAztecNodeService(
     started.push({ stop: () => avmSimulator[Symbol.asyncDispose]() });
     const archiver = await createArchiver(
       config,
-      { l1Client: publicClient, blobClient, epochCache, telemetry, dateProvider, feeConfigProvider: feeConfigTracker },
+      {
+        l1Client: publicClient,
+        l1DebugClient: debugClient,
+        blobClient,
+        epochCache,
+        telemetry,
+        dateProvider,
+        feeConfigProvider: feeConfigTracker,
+      },
       { blockUntilSync: !config.skipArchiverInitialSync },
       initialHeader,
       initialBlockHash,
