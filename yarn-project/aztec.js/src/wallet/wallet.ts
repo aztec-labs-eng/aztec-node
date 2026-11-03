@@ -9,7 +9,7 @@ import {
   type EventMetadataDefinition,
   FunctionCall,
 } from '@aztec-labs/stdlib/abi';
-import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AuthWitness, MAX_AUTH_WITNESSES_PER_TX } from '@aztec-labs/stdlib/auth-witness';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractInstancePreimage,
@@ -33,6 +33,8 @@ import type { ExecutionPayload, InTx } from '@aztec-labs/stdlib/tx';
 import {
   Capsule,
   HashedValues,
+  MAX_CAPSULES_PER_TX,
+  MAX_HASHED_ARGS_PER_TX,
   SimulationOverrides,
   TxHash,
   TxProfileResult,
@@ -56,6 +58,13 @@ import {
 import type { CallIntent, IntentInnerHash } from '../utils/authwit.js';
 import type { AppCapabilities, WalletCapabilities } from './capabilities.js';
 import { TxSimulationResultWithAppOffset } from './tx_simulation_result_with_app_offset.js';
+
+/**
+ * Bound for the other lists a dApp sends to the wallet (calls, scopes, event field names, capabilities, batched
+ * methods). None has a protocol limit and real requests carry a handful of entries; the bound only makes an oversized
+ * list fail on its length before its entries are parsed.
+ */
+const MAX_WALLET_LIST_LEN = 1024;
 
 /**
  * A wrapper type that allows any item to be associated with an alias.
@@ -308,10 +317,10 @@ export type Wallet = {
 };
 
 export const ExecutionPayloadSchema = z.object({
-  calls: z.array(FunctionCall.schema),
-  authWitnesses: z.array(AuthWitness.schema),
-  capsules: z.array(Capsule.schema),
-  extraHashedArgs: z.array(HashedValues.schema),
+  calls: z.array(FunctionCall.schema).max(MAX_WALLET_LIST_LEN),
+  authWitnesses: z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX),
+  capsules: z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX),
+  extraHashedArgs: z.array(HashedValues.schema).max(MAX_HASHED_ARGS_PER_TX),
   feePayer: optional(schemas.AztecAddress),
 });
 
@@ -339,23 +348,23 @@ const FromSchema = z.union([schemas.AztecAddress, z.literal(NO_FROM)]);
 
 export const SendOptionsSchema = z.object({
   from: FromSchema,
-  authWitnesses: optional(z.array(AuthWitness.schema)),
-  capsules: optional(z.array(Capsule.schema)),
+  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
+  capsules: optional(z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX)),
   fee: optional(GasSettingsOptionSchema),
   wait: optional(z.union([z.literal(NO_WAIT), WaitOptsSchema])),
-  additionalScopes: optional(z.array(schemas.AztecAddress)),
+  additionalScopes: optional(z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN)),
   sendMessagesAs: optional(schemas.AztecAddress),
 });
 
 export const SimulateOptionsSchema = z.object({
   from: FromSchema,
-  authWitnesses: optional(z.array(AuthWitness.schema)),
-  capsules: optional(z.array(Capsule.schema)),
+  authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
+  capsules: optional(z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX)),
   fee: optional(GasSettingsOptionSchema),
   skipTxValidation: optional(z.boolean()),
   skipFeeEnforcement: optional(z.boolean()),
   includeMetadata: optional(z.boolean()),
-  additionalScopes: optional(z.array(schemas.AztecAddress)),
+  additionalScopes: optional(z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN)),
   sendMessagesAs: optional(schemas.AztecAddress),
   overrides: optional(SimulationOverrides.schema),
 });
@@ -376,7 +385,7 @@ export const MessageHashOrIntentSchema = z.union([
 export const EventMetadataDefinitionSchema = z.object({
   eventSelector: schemas.EventSelector,
   abiType: AbiTypeSchema,
-  fieldNames: z.array(z.string()),
+  fieldNames: z.array(z.string()).max(MAX_WALLET_LIST_LEN),
 });
 
 // Event filters share `txHash ⊕ block-range` semantics with `LogsQueryBase` (see stdlib `logs_query.ts`)
@@ -391,7 +400,7 @@ export const PrivateEventFilterSchema = refineTxHashAndRange(
   z.object({
     ...eventFilterBaseShape,
     contractAddress: schemas.AztecAddress,
-    scopes: z.array(schemas.AztecAddress),
+    scopes: z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN),
   }),
 );
 
@@ -433,7 +442,7 @@ export const ContractClassMetadataSchema = z.object({
 export const ContractFunctionPatternSchema = z.object({
   contract: z.union([schemas.AztecAddress, z.literal('*')]),
   function: z.union([z.string(), z.literal('*')]),
-  additionalScopes: optional(z.union([z.array(schemas.AztecAddress), z.literal('*')])),
+  additionalScopes: optional(z.union([z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN), z.literal('*')])),
 });
 
 export const AccountsCapabilitySchema = z.object({
@@ -448,7 +457,7 @@ export const GrantedAccountsCapabilitySchema = AccountsCapabilitySchema.extend({
 
 export const ContractsCapabilitySchema = z.object({
   type: z.literal('contracts'),
-  contracts: z.union([z.literal('*'), z.array(schemas.AztecAddress)]),
+  contracts: z.union([z.literal('*'), z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN)]),
   canRegister: optional(z.boolean()),
   canGetMetadata: optional(z.boolean()),
 });
@@ -457,7 +466,7 @@ export const GrantedContractsCapabilitySchema = ContractsCapabilitySchema;
 
 export const ContractClassesCapabilitySchema = z.object({
   type: z.literal('contractClasses'),
-  classes: z.union([z.literal('*'), z.array(schemas.Fr)]),
+  classes: z.union([z.literal('*'), z.array(schemas.Fr).max(MAX_WALLET_LIST_LEN)]),
   canRegister: optional(z.boolean()),
   canGetMetadata: z.boolean(),
 });
@@ -468,12 +477,12 @@ export const SimulationCapabilitySchema = z.object({
   type: z.literal('simulation'),
   transactions: optional(
     z.object({
-      scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema)]),
+      scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema).max(MAX_WALLET_LIST_LEN)]),
     }),
   ),
   utilities: optional(
     z.object({
-      scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema)]),
+      scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema).max(MAX_WALLET_LIST_LEN)]),
     }),
   ),
 });
@@ -482,7 +491,7 @@ export const GrantedSimulationCapabilitySchema = SimulationCapabilitySchema;
 
 export const TransactionCapabilitySchema = z.object({
   type: z.literal('transaction'),
-  scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema)]),
+  scope: z.union([z.literal('*'), z.array(ContractFunctionPatternSchema).max(MAX_WALLET_LIST_LEN)]),
 });
 
 export const GrantedTransactionCapabilitySchema = TransactionCapabilitySchema;
@@ -492,7 +501,7 @@ export const DataCapabilitySchema = z.object({
   addressBook: optional(z.boolean()),
   privateEvents: optional(
     z.object({
-      contracts: z.union([z.literal('*'), z.array(schemas.AztecAddress)]),
+      contracts: z.union([z.literal('*'), z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN)]),
     }),
   ),
 });
@@ -526,7 +535,7 @@ export const AppCapabilitiesSchema = z.object({
     url: optional(z.string()),
     icon: optional(z.string()),
   }),
-  capabilities: z.array(CapabilitySchema),
+  capabilities: z.array(CapabilitySchema).max(MAX_WALLET_LIST_LEN),
   behavior: optional(
     z.object({
       mode: optional(z.enum(['strict', 'permissive'])),
@@ -598,8 +607,8 @@ const WalletMethodSchemas = {
     input: z.tuple([
       FunctionCall.schema,
       z.object({
-        scopes: z.array(schemas.AztecAddress),
-        authWitnesses: optional(z.array(AuthWitness.schema)),
+        scopes: z.array(schemas.AztecAddress).max(MAX_WALLET_LIST_LEN),
+        authWitnesses: optional(z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX)),
       }),
     ]),
     output: UtilityExecutionResult.schema,
@@ -664,5 +673,8 @@ export { BatchedMethodSchema, BatchedResultSchema };
 export const WalletSchema: ApiSchemaFor<Wallet> = {
   ...WalletMethodSchemas,
   // @ts-expect-error - ApiSchemaFor cannot properly type generic methods with readonly arrays
-  batch: z.function({ input: z.tuple([z.array(BatchedMethodSchema)]), output: z.array(BatchedResultSchema) }),
+  batch: z.function({
+    input: z.tuple([z.array(BatchedMethodSchema).max(MAX_WALLET_LIST_LEN)]),
+    output: z.array(BatchedResultSchema),
+  }),
 };

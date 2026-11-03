@@ -7,6 +7,12 @@ import { AztecAddress } from '../aztec-address/index.js';
 import { Vector } from '../types/shared.js';
 
 /**
+ * Bound for the capsules a single tx request carries. The protocol sets none, since contracts read capsules through an
+ * oracle; real requests carry a handful.
+ */
+export const MAX_CAPSULES_PER_TX = 1024;
+
+/**
  * Read-only data that is passed to the contract through an oracle during a transaction execution.
  * TODO(#12425): Check whether this is always used to represent a transient capsule and if so, rename to
  * TransientCapsule.
