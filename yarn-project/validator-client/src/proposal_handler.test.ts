@@ -2261,6 +2261,7 @@ describe('ProposalHandler checkpoint validation', () => {
       // The checkpoint's last block is not local, so validation reaches the bound-to-rejected-block evidence path.
       blockSource.getBlockData.mockResolvedValue(undefined);
       dateProvider.setTime(1_000_000);
+      checkpointFeeSource.getCheckpointOpeningGasFees.mockResolvedValue(blockHeader.globalVariables.gasFees);
 
       const consumedLeaves = [new Fr(1000), new Fr(1001)];
       const mockLocalView = (hashAtTwo: Fr | undefined) => {
@@ -2297,6 +2298,7 @@ describe('ProposalHandler checkpoint validation', () => {
         config,
         mock<BlobClientInterface>(),
         new CheckpointReexecutionTracker(),
+        checkpointFeeSource,
         metrics,
         dateProvider,
       );
