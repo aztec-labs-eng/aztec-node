@@ -1275,6 +1275,7 @@ export class CheckpointProposalJob implements Traceable {
       // doesn't echo our own messages back, so this is how the proposer makes its own proposed
       // checkpoint visible for pipelining the next slot. Built from local checkpoint data — never
       // from the broadcast proposal archive, which may be deliberately corrupted under test flags.
+      // claimParentArchiveRoot corrupts the local archive too, so it is paired with skipPushProposedBlocksToArchiver.
       // Fail closed: if this throws, the outer catch aborts the slot before gossiping.
       await this.syncProposedCheckpointToArchiver(
         checkpoint,

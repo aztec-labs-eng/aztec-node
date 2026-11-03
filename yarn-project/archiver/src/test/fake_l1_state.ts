@@ -171,6 +171,7 @@ export class FakeL1State {
   private targetCommitteeSize: number = 0;
   private version: bigint = 1n;
   private canPruneResult: boolean = false;
+  private rollupTxCount: number = 0;
 
   // Computed from checkpoints based on L1 block visibility
   private pendingCheckpointNumber: CheckpointNumber = CheckpointNumber(0);
@@ -302,8 +303,7 @@ export class FakeL1State {
       checkpointNumber,
       checkpoint,
       l1BlockNumber,
-      // The tx hash defaults to the archive root, which a claimed archive may share with another checkpoint.
-      tx: options.claimedArchive ? { ...tx, hash: `0x${l1BlockNumber.toString(16).padStart(64, '0')}` } : tx,
+      tx,
       blobHashes,
       blobs,
       signers,
@@ -556,8 +556,7 @@ export class FakeL1State {
       ...previous,
       pruned: false,
       l1BlockNumber: opts.l1BlockNumber,
-      // The tx hash defaults to the archive root, which both entries share, so give the repost its own.
-      tx: { ...tx, hash: `0x${opts.l1BlockNumber.toString(16).padStart(64, '0')}` },
+      tx,
       signers: opts.signers,
       attestationsHash,
       payloadDigest,
@@ -977,9 +976,11 @@ export class FakeL1State {
     // Compute payloadDigest (same logic as CalldataRetriever)
     const payloadDigest = getHashedSignaturePayloadTypedData(consensusPayload);
 
+    // Not derived from the archive root: several checkpoints can claim the same root, and getTransaction looks txs up by
+    // hash.
     const tx = {
       input: multiCallInput,
-      hash: archive,
+      hash: `0x${(++this.rollupTxCount).toString(16).padStart(64, '0')}`,
       blockHash: archive,
       to: MULTI_CALL_3_ADDRESS as `0x${string}`,
     } as Transaction<bigint, number>;

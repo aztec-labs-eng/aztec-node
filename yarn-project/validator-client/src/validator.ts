@@ -1000,7 +1000,8 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     // sentinel would see no outcome for slots it proposed and would mis-attribute itself as
     // inactive. We pass the locally-computed `archive` (not `newProposal.archive`, which may
     // be intentionally corrupted under test-only flags); from the proposer's local-view
-    // perspective the work it just completed is valid by definition.
+    // perspective the work it just completed is valid by definition. The exception is
+    // claimParentArchiveRoot, which corrupts `archive` itself, since L1 checks the proposer's signature over it.
     this.proposalHandler.recordOwnCheckpointProposalAsValid(
       checkpointHeader.slotNumber,
       archive,

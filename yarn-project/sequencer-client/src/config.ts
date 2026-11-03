@@ -248,7 +248,9 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
     ...booleanConfigHelper(DefaultSequencerConfig.republishAfterFakeAttestation),
   },
   claimParentArchiveRoot: {
-    description: "Publish the checkpoint claiming its parent's archive root as its own (for testing only)",
+    description:
+      "Publish the checkpoint claiming its parent's archive root as its own. The proposal is signed over that root, " +
+      'so pair it with skipBroadcastProposals and skipPushProposedBlocksToArchiver to keep it to L1 (for testing only)',
     ...booleanConfigHelper(DefaultSequencerConfig.claimParentArchiveRoot),
   },
   fishermanMode: {

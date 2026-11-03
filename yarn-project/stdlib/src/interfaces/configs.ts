@@ -107,7 +107,10 @@ export interface SequencerConfig {
    * attestations within the same slot (for testing only)
    */
   republishAfterFakeAttestation?: boolean;
-  /** Publish the checkpoint claiming its parent's archive root as its own (for testing only) */
+  /**
+   * Publish the checkpoint claiming its parent's archive root as its own. The proposal is signed over that root, so pair
+   * it with skipBroadcastProposals and skipPushProposedBlocksToArchiver to keep it to L1 (for testing only)
+   */
   claimParentArchiveRoot?: boolean;
   /** Whether to run in fisherman mode: builds blocks on every slot for validation without publishing */
   fishermanMode?: boolean;
