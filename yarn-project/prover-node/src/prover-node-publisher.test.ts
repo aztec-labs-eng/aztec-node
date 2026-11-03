@@ -7,11 +7,10 @@ import {
   computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import { l1RpcGraderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import type { L1TxState, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
-import { SecretValue, getDefaultConfig } from '@aztec-labs/foundation/config';
+import { SecretValue } from '@aztec-labs/foundation/config';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -73,7 +72,6 @@ describe('prover-node-publisher', () => {
       l1DebugRpcUrls: [],
       publisherPrivateKeys: [new SecretValue('0x1234')],
       viemPollingIntervalMS: 1000,
-      ...getDefaultConfig(l1RpcGraderConfigMappings),
       ...randomL1ContractAddresses(),
     };
   });
