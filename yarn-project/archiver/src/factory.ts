@@ -1,7 +1,6 @@
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { merge } from '@aztec-labs/foundation/collection';
@@ -23,7 +22,6 @@ import {
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { EventEmitter } from 'events';
-import { createPublicClient } from 'viem';
 
 import { Archiver, type ArchiverDeps } from './archiver.js';
 import { type ArchiverConfig, mapArchiverConfig } from './config.js';
@@ -71,7 +69,7 @@ export async function createArchiver(
   }
 
   const publicClient = deps.l1Client;
-  const debugClient = createDebugClient(config, publicClient);
+  const debugClient = deps.l1DebugClient ?? (publicClient as ViemPublicDebugClient);
 
   // Create L1 contract instances
   const rollup = new RollupContract(publicClient, config.rollupAddress);
@@ -184,24 +182,6 @@ export async function createArchiver(
 
   await archiver.start(opts.blockUntilSync);
   return archiver;
-}
-
-/**
- * Returns the client the archiver traces L1 txs with. When debug RPC URLs are configured it builds a client over
- * them, since the regular RPCs may not serve debug or trace calls; otherwise it reuses the shared public client.
- */
-function createDebugClient(
-  config: Pick<ArchiverConfig, 'l1DebugRpcUrls' | 'l1HttpTimeoutMS' | 'viemPollingIntervalMS'>,
-  publicClient: ViemPublicClient,
-): ViemPublicDebugClient {
-  if (config.l1DebugRpcUrls.length === 0) {
-    return publicClient as ViemPublicDebugClient;
-  }
-  return createPublicClient({
-    chain: publicClient.chain,
-    transport: makeL1HttpTransport(config.l1DebugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
-    pollingInterval: config.viemPollingIntervalMS,
-  }) as ViemPublicDebugClient;
 }
 
 /** Registers protocol contracts in the archiver store. Idempotent — skips contracts that already exist (e.g. on node restart). */
