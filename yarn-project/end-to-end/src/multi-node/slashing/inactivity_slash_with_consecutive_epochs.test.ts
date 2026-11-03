@@ -21,7 +21,7 @@ describe('multi-node/slashing/inactivity_slash_with_consecutive_epochs', () => {
   beforeAll(async () => {
     test = await InactivityTest.setup({
       slashInactivityConsecutiveEpochThreshold,
-      inactiveNodeCount: 2,
+      inactiveNodeCount: 1,
     });
   });
 
@@ -29,11 +29,14 @@ describe('multi-node/slashing/inactivity_slash_with_consecutive_epochs', () => {
     await test?.teardown();
   });
 
-  // Consecutive-epoch threshold is respected: 2 validators start offline, but one is re-enabled after
-  // the first epoch. Asserts that offenses and slash events target only the permanently-offline
-  // validator (never the re-enabled one).
+  // Consecutive-epoch threshold is respected: one validator is offline from genesis, while another runs normally
+  // past the grace period, goes offline for one epoch fewer than the threshold, and comes back. Asserts that offenses
+  // and slash events target only the permanently-offline validator (never the temporarily-offline one).
   it('only slashes validator inactive for N consecutive epochs', async () => {
-    const [offlineValidator, reenabledValidator] = test.offlineValidators;
+    const [offlineValidator] = test.offlineValidators;
+    const observer = test.activeNodes[0];
+    const temporarilyOfflineNode = test.activeNodes.at(-1)!;
+    const [temporarilyOfflineValidator] = temporarilyOfflineNode.getSequencer()!.validatorAddresses!;
 
     const {
       aztecEpochDuration,
@@ -41,35 +44,75 @@ describe('multi-node/slashing/inactivity_slash_with_consecutive_epochs', () => {
       slashingOffsetInRounds,
       slashingRoundSizeInEpochs,
       aztecSlotDuration,
+      slashGracePeriodL2Slots,
     } = test.config;
 
-    const initialEpoch = Number(test.monitor.l2EpochNumber) + 1;
-    test.logger.warn(`Waiting until end of epoch ${initialEpoch} to reenable validator ${reenabledValidator}`);
-    await test.monitor.waitUntilL2Slot(SlotNumber(initialEpoch * aztecEpochDuration));
+    // The setup warp leaves the last grace epochs with every proposer recorded as missed, online or not, and the
+    // consecutive-epoch lookback counts those epochs. Keep the validator online through the first epoch after the
+    // grace period so that epoch breaks any streak carried over from setup.
+    const firstSlashableEpoch = Math.ceil(slashGracePeriodL2Slots / aztecEpochDuration);
+    const firstOfflineEpoch = firstSlashableEpoch + 1;
+    const lastOfflineEpoch = firstOfflineEpoch + slashInactivityConsecutiveEpochThreshold - 2;
 
-    test.logger.warn(`Re-enabling offline validator ${reenabledValidator}`);
-    const reenabledNode = test.nodes.at(-1)!;
-    expect(reenabledNode.getSequencer()!.validatorAddresses![0].toString()).toEqual(reenabledValidator.toString());
-    await reenabledNode.getSequencer()!.start();
+    // With proposer pipelining, a slot's proposal is built and attested before the slot starts, so duties of adjacent
+    // epochs overlap in wall-clock time. Both transitions are placed to shorten the outage rather than extend it into
+    // the epochs around it: the validator goes offline at the last slot before the window, once every proposal of the
+    // previous epoch has been received and attested, and comes back at the first slot of the last offline epoch, an
+    // Ethereum slot before the duties of the epoch after the window begin. The sentinel may then record fewer than
+    // threshold-1 inactive epochs, which is still a streak below the threshold.
+    const disableAtSlot = SlotNumber(firstOfflineEpoch * aztecEpochDuration - 1);
+    const reenableAtSlot = SlotNumber(lastOfflineEpoch * aztecEpochDuration);
 
-    test.logger.warn(`Waiting until offenses are created for ${offlineValidator}`);
-    const offenses = await retryUntil(
-      async () => {
-        const offenses = await test.activeNodes[0].getSlashOffenses('all');
-        return offenses.length > 0 ? offenses : undefined;
-      },
-      'slash offenses',
-      slashInactivityConsecutiveEpochThreshold * aztecEpochDuration * aztecSlotDuration * 4,
-    );
-    expect(unique(offenses.map(o => o.validator.toString()))).toEqual([offlineValidator.toString()]);
-    expect(unique(offenses.map(o => o.offenseType))).toEqual([OffenseType.INACTIVITY]);
-
-    test.logger.warn(`Expecting offline validator ${offlineValidator} to be slashed but not ${reenabledValidator}`);
+    // Subscribe before the outage: the permanently-offline validator can be slashed before the wait below ends.
     const slashed: EthAddress[] = [];
     test.rollup.listenToSlash(args => {
       test.logger.warn(`Slashed ${args.attester.toString()}`);
       slashed.push(args.attester);
     });
+
+    await test.monitor.waitUntilL2Slot(disableAtSlot);
+    await temporarilyOfflineNode.setConfig({ disabledValidators: [temporarilyOfflineValidator] });
+    test.logger.warn(`Disabled validator ${temporarilyOfflineValidator}`, { l2Slot: test.monitor.l2SlotNumber });
+
+    await test.monitor.waitUntilL2Slot(reenableAtSlot);
+    await temporarilyOfflineNode.setConfig({ disabledValidators: [] });
+    test.logger.warn(`Re-enabled validator ${temporarilyOfflineValidator}`, { l2Slot: test.monitor.l2SlotNumber });
+
+    // Wait until the sentinel has judged the epoch after the offline window, the last one that could close a streak
+    // for the temporarily-offline validator, and until the permanently-offline validator has an offense.
+    const offensesTimeout = slashInactivityConsecutiveEpochThreshold * aztecEpochDuration * aztecSlotDuration * 4;
+    await retryUntil(
+      async () => {
+        const stats = await observer.getValidatorStats(temporarilyOfflineValidator);
+        return stats?.allTimeEpochPerformance.some(p => p.epoch > lastOfflineEpoch + 1);
+      },
+      'sentinel past the offline window',
+      offensesTimeout,
+    );
+    // Offenses are stored through their own queue, and a sentinel catching up judges several epochs back to back.
+    await test.monitor.waitUntilNextL2Slot();
+
+    test.logger.warn(`Waiting until offenses are created for ${offlineValidator}`);
+    const offenses = await retryUntil(
+      async () => {
+        const offenses = await observer.getSlashOffenses('all');
+        return offenses.some(o => o.validator.equals(offlineValidator)) ? offenses : undefined;
+      },
+      'slash offenses',
+      offensesTimeout,
+    );
+
+    const temporarilyOfflineStats = await observer.getValidatorStats(temporarilyOfflineValidator);
+    test.logger.warn(`Epoch performance for ${temporarilyOfflineValidator}`, {
+      performance: temporarilyOfflineStats?.allTimeEpochPerformance,
+    });
+
+    expect(unique(offenses.map(o => o.validator.toString()))).toEqual([offlineValidator.toString()]);
+    expect(unique(offenses.map(o => o.offenseType))).toEqual([OffenseType.INACTIVITY]);
+
+    test.logger.warn(
+      `Expecting offline validator ${offlineValidator} to be slashed but not ${temporarilyOfflineValidator}`,
+    );
 
     // Wait until after the slashing would have executed for inactivity
     // Note that this may take some time if the offline validator is elected as proposer enough times
