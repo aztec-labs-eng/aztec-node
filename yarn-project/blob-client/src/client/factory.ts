@@ -15,7 +15,10 @@ import { LocalBlobClient } from './local.js';
 
 export interface CreateBlobClientDeps {
   logger?: Logger;
-  /** L1 execution client, used to look up a block's parent beacon root when resolving its beacon slot. */
+  /**
+   * L1 execution client, used to look up a block's parent beacon root when resolving its beacon slot. Without it, the
+   * slot can only be resolved when the caller passes the block's L1 timestamp or parent beacon root.
+   */
   l1Client?: Pick<ViemPublicClient, 'request'>;
   /** FileStore clients for reading blobs */
   fileStoreClients?: FileStoreBlobClient[];
