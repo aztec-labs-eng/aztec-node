@@ -942,7 +942,8 @@ export class ArchiverL1Synchronizer implements Traceable {
    * stale higher-numbered record (e.g. a dropped descendant) and a same-numbered replacement with a different root do
    * not count. Nor does a record whose L1 block, or the L1 block of any rejected ancestor it was rejected for, was
    * reorged out (past the given head, or now carrying another hash): an L1 reorg may have republished that checkpoint
-   * with valid attestations behind the sync point.
+   * with valid attestations behind the sync point. This only runs on a pass whose L1 head moved past the sync point,
+   * so a reorg that replaces the head block holding a rejected checkpoint is noticed one L1 block later.
    */
   private async getLocalProgressCheckpoint(
     status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,
