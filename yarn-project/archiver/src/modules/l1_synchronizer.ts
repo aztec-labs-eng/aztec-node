@@ -14,7 +14,7 @@ import { count } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { isDefined } from '@aztec-labs/foundation/types';
 import { type ArchiverEmitter, type L2Block, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
-import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
+import type { CheckpointData, L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getEpochAtSlot, getSlotAtNextL1Block } from '@aztec-labs/stdlib/epoch-helpers';
 import type { RollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec-labs/telemetry-client';
@@ -591,11 +591,13 @@ export class ArchiverL1Synchronizer implements Traceable {
     if (checkpoint === undefined || checkpoint.l1.blockNumber > head.l1BlockNumber) {
       return false;
     }
-    const block = await this.publicClient.getBlock({
-      blockNumber: checkpoint.l1.blockNumber,
-      includeTransactions: false,
-    });
-    return !Buffer32.fromString(block.hash).equals(Buffer32.fromString(checkpoint.l1.blockHash));
+    return !(await this.l1BlockStillHasHash(checkpoint.l1));
+  }
+
+  /** Whether the L1 block at the given publication's block number still carries the hash recorded with it. */
+  private async l1BlockStillHasHash(l1: L1PublishedData): Promise<boolean> {
+    const block = await this.publicClient.getBlock({ blockNumber: l1.blockNumber, includeTransactions: false });
+    return Buffer32.fromString(block.hash).equals(Buffer32.fromString(l1.blockHash));
   }
 
   /**
@@ -895,7 +897,8 @@ export class ArchiverL1Synchronizer implements Traceable {
     const { pendingCheckpointNumber } = status;
     // Compare the last checkpoint (valid or not) we have (either retrieved in this round or loaded from store)
     // with what the rollup contract told us was the latest one (pinned at the currentL1BlockNumber).
-    const latestLocalCheckpoint = lastSeenCheckpoint ?? (await this.getLocalProgressCheckpoint(status));
+    const latestLocalCheckpoint =
+      lastSeenCheckpoint ?? (await this.getLocalProgressCheckpoint(status, currentL1BlockNumber));
     const latestLocalCheckpointNumber = latestLocalCheckpoint?.checkpointNumber ?? CheckpointNumber.ZERO;
 
     if (latestLocalCheckpointNumber < pendingCheckpointNumber) {
@@ -935,22 +938,27 @@ export class ArchiverL1Synchronizer implements Traceable {
    * Returns the stored checkpoint to measure local progress from when deciding whether checkpoints were added behind
    * the sync point: the rollup's pending tip if we recorded it as rejected, otherwise the latest accepted checkpoint.
    * A rejected checkpoint moves the sync point past its L1 block, so it only counts as seen while it is still the
-   * pending tip. If an L1 reorg replaced it with a different same-numbered checkpoint at an earlier L1 block, its
-   * stale marker must not hide that gap. The entry is matched on the pending tip's number and archive root, so neither
-   * a stale higher-numbered marker (e.g. a dropped descendant) nor a same-numbered replacement with a different root
-   * counts.
+   * pending tip as it was read from L1. The record is matched on the pending tip's number and archive root, so a
+   * stale higher-numbered record (e.g. a dropped descendant) and a same-numbered replacement with a different root do
+   * not count. Nor does a record whose L1 block was reorged out (past the given head, or now carrying another hash):
+   * an L1 reorg may have republished the same checkpoint with valid attestations behind the sync point.
    */
   private async getLocalProgressCheckpoint(
     status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,
+    currentL1BlockNumber: bigint,
   ): Promise<CheckpointData | RejectedCheckpoint | undefined> {
     const rejectedPendingTip = await this.stores.blocks.getRejectedCheckpoint(
       status.pendingCheckpointNumber,
       status.pendingArchive,
     );
-    return (
-      rejectedPendingTip ??
-      (await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber()))
-    );
+    if (
+      rejectedPendingTip &&
+      rejectedPendingTip.l1.blockNumber <= currentL1BlockNumber &&
+      (await this.l1BlockStillHasHash(rejectedPendingTip.l1))
+    ) {
+      return rejectedPendingTip;
+    }
+    return await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber());
   }
 
   private async getCheckpointHeader(number: CheckpointNumber) {
