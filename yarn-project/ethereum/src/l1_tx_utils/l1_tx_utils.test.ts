@@ -40,6 +40,7 @@ import {
   type IL1TxMetrics,
   type IL1TxStore,
   INSUFFICIENT_FUNDS_BACKOFF_MS,
+  type L1TxMonitorOptions,
   type L1TxRequest,
   type L1TxState,
   type L1TxUtilsConfig,
@@ -1407,6 +1408,29 @@ describeAcrossL1Forks('L1TxUtils', () => {
       expect(gasUtils.state).toBe(TxUtilsState.MINED);
     }, 10_000);
 
+    it('mines replacement calldata at the original nonce', async () => {
+      await cheatCodes.setAutomine(false);
+      await cheatCodes.setIntervalMining(0);
+      const replacement: L1TxRequest = { ...request, data: '0xabcdefabcdefabcdef' };
+      const { state, txHash } = await gasUtils.sendTransaction(request, {
+        stallTimeMs: 0,
+        maxSpeedUpAttempts: 0,
+      });
+      const monitored = gasUtils.monitorTransaction(state, {
+        getReplacement: current => Promise.resolve(current.request.data === request.data ? replacement : undefined),
+      });
+      await retryUntil(() => state.txHashes.length === 2, 'replacement broadcast', 10, 0.1);
+      await cheatCodes.mine();
+      const receipt = await monitored;
+      const mined = await l1Client.getTransaction({ hash: receipt.transactionHash });
+
+      expect(receipt.status).toEqual('success');
+      expect(receipt.transactionHash).not.toEqual(txHash);
+      expect(mined.nonce).toEqual(state.nonce);
+      expect(mined.input).toEqual(replacement.data);
+      expect(state.request).toEqual(replacement);
+    }, 20_000);
+
     it('transitions from sent to mined', async () => {
       // Initially IDLE
       expect(gasUtils.state).toBe(TxUtilsState.IDLE);
@@ -2085,7 +2109,7 @@ class TestL1TxUtils extends L1TxUtils {
     this.txs.push(state);
   }
 
-  public override monitorTransaction(state: L1TxState) {
-    return super.monitorTransaction(state);
+  public override monitorTransaction(state: L1TxState, options?: L1TxMonitorOptions) {
+    return super.monitorTransaction(state, options);
   }
 }

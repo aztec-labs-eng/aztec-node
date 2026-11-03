@@ -36,6 +36,7 @@ import {
   DroppedTransactionError,
   type L1BlobInputs,
   type L1TxConfig,
+  type L1TxMonitorOptions,
   type L1TxRequest,
   type L1TxState,
   L1TxTimeoutError,
@@ -505,8 +506,8 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   /**
    * Monitors a transaction until completion, handling speed-ups if needed
    */
-  protected async monitorTransaction(state: L1TxState): Promise<TransactionReceipt> {
-    const { nonce, gasLimit, blobInputs, txConfigOverrides: gasConfigOverrides } = state;
+  protected async monitorTransaction(state: L1TxState, options?: L1TxMonitorOptions): Promise<TransactionReceipt> {
+    const { nonce, blobInputs, txConfigOverrides: gasConfigOverrides } = state;
     const gasConfig = merge(this.config, gasConfigOverrides);
     const { maxSpeedUpAttempts, stallTimeMs } = gasConfig;
     const isCancelTx = state.cancelTxHashes.length > 0;
@@ -514,8 +515,10 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     const isBlobTx = !!blobInputs;
     const account = this.getSenderAddress().toString();
 
+    const versions = new Map(txHashes.map(hash => [hash, { request: state.request, gasLimit: state.gasLimit }]));
     const initialTxHash = txHashes[0];
     let currentTxHash = txHashes.at(-1)!;
+    let lastReplacementCheckAt = state.lastSentAtL1Ts.getTime();
     let l1Timestamp = 0;
 
     while (true) {
@@ -552,6 +555,11 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
             (await this.tryGetTxReceipt(state.txHashes, nonce, false));
 
           if (receipt) {
+            const mined = versions.get(receipt.transactionHash);
+            if (mined) {
+              state.request = mined.request;
+              state.gasLimit = mined.gasLimit;
+            }
             state.receipt = receipt;
             await this.updateState(state, TxUtilsState.MINED, l1Timestamp);
             return receipt;
@@ -581,10 +589,24 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
         // Speed up the transaction if it appears to be stuck (exceeded stall time and still have retry attempts)
         const attempts = txHashes.length;
-        if (timePassed >= stallTimeMs && attempts <= maxSpeedUpAttempts) {
+        let replacement: L1TxRequest | undefined;
+        if (
+          timePassed >= stallTimeMs &&
+          l1Timestamp - lastReplacementCheckAt >= stallTimeMs &&
+          !isCancelTx &&
+          !isBlobTx &&
+          options?.getReplacement
+        ) {
+          lastReplacementCheckAt = l1Timestamp;
+          try {
+            replacement = await options.getReplacement(state);
+          } catch (err) {
+            this.logger.warn('Failed to prepare a replacement L1 transaction', { err, nonce, account });
+          }
+        }
+        if (timePassed >= stallTimeMs && (replacement || attempts <= maxSpeedUpAttempts)) {
+          const gasLimit = replacement ? await this.estimateGas(account, replacement, gasConfig) : state.gasLimit;
           const newFeesPerGas = await this.getFeesPerGas(gasConfig, isBlobTx, attempts, state.feesPerGas);
-          state.feesPerGas = newFeesPerGas;
-          state.feesPerGasHistory?.push(newFeesPerGas);
 
           this.logger.debug(
             `Tx ${currentTxHash} with nonce ${nonce} from ${account} appears stuck. ` +
@@ -599,9 +621,20 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
             },
           );
 
-          const txData = this.makeTxData(state, { isCancelTx });
+          const request = replacement ?? state.request;
+          const txData = this.makeTxData({ ...state, request, gasLimit, feesPerGas: newFeesPerGas }, { isCancelTx });
 
           const signedRequest = await this.prepareSignedTransaction(txData);
+          // Preparation can race inclusion or the deadline; never replace a mined or expired transaction.
+          if (replacement) {
+            const now = await this.getL1Timestamp();
+            if (this.isTxTimedOut(state, now)) {
+              break;
+            }
+            if ((await this.client.getTransactionCount({ address: account, blockTag: 'latest' })) > nonce) {
+              continue;
+            }
+          }
           const newHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
 
           this.logger.verbose(
@@ -617,6 +650,11 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
             },
           );
 
+          state.request = request;
+          state.gasLimit = gasLimit;
+          state.feesPerGas = newFeesPerGas;
+          state.feesPerGasHistory?.push(newFeesPerGas);
+          versions.set(newHash, { request, gasLimit });
           currentTxHash = newHash;
           txHashes.push(currentTxHash);
           state.lastSentAtL1Ts = new Date(l1Timestamp);
@@ -751,10 +789,14 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     request: L1TxRequest,
     gasConfig?: L1TxConfig,
     blobInputs?: L1BlobInputs,
+    options?: L1TxMonitorOptions,
   ): Promise<{ receipt: TransactionReceipt; state: L1TxState }> {
+    if (blobInputs && options?.getReplacement) {
+      throw new Error('Transaction replacement is not supported for blob transactions');
+    }
     const { state } = await this.sendTransaction(request, gasConfig, blobInputs);
     try {
-      const receipt = await this.monitorTransaction(state);
+      const receipt = await this.monitorTransaction(state, options);
       return { receipt, state };
     } catch (err) {
       if (err instanceof TimeoutError) {
