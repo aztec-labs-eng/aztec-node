@@ -24,7 +24,6 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
-import { isAlreadyKnownTxError } from './already_known.js';
 import { createEthereumChain, isAnvilTestChain } from './chain.js';
 import type { L1RpcGraderConfig } from './l1_reader.js';
 import { L1RpcGrader } from './l1_rpc_grader.js';
@@ -224,6 +223,23 @@ export function isL1RpcHttpStatus(err: unknown, status: number): boolean {
 /** Returns the JSON-RPC error code reported by the L1 node, if the error's cause chain carries one. */
 export function getL1RpcErrorCode(err: unknown): number | undefined {
   return getErrorCause(err, RpcRequestError)?.code;
+}
+
+/**
+ * Messages L1 execution clients return from `eth_sendRawTransaction` when their pool already holds the exact tx sent:
+ * geth, reth and nethermind say "already known", erigon "ALREADY_EXISTS: already known", besu "Known transaction",
+ * and anvil "transaction already imported". The word boundary keeps "unknown transaction" from matching.
+ */
+const ALREADY_KNOWN_TX_PATTERN = /already known|\bknown transaction\b|already imported/i;
+
+/**
+ * Returns whether a send failed because the node already holds this exact tx, which happens when a tx is sent again
+ * after a node accepted it but its reply was lost. A "nonce too low" error does not match: it can mean that a different
+ * tx took the nonce.
+ */
+export function isAlreadyKnownTxError(err: unknown): boolean {
+  const message = getErrorCause(err, RpcRequestError)?.details;
+  return message !== undefined && ALREADY_KNOWN_TX_PATTERN.test(message);
 }
 
 function wrapL1RpcTransport(transport: FallbackTransport<HttpTransport[]>): FallbackTransport<HttpTransport[]> {
