@@ -144,45 +144,6 @@ export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends 
     .pipe(z.record(key, value));
 }
 
-/**
- * Wraps a recursive schema so that input nested more than `maxDepth` arrays or objects deep fails before zod recurses
- * into it. Parsing deeply nested input through `z.lazy` otherwise overflows the stack.
- */
-export function withMaxDepth<T extends ZodTypeAny>(schema: T, maxDepth: number) {
-  return z
-    .custom<unknown>(input => !isNestedDeeperThan(input, maxDepth), {
-      message: `Must not be nested more than ${maxDepth} levels deep`,
-    })
-    .pipe(schema);
-}
-
-// Runs before the inner schema's size caps. Arrays are walked by index, which allocates nothing per element, so a wide
-// array costs no memory before `.max()` rejects it. Objects are walked with `for…in`, for which V8 collects the full
-// key list before the first iteration, so a wide object costs memory proportional to its key count, the same order as
-// the parsed object itself. Recursion is bounded by `maxDepth`.
-function isNestedDeeperThan(value: unknown, maxDepth: number, depth = 0): boolean {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  if (depth >= maxDepth) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      if (isNestedDeeperThan(value[i], maxDepth, depth + 1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  for (const key in value) {
-    if (Object.hasOwn(value, key) && isNestedDeeperThan(Reflect.get(value, key), maxDepth, depth + 1)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /** Given an already parsed and validated object, extracts the keys defined in the given schema. Does not validate again. */
 export function pickFromSchema<T extends object, S extends ZodObject<ZodRawShape>>(obj: T, schema: S) {
   return pick(obj, ...Object.keys(schema.shape));
