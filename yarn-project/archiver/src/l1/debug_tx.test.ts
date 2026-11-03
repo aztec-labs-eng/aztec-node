@@ -300,12 +300,26 @@ describe('getSuccessfulCallsFromDebug', () => {
       return trace;
     };
 
-    it('accepts a deeply nested trace', () => {
-      expect(callTraceSchema.safeParse(nestedTrace(100)).success).toBe(true);
+    it('accepts a trace nested as deep as the EVM allows', () => {
+      // The top-level call plus 1024 nested calls.
+      const trace = nestedTrace(1025);
+      expect(callTraceSchema.parse(trace)).toEqual(trace);
     });
 
-    it('rejects a deeply nested trace without overflowing the stack', () => {
+    it('rejects a trace nested deeper than the EVM allows', () => {
+      expect(callTraceSchema.safeParse(nestedTrace(1026)).success).toBe(false);
+    });
+
+    it('rejects a very deeply nested trace without overflowing the stack', () => {
       expect(callTraceSchema.safeParse(nestedTrace(50_000)).success).toBe(false);
+    });
+
+    it('reports the path of an invalid nested frame', () => {
+      const trace = nestedTrace(3);
+      trace.calls![0].calls![0].from = 'not-hex' as Hex;
+      const result = callTraceSchema.safeParse(trace);
+      expect(result.success).toBe(false);
+      expect(result.error!.issues[0].path).toEqual(['calls', 0, 'calls', 0, 'from']);
     });
   });
 });

@@ -1,7 +1,7 @@
 import type { DebugCallTrace, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
-import { type ZodFor, schemas, withMaxDepth } from '@aztec-labs/foundation/schemas';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
@@ -11,32 +11,82 @@ import { type CallInfo, MAX_L1_TRACE_LEN } from './types.js';
 /** The EVM stops nesting calls 1024 frames below the top-level call. */
 const EVM_MAX_CALL_DEPTH = 1024;
 
+/** A single frame of a call trace. Its `calls` are left unparsed, and {@link callTraceSchema} parses each of them. */
+export const callFrameSchema = z.object({
+  from: schemas.HexStringWith0x,
+  to: schemas.HexStringWith0x.optional(),
+  type: z.string(),
+  input: schemas.HexStringWith0x.optional(),
+  output: schemas.HexStringWith0x.optional(),
+  gas: schemas.HexStringWith0x.optional(),
+  gasUsed: schemas.HexStringWith0x.optional(),
+  value: schemas.HexStringWith0x.optional(),
+  error: z.string().optional(),
+  calls: z.array(z.unknown()).max(MAX_L1_TRACE_LEN).optional(),
+});
+
+/** A frame waiting to be parsed, with what is needed to attach it to its parent and to locate it in an error. */
+type PendingFrame = {
+  input: unknown;
+  depth: number;
+  parent?: { frame: PendingFrame; index: number };
+  attach: (frame: DebugCallTrace) => void;
+};
+
 /**
- * JSON nesting of a call trace whose calls go as deep as the EVM allows: every frame sits one object and one `calls`
- * array below its parent, and the deepest frame may carry an empty `calls` array of its own.
+ * Zod schema for validating call trace from debug_traceTransaction.
+ *
+ * A trace nests one frame per EVM call, and the EVM allows 1024 calls below the top-level one. A recursive schema
+ * (`z.lazy`) would use several JS stack frames per call: in Node with its default stack size, zod overflows the stack
+ * after a few hundred calls, well short of the EVM limit. So this schema parses one frame at a time from an explicit
+ * stack, and rejects a trace that nests deeper than the EVM can.
  */
-const MAX_CALL_TRACE_JSON_DEPTH = 2 * (EVM_MAX_CALL_DEPTH + 1);
+export const callTraceSchema: ZodFor<DebugCallTrace> = z.unknown().transform((input, ctx) => {
+  let root: DebugCallTrace | undefined;
+  const pending: PendingFrame[] = [{ input, depth: 0, attach: frame => (root = frame) }];
 
-const callTraceSchemaWithoutDepthLimit: ZodFor<DebugCallTrace> = z.lazy(() =>
-  z.object({
-    from: schemas.HexStringWith0x,
-    to: schemas.HexStringWith0x.optional(),
-    type: z.string(),
-    input: schemas.HexStringWith0x.optional(),
-    output: schemas.HexStringWith0x.optional(),
-    gas: schemas.HexStringWith0x.optional(),
-    gasUsed: schemas.HexStringWith0x.optional(),
-    value: schemas.HexStringWith0x.optional(),
-    error: z.string().optional(),
-    calls: z.array(callTraceSchemaWithoutDepthLimit).max(MAX_L1_TRACE_LEN).optional(),
-  }),
-);
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (next.depth > EVM_MAX_CALL_DEPTH) {
+      ctx.addIssue({ code: 'custom', message: `Calls nested deeper than ${EVM_MAX_CALL_DEPTH}`, path: pathOf(next) });
+      return z.NEVER;
+    }
+    const parsed = callFrameSchema.safeParse(next.input);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        ctx.addIssue({ code: 'custom', message: issue.message, path: [...pathOf(next), ...issue.path] });
+      }
+      return z.NEVER;
+    }
 
-/** Zod schema for validating call trace from debug_traceTransaction */
-export const callTraceSchema: ZodFor<DebugCallTrace> = withMaxDepth(
-  callTraceSchemaWithoutDepthLimit,
-  MAX_CALL_TRACE_JSON_DEPTH,
-);
+    const { calls, ...fields } = parsed.data;
+    const frame: DebugCallTrace = fields;
+    if (calls !== undefined) {
+      const children: DebugCallTrace[] = new Array(calls.length);
+      frame.calls = children;
+      const current = next;
+      calls.forEach((child, index) =>
+        pending.push({
+          input: child,
+          depth: current.depth + 1,
+          parent: { frame: current, index },
+          attach: parsedChild => (children[index] = parsedChild),
+        }),
+      );
+    }
+    next.attach(frame);
+  }
+
+  return root!;
+});
+
+/** Path of a frame from the root of the trace, built only when reporting an issue. */
+function pathOf(frame: PendingFrame): PropertyKey[] {
+  const path: PropertyKey[] = [];
+  for (let current = frame; current.parent; current = current.parent.frame) {
+    path.unshift('calls', current.parent.index);
+  }
+  return path;
+}
 
 /**
  * Traces a transaction and extracts all CALL operations to a specific contract and function selector.
