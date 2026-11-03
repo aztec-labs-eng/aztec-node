@@ -24,9 +24,8 @@ import {
   formatGwei,
 } from 'viem';
 
-import { isAlreadyKnownTxError } from '../already_known.js';
 import { computeSignedTransactionHash, serializeSignedTransaction } from '../blob_tx.js';
-import { L1RpcNullResultError } from '../client.js';
+import { L1RpcNullResultError, isAlreadyKnownTxError } from '../client.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
