@@ -2,6 +2,7 @@ import { RECURSIVE_PROOF_LENGTH } from '@aztec-labs/constants';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
+import { ProvingError } from '@aztec-labs/stdlib/errors';
 import { type ProvingJobStatus, makePublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
 import { makeRecursiveProof } from '@aztec-labs/stdlib/proofs';
 import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec-labs/stdlib/testing';
@@ -165,7 +166,8 @@ describe('BrokerCircuitProverFacade', () => {
 
     await retryFastUntil(() => getInboxParityProofSpy.mock.calls.length > 0, 'prover to be called');
 
-    resultPromise.reject(new Error('TEST ERROR'));
+    // A permanent failure, so the broker rejects the job on its first attempt instead of retrying it.
+    resultPromise.reject(new ProvingError('TEST ERROR', undefined, false));
 
     await Promise.all(promises);
 

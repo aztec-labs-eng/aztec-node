@@ -22,6 +22,24 @@ export class AbortError extends Error {
 }
 
 /**
+ * An error caused by the environment rather than by the request: a process that died or could not be started, or a
+ * failed system call. Retrying may succeed. Satisfies {@link isRetryableError}.
+ */
+export class RetryableError extends Error {
+  public override readonly name = 'RetryableError';
+  public readonly retry = true;
+}
+
+/**
+ * Whether an error is a Node system error, one carrying `syscall` (such as ENOSPC or EMFILE): the machine failed rather
+ * than the request, so retrying may succeed. Checked structurally because errors from Node's own APIs can come from
+ * another realm and fail `instanceof Error`.
+ */
+export function isSystemError(err: unknown): err is { syscall: string } {
+  return typeof err === 'object' && err !== null && 'syscall' in err && typeof err.syscall === 'string';
+}
+
+/**
  * Whether a failure was environmental, and so may be retried: the process behind a call died, its
  * connection broke, or it could not be started.
  *
