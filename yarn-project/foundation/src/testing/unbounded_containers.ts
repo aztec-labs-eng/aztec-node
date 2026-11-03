@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiSchema } from '../schemas/api.js';
-import { sizeCheckedBeforeParse } from '../schemas/size_checked_before_parse.js';
+import { sizeCheckedBeforeParse } from '../schemas/utils.js';
 
 /**
  * Depth past which the walk stops expanding lazy schemas, whose getter may build a new schema on every call. Only lazy

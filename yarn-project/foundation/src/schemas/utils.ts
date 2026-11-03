@@ -3,7 +3,6 @@ import { type ZodObject, type ZodRawShape, type ZodType, type ZodTypeAny, z } fr
 
 import { pick } from '../collection/object.js';
 import { isHex, withoutHexPrefix } from '../string/index.js';
-import { sizeCheckedBeforeParse } from './size_checked_before_parse.js';
 import type { ZodFor } from './types.js';
 
 export const hexSchema = z.string().refine(isHex, 'Not a valid hex string').transform(withoutHexPrefix);
@@ -127,6 +126,13 @@ export function setSchema<T>(value: ZodFor<T>, maxSize: number): ZodFor<Set<T>> 
 function boundedArray<T extends ZodTypeAny>(item: T, maxSize: number) {
   return Number.isFinite(maxSize) ? z.array(item).max(maxSize) : z.array(item);
 }
+
+/**
+ * Pipes whose input guard checks the size of the record they feed before it parses any entry, which zod's own checks
+ * cannot show. This is the opt-out of the unbounded-container walker, the only reader: it treats a record that is the
+ * immediate output of one of these pipes as bounded. Only `boundedRecord` adds to it.
+ */
+export const sizeCheckedBeforeParse = new WeakSet<z.core.$ZodType>();
 
 /**
  * Creates a record schema that rejects objects with more than `maxKeys` keys before parsing any entry. A record has no
