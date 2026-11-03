@@ -32,6 +32,10 @@ Port PRs (branches named `port-<PR>-to-<target>`) target the port's target branc
 Use the base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. Always `git fetch` before creating branches so the base is not stale.
 </base_branch>
 
+<worktrees>
+`ci3/` is a git submodule, and `git worktree add` leaves it empty. Run `git submodule update --init ci3` in every new worktree before using any `bootstrap.sh` (including `yarn format` and `yarn lint`). Without it they fail with a misleading `syntax error near unexpected token '('`, because the extglob setup in `ci3` never loads.
+</worktrees>
+
 <commits_and_prs>
 Follow Conventional Commits: `fix:`, `feat:`, `chore:`, `refactor:`, `docs:`, `test:`. During development just create normal commits — do not amend unless explicitly asked.
 </commits_and_prs>
