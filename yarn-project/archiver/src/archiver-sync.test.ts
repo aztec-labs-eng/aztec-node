@@ -2317,6 +2317,38 @@ describe('Archiver Sync', () => {
       expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
     }, 15_000);
 
+    it('accepts a republished rejected checkpoint whose descendant landed before the next pass', async () => {
+      // The forward scan reads the descendant above the sync point and rejects it as a child of the stale CP2 record.
+      // The descendant's own record carries a canonical L1 block hash, so only the replaced block of its rejected
+      // ancestor tells the pending tip's verdict is stale.
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { badCp2, signers } = await addValidCheckpointAndInvalidChild(l1Blocks);
+
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root)).toBeDefined();
+
+      fake.reorgL1BlocksFrom(l1Blocks.cp2);
+      await fake.repostCheckpoint(CheckpointNumber(2), { l1BlockNumber: l1Blocks.cp2, signers, reorged: true });
+      const { checkpoint: cp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 81n,
+        numL1ToL2Messages: 0,
+        previousArchive: badCp2.blocks.at(-1)!.archive,
+        signers,
+      });
+
+      for (const head of [83n, 84n, 85n, 86n]) {
+        fake.setL1BlockNumber(head);
+        await archiver.syncImmediate();
+      }
+
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp2.number, badCp2.archive.root)).toBeUndefined();
+      expect(await archiverStore.blocks.getRejectedCheckpoint(cp3.number, cp3.archive.root)).toBeUndefined();
+      expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+    }, 15_000);
+
     it('refetches a valid checkpoint whose blob fetch failed after a later checkpoint in its batch was rejected', async () => {
       // Screening rejects CP2 and moves the sync point past its L1 block before CP1's blobs are fetched. If that
       // fetch fails, the sync point must not stay past CP1, or CP1 is never fetched again: the rejected CP2 is the

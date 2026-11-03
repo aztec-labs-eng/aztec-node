@@ -940,8 +940,9 @@ export class ArchiverL1Synchronizer implements Traceable {
    * A rejected checkpoint moves the sync point past its L1 block, so it only counts as seen while it is still the
    * pending tip as it was read from L1. The record is matched on the pending tip's number and archive root, so a
    * stale higher-numbered record (e.g. a dropped descendant) and a same-numbered replacement with a different root do
-   * not count. Nor does a record whose L1 block was reorged out (past the given head, or now carrying another hash):
-   * an L1 reorg may have republished the same checkpoint with valid attestations behind the sync point.
+   * not count. Nor does a record whose L1 block, or the L1 block of any rejected ancestor it was rejected for, was
+   * reorged out (past the given head, or now carrying another hash): an L1 reorg may have republished that checkpoint
+   * with valid attestations behind the sync point.
    */
   private async getLocalProgressCheckpoint(
     status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,
@@ -951,10 +952,29 @@ export class ArchiverL1Synchronizer implements Traceable {
       status.pendingCheckpointNumber,
       status.pendingArchive,
     );
-    if (rejectedPendingTip && (await this.rejectedRecordStillOnL1(rejectedPendingTip, currentL1BlockNumber))) {
+    if (rejectedPendingTip && (await this.rejectedChainStillOnL1(rejectedPendingTip, currentL1BlockNumber))) {
       return rejectedPendingTip;
     }
     return await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber());
+  }
+
+  /**
+   * Whether a rejected checkpoint and every rejected ancestor down to its nearest non-rejected one are still on L1 as
+   * seen from the given head. A descendant read after a reorg carries a canonical hash even when the ancestor it was
+   * rejected for has been replaced.
+   */
+  private async rejectedChainStillOnL1(tip: RejectedCheckpoint, currentL1BlockNumber: bigint): Promise<boolean> {
+    let record: RejectedCheckpoint | undefined = tip;
+    while (record) {
+      if (!(await this.rejectedRecordStillOnL1(record, currentL1BlockNumber))) {
+        return false;
+      }
+      record = await this.stores.blocks.getRejectedCheckpoint(
+        CheckpointNumber(record.checkpointNumber - 1),
+        record.parentArchiveRoot,
+      );
+    }
+    return true;
   }
 
   /**
