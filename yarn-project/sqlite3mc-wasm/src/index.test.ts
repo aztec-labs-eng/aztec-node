@@ -45,7 +45,9 @@ describe('sqlite3InitModule', () => {
   const settleWithin = <T>(promise: Promise<T>, ms = 20_000): Promise<T> =>
     Promise.race([
       promise,
+      // This package does not depend on foundation, so it cannot use its timeout helpers.
       new Promise<never>((_, reject) =>
+        // eslint-disable-next-line no-restricted-syntax
         setTimeout(
           () =>
             reject(

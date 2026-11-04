@@ -23,6 +23,7 @@ export class SlashRoundMonitor {
   public start() {
     // Check for round changes
     this.currentRound = this.getCurrentRound().round;
+    // eslint-disable-next-line no-restricted-syntax
     this.intervalId = setInterval(() => {
       const round = this.getCurrentRound().round;
       if (round !== this.currentRound) {

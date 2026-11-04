@@ -1,3 +1,4 @@
+import { sleep } from '../sleep/index.js';
 import type { MutexDatabase } from './mutex_database.js';
 
 export * from './mutex_database.js';
@@ -47,7 +48,7 @@ export class Mutex {
       if (!untilAcquired) {
         return false;
       }
-      await new Promise(resolve => setTimeout(resolve, this.tryLockInterval));
+      await sleep(this.tryLockInterval);
     }
   }
 

@@ -138,6 +138,25 @@ export default [
           ],
         },
       ],
+      'no-restricted-syntax': [
+        'error',
+        ...[
+          "NewExpression[callee.name='Promise'] > ArrowFunctionExpression > CallExpression.body[callee.name='setTimeout']",
+          "NewExpression[callee.name='Promise'] > ArrowFunctionExpression > BlockStatement[body.length=1] > ExpressionStatement > CallExpression[callee.name='setTimeout']",
+        ].map(selector => ({
+          selector,
+          message:
+            'Use sleep(ms, value?) from @aztec-labs/foundation/sleep instead of wrapping setTimeout in a Promise. To ' +
+            'bound how long an operation may take, use executeTimeout() from @aztec-labs/foundation/timer.',
+        })),
+        {
+          selector:
+            "CallExpression[callee.name='setInterval'] > :function:matches([async=true], :has(UnaryExpression[operator='void']))",
+          message:
+            'Use RunningPromise from @aztec-labs/foundation/running-promise for periodic async work: setInterval ' +
+            'starts a run while the previous one may still be going, and nothing waits for the run in flight on stop.',
+        },
+      ],
       'import-x/no-unresolved': [
         'error',
         {

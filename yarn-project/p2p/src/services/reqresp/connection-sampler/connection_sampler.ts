@@ -35,6 +35,7 @@ export class ConnectionSampler {
     private readonly opts: { cleanupIntervalMs?: number; p2pOptimisticNegotiation?: boolean } = {},
   ) {
     this.cleanupInterval = setInterval(
+      // eslint-disable-next-line no-restricted-syntax
       () => void this.cleanupStaleConnections(),
       this.opts.cleanupIntervalMs ?? 60_000,
     );
