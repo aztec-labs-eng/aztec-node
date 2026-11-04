@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [main]
+        branch: [main, v6]
     # No concurrency group: sharing one with release-tag.yml's nightly re-cuts
     # would let a re-cut left awaiting approval hold back this unattended run,
     # and each later night's run would cancel the one pending before it. When an
