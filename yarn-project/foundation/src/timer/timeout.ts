@@ -22,28 +22,33 @@ export class TimeoutTask<T> {
   /**
    * Executes the given function with a specified timeout.
    * If the function takes longer than the timeout, it will be interrupted and an error will be thrown.
+   * Once the function settles, the timeout has no further effect: the signal passed to it never aborts and `onAbort`
+   * does not run.
    * The total execution time of the function will be stored in the totalTime property.
    *
    * @returns The result of the executed function if completed within the timeout.
    * @throws An error with a message indicating the function was interrupted due to exceeding the specified timeout.
    */
   public async exec() {
-    const signal = AbortSignal.timeout(this.timeout);
-    this.timeoutPromise = new Promise<never>((_, reject) => {
-      signal!.addEventListener(
-        'abort',
-        () => {
-          this.onAbort?.();
-          reject(this.errorFn());
-        },
-        { once: true },
-      );
-    });
+    const timeoutSignal = AbortSignal.timeout(this.timeout);
+    // `fn` gets its own signal so that the timeout firing after `fn` settles cannot abort it.
+    const controller = new AbortController();
+    const interrupt = promiseWithResolvers<never>();
+    const onTimeout = () => {
+      controller.abort(timeoutSignal.reason);
+      this.onAbort?.();
+      interrupt.reject(this.errorFn());
+    };
+    timeoutSignal.addEventListener('abort', onTimeout, { once: true });
+    this.timeoutPromise = interrupt.promise;
 
     const start = Date.now();
-    const result = await Promise.race<T>([this.fn(signal), this.timeoutPromise]);
-    this.totalTime = Date.now() - start;
-    return result;
+    try {
+      return await Promise.race<T>([this.fn(controller.signal), interrupt.promise]);
+    } finally {
+      timeoutSignal.removeEventListener('abort', onTimeout);
+      this.totalTime = Date.now() - start;
+    }
   }
 
   /**
