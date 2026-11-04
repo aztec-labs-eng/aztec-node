@@ -205,9 +205,10 @@ describe('Validator factory functions', () => {
         true,
       );
 
-      // Timestamp and block header are high tolerance (more likely to be stale rather than malicious)
+      // Timestamp, block header and max gas are high tolerance (more likely to be stale rather than malicious)
       expect(validators.timestampValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
       expect(validators.blockHeaderValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
+      expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
 
       // Others are mid tolerance
       expect(validators.txsPermittedValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
@@ -215,7 +216,6 @@ describe('Validator factory functions', () => {
       expect(validators.metadataValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.doubleSpendValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.minGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
-      expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.feePayerBalanceValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
 
       // A tx below our admission fee may be valid for a peer ahead of us, so the sender is not penalized unless

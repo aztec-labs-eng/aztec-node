@@ -195,9 +195,14 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       validator: new MinGasLimitsValidator<Tx>(bindings),
       severity: PeerErrorSeverity.MidToleranceError,
     },
+    // Mild because the L2 limit comes from this node's own read of the rollup's live mana limit, which can briefly
+    // lag a governance raise that the relaying peer has already seen. This keeps such a relayer from being
+    // disconnected or banned, though the rejections still count against its gossipsub score for a few slots. Txs
+    // above the fixed protocol maxima get the same mild penalty; this opens no cheaper spam path, since a tx with a
+    // random anchor block hash already draws only a high-tolerance penalty.
     maxGasLimitsValidator: {
       validator: new MaxGasLimitsValidator<Tx>({ ...gasLimitOpts, bindings }),
-      severity: PeerErrorSeverity.MidToleranceError,
+      severity: PeerErrorSeverity.HighToleranceError,
     },
     // The max-fee comparisons and the fee-payer balance check are separate entries because their failures mean
     // different things. A tx below our admission fee is only invalid against a fee this node resolved: a peer
