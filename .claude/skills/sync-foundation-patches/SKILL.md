@@ -9,9 +9,27 @@ argument-hint: [patch number ...]
 `labs-patches/` in **AztecProtocol/aztec-packages** is a `git format-patch` series the
 foundation applies on top of its `labs/` submodule, which is this repo. Every patch in it
 is a queued upstream: it is re-applied on every pin bump until the same change lands here.
-Syncing replays the series onto `main` and opens the PR that drains it. Once the PR merges
-and the foundation bumps its labs pin past those commits, the patches drop out of the next
-export on their own — nothing is deleted by hand on the foundation side.
+Syncing replays the series onto the matching labs branch and opens the PR that drains it.
+Once the PR merges and the foundation bumps its labs pin past those commits, the patches
+drop out of the next export on their own — nothing is deleted by hand on the foundation
+side.
+
+## Branch mapping
+
+Each foundation branch carries its own series, written against the labs branch of the same
+release line, and it syncs to that branch only:
+
+| foundation (aztec-packages) | labs (aztec-node) |
+| --------------------------- | ----------------- |
+| `next`                      | `main`            |
+| `vN`                        | `vN`              |
+
+Sync `next` into `main` unless asked for a release line. For a release line, read the
+series from the foundation's `vN` and replay it onto labs `vN`; if either side has no `vN`
+branch, stop and say so. Never carry a series across lines: `next`'s patches are written
+against the next major's unreleased code, and a `vN` series against that line's.
+
+Below, `$FND_REF` is the foundation branch and `$LABS_BRANCH` the labs branch of the pair.
 
 **Default: one draft PR for the whole series, one commit per patch.** The patches are a
 dependent chain (later ones build on earlier ones), so splitting them is only worth it when
@@ -27,12 +45,13 @@ rather than quietly pulling in the patches it turned out to need.
 ### Step 1: Read the series from GitHub
 
 No aztec-packages checkout is needed — the series, the patch bodies and the recorded base
-all come from the contents API on the default branch (`next`):
+all come from the contents API on `$FND_REF`:
 
 ```bash
 FND=AztecProtocol/aztec-packages
-gh api "repos/$FND/contents/labs-patches?ref=next" --jq '.[].name' | grep '\.patch$' | sort
-gh api "repos/$FND/contents/labs?ref=next" --jq .sha        # the base gitlink
+FND_REF=next LABS_BRANCH=main     # or FND_REF=vN LABS_BRANCH=vN for a release line
+gh api "repos/$FND/contents/labs-patches?ref=$FND_REF" --jq '.[].name' | grep '\.patch$' | sort
+gh api "repos/$FND/contents/labs?ref=$FND_REF" --jq .sha    # the base gitlink
 ```
 
 Take the files in **name order**, not by number: the numbering has gaps where a patch was
@@ -47,7 +66,7 @@ whole; some patches are megabytes of regenerated artifacts):
 
 ```bash
 gh api -H "Accept: application/vnd.github.raw" \
-  "repos/$FND/contents/labs-patches/<name>?ref=next" > "$SCRATCH/<name>"
+  "repos/$FND/contents/labs-patches/<name>?ref=$FND_REF" > "$SCRATCH/<name>"
 ```
 
 `head -12` on a patch gives its author, date and subject (the subject is the commit
@@ -75,7 +94,7 @@ before `git am --continue`, while preloading keeps the normal replay path intact
 not permission to apply without a three-way base; stop and identify which fork or commit
 holds the blob.
 
-### Step 2: Branch off main, and drop what is already here
+### Step 2: Branch off the labs branch, and drop what is already here
 
 Work in an independent, clean aztec-node checkout — never in one that is a submodule of
 another repo, where the build and the pins are wired to that parent. A plain branch is
@@ -84,17 +103,17 @@ enough; no worktree. If the tree is dirty, stop and ask rather than stashing or 
 
 ```bash
 git fetch origin
-git checkout -b <prefix>/sync-foundation-patches origin/main
+git checkout -b <prefix>/sync-foundation-patches origin/$LABS_BRANCH
 ```
 
 `<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
-facundo's clones).
+facundo's clones). For a release line, end the branch name in `-vN`.
 
 A patch stays in the series until the foundation bumps past it, so the series routinely
 lists changes that already landed here. Test the content, not the commit message: a patch
-whose changes are already on `main` reverse-applies cleanly to it, whatever the commit it
-arrived in was called. The tree is `main` at this point, which is what makes the test mean
-anything:
+whose changes are already on `$LABS_BRANCH` reverse-applies cleanly to it, whatever the
+commit it arrived in was called. The tree is `$LABS_BRANCH` at this point, which is what
+makes the test mean anything:
 
 ```bash
 git apply --check --reverse <patch>    # exit 0 = already here, drop it
@@ -103,18 +122,19 @@ git apply --check --reverse <patch>    # exit 0 = already here, drop it
 A subject search is a hint worth printing beside that, never the decision:
 
 ```bash
-git log origin/main --oneline --fixed-strings --grep="<subject>"
+git log origin/$LABS_BRANCH --oneline --fixed-strings --grep="<subject>"
 ```
 
 The subject cannot settle it in either direction. Sync PRs are squash-merged, so the
-individual patch subjects do not survive on `main` and a landed patch matches nothing; and
-a subject can equally match a different or partial change that shares its wording.
+individual patch subjects do not survive on the labs branch and a landed patch matches
+nothing; and a subject can equally match a different or partial change that shares its
+wording.
 
 Report every patch dropped this way: a merged-but-still-listed patch means the foundation's
 pin is behind and a `bump` there would clear it. A patch that neither reverse-applies nor
 applies forward is a genuine conflict — Step 3's problem, not a reason to drop it.
 
-### Step 3: Apply the series onto main
+### Step 3: Apply the series onto the labs branch
 
 ```bash
 git am --3way "$SCRATCH"/<patch> "$SCRATCH"/<patch> ...   # the set from Step 2, in series order
@@ -126,14 +146,15 @@ re-exports and re-applies those commits until they land, so they should stay ide
 the series entries. Everything this skill adds goes in follow-up commits.
 
 **Conflicts are yours to resolve.** `am` stops on the offending patch with the markers in
-the tree; main has moved on since the recorded base, so resolve against the intent of the
-change rather than either literal side, then `git add` and `git am --continue`. Never
-`git am --skip` merely to get past a conflict — it can silently drop a patch the rest of
-the chain needs — and never abort and restart. There is one narrow exception: later
-patches may have rewritten an earlier patch enough that its isolated reverse check failed,
-while current main already contains its final behavior. Before treating it as landed,
-inspect `git am --show-current-patch=diff` and map every hunk's intended behavior to
-equivalent or superseding source on the current branch; record that evidence per file.
+the tree; the labs branch has moved on since the recorded base, so resolve against the
+intent of the change rather than either literal side, then `git add` and
+`git am --continue`. Never `git am --skip` merely to get past a conflict — it can silently
+drop a patch the rest of the chain needs — and never abort and restart. There is one
+narrow exception: later patches may have rewritten an earlier patch enough that its
+isolated reverse check failed, while the current labs branch already contains its final
+behavior. Before treating it as landed, inspect `git am --show-current-patch=diff` and map
+every hunk's intended behavior to equivalent or superseding source on the current branch;
+record that evidence per file.
 Use current tests as corroboration and run a focused test for behavioral changes whose
 source equivalence is not mechanical. If any behavior is unaccounted for, merge it.
 Only after that audit, resolve the conflicts, stage the result, and require
@@ -151,8 +172,13 @@ without re-deriving it.
 The patches were written in the foundation's own tree, against its unreleased code rather
 than a published release, so they can rely on `@aztec-foundation/*` APIs, or bb / nargo
 behaviour, newer than this repo's pin. The sync therefore carries a pin bump to the latest
-foundation nightly and the noir release that nightly was built against, as its own commit
-on top of the patch commits.
+foundation nightly of the series' line and the noir release that nightly was built against,
+as its own commit on top of the patch commits.
+
+The line is the major in `$FND_REF`'s `.release-please-manifest.json`. bump-toolchain
+filters nightlies by the major currently pinned here, so when the two differ — as on `main`
+right after the foundation moves `next` to a new major — the bump is cross-major, which
+bump-toolchain leaves to the user: ask before making it.
 
 Follow the **bump-toolchain** skill for the version work: it covers picking the latest
 complete nightly (they can publish partially), deriving the paired `NOIR_VERSION` from that
@@ -210,7 +236,7 @@ only — the suite is CI's job, and CI starts when the PR leaves draft.
 
 ```bash
 git push -u origin <prefix>/sync-foundation-patches
-gh pr create --repo aztec-labs-eng/aztec-node --base main --draft \
+gh pr create --repo aztec-labs-eng/aztec-node --base "$LABS_BRANCH" --draft \
   --label ci-full --label ci-no-fail-fast \
   --title "chore: sync the foundation patch queue" --body-file "$SCRATCH/pr-body.md"
 ```
