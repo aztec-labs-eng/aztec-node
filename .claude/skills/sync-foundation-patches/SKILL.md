@@ -1,6 +1,6 @@
 ---
 name: sync-foundation-patches
-description: Sync the foundation's labs-patches series (carried in aztec-packages on top of this repo) into aztec-node as one draft PR, a commit per patch, bumping the toolchain pins with labs-aztec-toolchain/pins.mjs. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
+description: Sync the foundation's labs-patches series (carried in aztec-packages on top of this repo) into aztec-node as one draft PR, a commit per patch, with a toolchain pin bump via labs-aztec-toolchain/pins.mjs when the user wants one. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
 argument-hint: [patch number ...]
 ---
 
@@ -29,7 +29,10 @@ series from the foundation's `vN` and replay it onto labs `vN`; if either side h
 branch, stop and say so. Never carry a series across lines: `next`'s patches are written
 against the next major's unreleased code, and a `vN` series against that line's.
 
-Below, `$FND_REF` is the foundation branch and `$LABS_BRANCH` the labs branch of the pair.
+Below, `<fnd-branch>` and `<labs-branch>` stand for the pair. Write the literal branch names
+into every command and ref, never a shell variable: variables do not survive between tool
+calls, an empty `?ref=` silently reads `next`, and an empty `--base` opens the PR against
+`main`.
 
 **Default: one draft PR for the whole series, one commit per patch.** The patches are a
 dependent chain (later ones build on earlier ones), so splitting them is only worth it when
@@ -45,13 +48,12 @@ rather than quietly pulling in the patches it turned out to need.
 ### Step 1: Read the series from GitHub
 
 No aztec-packages checkout is needed — the series, the patch bodies and the recorded base
-all come from the contents API on `$FND_REF`:
+all come from the contents API on `<fnd-branch>`:
 
 ```bash
-FND=AztecProtocol/aztec-packages
-FND_REF=next LABS_BRANCH=main     # or FND_REF=vN LABS_BRANCH=vN for a release line
-gh api "repos/$FND/contents/labs-patches?ref=$FND_REF" --jq '.[].name' | grep '\.patch$' | sort
-gh api "repos/$FND/contents/labs?ref=$FND_REF" --jq .sha    # the base gitlink
+gh api "repos/AztecProtocol/aztec-packages/contents/labs-patches?ref=<fnd-branch>" \
+  --jq '.[].name' | grep '\.patch$' | sort
+gh api "repos/AztecProtocol/aztec-packages/contents/labs?ref=<fnd-branch>" --jq .sha  # the base gitlink
 ```
 
 Take the files in **name order**, not by number: the numbering has gaps where a patch was
@@ -66,7 +68,7 @@ whole; some patches are megabytes of regenerated artifacts):
 
 ```bash
 gh api -H "Accept: application/vnd.github.raw" \
-  "repos/$FND/contents/labs-patches/<name>?ref=$FND_REF" > "$SCRATCH/<name>"
+  "repos/AztecProtocol/aztec-packages/contents/labs-patches/<name>?ref=<fnd-branch>" > "$SCRATCH/<name>"
 ```
 
 `head -12` on a patch gives its author, date and subject (the subject is the commit
@@ -103,7 +105,7 @@ enough; no worktree. If the tree is dirty, stop and ask rather than stashing or 
 
 ```bash
 git fetch origin
-git checkout -b <prefix>/sync-foundation-patches origin/$LABS_BRANCH
+git checkout -b <prefix>/sync-foundation-patches origin/<labs-branch>
 ```
 
 `<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
@@ -111,8 +113,8 @@ facundo's clones). For a release line, end the branch name in `-vN`.
 
 A patch stays in the series until the foundation bumps past it, so the series routinely
 lists changes that already landed here. Test the content, not the commit message: a patch
-whose changes are already on `$LABS_BRANCH` reverse-applies cleanly to it, whatever the
-commit it arrived in was called. The tree is `$LABS_BRANCH` at this point, which is what
+whose changes are already on `<labs-branch>` reverse-applies cleanly to it, whatever the
+commit it arrived in was called. The tree is `<labs-branch>` at this point, which is what
 makes the test mean anything:
 
 ```bash
@@ -122,7 +124,7 @@ git apply --check --reverse <patch>    # exit 0 = already here, drop it
 A subject search is a hint worth printing beside that, never the decision:
 
 ```bash
-git log origin/$LABS_BRANCH --oneline --fixed-strings --grep="<subject>"
+git log origin/<labs-branch> --oneline --fixed-strings --grep="<subject>"
 ```
 
 The subject cannot settle it in either direction. Sync PRs are squash-merged, so the
@@ -171,18 +173,29 @@ without re-deriving it.
 
 The patches were written in the foundation's own tree, against its unreleased code rather
 than a published release, so they can rely on `@aztec-foundation/*` APIs, or bb / nargo
-behaviour, newer than this repo's pin. The sync therefore carries a pin bump to the latest
-foundation nightly of the series' line and the noir release that nightly was built against,
-as its own commit on top of the patch commits.
+behaviour, newer than this repo's pin. A bump to a nightly of the series' line, and the
+noir release that nightly was built against, can therefore belong in the sync, as its own
+commit on top of the patch commits.
 
-The line is the major in `$FND_REF`'s `.release-please-manifest.json`. bump-toolchain
-filters nightlies by the major currently pinned here, so when the two differ — as on `main`
-right after the foundation moves `next` to a new major — the bump is cross-major, which
-bump-toolchain leaves to the user: ask before making it.
+The series' line is the version in `<fnd-branch>`'s manifest, and its nightlies are tagged
+`v<version>-nightly.<date>`:
 
-Follow the **bump-toolchain** skill for the version work: it covers picking the latest
-complete nightly (they can publish partially), deriving the paired `NOIR_VERSION` from that
-release's noir submodule, and the verification. The rewrite itself is:
+```bash
+gh api -H "Accept: application/vnd.github.raw" \
+  "repos/AztecProtocol/aztec-packages/contents/.release-please-manifest.json?ref=<fnd-branch>"
+gh api --paginate "repos/AztecProtocol/aztec-packages/git/matching-refs/tags/v<version>-nightly." \
+  --jq '.[].ref' | tail -1
+```
+
+Do not use bump-toolchain's own lookup for this: it filters by the major pinned here, which
+is another line than the series' whenever the foundation has moved `<fnd-branch>` to a new
+major. If the line has a complete nightly newer than `BB_VERSION`, ask the user whether to
+bump to it, naming the version, and bump only on a yes. With no such nightly, or on a no,
+there is no bump commit.
+
+Follow the **bump-toolchain** skill for the rest of the version work: checking that the
+nightly is complete (they can publish partially), deriving the paired `NOIR_VERSION` from
+that release's noir submodule, and the verification. The rewrite itself is:
 
 ```bash
 ./labs-aztec-toolchain/bootstrap.sh set-pins <bb-version> <noir-version>
@@ -236,7 +249,7 @@ only — the suite is CI's job, and CI starts when the PR leaves draft.
 
 ```bash
 git push -u origin <prefix>/sync-foundation-patches
-gh pr create --repo aztec-labs-eng/aztec-node --base "$LABS_BRANCH" --draft \
+gh pr create --repo aztec-labs-eng/aztec-node --base <labs-branch> --draft \
   --label ci-full --label ci-no-fail-fast \
   --title "chore: sync the foundation patch queue" --body-file "$SCRATCH/pr-body.md"
 ```
