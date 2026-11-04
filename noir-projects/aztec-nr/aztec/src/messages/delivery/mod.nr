@@ -10,10 +10,7 @@ pub mod handshake;
 
 use crate::{
     context::PrivateContext,
-    messages::{
-        encryption::{aes128::AES128, message_encryption::MessageEncryption},
-        offchain_messages::deliver_offchain_message,
-    },
+    messages::{encryption::aes128, offchain_messages::deliver_offchain_message},
     oracle::notes::get_sender_for_tags,
     utils::remove_constraints::remove_constraints_if,
 };
@@ -73,13 +70,7 @@ where
     let messaging_secret_derivation = delivery.messaging_secret_derivation();
 
     if deliver_as_offchain_message {
-        let contract_address = context.this_address();
-        let ciphertext = remove_constraints_if(
-            true,
-            || AES128::encrypt(encode_into_message_plaintext(), recipient, contract_address),
-        );
-
-        deliver_offchain_message(ciphertext, recipient);
+        do_offchain_private_message_delivery(context, encode_into_message_plaintext, recipient);
     } else {
         do_onchain_private_message_delivery(
             context,
@@ -91,6 +82,20 @@ where
             messaging_secret_derivation,
         );
     }
+}
+
+fn do_offchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
+    context: &mut PrivateContext,
+    encode_into_message_plaintext: fn[Env]() -> [Field; MESSAGE_PLAINTEXT_LEN],
+    recipient: AztecAddress,
+) {
+    let contract_address = context.this_address();
+    let ciphertext = remove_constraints_if(
+        true,
+        || aes128::encrypt_with_ecdh_secret(encode_into_message_plaintext(), recipient, contract_address),
+    );
+
+    deliver_offchain_message(ciphertext, recipient);
 }
 
 fn do_onchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
@@ -129,7 +134,7 @@ fn do_onchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
     let messaging_secret = delivery_messaging_secret.secret();
     let ciphertext = remove_constraints_if(
         !is_constrained,
-        || AES128::encrypt_with_messaging_secret(encode_into_message_plaintext(), messaging_secret),
+        || aes128::encrypt_with_messaging_secret(encode_into_message_plaintext(), messaging_secret),
     );
 
     let log_tag = derive_log_tag(

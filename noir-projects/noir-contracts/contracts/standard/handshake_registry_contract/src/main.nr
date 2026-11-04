@@ -37,7 +37,7 @@ pub contract HandshakeRegistry {
                 handshake::{AppSiloedHandshakeSecrets, HandshakePage, MAX_HANDSHAKES_PER_PAGE, protect_from_forgery},
                 MessageDelivery,
             },
-            encryption::{aes128::AES128, message_encryption::MessageEncryption},
+            encryption::aes128,
         },
         oracle::{random::random, resolve_custom_request::resolve_custom_request},
         protocol::{
@@ -90,7 +90,7 @@ pub contract HandshakeRegistry {
             recipient.to_field(),
             DOM_SEP__NON_INTERACTIVE_HANDSHAKE_LOG_TAG,
         );
-        let ciphertext = AES128::encrypt([eph_pk.x], recipient, self.context.this_address());
+        let ciphertext = aes128::encrypt_with_ecdh_secret([eph_pk.x], recipient, self.context.this_address());
         self.context.emit_private_log_unsafe(log_tag, BoundedVec::from_array(ciphertext));
 
         secrets

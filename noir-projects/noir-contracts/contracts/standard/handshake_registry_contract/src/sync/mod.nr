@@ -11,7 +11,7 @@ use aztec::{
         discovery::{
             ComputeNoteHash, ComputeNoteNullifier, CustomMessageHandler, do_sync_state_without_handshake_discovery,
         },
-        encryption::{aes128::AES128, message_encryption::MessageEncryption},
+        encryption::aes128,
         processing::{
             log_retrieval_request::{LogRetrievalRequest, LogSource},
             log_retrieval_response::LogRetrievalResponse,
@@ -66,7 +66,7 @@ pub(crate) unconstrained fn handshake_registry_sync(
         logs.for_each(|_i, log| {
             let ciphertext = aztec::utils::array::subbvec(log.log_payload, 0);
 
-            let _ = AES128::decrypt(ciphertext, scope, contract_address)
+            let _ = aes128::decrypt_with_ecdh_secret(ciphertext, scope, contract_address)
                 .and_then(|pt| {
                     point_from_x_coord_and_sign(pt.get(0), true).map(|pk| DiscoveredHandshake { eph_pk: pk })
                 })
