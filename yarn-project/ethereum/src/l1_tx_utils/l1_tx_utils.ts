@@ -7,7 +7,7 @@ import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Semaphore } from '@aztec-labs/foundation/queue';
-import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
+import { NoRetryError, makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
@@ -49,8 +49,8 @@ import { summarizeTransactionReceipt } from './utils.js';
 
 const MAX_L1_TX_STATES = 32;
 
-/** Delays before each retry of a raw tx send that failed without a definitive answer from the L1 node. */
-const SEND_RETRY_DELAYS_MS = [150, 300, 600];
+/** Delays in seconds before each retry of a raw tx send that failed without a definitive answer from the L1 node. */
+const SEND_RETRY_BACKOFF_S = [0.15, 0.3, 0.6];
 
 // Backoff (in seconds) for retrying the read-only RPC calls that prepare a tx cancellation. A
 // cancellation is fired in the background after a tx times out and is important (it frees the stuck
@@ -282,13 +282,14 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   }
 
   /**
-   * Broadcasts a signed tx and returns its hash, computed from the signed tx rather than taken from the node's reply,
-   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send.
+   * Broadcasts a signed tx and returns its hash, computed from the signed tx since a node that already holds the tx
+   * answers with an error instead of the hash. That answer counts as a successful send. A node that answers with a hash
+   * other than the computed one fails the send.
    */
   private async sendSignedTransaction(serializedTransaction: Hex, nonce: number): Promise<Hex> {
     const txHash = computeSignedTransactionHash(serializedTransaction);
     const account = this.getSenderAddress().toString();
-    let rpcHash: Hex | undefined;
+    let rpcHash: Hex;
     try {
       rpcHash = await this.sendRawTransaction(serializedTransaction, txHash);
     } catch (err) {
@@ -298,13 +299,8 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
       }
       throw err;
     }
-    if (rpcHash?.toLowerCase() !== txHash.toLowerCase()) {
-      this.logger.warn(`L1 node returned hash ${rpcHash} for tx ${txHash}, tracking the tx by its own hash`, {
-        txHash,
-        rpcHash,
-        nonce,
-        account,
-      });
+    if (rpcHash.toLowerCase() !== txHash.toLowerCase()) {
+      throw new Error(`L1 node returned hash ${rpcHash} for tx ${txHash} with nonce ${nonce} from ${account}`);
     }
     return txHash;
   }
@@ -315,21 +311,23 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
    * the first attempt answers "already known".
    */
   private async sendRawTransaction(serializedTransaction: Hex, txHash: Hex): Promise<Hex> {
-    for (const delayMs of SEND_RETRY_DELAYS_MS) {
-      try {
-        return await this.client.sendRawTransaction({ serializedTransaction });
-      } catch (err) {
-        if (!isTransientL1RpcError(err)) {
-          throw err;
-        }
-        this.logger.warn(`Sending L1 tx ${txHash} failed, retrying in ${delayMs}ms`, {
-          txHash,
-          error: formatViemError(err).message,
-        });
-        await sleep(delayMs);
-      }
+    try {
+      return await retry(
+        async () => {
+          try {
+            return await this.client.sendRawTransaction({ serializedTransaction });
+          } catch (err) {
+            throw isTransientL1RpcError(err) ? err : new NoRetryError('L1 tx send failed', { cause: err });
+          }
+        },
+        `Sending L1 tx ${txHash}`,
+        makeBackoff(SEND_RETRY_BACKOFF_S),
+        this.logger,
+        true,
+      );
+    } catch (err) {
+      throw err instanceof NoRetryError ? err.cause : err;
     }
-    return await this.client.sendRawTransaction({ serializedTransaction });
   }
 
   private async checkInterruptedOrTimedOut(gasConfig: Pick<L1TxConfig, 'txTimeoutAt'>): Promise<Date> {

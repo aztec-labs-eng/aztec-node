@@ -1,8 +1,7 @@
 import { Blob } from '@aztec-labs/blob-lib';
-import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
-import { type Hex, type PrepareTransactionRequestRequest, createPublicClient, custom, fromRlp, toHex } from 'viem';
+import { type Hex, type PrepareTransactionRequestRequest, createPublicClient, custom, fromRlp } from 'viem';
 import { sepolia } from 'viem/chains';
 
 import { parseSignedTransaction } from '../blob_tx.js';
@@ -69,8 +68,9 @@ describe('L1TxUtils blob wrapper', () => {
       const originalSendRawTransaction = client.sendRawTransaction.bind(client);
       const sent: { serialized: Hex; nodeHash: Hex }[] = [];
       using _spy = jest.spyOn(client, 'sendRawTransaction').mockImplementation(async args => {
-        sent.push({ serialized: args.serializedTransaction, nodeHash: await originalSendRawTransaction(args) });
-        return toHex(randomBytes(32));
+        const nodeHash = await originalSendRawTransaction(args);
+        sent.push({ serialized: args.serializedTransaction, nodeHash });
+        return nodeHash;
       });
 
       const { txHash } = await utils.sendTransaction(
