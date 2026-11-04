@@ -839,7 +839,11 @@ describe('SessionManager', () => {
 
   it('onTick reads each covered epoch once per L2 slot however many epochs the proof window holds', async () => {
     // A long proof-submission window keeps many covered epochs in the store, each with our full-epoch proof on L1.
+    // Epochs 3 to 22 hold one checkpoint each. The clock is at slot 46, just after epoch 22 ends and before epoch 3's
+    // deadline at slot 48 (the start of epoch 3 + proofSubmissionEpochs + 1 = 24).
     const epochs = 20;
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, proofSubmissionEpochs: epochs });
+    dateProvider.advanceTime(46 * l1Constants.slotDuration);
     setStore(Array.from({ length: epochs }, (_, i) => proverForCheckpoint(i + 1, 6 + 2 * i)));
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
     mockNextUnprovenSlot(epochs, undefined);
