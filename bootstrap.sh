@@ -572,8 +572,8 @@ function check_compat_artifacts_tracked {
   # full CI run after a stable release goes red until someone commits the new tarball.
   #   compat_major:       major version line with a backwards-compatibility guarantee.
   #   compat_min_version: earliest stable release covered by that guarantee.
-  local compat_major="6"
-  local compat_min_version="6.0.0"
+  local compat_major="7"
+  local compat_min_version="7.0.0"
 
   local current_version major
   current_version=$(jq -r '."."' .version-manifest.json)
