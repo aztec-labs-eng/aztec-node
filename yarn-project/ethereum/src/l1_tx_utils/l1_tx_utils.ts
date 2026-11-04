@@ -25,7 +25,7 @@ import {
 } from 'viem';
 
 import { computeSignedTransactionHash, serializeSignedTransaction } from '../blob_tx.js';
-import { L1RpcNullResultError, isAlreadyKnownTxError } from '../client.js';
+import { isAlreadyKnownTxError, isTransientL1RpcError } from '../client.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
@@ -48,6 +48,9 @@ import {
 import { summarizeTransactionReceipt } from './utils.js';
 
 const MAX_L1_TX_STATES = 32;
+
+/** Delays before each retry of a raw tx send that failed without a definitive answer from the L1 node. */
+const SEND_RETRY_DELAYS_MS = [150, 300, 600];
 
 // Backoff (in seconds) for retrying the read-only RPC calls that prepare a tx cancellation. A
 // cancellation is fired in the background after a tx times out and is important (it frees the stuck
@@ -280,23 +283,17 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
   /**
    * Broadcasts a signed tx and returns its hash, computed from the signed tx rather than taken from the node's reply,
-   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send, and
-   * so does a send that every node answered with null: such a node took the request without confirming it, and if the
-   * tx never lands, the monitor speeds it up and sends it again.
+   * which a faulty node can get wrong or leave empty. A node that already holds the tx counts as a successful send.
    */
   private async sendSignedTransaction(serializedTransaction: Hex, nonce: number): Promise<Hex> {
     const txHash = computeSignedTransactionHash(serializedTransaction);
     const account = this.getSenderAddress().toString();
     let rpcHash: Hex | undefined;
     try {
-      rpcHash = await this.client.sendRawTransaction({ serializedTransaction });
+      rpcHash = await this.sendRawTransaction(serializedTransaction, txHash);
     } catch (err) {
       if (isAlreadyKnownTxError(err)) {
         this.logger.info(`L1 node already knows tx ${txHash}, treating it as sent`, { txHash, nonce, account });
-        return txHash;
-      }
-      if (getErrorCause(err, L1RpcNullResultError)) {
-        this.logger.warn(`L1 node answered null to tx ${txHash}, treating it as sent`, { txHash, nonce, account });
         return txHash;
       }
       throw err;
@@ -310,6 +307,29 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
       });
     }
     return txHash;
+  }
+
+  /**
+   * Sends a raw tx, and sends it again a few times if a failure leaves no definitive answer from the node, such as a
+   * timeout or a rate limit. viem does not retry sends, and sending the same signed tx again is safe: a node that got
+   * the first attempt answers "already known".
+   */
+  private async sendRawTransaction(serializedTransaction: Hex, txHash: Hex): Promise<Hex> {
+    for (const delayMs of SEND_RETRY_DELAYS_MS) {
+      try {
+        return await this.client.sendRawTransaction({ serializedTransaction });
+      } catch (err) {
+        if (!isTransientL1RpcError(err)) {
+          throw err;
+        }
+        this.logger.warn(`Sending L1 tx ${txHash} failed, retrying in ${delayMs}ms`, {
+          txHash,
+          error: formatViemError(err).message,
+        });
+        await sleep(delayMs);
+      }
+    }
+    return await this.client.sendRawTransaction({ serializedTransaction });
   }
 
   private async checkInterruptedOrTimedOut(gasConfig: Pick<L1TxConfig, 'txTimeoutAt'>): Promise<Date> {

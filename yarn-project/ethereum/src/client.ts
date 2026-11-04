@@ -11,6 +11,7 @@ import {
   type LocalAccount,
   type PrivateKeyAccount,
   RpcRequestError,
+  TimeoutError,
   createPublicClient,
   createWalletClient,
   fallback,
@@ -223,6 +224,30 @@ export function isL1RpcHttpStatus(err: unknown, status: number): boolean {
 /** Returns the JSON-RPC error code reported by the L1 node, if the error's cause chain carries one. */
 export function getL1RpcErrorCode(err: unknown): number | undefined {
   return getErrorCause(err, RpcRequestError)?.code;
+}
+
+/** JSON-RPC codes providers answer with when they rate-limit a caller: 429, -32005 (limit exceeded) and -32007. */
+const RATE_LIMIT_RPC_ERROR_CODES = new Set([429, -32005, -32007]);
+
+/**
+ * Returns whether an L1 RPC request failed without a definitive answer from the node, so that sending it again may
+ * succeed: a timeout, a network failure, an HTTP 408, 429 or 5xx, or a JSON-RPC rate limit. This is the subset of what
+ * viem retries that applies to a request whose caller turned viem's retries off.
+ */
+export function isTransientL1RpcError(err: unknown): boolean {
+  if (getErrorCause(err, TimeoutError)) {
+    return true;
+  }
+  const code = getL1RpcErrorCode(err);
+  if (code !== undefined) {
+    return RATE_LIMIT_RPC_ERROR_CODES.has(code);
+  }
+  const httpError = getErrorCause(err, HttpRequestError);
+  if (!httpError) {
+    return false;
+  }
+  const status = httpError.status;
+  return status === undefined || status === 408 || status === 429 || status >= 500;
 }
 
 /**
