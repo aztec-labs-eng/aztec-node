@@ -2,6 +2,7 @@ import { DomainSeparator } from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { type EventMetadataDefinition, decodeFromAbi } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AnchoredBlockParameter } from '@aztec-labs/stdlib/block';
 import { computeLogTag } from '@aztec-labs/stdlib/hash';
 import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
@@ -31,17 +32,15 @@ export type AllPublicEventsFilter = {
   contractAddress: AztecAddress;
   /**
    * The latest block the caller has synced to. The read throws if that block is no longer present, and only returns
-   * events up to and including it.
+   * events up to and including it. Defaults to the node's latest block when the read starts, so that every page the
+   * node serves comes from the same fork.
    */
   referenceBlock?: LogsQueryAnchor;
 } & (
   | {
       /** The block number from which to read events (inclusive). */
       fromBlock: BlockNumber;
-      /**
-       * The block number until which to read events (not inclusive). Without it, the read includes the latest block the
-       * node has.
-       */
+      /** The block number until which to read events (not inclusive). Without it, the read includes `referenceBlock`. */
       toBlock?: BlockNumber;
       /** Not allowed with a block range. */
       txHash?: never;
@@ -77,9 +76,8 @@ export type GetPublicEventsResult<T> = {
  * The node serves events in pages, so a single call can make many requests, and it holds all the events in memory.
  * Split long ranges into smaller ones.
  *
- * To poll for new events, read up to a chain tip, and only move on to the next range once the events have been handled.
- * Anchor the read on that tip with `referenceBlock`: a reorg during the read then throws, instead of mixing events from
- * both forks.
+ * To poll for new events, pass a chain tip as `referenceBlock`, so the next range can start right after it, and only
+ * move on to that range once the events have been handled.
  *
  * ```ts
  * const tip = await node.getBlockData('checkpointed');
@@ -112,7 +110,7 @@ export async function getAllPublicEvents<T>(
     fromBlock: filter.fromBlock,
     toBlock: filter.toBlock,
     txHash: filter.txHash,
-    referenceBlock: filter.referenceBlock,
+    referenceBlock: filter.referenceBlock ?? (await getLatestBlockAnchor(node)),
   });
 
   return logsForTag.map(log => decodePublicEvent<T>(log, eventMetadataDef, filter.contractAddress));
@@ -163,6 +161,15 @@ export async function getPublicEvents<T>(
       : undefined;
 
   return { events, nextCursor };
+}
+
+/** The node's latest block, named by number and hash so that it pins the fork it is on. */
+async function getLatestBlockAnchor(node: AztecNode): Promise<AnchoredBlockParameter> {
+  const latest = await node.getBlockData('latest');
+  if (latest === undefined) {
+    throw new Error('Node returned no latest block to anchor the public events read on');
+  }
+  return latest.header.toBlockParameter();
 }
 
 /** The tag under which a node indexes the public logs of this event type. */

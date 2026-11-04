@@ -1,13 +1,14 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type EventMetadataDefinition, EventSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash } from '@aztec-labs/stdlib/block';
+import { type BlockData, BlockHash } from '@aztec-labs/stdlib/block';
 import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { LogCursor, type LogResult, type PublicLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
-import { TxHash } from '@aztec-labs/stdlib/tx';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { EventCursor, getAllPublicEvents, getPublicEvents } from './events.js';
@@ -36,6 +37,17 @@ function servePages(node: MockProxy<AztecNode>, logs: LogResult[]) {
   });
 }
 
+/** The block data a node returns for the block with `header`. */
+async function blockDataOf(header: BlockHeader): Promise<BlockData> {
+  return {
+    header,
+    archive: AppendOnlyTreeSnapshot.random(),
+    blockHash: await header.hash(),
+    checkpointNumber: CheckpointNumber(1),
+    indexWithinCheckpoint: IndexWithinCheckpoint(0),
+  };
+}
+
 describe('getAllPublicEvents', () => {
   let node: MockProxy<AztecNode>;
   let contractAddress: AztecAddress;
@@ -45,6 +57,7 @@ describe('getAllPublicEvents', () => {
     node = mock<AztecNode>();
     contractAddress = await AztecAddress.random();
     eventDef = { eventSelector: EventSelector.random(), abiType: { kind: 'field' }, fieldNames: ['value'] };
+    node.getBlockData.mockResolvedValue(await blockDataOf(BlockHeader.random()));
   });
 
   it.each([
@@ -73,6 +86,22 @@ describe('getAllPublicEvents', () => {
     expect(queries).toHaveLength(2);
     for (const query of queries) {
       expect(query).toMatchObject({ contractAddress, fromBlock, toBlock, referenceBlock });
+    }
+  });
+
+  it('anchors every page on the latest block at the start of the read when no reference block is given', async () => {
+    const latestAtStart = BlockHeader.random({ blockNumber: BlockNumber(9) });
+    node.getBlockData
+      .mockResolvedValueOnce(await blockDataOf(latestAtStart))
+      .mockResolvedValue(await blockDataOf(BlockHeader.random({ blockNumber: BlockNumber(10) })));
+    servePages(node, page(0, MAX_LOGS_PER_TAG + 1));
+
+    await getAllPublicEvents<bigint>(node, eventDef, { contractAddress, fromBlock: BlockNumber(1) });
+
+    const queries = node.getPublicLogsByTags.mock.calls.map(([query]) => query);
+    expect(queries).toHaveLength(2);
+    for (const query of queries) {
+      expect(query.referenceBlock).toEqual(await latestAtStart.toBlockParameter());
     }
   });
 
