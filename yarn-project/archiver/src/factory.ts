@@ -1,6 +1,5 @@
 import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { merge } from '@aztec-labs/foundation/collection';
@@ -69,7 +68,6 @@ export async function createArchiver(
   }
 
   const publicClient = deps.l1Client;
-  const debugClient = deps.l1DebugClient ?? (publicClient as ViemPublicDebugClient);
 
   // Create L1 contract instances
   const rollup = new RollupContract(publicClient, config.rollupAddress);
@@ -143,7 +141,7 @@ export async function createArchiver(
   // Create the L1 synchronizer
   const synchronizer = new ArchiverL1Synchronizer(
     publicClient,
-    debugClient,
+    deps.l1DebugClient,
     rollup,
     inbox,
     archiverStore,
@@ -162,7 +160,7 @@ export async function createArchiver(
 
   const archiver = new Archiver(
     publicClient,
-    debugClient,
+    deps.l1DebugClient,
     rollup,
     outbox,
     { ...pickL1ContractAddresses(config), slashingProposerAddress },

@@ -261,7 +261,7 @@ export async function createAztecNodeService(
       config,
       {
         l1Client: publicClient,
-        l1DebugClient: debugClient,
+        l1DebugClient: debugClient ?? (publicClient as ViemPublicDebugClient),
         blobClient,
         epochCache,
         telemetry,
