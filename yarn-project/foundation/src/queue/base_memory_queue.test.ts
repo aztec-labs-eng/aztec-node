@@ -1,3 +1,6 @@
+import { jest } from '@jest/globals';
+
+import { TimeoutError } from '../error/index.js';
 import { sleep } from '../sleep/index.js';
 import { FifoMemoryQueue } from './fifo_memory_queue.js';
 import { PriorityMemoryQueue } from './priority_memory_queue.js';
@@ -73,5 +76,38 @@ describe.each(queueFactories)('%s queue process', (_name, createQueue) => {
     await processing;
 
     expect(seen).toEqual([1, 2, 3]);
+  });
+});
+
+describe.each(queueFactories)('%s queue get with timeout', (_name, createQueue) => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('rejects when no item arrives in time', async () => {
+    const queue = createQueue();
+    const next = queue.get(1);
+    jest.advanceTimersByTime(1000);
+    await expect(next).rejects.toThrow(TimeoutError);
+  });
+
+  it('leaves no timer pending once an item arrives', async () => {
+    const queue = createQueue();
+    const next = queue.get(60);
+    queue.put(1);
+    expect(await next).toBe(1);
+    expect(jest.getTimerCount()).toEqual(0);
+  });
+
+  it('leaves no timer pending once the queue ends', async () => {
+    const queue = createQueue();
+    const next = queue.get(60);
+    queue.end();
+    expect(await next).toBeNull();
+    expect(jest.getTimerCount()).toEqual(0);
   });
 });
