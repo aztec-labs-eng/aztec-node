@@ -22,6 +22,18 @@ export function makeLoggingErrorHandler(
  * RunningPromise is a utility class that helps manage the execution of an asynchronous function
  * at a specified polling interval. It allows starting, stopping, and checking the status of the
  * internally managed promise. The class also supports interrupting the polling process when stopped.
+ *
+ * Use this for periodic background work instead of `setInterval` or a `while (this.running) { ...; await sleep() }`
+ * loop. Runs never overlap: `start()` runs `fn` immediately, then waits `pollingIntervalMS` (milliseconds) after each
+ * run finishes before starting the next. Errors thrown by `fn` go to the error handler (logged by default) and the loop
+ * keeps going; return {@link RunningPromise.EXIT} from the handler to stop it. `stop()` cuts the wait short and resolves
+ * once the run in flight completes, and `trigger()` requests an extra run without waiting for the interval.
+ *
+ * @example
+ * this.runningPromise = new RunningPromise(() => this.work(), this.log, 1000);
+ * this.runningPromise.start();
+ * // on shutdown
+ * await this.runningPromise.stop();
  */
 export class RunningPromise {
   private running = false;
