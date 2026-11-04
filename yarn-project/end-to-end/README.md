@@ -246,7 +246,7 @@ To verify that contracts deployed from a previous release still work against the
 `CONTRACT_ARTIFACTS_VERSION` to a stable release with a committed tarball in `legacy-contracts/` (see its README):
 
 ```bash
-CONTRACT_ARTIFACTS_VERSION=6.0.0 yarn test:e2e src/automine/token/access_control.parallel.test.ts
+CONTRACT_ARTIFACTS_VERSION=X.Y.Z yarn test:e2e src/automine/token/access_control.parallel.test.ts
 ```
 
 Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeScript wrapper classes
@@ -259,9 +259,9 @@ runs). A startup banner and a per-redirect line are printed to stderr so you can
 artifacts were actually loaded:
 
 ```
-[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=6.0.0
-[legacy-contracts][jest] redirecting noir-contracts.js/artifacts/*.json -> .legacy-contracts/6.0.0/...
-[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/6.0.0/.../token_contract-Token.json
+[legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=X.Y.Z
+[legacy-contracts][jest] redirecting noir-contracts.js/artifacts/*.json -> .legacy-contracts/X.Y.Z/...
+[legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/X.Y.Z/.../token_contract-Token.json
 ```
 
 When `CONTRACT_ARTIFACTS_VERSION` is unset the test run is byte-identical to the default behaviour. The
