@@ -10,7 +10,7 @@ pub mod test_environment;
 pub mod txe_oracles;
 pub mod authwit;
 pub mod messaging_secret_strategy;
-/// Deprecated: use [`messaging_secret_strategy`].
+/// Deprecated: use [`messaging_secret_strategy`](super::messaging_secret_strategy).
 pub mod tagging_secret_strategy {
     pub use super::messaging_secret_strategy::compute_directional_app_secret;
 
