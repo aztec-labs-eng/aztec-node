@@ -517,6 +517,39 @@ describe('ProverNode', () => {
     ).toEqual([CheckpointNumber(2), CheckpointNumber(3)]);
   });
 
+  it('retries a stored checkpoint of a fully-proven epoch without rereading its pruned history', async () => {
+    // Four-slot epochs. Epoch 1 holds checkpoints 2 and 3 (blocks 2 and 3, slots 4 and 5). Checkpoint 2 enters the
+    // store but notifying the session manager fails, so the cursor stays at 1. World state then prunes block 1's
+    // snapshot, which only checkpoint 2 needed.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
+    setupRegistrationSuccess();
+    mockChain({ provenBlock: 1, blockSlots: [0, 1, 4, 5] });
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    sessionManager.onCheckpointAdded.mockRejectedValueOnce(new Error('archiver unavailable'));
+    mineCheckpoint(makeCheckpoint(1, 1, 1));
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
+    await expect(proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)))).rejects.toThrow();
+
+    mockChain({ provenBlock: 3, blockSlots: [0, 1, 4, 5] });
+    mockOldestHistoricBlock(2);
+    const snapshot = worldState.getSnapshot(BlockNumber(0));
+    worldState.getSnapshot.mockImplementation(block => {
+      if (block > 0 && block < 2) {
+        throw new Error(`Snapshot ${block} has been pruned`);
+      }
+      return snapshot;
+    });
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
+
+    expect(
+      proverNode
+        .getCheckpointStore()
+        .listAll()
+        .map(p => p.checkpoint.number),
+    ).toEqual([CheckpointNumber(2), CheckpointNumber(3)]);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+  });
+
   it('skips a fully-proven epoch with our full-epoch proof on L1 while world state cannot report its history', async () => {
     // Checkpoint 3 (block 3, slot 3) is epoch 3's only checkpoint and needs block 2's snapshot. Registering it is not
     // needed, so a world-state status failure must not stall the catch-up on it.

@@ -331,8 +331,12 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       slotNumber: checkpoint.header.slotNumber,
     });
 
-    const registerData = await this.collectRegisterData(checkpoint, published);
-    await this.checkpointStore.addOrUpdate(checkpoint, registerData);
+    // A retry can revisit a checkpoint already in the store. Its register data would be discarded, and collecting it
+    // reads world-state history that may since have been pruned.
+    if (!this.checkpointStore.getByCheckpoint(checkpoint)) {
+      const registerData = await this.collectRegisterData(checkpoint, published);
+      await this.checkpointStore.addOrUpdate(checkpoint, registerData);
+    }
     await this.sessionManager?.onCheckpointAdded(epochNumber);
 
     // Tips-only mode delivers no blocks, so record one witness per checkpointed block: a reorg into the checkpoint's
