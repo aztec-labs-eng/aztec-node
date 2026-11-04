@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - "v[0-9]+"
+      - "release/**"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
 
@@ -20,9 +21,9 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
-  # The main CI job for Aztec. Fast runs gate pull requests; every push to main or to a
-  # release line (v<N>) runs full CI, and main's also produce the per-commit benchmark
-  # series (bench/main).
+  # The main CI job for Aztec. Fast runs gate pull requests; every push to main, to a
+  # release line (v<N>) or to a release branch (release/*) runs full CI, and main's also
+  # produce the per-commit benchmark series (bench/main).
   #
   # This orchestrates AWS EC2 spot instances then remotely runs ./bootstrap.sh
   # The ci-full label enables heavier tests. For other labels, see ci3.sh.

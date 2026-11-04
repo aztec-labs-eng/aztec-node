@@ -84,10 +84,10 @@ function main {
     ci_mode="full-no-test-cache"
   # elif has_label "ci-test-network"; then
   #   ci_mode="full-no-test-cache"
-  elif [[ "${GITHUB_REF:-}" =~ ^refs/heads/(main|v[0-9]+)$ ]]; then
-    # Pushes to main and to release lines (v<N>) run full CI: with no merge queue, this is
-    # the post-merge gate. Main's runs also produce the per-commit benchmark series (see
-    # BENCH_UPLOAD/BENCH_BRANCH below).
+  elif [[ "${GITHUB_REF:-}" =~ ^refs/heads/(main|v[0-9]+|release/.+)$ ]]; then
+    # Pushes to main, to release lines (v<N>) and to release branches (release/*) run full
+    # CI: with no merge queue, this is the post-merge gate. Main's runs also produce the
+    # per-commit benchmark series (see BENCH_UPLOAD/BENCH_BRANCH below).
     ci_mode="full"
   else
     ci_mode="fast"
