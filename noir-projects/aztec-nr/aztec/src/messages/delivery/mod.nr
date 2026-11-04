@@ -20,7 +20,7 @@ use crate::{
 use crate::protocol::address::AztecAddress;
 use messaging_secret_derivation::MessagingSecretDerivation;
 use mode::DeliveryMode;
-use tag::derive_log_tag;
+use tag::{derive_log_tag, resolve_delivery_messaging_secret};
 
 pub use builder::{
     MessageDelivery, MessageDeliveryBuilder, OffchainDelivery, OnchainConstrainedDelivery, OnchainUnconstrainedDelivery,
@@ -115,19 +115,29 @@ fn do_onchain_private_message_delivery<Env, let MESSAGE_PLAINTEXT_LEN: u32>(
     let onchain_mode = to_onchain_delivery_mode(mode);
     let sender = resolve_sender(sender_override);
 
-    let contract_address = context.this_address();
-
-    let ciphertext = remove_constraints_if(
-        !is_constrained,
-        || AES128::encrypt(encode_into_message_plaintext(), recipient, contract_address),
-    );
-
-    let log_tag = derive_log_tag(
+    let delivery_messaging_secret = resolve_delivery_messaging_secret(
         context,
         onchain_mode,
         sender,
         recipient,
         messaging_secret_derivation,
+    );
+
+    // The message is encrypted with the secret that tags it, which by definition is known to the recipient when they
+    // find the log, and they can therefore decrypt it. Under constrained delivery the messaging secret is constrained
+    // when deriving the tag below.
+    let messaging_secret = delivery_messaging_secret.secret();
+    let ciphertext = remove_constraints_if(
+        !is_constrained,
+        || AES128::encrypt_with_messaging_secret(encode_into_message_plaintext(), messaging_secret),
+    );
+
+    let log_tag = derive_log_tag(
+        delivery_messaging_secret,
+        context,
+        onchain_mode,
+        sender,
+        recipient,
     );
 
     // This value must be constant to avoid predicating the context calls below, which might result in

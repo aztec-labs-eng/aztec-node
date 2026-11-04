@@ -617,7 +617,7 @@ describe('Utility Execution test suite', () => {
       });
     });
 
-    describe('getPendingTaggedLogsV2', () => {
+    describe('getPendingTaggedLogsV3', () => {
       const service = new EphemeralArrayService();
 
       it("uses the provided secret's delivery mode when querying pending log tags", async () => {
@@ -656,7 +656,7 @@ describe('Utility Execution test suite', () => {
         });
 
         const oracle = makeOracle({ scopes: [owner] });
-        const result = await oracle.getPendingTaggedLogsV2(owner, EphemeralArray.fromValues(service, providedSecrets));
+        const result = await oracle.getPendingTaggedLogsV3(owner, EphemeralArray.fromValues(service, providedSecrets));
 
         const queried = aztecNode.getPrivateLogsByTags.mock.calls.flatMap(([query]) =>
           query.tags.map(entry => ('tag' in entry ? entry.tag.value.toString() : entry.value.toString())),
@@ -674,6 +674,7 @@ describe('Utility Execution test suite', () => {
               blockNumber: log.blockNumber,
               blockHash: log.blockHash.toFr(),
             },
+            messagingSecret: sharedSecret,
           },
         ]);
       });
@@ -681,7 +682,7 @@ describe('Utility Execution test suite', () => {
       it('rejects a scope outside the allowed scopes', async () => {
         const outOfScope = await AztecAddress.random();
         await expect(
-          utilityExecutionOracle.getPendingTaggedLogsV2(
+          utilityExecutionOracle.getPendingTaggedLogsV3(
             outOfScope,
             EphemeralArray.fromValues<ProvidedSecret>(service, []),
           ),
@@ -1041,7 +1042,7 @@ describe('Utility Execution test suite', () => {
           Promise.resolve(query.tags.map(entry => (('tag' in entry ? entry.tag : entry).equals(tag) ? [log] : []))),
         );
 
-        await oracle.getPendingTaggedLogsV2(
+        await oracle.getPendingTaggedLogsV3(
           owner,
           EphemeralArray.fromValues<ProvidedSecret>(service, [{ secret, mode }]),
         );

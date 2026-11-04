@@ -36,7 +36,7 @@ where
     /// Any recipient that receives the private event information will be able to prove its emission - events have no
     /// owner, and as such all recipients are treated equally.
     ///
-    /// The message is first encrypted to the recipient's public key, ensuring no other actor can read it.
+    /// The message is first encrypted for the recipient, ensuring no other actor can read it.
     ///
     /// The `delivery_mode` is produced by the [`crate::messages::delivery::MessageDelivery`] entrypoints
     /// (`offchain`, `onchain_unconstrained`, or `onchain_constrained`). It informs costs (both proving time and TX

@@ -16,8 +16,8 @@ pub(crate) global DOM_SEP__RECIPIENT_TSK_SECRET: u32 = 1256167324;
 
 /// A contract's choice of messaging-secret derivation.
 ///
-/// Selected through the on-chain delivery builder's `via_*` methods. On-chain delivery tags every message from a
-/// secret shared between the sender and the recipient, and there is
+/// Selected through the on-chain delivery builder's `via_*` methods. On-chain delivery tags and encrypts every message
+/// with a secret shared between the sender and the recipient, and there is
 /// [more than one way][`crate::messages::delivery::ResolvedMessagingSecretStrategy`] to establish it.
 /// Selecting a derivation instead lets the contract fix it, and its choice is honored over the wallet-resolved
 /// strategy.
@@ -48,7 +48,7 @@ impl MessagingSecretDerivation {
         assert_constant(self.kind as Field);
     }
 
-    /// Resolves this choice into the [`DeliveryMessagingSecret`] backing the message tag.
+    /// Resolves this choice into the [`DeliveryMessagingSecret`] backing the message's tag and encryption.
     pub(crate) fn into_delivery_messaging_secret(
         self,
         context: &mut PrivateContext,

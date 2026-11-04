@@ -3,11 +3,16 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toACVMField } from '@aztec-labs/simulator/client';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
+import { EphemeralArrayService } from '../ephemeral_array_service.js';
+import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import { Option } from '../noir-structs/option.js';
+import type { PendingTaggedLog } from '../noir-structs/pending_tagged_log.js';
 import { buildACIRCallback } from './acir_callback.js';
 import { LEGACY_ORACLE_REGISTRY, type LegacyOracleEntry } from './legacy_oracle_registry.js';
 import { FIELD, U32 } from './oracle_registry.js';
+import type { OutputSlot } from './oracle_type_mappings.js';
 
 // How aztec-nr serializes `OnchainDeliveryMode::onchain_unconstrained()`. stdlib does not export its own constant for
 // this value, to keep its public API small.
@@ -144,6 +149,41 @@ describe('legacy oracle dispatch', () => {
 
     const legacyWire = await callback['aztec_prv_resolveTaggingStrategy'](...inputs);
     expect(legacyWire).toEqual(await callback['aztec_prv_resolveMessagingSecretStrategy'](...inputs));
+  });
+
+  it('serves the retired getPendingTaggedLogsV2 name with the V3 wire minus the messaging secret', async () => {
+    const service = new EphemeralArrayService();
+    const pendingTaggedLog: PendingTaggedLog = {
+      log: [Fr.random(), Fr.random()],
+      context: {
+        txHash: TxHash.random(),
+        uniqueNoteHashesInTx: [Fr.random()],
+        firstNullifierInTx: Fr.random(),
+        blockNumber: 7,
+        blockHash: Fr.random(),
+      },
+      messagingSecret: Fr.random(),
+    };
+    const handler = {
+      isUtility: true,
+      getPendingTaggedLogsV3: () => Promise.resolve(EphemeralArray.fromValues(service, [pendingTaggedLog])),
+    } as unknown as Handler;
+    const inputs = [[toACVMField(await AztecAddress.random())], [toACVMField(service.newArray([]))]];
+
+    const callback = buildACIRCallback(handler);
+
+    const readOnlyElement = ([slot]: OutputSlot[]) => {
+      if (Array.isArray(slot)) {
+        throw new Error(`Expected an ephemeral array slot, got ${slot}`);
+      }
+      const [element] = service.readArrayAt(Fr.fromString(slot));
+      return element;
+    };
+    const modernElement = readOnlyElement(await callback['aztec_utl_getPendingTaggedLogsV3'](...inputs));
+    const legacyElement = readOnlyElement(await callback['aztec_utl_getPendingTaggedLogsV2'](...inputs));
+
+    expect(modernElement.at(-1)).toEqual(pendingTaggedLog.messagingSecret);
+    expect(legacyElement).toEqual(modernElement.slice(0, -1));
   });
 
   it('rejects a legacy name that collides with a live oracle', () => {

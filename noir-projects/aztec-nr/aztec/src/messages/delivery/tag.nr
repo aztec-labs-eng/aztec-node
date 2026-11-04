@@ -1,4 +1,4 @@
-//! Discovery tag derivation for on-chain message delivery.
+//! Messaging secret resolution and discovery tag derivation for on-chain message delivery.
 //!
 //! Constrained derivation also emits the sequence nullifier; see [`super::constrained_delivery`].
 
@@ -16,22 +16,21 @@ use crate::protocol::{
     hash::{compute_log_tag, poseidon2_hash},
 };
 
-/// Derives the discovery log tag for an on-chain delivery.
+/// Resolves the messaging secret an on-chain delivery tags and encrypts its message with.
 ///
 /// `messaging_secret_derivation` is the contract's compile-time choice of messaging secret derivation, or `None` for
 /// the wallet-resolved default. It must be a compile-time constant so unused derivations are eliminated.
-pub(crate) fn derive_log_tag(
+pub(crate) fn resolve_delivery_messaging_secret(
     context: &mut PrivateContext,
     mode: OnchainDeliveryMode,
     sender: AztecAddress,
     recipient: AztecAddress,
     messaging_secret_derivation: Option<MessagingSecretDerivation>,
-) -> Field {
-    let delivery_messaging_secret = messaging_secret_derivation.map_or_else(
+) -> DeliveryMessagingSecret {
+    messaging_secret_derivation.map_or_else(
         || default_messaging_secret(context, sender, recipient, mode),
         |derivation| derivation.into_delivery_messaging_secret(context, sender, recipient),
-    );
-    tag_with(delivery_messaging_secret, context, mode, sender, recipient)
+    )
 }
 
 /// The wallet-resolved default: reuse a handshake already registered for the pair, otherwise let the wallet resolve
@@ -55,7 +54,8 @@ fn default_messaging_secret(
     )
 }
 
-fn tag_with(
+/// Derives the discovery log tag for an on-chain delivery from its messaging secret.
+pub(crate) fn derive_log_tag(
     delivery_messaging_secret: DeliveryMessagingSecret,
     context: &mut PrivateContext,
     mode: OnchainDeliveryMode,
@@ -92,6 +92,7 @@ fn tag_from_secret_and_index(secret: Field, index: u32, mode: OnchainDeliveryMod
 }
 
 mod test {
+    use crate::context::PrivateContext;
     use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
     use crate::messages::delivery::{
         messaging_secret_derivation::MessagingSecretDerivation, ResolvedMessagingSecretStrategy,
@@ -103,7 +104,7 @@ mod test {
         traits::{FromField, Serialize},
     };
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::{derive_log_tag, OnchainDeliveryMode, tag_from_secret_and_index};
+    use super::{derive_log_tag, OnchainDeliveryMode, resolve_delivery_messaging_secret, tag_from_secret_and_index};
     use std::test::OracleMock;
 
     global SENDER: AztecAddress = AztecAddress::from_field(1);
@@ -141,11 +142,9 @@ mod test {
             );
 
             assert_eq(
-                derive_log_tag(
+                resolve_and_derive_log_tag(
                     context,
                     OnchainDeliveryMode::onchain_unconstrained(),
-                    SENDER,
-                    RECIPIENT,
                     Option::none(),
                 ),
                 tag_from_secret_and_index(secret, index, OnchainDeliveryMode::onchain_unconstrained()),
@@ -170,11 +169,9 @@ mod test {
             let _ = OracleMock::mock("aztec_prv_getNextTaggingIndex").returns(index);
 
             assert_eq(
-                derive_log_tag(
+                resolve_and_derive_log_tag(
                     context,
                     OnchainDeliveryMode::onchain_unconstrained(),
-                    SENDER,
-                    RECIPIENT,
                     Option::none(),
                 ),
                 tag_from_secret_and_index(secret, index, OnchainDeliveryMode::onchain_unconstrained()),
@@ -195,11 +192,9 @@ mod test {
             );
             let _ = OracleMock::mock("aztec_prv_getNextTaggingIndex").returns(index);
 
-            let _ = derive_log_tag(
+            let _ = resolve_and_derive_log_tag(
                 context,
                 OnchainDeliveryMode::onchain_constrained(),
-                SENDER,
-                RECIPIENT,
                 Option::none(),
             );
         });
@@ -220,11 +215,9 @@ mod test {
             let _ = OracleMock::mock("aztec_prv_isNullifierPending").returns(false);
 
             assert_eq(
-                derive_log_tag(
+                resolve_and_derive_log_tag(
                     context,
                     OnchainDeliveryMode::onchain_constrained(),
-                    SENDER,
-                    RECIPIENT,
                     Option::none(),
                 ),
                 tag_from_secret_and_index(secret, index, OnchainDeliveryMode::onchain_constrained()),
@@ -236,7 +229,7 @@ mod test {
     }
 
     #[test]
-    unconstrained fn derive_log_tag_honors_the_messaging_secret_derivation_override() {
+    unconstrained fn resolution_honors_the_messaging_secret_derivation_override() {
         let env = TestEnvironment::new();
         let secret: Field = 7;
         let index: u32 = 3;
@@ -251,11 +244,9 @@ mod test {
 
             // With a contract-fixed derivation, the tag comes from the override's secret, not the wallet's.
             assert_eq(
-                derive_log_tag(
+                resolve_and_derive_log_tag(
                     context,
                     OnchainDeliveryMode::onchain_unconstrained(),
-                    SENDER,
-                    RECIPIENT,
                     Option::some(MessagingSecretDerivation::address_derived()),
                 ),
                 tag_from_secret_and_index(secret, index, OnchainDeliveryMode::onchain_unconstrained()),
@@ -268,5 +259,21 @@ mod test {
 
     unconstrained fn mock_existing_handshake_secrets(maybe_secrets: Option<AppSiloedHandshakeSecrets>) {
         let _ = OracleMock::mock("aztec_utl_callUtilityFunction").returns(maybe_secrets.serialize());
+    }
+
+    /// Resolves the delivery's messaging secret and derives its tag, as on-chain delivery does.
+    unconstrained fn resolve_and_derive_log_tag(
+        context: &mut PrivateContext,
+        mode: OnchainDeliveryMode,
+        messaging_secret_derivation: Option<MessagingSecretDerivation>,
+    ) -> Field {
+        let delivery_messaging_secret = resolve_delivery_messaging_secret(
+            context,
+            mode,
+            SENDER,
+            RECIPIENT,
+            messaging_secret_derivation,
+        );
+        derive_log_tag(delivery_messaging_secret, context, mode, SENDER, RECIPIENT)
     }
 }

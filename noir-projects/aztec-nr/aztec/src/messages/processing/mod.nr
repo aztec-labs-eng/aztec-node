@@ -73,7 +73,7 @@ pub struct OffchainMessageWithTx {
 /// `owner` is the address used in note hash and nullifier computation, often requiring knowledge of their nullifier
 /// secret key.
 ///
-/// `scope` is the account to which the note message was delivered (i.e. the address the message was encrypted to).
+/// `scope` is the account to which the note message was delivered (i.e. the message's recipient).
 /// This determines which PXE account can see the note - other accounts will not be able to access it (e.g. other
 /// accounts will not be able to see one another's token balance notes, even in the same PXE) unless authorized. In
 /// most cases `recipient` equals `owner`, but they can differ in scenarios like delegated discovery.

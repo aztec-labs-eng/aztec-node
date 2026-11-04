@@ -33,7 +33,7 @@ where
 
     /// Delivers the note message to its owner, providing them access to the private note information.
     ///
-    /// The message is first encrypted to the owner's public key, ensuring no other actor can read it.
+    /// The message is first encrypted for the owner, ensuring no other actor can read it.
     ///
     /// The `delivery_mode` is produced by the [`crate::messages::delivery::MessageDelivery`] entrypoints
     /// (`offchain`, `onchain_unconstrained`, or `onchain_constrained`). It informs costs (both proving time and TX

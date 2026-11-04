@@ -11,7 +11,7 @@
 /// if AZTEC_NR_MINOR > PXE_MINOR because if a contract is updated to use a newer Aztec.nr dependency without actually
 /// using any of the new oracles then there is no reason to throw.
 export const ORACLE_VERSION_MAJOR = 33;
-export const ORACLE_VERSION_MINOR = 3;
+export const ORACLE_VERSION_MINOR = 4;
 
 /// This hash is computed from `ORACLE_REGISTRY` (each oracle's name, ordered parameter names and
 /// types, and return type) and is used to detect when the oracle interface changes. When it does, you need to either:
@@ -19,7 +19,7 @@ export const ORACLE_VERSION_MINOR = 3;
 /// - increment only `ORACLE_VERSION_MINOR` if the change is additive (a new oracle was added).
 ///
 /// These constants must be kept in sync between this file and `noir-projects/aztec-nr/aztec/src/oracle/version.nr`.
-export const ORACLE_INTERFACE_HASH = 'a1b2200027b2ef05b570bbece9d000d9827ead9314f3ae2873def6563f4f1b5d';
+export const ORACLE_INTERFACE_HASH = '358854af359013f0ef9e167daaf7ae98cf8295664ea12a9bf326d3c4b6b462f1';
 
 /// The oracle interface served to the protocol contracts, which is versioned separately from the Aztec.nr one above.
 /// It is a single number that must match exactly: protocol contracts are only rebuilt when they are redeployed on a

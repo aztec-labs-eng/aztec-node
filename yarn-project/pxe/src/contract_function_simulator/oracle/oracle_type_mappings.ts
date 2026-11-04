@@ -549,6 +549,7 @@ export const RESOLVED_TX: TypeMapping<ResolvedTx> = STRUCT([
 export const PENDING_TAGGED_LOG: TypeMapping<PendingTaggedLog> = STRUCT([
   { name: 'log', type: FIXED_BOUNDED_VEC(FIELD, PRIVATE_LOG_SIZE_IN_FIELDS) },
   { name: 'context', type: RESOLVED_TX },
+  { name: 'messagingSecret', type: FIELD },
 ]);
 
 export const BLOCK_REFERENCE: TypeMapping<BlockReference> = STRUCT([

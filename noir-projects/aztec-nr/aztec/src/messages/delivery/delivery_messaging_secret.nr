@@ -17,7 +17,7 @@ global NEW_INTERACTIVE_HANDSHAKE: u8 = 4;
 #[derive(Eq)]
 pub(crate) struct DeliveryMessagingSecret {
     kind: u8,
-    /// The secret the message tag derives from. Every kind resolves to exactly one.
+    /// The secret the message's tag and encryption derive from. Every kind resolves to exactly one.
     secret: Field,
     /// The handshake sender-only secret, folded into the constrained-delivery sequence nullifier. Only meaningful
     /// for handshake-backed kinds.
@@ -66,7 +66,7 @@ impl DeliveryMessagingSecret {
         Self { kind: UNCONSTRAINED_SECRET, secret, sender_only: 0 }
     }
 
-    /// The secret the message tag derives from.
+    /// The secret the message's tag and encryption derive from.
     pub(crate) fn secret(self) -> Field {
         self.secret
     }

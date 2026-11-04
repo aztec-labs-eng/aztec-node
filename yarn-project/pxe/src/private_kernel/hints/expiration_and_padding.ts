@@ -24,8 +24,11 @@ const MAX_SIDE_EFFECTS_PER_TX: SideEffectCounts = {
 
 const NO_SIDE_EFFECTS: SideEffectCounts = { noteHashes: 0, nullifiers: 0, privateLogs: 0 };
 
-/** The private log field where an aztec-nr message carries its ephemeral public key's x-coordinate, after the tag. */
-const EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX = 1;
+/**
+ * The private log field where an aztec-nr message carries its salt or its ephemeral public key's x-coordinate, after
+ * the tag.
+ */
+const SALT_OR_EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX = 1;
 
 /**
  * Resolves the expiry a tx publishes and the padding it adds, through the wallet's hook or PXE's default when the hook
@@ -88,12 +91,12 @@ export async function makePadding(paddedSideEffectAmounts: PaddedSideEffectAmoun
 }
 
 /**
- * A random private log shaped like an aztec-nr message. Its ephemeral public key field holds the x-coordinate of a
- * random curve point, as in a real message: a uniformly random field is not one about half of the time.
+ * A random private log shaped like an aztec-nr message. Its salt or ephemeral public key field holds the x-coordinate
+ * of a random curve point, as in a real message: a uniformly random field is not one about half of the time.
  */
 async function makePaddingPrivateLog(): Promise<PrivateLog> {
   const log = PrivateLog.random();
-  log.fields[EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX] = (await Point.random()).x;
+  log.fields[SALT_OR_EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX] = (await Point.random()).x;
   return log;
 }
 

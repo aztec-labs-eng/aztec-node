@@ -9,4 +9,6 @@ import type { ResolvedTx } from './resolved_tx.js';
 export type PendingTaggedLog = {
   log: Fr[];
   context: ResolvedTx;
+  /** The messaging secret whose tag found the log. */
+  messagingSecret: Fr;
 };

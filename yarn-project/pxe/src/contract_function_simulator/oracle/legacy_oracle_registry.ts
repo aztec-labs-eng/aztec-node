@@ -19,6 +19,7 @@ import {
   EPHEMERAL_ARRAY,
   FIELD,
   FIXED_BOUNDED_VEC,
+  RESOLVED_TX,
   STRUCT,
   TX_HASH,
   type TypeMapping,
@@ -42,6 +43,12 @@ const LEGACY_MESSAGE_CONTEXT: TypeMapping<LegacyMessageContext> = STRUCT<LegacyM
 const LEGACY_PENDING_TAGGED_LOG: TypeMapping<LegacyPendingTaggedLog> = STRUCT<LegacyPendingTaggedLog>([
   { name: 'log', type: FIXED_BOUNDED_VEC(FIELD, PRIVATE_LOG_SIZE_IN_FIELDS) },
   { name: 'context', type: LEGACY_MESSAGE_CONTEXT },
+]);
+
+// The pending tagged log carried by `getPendingTaggedLogsV2`, which predates the messaging secret that found the log.
+const PENDING_TAGGED_LOG_V2: TypeMapping<PendingTaggedLogV2> = STRUCT<PendingTaggedLogV2>([
+  { name: 'log', type: FIXED_BOUNDED_VEC(FIELD, PRIVATE_LOG_SIZE_IN_FIELDS) },
+  { name: 'context', type: RESOLVED_TX },
 ]);
 
 /**
@@ -81,11 +88,19 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
     },
   }),
   aztec_utl_getPendingTaggedLogs: legacyOracle({
-    modernOracle: 'aztec_utl_getPendingTaggedLogsV2',
+    modernOracle: 'aztec_utl_getPendingTaggedLogsV3',
     returnType: {
       legacyType: EPHEMERAL_ARRAY(LEGACY_PENDING_TAGGED_LOG),
       // We can map this directly, since `ResolvedTx` carries the legacy context's fields under the same names
       mapping: result => result as unknown as EphemeralArray<LegacyPendingTaggedLog>,
+    },
+  }),
+  aztec_utl_getPendingTaggedLogsV2: legacyOracle({
+    modernOracle: 'aztec_utl_getPendingTaggedLogsV3',
+    returnType: {
+      legacyType: EPHEMERAL_ARRAY(PENDING_TAGGED_LOG_V2),
+      // We can map this directly, since the new type is a superset of the old type
+      mapping: result => result as unknown as EphemeralArray<PendingTaggedLogV2>,
     },
   }),
   aztec_prv_getAppTaggingSecret: legacyOracle({
@@ -110,6 +125,8 @@ type LegacyPendingTaggedLog = {
   log: PendingTaggedLog['log'];
   context: LegacyMessageContext;
 };
+
+type PendingTaggedLogV2 = Omit<PendingTaggedLog, 'messagingSecret'>;
 
 type Registry = typeof ORACLE_REGISTRY;
 

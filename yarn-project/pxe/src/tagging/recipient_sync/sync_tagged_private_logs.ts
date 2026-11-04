@@ -19,7 +19,7 @@ import { findHighestIndexes } from './utils/find_highest_indexes.js';
 /**
  * Fetches and syncs tagged private logs for multiple sender-recipient pairs, batching tag queries across all secrets
  * into shared RPC calls. Handles both constrained and unconstrained secrets, which differ in their scan strategy
- * but share the same batching infrastructure.
+ * but share the same batching infrastructure. Each log is returned with the secret whose tag found it.
  *
  * # Unconstrained secrets
  *
@@ -90,7 +90,7 @@ export async function syncTaggedPrivateLogs(
   anchorBlockHeader: BlockHeader,
   finalizedBlockNumber: BlockNumber,
   changeSetId: ChangeSetId,
-): Promise<LogResult[]> {
+): Promise<LogWithMessagingSecret[]> {
   if (secrets.length === 0) {
     return [];
   }
@@ -100,7 +100,7 @@ export async function syncTaggedPrivateLogs(
 
   // Read stored indexes from the db and compute the initial [start, end) range for each secret
   let pending = await getIndexRangesForSecrets(secrets, taggingStore, changeSetId);
-  const allLogs: LogResult[] = [];
+  const allLogs: LogWithMessagingSecret[] = [];
 
   while (pending.length > 0) {
     // Compute tags for all pending secrets and fetch logs in batched RPC calls
@@ -114,7 +114,7 @@ export async function syncTaggedPrivateLogs(
           return undefined;
         }
 
-        allLogs.push(...logsFoundWithSecret.map(({ log }) => log));
+        allLogs.push(...logsFoundWithSecret.map(({ log }) => ({ log, messagingSecret: pendingSecret.secret })));
 
         // Persist new indexes. If the finalized index moved forward, the window advances
         // and we need another round for this secret.
@@ -143,6 +143,12 @@ export async function syncTaggedPrivateLogs(
 
   return allLogs;
 }
+
+/** A tagged private log, together with the messaging secret whose tag found it. */
+export type LogWithMessagingSecret = {
+  log: LogResult;
+  messagingSecret: MessagingSecret;
+};
 
 /** Reads stored indexes for each secret and computes the initial index range to query. */
 function getIndexRangesForSecrets(

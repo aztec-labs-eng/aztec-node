@@ -772,8 +772,7 @@ impl PrivateContext {
     /// keypair (the address keypair (which is effectively the same as the "incoming" keypair)) for all incoming &
     /// outgoing messages to a user.
     ///
-    /// Currently, all of the exposed encryption functions in aztec-nr ignore the outgoing viewing keys, and instead
-    /// encrypt all note logs and event logs to a user's address public key.
+    /// Currently, all of the exposed encryption functions in aztec-nr ignore the outgoing viewing keys.
     ///
     /// # Arguments
     /// * `ovpk_m_hash` - Hash of the outgoing viewing public key master
@@ -923,8 +922,8 @@ impl PrivateContext {
     /// The protocol does not dictate what encryption scheme should be used: a smart contract developer can choose
     /// whatever encryption scheme they like. Aztec-nr includes some off-the-shelf encryption libraries that developers
     /// might wish to use, for convenience. These libraries not only encrypt a plaintext (to produce a ciphertext);
-    /// they also prepend the ciphertext with a `tag` and `ephemeral public key` for easier message discovery. This is
-    /// a very dense topic, and we will be writing more libraries and docs soon.
+    /// they also prepend the ciphertext with a `tag` for easier message discovery. This is a very dense topic, and we
+    /// will be writing more libraries and docs soon.
     ///
     /// > Currently, AES128 CBC encryption is the main scheme included in > aztec.nr. > We are currently making
     /// significant changes to the interfaces of the > encryption library.
