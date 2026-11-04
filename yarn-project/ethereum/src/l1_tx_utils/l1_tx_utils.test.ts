@@ -30,6 +30,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
+import { computeSignedTransactionHash } from '../blob_tx.js';
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
 import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
@@ -292,24 +293,22 @@ describeAcrossL1Forks('L1TxUtils', () => {
       };
 
       it.each(txKinds)(
-        'tracks the hash of a %s tx when the RPC returns a different one',
+        'computes the same hash for a %s tx as the node',
         async (_, blobInputs) => {
-          const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
-          const anvilHashes: Hex[] = [];
-          using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
-            anvilHashes.push(await originalSendRawTransaction(args));
-            return toHex(randomBytes(32));
-          });
-
           const { txHash, state } = await gasUtils.sendTransaction(request, undefined, blobInputs());
 
-          expect(anvilHashes).toHaveLength(1);
-          expect(txHash).toEqual(anvilHashes[0]);
-          expect(state.txHashes).toEqual(anvilHashes);
+          expect(state.txHashes).toEqual([txHash]);
           await expect(gasUtils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
         },
         30_000,
       );
+
+      it('fails a send when the node returns a different hash', async () => {
+        const wrongHash = toHex(randomBytes(32));
+        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockResolvedValue(wrongHash);
+
+        await expect(gasUtils.sendTransaction(request)).rejects.toThrow(wrongHash);
+      }, 30_000);
 
       it('sends a tx again when the only node rate-limits the first attempt', async () => {
         let sends = 0;
@@ -406,7 +405,7 @@ describeAcrossL1Forks('L1TxUtils', () => {
         expect(getErrorCause(err, RpcRequestError)?.details).toMatch(/nonce too low/i);
       }, 30_000);
 
-      it('tracks the hash of a speed-up tx when the RPC returns a different one', async () => {
+      it('tracks a speed-up tx by the hash the node reports for it', async () => {
         await cheatCodes.setAutomine(false);
         await cheatCodes.setIntervalMining(0);
         await cheatCodes.setBlockInterval(12);
@@ -417,8 +416,9 @@ describeAcrossL1Forks('L1TxUtils', () => {
         const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
         const anvilHashes: Hex[] = [];
         using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
-          anvilHashes.push(await originalSendRawTransaction(args));
-          return toHex(randomBytes(32));
+          const hash = await originalSendRawTransaction(args);
+          anvilHashes.push(hash);
+          return hash;
         });
 
         const monitorPromise = gasUtils.monitorTransaction(state);
@@ -1418,10 +1418,10 @@ describeAcrossL1Forks('L1TxUtils', () => {
           sentTxs.set(hash, sentTx);
           return hash;
         })
-        .mockImplementation(_arg => {
+        .mockImplementation(arg => {
           // Do nothing, there are any/all cancellations
           const sentTx = txBeingSigned!;
-          const hash = randomBytes(32).toString('hex') as Hex;
+          const hash = computeSignedTransactionHash(arg.serializedTransaction);
           sentTxs.set(hash, sentTx);
           cancellationSent = true;
           return Promise.resolve(hash);
