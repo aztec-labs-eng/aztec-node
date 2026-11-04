@@ -169,40 +169,36 @@ export async function createAztecNodeService(
     );
   }
 
-  // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through it,
-  // rather than building its own from the L1 RPC URLs.
-  const l1Transport = makeL1HttpTransport(config.l1RpcUrls, {
-    timeout: config.l1HttpTimeoutMS,
-    grader: { config, chainId: config.l1ChainId, logger: log.createChild('l1-rpc-grader') },
-  });
-  const publicClient: ViemPublicClient = createPublicClient({
-    chain: ethereumChain.chainInfo,
-    transport: l1Transport,
-    pollingInterval: config.viemPollingIntervalMS,
-  });
+  // Track started resources so we can clean up on partial failure during node creation. Each L1 RPC grader goes in as
+  // soon as its transport starts it, so a failure building the next one does not leave it running.
+  const started: { stop?(): Promise<void> | void }[] = [];
+  const l1RpcGraders: { stop(): Promise<void> }[] = [];
+  const makeL1Client = (urls: string[], graderName: string): ViemPublicClient => {
+    const transport = makeL1HttpTransport(urls, {
+      timeout: config.l1HttpTimeoutMS,
+      grader: { config, chainId: config.l1ChainId, logger: log.createChild(graderName) },
+    });
+    if (transport.grader) {
+      l1RpcGraders.push(transport.grader);
+      started.push(transport.grader);
+    }
+    return createPublicClient({
+      chain: ethereumChain.chainInfo,
+      transport,
+      pollingInterval: config.viemPollingIntervalMS,
+    });
+  };
 
-  // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
-  // or trace calls.
-  const l1DebugTransport =
-    config.l1DebugRpcUrls.length > 0
-      ? makeL1HttpTransport(config.l1DebugRpcUrls, {
-          timeout: config.l1HttpTimeoutMS,
-          grader: { config, chainId: config.l1ChainId, logger: log.createChild('l1-debug-rpc-grader') },
-        })
-      : undefined;
-  const debugClient = l1DebugTransport
-    ? (createPublicClient({
-        chain: ethereumChain.chainInfo,
-        transport: l1DebugTransport,
-        pollingInterval: config.viemPollingIntervalMS,
-      }) as ViemPublicDebugClient)
-    : undefined;
-  const l1RpcGraders = compactArray([l1Transport.grader, l1DebugTransport?.grader]);
-
-  // Track started resources so we can clean up on partial failure during node creation. The L1 RPC graders are the
-  // first of them, since everything below reads from L1 through the clients they grade.
-  const started: { stop?(): Promise<void> | void }[] = [...l1RpcGraders];
   try {
+    // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through
+    // it, rather than building its own from the L1 RPC URLs.
+    const publicClient = makeL1Client(config.l1RpcUrls, 'l1-rpc-grader');
+    // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
+    // or trace calls.
+    const debugClient = (
+      config.l1DebugRpcUrls.length > 0 ? makeL1Client(config.l1DebugRpcUrls, 'l1-debug-rpc-grader') : publicClient
+    ) as ViemPublicDebugClient;
+
     const l1ContractsAddresses = await RegistryContract.collectAddresses(
       publicClient,
       config.registryAddress,
@@ -270,7 +266,7 @@ export async function createAztecNodeService(
       config,
       {
         l1Client: publicClient,
-        l1DebugClient: debugClient ?? (publicClient as ViemPublicDebugClient),
+        l1DebugClient: debugClient,
         blobClient,
         epochCache,
         telemetry,
