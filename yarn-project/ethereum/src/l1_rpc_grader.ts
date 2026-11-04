@@ -1,4 +1,5 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { executeTimeout } from '@aztec-labs/foundation/timer';
 
 import type { L1RpcGraderConfig } from './l1_reader.js';
@@ -88,9 +89,7 @@ type ProbeResult = { type: 'ok'; blockNumber: bigint } | { type: 'unreachable' }
 export class L1RpcGrader {
   private readonly states: UrlState[];
   private order: readonly number[];
-  private running = false;
-  private timer: NodeJS.Timeout | undefined;
-  private currentRound: Promise<void> | undefined;
+  private readonly loop: RunningPromise;
   private allDemoted = false;
   private head = -1n;
   private readonly log: Logger;
@@ -111,25 +110,24 @@ export class L1RpcGrader {
       unreachable: false,
     }));
     this.order = urls.map((_, index) => index);
+    this.loop = new RunningPromise(
+      () => this.probeAll(),
+      this.log,
+      opts.config.l1RpcGraderIntervalMS,
+      err => this.log.warn('Failed to grade L1 RPC URLs', { err }),
+    );
   }
 
   /**
    * Starts probing, with the first round right away. It can be started again after {@link stop}, keeping what it has
-   * learnt about each URL. The timer does not keep the process alive.
+   * learnt about each URL.
    */
   public start(): void {
-    if (this.running) {
-      return;
-    }
-    this.running = true;
-    this.schedule(0);
+    this.loop.start();
   }
 
-  public async stop(): Promise<void> {
-    this.running = false;
-    clearTimeout(this.timer);
-    this.timer = undefined;
-    await this.currentRound;
+  public stop(): Promise<void> {
+    return this.loop.stop();
   }
 
   /**
@@ -176,19 +174,6 @@ export class L1RpcGrader {
     });
 
     this.updateOrder();
-  }
-
-  private schedule(delayMs: number): void {
-    this.timer = setTimeout(() => {
-      this.currentRound = this.probeAll()
-        .catch(err => this.log.warn('Failed to grade L1 RPC URLs', { err }))
-        .finally(() => {
-          if (this.running) {
-            this.schedule(this.opts.config.l1RpcGraderIntervalMS);
-          }
-        });
-    }, delayMs);
-    this.timer.unref();
   }
 
   private async probe(index: number): Promise<ProbeResult> {
