@@ -311,33 +311,19 @@ describeAcrossL1Forks('L1TxUtils', () => {
         30_000,
       );
 
-      it('treats a tx as sent when every node answers null to it', async () => {
-        // The first node takes the tx without confirming it, and the second does not answer either.
-        const forwarding = await startProxy(async forward => {
-          await forward().catch(() => undefined);
-          return null;
+      it('sends a tx again when the only node rate-limits the first attempt', async () => {
+        let sends = 0;
+        const limited = await startProxy(forward => {
+          if (sends++ === 0) {
+            throw new RpcErrorAnswer(-32005, 'request rate limit exceeded');
+          }
+          return forward();
         });
-        const silent = await startProxy(() => null);
-        const utils = makeProxiedL1TxUtils([forwarding.url, silent.url]);
-        const expectedNonce = await l1Client.getTransactionCount({
-          blockTag: 'pending',
-          address: l1Client.account.address,
-        });
+        const utils = makeProxiedL1TxUtils([limited.url]);
 
         const { txHash, state } = await utils.sendTransaction(request);
 
-        expect(state).toMatchObject({ nonce: expectedNonce, txHashes: [txHash], status: TxUtilsState.SENT });
-        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: expectedNonce });
-
-        // A node that reports a stale pending nonce does not make the next send reuse the one just sent.
-        const originalGetTransactionCount = utils.client.getTransactionCount.bind(utils.client);
-        using _countSpy = jest
-          .spyOn(utils.client, 'getTransactionCount')
-          .mockImplementationOnce(() => Promise.resolve(expectedNonce))
-          .mockImplementation(originalGetTransactionCount);
-        const { state: nextState } = await utils.sendTransaction(request);
-        expect(nextState.nonce).toBe(expectedNonce + 1);
-
+        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: state.nonce });
         await expect(utils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
       }, 30_000);
 

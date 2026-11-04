@@ -5,7 +5,9 @@ import { getErrorCause } from '@aztec-labs/foundation/types';
 import { type Server, createServer } from 'node:http';
 import {
   BlockNotFoundError,
+  HttpRequestError,
   RpcRequestError,
+  TimeoutError,
   TransactionReceiptNotFoundError,
   UnknownRpcError,
   createPublicClient,
@@ -22,6 +24,7 @@ import {
   getRpcUrlsFromClient,
   isAlreadyKnownTxError,
   isL1RpcHttpStatus,
+  isTransientL1RpcError,
   makeL1HttpTransport,
 } from './client.js';
 import type { L1RpcGraderConfig } from './l1_reader.js';
@@ -510,5 +513,29 @@ describe('isAlreadyKnownTxError', () => {
   it('matches through a cause chain deeper than the transport error', () => {
     const err = new Error('Failed to send L1 transaction', { cause: makeSendError('already known') });
     expect(isAlreadyKnownTxError(err)).toBe(true);
+  });
+});
+
+describe('isTransientL1RpcError', () => {
+  const wrap = (cause: Error) => new L1RpcError('L1 RPC request failed', { cause });
+  const httpError = (status?: number) =>
+    wrap(new HttpRequestError({ url: 'http://localhost:8545', status, body: { method: 'eth_sendRawTransaction' } }));
+
+  it.each([
+    ['a timeout', wrap(new TimeoutError({ body: {}, url: 'http://localhost:8545' }))],
+    ['a network failure', httpError(undefined)],
+    ['an HTTP 429', httpError(429)],
+    ['an HTTP 503', httpError(503)],
+    ['a JSON-RPC rate limit', makeSendError('request rate limit exceeded', -32005)],
+  ])('treats %s as transient', (_, err) => {
+    expect(isTransientL1RpcError(err)).toBe(true);
+  });
+
+  it.each([
+    ['an HTTP 400', httpError(400)],
+    ['a rejected tx', makeSendError('nonce too low: next nonce 1, tx nonce 0')],
+    ['a null answer', wrap(new L1RpcNullResultError('eth_sendRawTransaction'))],
+  ])('treats %s as definitive', (_, err) => {
+    expect(isTransientL1RpcError(err)).toBe(false);
   });
 });
