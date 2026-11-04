@@ -263,7 +263,12 @@ describe('makeL1HttpTransport with a grader', () => {
   });
 
   /** An L1 node at `height` that answers eth_getBalance with `balance`, or fails it when undefined. */
-  type FakeNode = { height: bigint; balance?: bigint; onBalance?: () => Promise<void> };
+  type FakeNode = {
+    height: bigint;
+    balance?: bigint;
+    onBalance?: () => Promise<void>;
+    onBlockNumber?: () => Promise<void>;
+  };
 
   const startServer = async (node: FakeNode) => {
     const server = await startRecordingRpcServer({
@@ -272,6 +277,7 @@ describe('makeL1HttpTransport with a grader', () => {
           case 'eth_chainId':
             return toHex(foundry.id);
           case 'eth_blockNumber':
+            await node.onBlockNumber?.();
             return toHex(node.height);
           case 'eth_getBalance':
             await node.onBalance?.();
@@ -295,7 +301,7 @@ describe('makeL1HttpTransport with a grader', () => {
     const client = createPublicClient({ chain: foundry, transport });
     if (transport.grader) {
       graders.push(transport.grader);
-      // Drive the grader by hand from here on, rather than on its interval.
+      // Let the grader finish the round it runs on start, and drive it by hand from here on.
       await transport.grader.stop();
     }
     return { client, grader: transport.grader };
@@ -322,12 +328,23 @@ describe('makeL1HttpTransport with a grader', () => {
     expect([...lagging.methods, ...healthy.methods]).toEqual([]);
   });
 
-  it('sends requests to the configured first URL before any probe', async () => {
+  it('sends requests to the configured first URL until the first round of probes completes', async () => {
+    const probeHeld = promiseWithResolvers<void>();
     const first = await startServer({ height: 10n, balance: 1n });
-    const second = await startServer({ height: 100n, balance: 2n });
-    const { client } = await makeClient([first.url, second.url]);
+    const second = await startServer({ height: 100n, balance: 2n, onBlockNumber: () => probeHeld.promise });
+    const transport = makeL1HttpTransport([first.url, second.url], {
+      grader: { config: graderConfig, chainId: foundry.id },
+    });
+    if (transport.grader) {
+      graders.push(transport.grader);
+    }
+    const client = createPublicClient({ chain: foundry, transport });
 
-    await expect(client.getBalance({ address })).resolves.toBe(1n);
+    try {
+      await expect(client.getBalance({ address })).resolves.toBe(1n);
+    } finally {
+      probeHeld.resolve();
+    }
   });
 
   it('does not send requests to a lagging URL', async () => {
