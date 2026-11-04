@@ -458,12 +458,13 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
    * - Past its proof-submission window: skip. L1 no longer accepts a proof of it.
    * - Not fully proven yet: register.
    * - Fully proven, on a node with full-epoch proving disabled: skip. That node never proves a full epoch.
-   * - Fully proven, but world state no longer holds the state before one of its checkpoints, because a small
-   *   `WS_HISTORY_RETENTION` pruned it once the epoch was finalized: skip. Registering would fail and stall the
-   *   catch-up of every later checkpoint.
-   * - Fully proven otherwise: register, unless L1 already holds our own full-epoch proof of it. The proof that moved
-   *   the tip may be another prover's, or may have landed before the epoch ended, and L1 still rewards ours. If L1
-   *   cannot be read, register anyway; the session manager checks again before proving.
+   * - Fully proven, and L1 already holds our own full-epoch proof of it: skip.
+   * - Fully proven, but world state no longer holds a snapshot that one of its checkpoints not yet in the store needs,
+   *   because a small `WS_HISTORY_RETENTION` pruned it once the epoch was finalized: skip. Registering would fail and
+   *   stall the catch-up of every later checkpoint.
+   * - Fully proven otherwise: register. The proof that moved the tip may be another prover's, or may have landed
+   *   before the epoch ended, and L1 still rewards ours. If L1 cannot be read, register anyway; the session manager
+   *   checks again before proving.
    */
   private async isEpochSkippableForCatchUp(epoch: EpochNumber, l1Constants: L1RollupConstants): Promise<boolean> {
     if (await this.isEpochPastProofSubmissionWindow(epoch, l1Constants)) {
@@ -476,22 +477,37 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       return true;
     }
     const checkpoints = await this.l2BlockSource.getCheckpointsData({ epoch });
-    // Registering each checkpoint reads the snapshot of the block before it. Block 0 is the genesis snapshot, which is
-    // never pruned; every other snapshot the epoch needs must still be in world state.
-    const requiredSnapshots = checkpoints.map(c => c.startBlock - 1).filter(block => block > 0);
-    if (requiredSnapshots.length > 0) {
-      const oldestRequiredSnapshot = Math.min(...requiredSnapshots);
-      const { oldestHistoricBlockNumber } = (await this.worldState.status()).syncSummary;
-      if (oldestRequiredSnapshot < oldestHistoricBlockNumber) {
-        this.log.warn(`Not proving fully-proven epoch ${epoch}: world-state history it needs has been pruned`, {
-          epoch,
-          oldestRequiredSnapshot,
-          oldestHistoricBlockNumber,
-        });
-        return true;
-      }
+    if ((await this.sessionManager?.readOwnFullEpochProof(epoch, checkpoints.length)) === true) {
+      return true;
     }
-    return (await this.sessionManager?.readOwnFullEpochProof(epoch, checkpoints.length)) === true;
+    const stored = await this.checkpointStore.listForEpoch(epoch);
+    const unregistered = checkpoints.filter(
+      c =>
+        !stored.some(
+          p => p.checkpoint.number === c.checkpointNumber && p.checkpoint.archive.root.equals(c.archive.root),
+        ),
+    );
+    // Proving a checkpoint reads the snapshot of the block before each of its blocks. Block 0 is the genesis snapshot,
+    // which is never pruned, so the oldest snapshot that can be missing is the one before its first block, or block 1's
+    // when it starts at block 1 and holds a second block.
+    const requiredSnapshots = unregistered.flatMap(c => {
+      const oldest = Math.max(c.startBlock - 1, 1);
+      return oldest <= c.startBlock + c.blockCount - 2 ? [oldest] : [];
+    });
+    if (requiredSnapshots.length === 0) {
+      return false;
+    }
+    const oldestRequiredSnapshot = Math.min(...requiredSnapshots);
+    const { oldestHistoricBlockNumber } = (await this.worldState.status()).syncSummary;
+    if (oldestRequiredSnapshot < oldestHistoricBlockNumber) {
+      this.log.warn(`Not proving fully-proven epoch ${epoch}: world-state history it needs has been pruned`, {
+        epoch,
+        oldestRequiredSnapshot,
+        oldestHistoricBlockNumber,
+      });
+      return true;
+    }
+    return false;
   }
 
   /**

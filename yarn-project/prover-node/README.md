@@ -395,8 +395,9 @@ raises the prover's activity score. So `openFullSessionIfReady` skips a covered 
 `RollupContract.getHasSubmittedFullEpochProof` reports our own full-epoch proof of it, or while that read
 fails (retried after one slot). The checkpoint catch-up registers a fully-proven epoch's checkpoints until
 our full-epoch proof is on L1 (a node with full-epoch proving disabled still skips them). It also skips a
-fully-proven epoch when world state has pruned a snapshot that registering its checkpoints needs, which a small
-`WS_HISTORY_RETENTION` can do once the epoch is finalized: registering it would fail and stall the catch-up.
+fully-proven epoch when world state has pruned a snapshot that proving its checkpoints not yet in the store needs,
+which a small `WS_HISTORY_RETENTION` can do once the epoch is finalized: registering it would fail and stall the
+catch-up.
 
 Only the tick opens a new session for a covered epoch, and it tries the next unproven epoch first. While
 that epoch is complete but has no session, for example because its checkpoints are still being registered
