@@ -33,3 +33,26 @@ describe.each([
     expect(await queue.get()).toBeNull();
   });
 });
+
+describe.each([
+  ['FIFO', () => new FifoMemoryQueue<number>()],
+  ['priority', () => new PriorityMemoryQueue<number>((a, b) => a - b)],
+] as const)('%s queue process', (_name, createQueue) => {
+  it('keeps consuming items after the handler throws', async () => {
+    const queue = createQueue();
+    queue.put(1);
+    queue.put(2);
+    queue.put(3);
+    queue.end();
+
+    const seen: number[] = [];
+    await queue.process(item => {
+      seen.push(item);
+      if (item === 1) {
+        throw new Error('handler failure');
+      }
+    });
+
+    expect(seen).toEqual([1, 2, 3]);
+  });
+});
