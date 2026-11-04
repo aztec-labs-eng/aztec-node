@@ -267,11 +267,10 @@ describe('HttpBlobClient', () => {
       const reprobeIntervalMs = 50;
       const client = new HttpBlobClient(
         {
-          l1RpcUrls: [`http://localhost:${executionHostPort}`],
           l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`],
           blobAllowEmptySources: true,
         },
-        { consensusHostReprobeIntervalMs: reprobeIntervalMs },
+        { l1Client: makeL1Client(executionHostPort), consensusHostReprobeIntervalMs: reprobeIntervalMs },
       );
       try {
         await client.testSources();
