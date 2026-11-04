@@ -16,6 +16,34 @@ describe('timeout', () => {
     expect(task.mock.calls[0][0].aborted).toEqual(true);
   });
 
+  it('has no effect once the function has settled', async () => {
+    let signal: AbortSignal | undefined;
+    let abortCallbackRan = false;
+    let errorCreated = false;
+
+    await expect(
+      executeTimeout(
+        s => {
+          signal = s;
+          return Promise.resolve('ok');
+        },
+        50,
+        () => {
+          errorCreated = true;
+          return new Error('Timed out!');
+        },
+        () => {
+          abortCallbackRan = true;
+        },
+      ),
+    ).resolves.toEqual('ok');
+
+    await sleep(150);
+    expect(signal?.aborted).toBe(false);
+    expect(abortCallbackRan).toBe(false);
+    expect(errorCreated).toBe(false);
+  });
+
   it('rejects if timeout is zero', async () => {
     await expect(executeTimeout(() => sleep(500), 0, 'Timed out!')).rejects.toThrow('Timed out!');
   });
