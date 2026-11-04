@@ -471,6 +471,66 @@ describe('ProverNode', () => {
     expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
+  it('skips epoch 0 when a snapshot inside its first multi-block checkpoint has been pruned', async () => {
+    // Four-slot epochs. Epoch 0's only checkpoint holds blocks 1-3, so proving it reads the snapshots of blocks 0, 1
+    // and 2. Block 1's snapshot is pruned. Checkpoint 2 (block 4, slot 4) is in the next, unproven epoch.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
+    setupRegistrationSuccess();
+    mockChain({ provenBlock: 3, blockSlots: [0, 1, 1, 1, 4] });
+    mockOldestHistoricBlock(2);
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    const first = makeCheckpoint(1, 1, 1);
+    mineCheckpoint({ ...first, blocks: [1, 2, 3].map(n => makeCheckpoint(1, 1, n).blocks[0]) } as Checkpoint);
+    const event = mineCheckpoint(makeCheckpoint(2, 4, 4));
+
+    await proverNode.handleBlockStreamEvent(event);
+
+    expect(
+      proverNode
+        .getCheckpointStore()
+        .listAll()
+        .map(p => p.checkpoint.number),
+    ).toEqual([CheckpointNumber(2)]);
+  });
+
+  it('registers the rest of a fully-proven epoch whose already-registered checkpoints need pruned history', async () => {
+    // Four-slot epochs. Epoch 1 holds checkpoints 2 and 3 (blocks 2 and 3, slots 4 and 5). Checkpoint 2 was registered
+    // before the proven tip covered the epoch. World state has since pruned block 1's snapshot, which only checkpoint
+    // 2 needed; checkpoint 3 needs block 2's, which is still there.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
+    setupRegistrationSuccess();
+    mockChain({ provenBlock: 1, blockSlots: [0, 1, 4, 5] });
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    mineCheckpoint(makeCheckpoint(1, 1, 1));
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)));
+
+    mockChain({ provenBlock: 3, blockSlots: [0, 1, 4, 5] });
+    mockOldestHistoricBlock(2);
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
+
+    expect(
+      proverNode
+        .getCheckpointStore()
+        .listAll()
+        .map(p => p.checkpoint.number),
+    ).toEqual([CheckpointNumber(2), CheckpointNumber(3)]);
+  });
+
+  it('skips a fully-proven epoch with our full-epoch proof on L1 while world state cannot report its history', async () => {
+    // Checkpoint 3 (block 3, slot 3) is epoch 3's only checkpoint and needs block 2's snapshot. Registering it is not
+    // needed, so a world-state status failure must not stall the catch-up on it.
+    mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
+    worldState.status.mockRejectedValue(new Error('world state unavailable'));
+    sessionManager.readOwnFullEpochProof.mockResolvedValue(true);
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+
+    expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+  });
+
   it('content-addresses the prover by the checkpoint archive root', async () => {
     setupNotFullyProven();
     const archiveRoot = Fr.random();
@@ -1057,7 +1117,9 @@ describe('ProverNode', () => {
               mock<CheckpointData>({
                 checkpointNumber: cp.number,
                 header: cp.header,
+                archive: cp.archive,
                 startBlock: BlockNumber(cp.blocks[0].number),
+                blockCount: cp.blocks.length,
               }),
             ),
         );

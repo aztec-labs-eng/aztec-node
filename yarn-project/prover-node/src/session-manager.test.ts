@@ -837,6 +837,21 @@ describe('SessionManager', () => {
     expect(stubs.map(s => s.spec.epochNumber)).toEqual([EpochNumber(3)]);
   });
 
+  it('onTick reads each covered epoch once per L2 slot however many epochs the proof window holds', async () => {
+    // A long proof-submission window keeps many covered epochs in the store, each with our full-epoch proof on L1.
+    const epochs = 20;
+    setStore(Array.from({ length: epochs }, (_, i) => proverForCheckpoint(i + 1, 6 + 2 * i)));
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    mockNextUnprovenSlot(epochs, undefined);
+    rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);
+
+    await manager.onTick();
+    await manager.onTick();
+
+    expect(rollupContract.getHasSubmittedFullEpochProof).toHaveBeenCalledTimes(epochs);
+    expect(stubs).toHaveLength(0);
+  });
+
   it('onTick opens an epoch at once when an L1 reorg rolls the proven tip back below it', async () => {
     // Epoch 3's only checkpoint is block 2. Our full-epoch proof is confirmed while the tip covers it, so the
     // epoch is skipped. A reorg then drops the proof that moved the tip: epoch 3 is the next unproven epoch again

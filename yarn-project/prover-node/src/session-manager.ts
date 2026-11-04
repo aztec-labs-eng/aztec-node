@@ -1,6 +1,5 @@
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { LruMap } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
@@ -97,16 +96,16 @@ export class SessionManager {
    */
   private readonly reconcileQueue = new SerialQueue();
   /**
-   * Recent reads of our full-epoch proof registration that did not find it missing: `true` (registered) or `undefined`
-   * (L1 could not be read), with the checkpoint count and when it was read. A covered epoch with no session is then
-   * read once per L2 slot rather than on every tick: a confirmed registration still notices an L1 reorg that drops
-   * it, and an L1 outage costs one slow read per slot instead of one per tick. Only the few epochs still in their
-   * proof window are looked up, so the small bound never evicts a useful entry.
+   * Reads of our full-epoch proof registration from the last L2 slot that did not find it missing: `true`
+   * (registered) or `undefined` (L1 could not be read), with the checkpoint count and when it was read. A covered
+   * epoch with no session is then read once per L2 slot rather than on every tick: a confirmed registration still
+   * notices an L1 reorg that drops it, and an L1 outage costs one slow read per slot instead of one per tick. Entries
+   * older than a slot are dropped on each read, so the map holds at most the epochs read within one slot.
    */
-  private readonly ownFullEpochProofs = new LruMap<
+  private readonly ownFullEpochProofs = new Map<
     EpochNumber,
     { length: number; registered: true | undefined; readAtMs: number }
-  >(16);
+  >();
   /** Cached L1 constants, populated on first read. */
   private cachedL1Constants: L1RollupConstants | undefined;
   /** Test-only hooks applied to every session this manager constructs. */
@@ -241,15 +240,17 @@ export class SessionManager {
    * are reused for one L2 slot.
    */
   public async readOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean | undefined> {
-    const cached = this.ownFullEpochProofs.get(epoch);
     const { slotDuration } = await this.getL1Constants();
+    const now = this.deps.dateProvider.now();
+    for (const [cachedEpoch, entry] of this.ownFullEpochProofs) {
+      if (now - entry.readAtMs >= slotDuration * 1000) {
+        this.ownFullEpochProofs.delete(cachedEpoch);
+      }
+    }
+    const cached = this.ownFullEpochProofs.get(epoch);
     // A failed read is reused whatever the count: while a catch-up fills the store, the count changes from tick to
     // tick, and each change would otherwise retry L1 during an outage.
-    if (
-      cached &&
-      this.deps.dateProvider.now() - cached.readAtMs < slotDuration * 1000 &&
-      (cached.registered === undefined || cached.length === length)
-    ) {
+    if (cached && (cached.registered === undefined || cached.length === length)) {
       return cached.registered;
     }
     let registered: boolean | undefined;
