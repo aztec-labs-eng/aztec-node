@@ -32,6 +32,14 @@ Port PRs (branches named `port-<PR>-to-<target>`) target the port's target branc
 Use the base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. Always `git fetch` before creating branches so the base is not stale.
 </base_branch>
 
+<operator_changelog>
+`CHANGELOG-OPERATORS.md` records the changes node operators have to act on or will notice: CLI flags, environment variables, changed defaults, keystore and Helm values, node RPC methods, artifact locations, and behaviour visible in their logs, metrics or sync. A PR that changes one of those adds an entry under `## Unreleased`; a PR that does not, adds nothing. Its own file is the only place the entry goes — do not also edit the published changelog in aztec-packages, which is written from these entries at release time.
+
+Every release line carries its own copy of the file on its own branch (`v6` ships the 6.x line, `main` ships as v7), and a PR edits only the copy on the branch it targets — the base established in `<base_branch>`. Never open a second PR against another branch to mirror an entry there. Several worktrees of this repo sit side by side and the file is named the same in all of them, so confirm the branch of the worktree you are editing, not just the path.
+
+A port PR (`port-<PR>-to-<target>`) carries the original entry in its cherry-pick, so the target branch's changelog is updated by the port itself and needs no separate edit. The conflict that produces is expected: keep the target branch's own headings, place the entry under its `## Unreleased`, and discard the source branch's heading. Resolving it by dropping the entry is wrong — a change that ships on two release lines is news to the operators of both.
+</operator_changelog>
+
 <worktrees>
 `ci3/` is a git submodule, and `git worktree add` leaves it empty. Run `git submodule update --init ci3` in every new worktree before using any `bootstrap.sh` (including `yarn format` and `yarn lint`). Without it they fail with a misleading `syntax error near unexpected token '('`, because the extglob setup in `ci3` never loads.
 </worktrees>
