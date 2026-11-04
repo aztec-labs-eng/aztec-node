@@ -5,7 +5,7 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { timeoutPromise } from '@aztec-labs/foundation/timer';
+import { withTimeout } from '@aztec-labs/foundation/timer';
 import { type L2Block, L2BlockSourceEvents, type L2Tips } from '@aztec-labs/stdlib/block';
 import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
@@ -204,9 +204,7 @@ describe('multi-node/recovery/proposal_failure_recovery', () => {
     logger.warn('Waiting for L2PruneUncheckpointed on every node');
     const pruneTimeoutMs = test.L2_SLOT_DURATION_IN_S * 2 * 1000;
     const pruneObservations = await Promise.all(
-      prunePromises.map((p, idx) =>
-        Promise.race([p, timeoutPromise(pruneTimeoutMs, `Node ${idx} did not emit prune event in time`)]),
-      ),
+      prunePromises.map((p, idx) => withTimeout(p, pruneTimeoutMs, `Node ${idx} did not emit prune event in time`)),
     );
 
     logger.warn('Asserting prune event details on every node');
@@ -401,9 +399,7 @@ describe('multi-node/recovery/proposal_failure_recovery', () => {
     logger.warn('Waiting for L2PruneUncheckpointed on every node');
     const pruneTimeoutMs = test.L2_SLOT_DURATION_IN_S * 2 * 1000;
     const pruneObservations = await Promise.all(
-      prunePromises.map((p, idx) =>
-        Promise.race([p, timeoutPromise(pruneTimeoutMs, `Node ${idx} did not emit prune event in time`)]),
-      ),
+      prunePromises.map((p, idx) => withTimeout(p, pruneTimeoutMs, `Node ${idx} did not emit prune event in time`)),
     );
 
     for (const [idx, obs] of pruneObservations.entries()) {

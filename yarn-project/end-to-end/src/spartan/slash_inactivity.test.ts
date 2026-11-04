@@ -6,7 +6,7 @@ import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { timeoutPromise } from '@aztec-labs/foundation/timer';
+import { withTimeout } from '@aztec-labs/foundation/timer';
 import { type SlasherConfig, type SlasherSettings, getSlasherSettings } from '@aztec-labs/slasher';
 import {
   type L1RollupConstants,
@@ -116,7 +116,7 @@ describe('slash inactivity test', () => {
       }
     });
 
-    return Promise.race([promise.promise, timeoutPromise(timeoutSeconds * 1000)]);
+    return withTimeout(promise.promise, timeoutSeconds * 1000);
   };
 
   /** Computes total number of seconds to wait until a slash happens (considers slash offset, execution delay, and a +1 for good measure) */

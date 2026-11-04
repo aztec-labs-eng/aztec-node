@@ -59,18 +59,20 @@ export abstract class BaseMemoryQueue<T> {
     }
 
     return new Promise<T | null>((resolve, reject) => {
-      this.waiting.push(resolve);
-
-      if (timeoutSec) {
-        setTimeout(() => {
-          const index = this.waiting.findIndex(r => r === resolve);
-          if (index > -1) {
-            this.waiting.splice(index, 1);
-            const err = new TimeoutError('Timeout getting item from queue.');
-            reject(err);
-          }
-        }, timeoutSec * 1000);
-      }
+      const timer = timeoutSec
+        ? setTimeout(() => {
+            const index = this.waiting.indexOf(waiter);
+            if (index > -1) {
+              this.waiting.splice(index, 1);
+              reject(new TimeoutError('Timeout getting item from queue.'));
+            }
+          }, timeoutSec * 1000)
+        : undefined;
+      const waiter = (item: T | null) => {
+        clearTimeout(timer);
+        resolve(item);
+      };
+      this.waiting.push(waiter);
     });
   }
 

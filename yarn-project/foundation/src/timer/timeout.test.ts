@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { sleep } from '../sleep/index.js';
-import { execWithSignal, executeTimeout } from './timeout.js';
+import { execWithSignal, executeTimeout, withTimeout } from './timeout.js';
 
 describe('timeout', () => {
   it('execs within timeout', async () => {
@@ -52,5 +52,34 @@ describe('timeout', () => {
         signal => new Error(signal.reason?.name ?? 'Aborted'),
       ),
     ).rejects.toThrow('TimeoutError');
+  });
+});
+
+describe('withTimeout', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('resolves with the result of the promise', async () => {
+    await expect(withTimeout(Promise.resolve('ok'), 1000)).resolves.toEqual('ok');
+  });
+
+  it('rejects with the promise error', async () => {
+    await expect(withTimeout(Promise.reject(new Error('Failed!')), 1000)).rejects.toThrow('Failed!');
+  });
+
+  it('rejects once the timeout elapses', async () => {
+    const promise = withTimeout(new Promise(() => {}), 1000, 'Too slow!');
+    jest.advanceTimersByTime(1000);
+    await expect(promise).rejects.toThrow('Too slow!');
+  });
+
+  it('leaves no timer pending once the promise settles', async () => {
+    await expect(withTimeout(Promise.resolve('ok'), 60_000)).resolves.toEqual('ok');
+    expect(jest.getTimerCount()).toEqual(0);
   });
 });

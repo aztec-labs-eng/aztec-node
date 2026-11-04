@@ -14,7 +14,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { executeTimeout, timeoutPromise } from '@aztec-labs/foundation/timer';
+import { executeTimeout, withTimeout } from '@aztec-labs/foundation/timer';
 import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { OffenseType } from '@aztec-labs/slasher';
 import { CommitteeAttestation, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
@@ -124,10 +124,11 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       logger.warn(`Checkpoint ${checkpointNumber} has been invalidated`);
       promise.resolve({ checkpointNumber, event });
     });
-    return Promise.race([
+    return withTimeout(
       promise.promise,
-      timeoutPromise(test.L2_SLOT_DURATION_IN_S * waitSlots * 1000, 'Waiting for CheckpointInvalidated event'),
-    ]);
+      test.L2_SLOT_DURATION_IN_S * waitSlots * 1000,
+      'Waiting for CheckpointInvalidated event',
+    );
   }
 
   /**
@@ -272,10 +273,11 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         unsubscribe();
       }
     });
-    await Promise.race([
-      timeoutPromise(1000 * test.L2_SLOT_DURATION_IN_S * 8, 'Waiting for two checkpoint invalidations'),
+    await withTimeout(
       invalidatePromise.promise,
-    ]);
+      1000 * test.L2_SLOT_DURATION_IN_S * 8,
+      'Waiting for two checkpoint invalidations',
+    );
 
     sequencers.forEach(sequencer => {
       sequencer.updateConfig(opts.disableConfig);
@@ -560,16 +562,14 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       }
     });
 
-    // Wait for both checkpoints to be mined. Note that timeoutPromise rejects on timeout, so there
-    // is no point in racing against a fallback value.
+    // Wait for both checkpoints to be mined. Note that withTimeout rejects on timeout, so there
+    // is no fallback value to handle.
     logger.warn(`Waiting for two checkpoints to be mined on slots ${expectedFirstSlot} and ${expectedSecondSlot}`);
-    const [firstCheckpoint, secondCheckpoint] = await Promise.race([
+    const [firstCheckpoint, secondCheckpoint] = await withTimeout(
       Promise.all([firstCheckpointPromise.promise, secondCheckpointPromise.promise]),
-      timeoutPromise(
-        test.L2_SLOT_DURATION_IN_S * 8 * 1000,
-        `Waiting for bad checkpoints at slots ${expectedFirstSlot} and ${expectedSecondSlot}`,
-      ),
-    ]);
+      test.L2_SLOT_DURATION_IN_S * 8 * 1000,
+      `Waiting for bad checkpoints at slots ${expectedFirstSlot} and ${expectedSecondSlot}`,
+    );
 
     // Sanity check: verify that both bad checkpoints landed on L1 with insufficient attestations.
     // This catches config-timing races where `skipCollectingAttestations` doesn't take effect in time.
