@@ -31,12 +31,12 @@ resource "google_artifact_registry_repository_iam_member" "ci_docker_registry_wr
   member     = "serviceAccount:${google_service_account.ci.email}"
 }
 
-# Docker repository for images built by aztec-labs-eng/treasury-infra (e.g. propose-watcher)
+# Docker repository for images built by aztec-labs-eng/aurelius-ops (e.g. propose-watcher)
 resource "google_artifact_registry_repository" "treasury_infra" {
   project       = var.project
   location      = var.region
   repository_id = "treasury-infra"
-  description   = "Images built by aztec-labs-eng/treasury-infra CI"
+  description   = "Images built by aztec-labs-eng/aurelius-ops CI"
   format        = "DOCKER"
 
   depends_on = [google_project_service.artifact_registry]
