@@ -27,6 +27,7 @@ import {
   L1TxTimeoutError,
   type L1TxUtils,
   MAX_L1_TX_LIMIT,
+  type SendAndMonitorOpts,
   type SendCostRequirement,
   type TransactionStats,
   WEI_CONST,
@@ -576,13 +577,18 @@ export class SequencerPublisher implements Disposable {
    *   sendRequestsAt), it is threaded into bundleSimulate so the block.timestamp override matches
    *   the slot the propose is built for. When omitted, falls back to getCurrentL2Slot() for the
    *   AutomineSequencer, which publishes synchronously within the current slot.
+   * @param opts - `onTxSent` is awaited once the bundle is sent to L1 and before its receipt is awaited; it is not
+   *   called when nothing is sent. The AutomineSequencer uses it to resume mining on its dev chain.
    * @returns one of:
    * - A receipt and stats if the tx succeeded
    * - a receipt and errorMsg if it failed on L1
    * - undefined if no valid requests are found OR the tx failed to send.
    */
   @trackSpan('SequencerPublisher.sendRequests')
-  public async sendRequests(targetSlot?: SlotNumber): Promise<SendRequestsResult | undefined> {
+  public async sendRequests(
+    targetSlot?: SlotNumber,
+    opts: SendAndMonitorOpts = {},
+  ): Promise<SendRequestsResult | undefined> {
     const requestsToProcess = [...this.requests];
     this.requests = [];
 
@@ -658,7 +664,14 @@ export class SequencerPublisher implements Disposable {
         requests: requests.map(request => request.action),
         txConfig,
       });
-      const result = await this.forwardWithPublisherRotation(requests, txConfig, blobConfig, currentL2Slot, cost);
+      const result = await this.forwardWithPublisherRotation(
+        requests,
+        txConfig,
+        blobConfig,
+        currentL2Slot,
+        cost,
+        opts.onTxSent,
+      );
       if (result === undefined) {
         return undefined;
       }
@@ -870,6 +883,7 @@ export class SequencerPublisher implements Disposable {
     blobConfig: L1BlobInputs | undefined,
     targetSlot?: SlotNumber,
     cost?: BundleCost,
+    onTxSent?: SendAndMonitorOpts['onTxSent'],
   ) {
     if (!txConfig?.gasLimit) {
       throw new Error('gasLimit is required for bundled transactions');
@@ -897,7 +911,7 @@ export class SequencerPublisher implements Disposable {
           currentPublisher,
           txConfigWithGasLimit,
           blobConfig,
-          { gasLimitRequired: true },
+          { gasLimitRequired: true, onTxSent },
         );
         this.l1TxUtils = currentPublisher;
         return result;

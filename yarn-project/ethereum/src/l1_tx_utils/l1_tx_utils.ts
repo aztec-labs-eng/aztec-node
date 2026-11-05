@@ -39,6 +39,7 @@ import {
   type L1TxRequest,
   type L1TxState,
   L1TxTimeoutError,
+  type SendAndMonitorOpts,
   type SigningCallback,
   TerminalTxUtilsState,
   TxUtilsState,
@@ -751,8 +752,16 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     request: L1TxRequest,
     gasConfig?: L1TxConfig,
     blobInputs?: L1BlobInputs,
+    opts: SendAndMonitorOpts = {},
   ): Promise<{ receipt: TransactionReceipt; state: L1TxState }> {
-    const { state } = await this.sendTransaction(request, gasConfig, blobInputs);
+    const { txHash, state } = await this.sendTransaction(request, gasConfig, blobInputs);
+    if (opts.onTxSent) {
+      try {
+        await opts.onTxSent(txHash);
+      } catch (err) {
+        this.logger.warn(`Hook run after sending tx ${txHash} failed, monitoring it anyway`, { txHash, err });
+      }
+    }
     try {
       const receipt = await this.monitorTransaction(state);
       return { receipt, state };

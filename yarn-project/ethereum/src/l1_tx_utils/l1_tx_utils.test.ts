@@ -321,6 +321,50 @@ describeAcrossL1Forks('L1TxUtils', () => {
       expect(gasUtils.state).toBe(TxUtilsState.MINED);
     }, 10_000);
 
+    it('runs the onTxSent hook once the tx is in the pool and before awaiting its receipt', async () => {
+      await cheatCodes.setAutomine(false);
+      await cheatCodes.setIntervalMining(0);
+
+      let sentTxHash: Hex | undefined;
+      let inPoolWhenHookRan = false;
+      // Nothing mines blocks on its own, so the receipt can only come from the block the hook mines.
+      const { receipt } = await gasUtils.sendAndMonitorTransaction(request, undefined, undefined, {
+        onTxSent: async txHash => {
+          sentTxHash = txHash;
+          inPoolWhenHookRan = (await cheatCodes.getTxPoolContents()).some(tx => tx.hash === txHash);
+          await cheatCodes.evmMine();
+        },
+      });
+
+      expect(receipt.status).toBe('success');
+      expect(sentTxHash).toEqual(receipt.transactionHash);
+      expect(inPoolWhenHookRan).toBe(true);
+    }, 10_000);
+
+    it('monitors the tx to its receipt when the onTxSent hook throws', async () => {
+      const { receipt } = await gasUtils.sendAndMonitorTransaction(request, undefined, undefined, {
+        onTxSent: () => Promise.reject(new Error('hook failed')),
+      });
+
+      expect(receipt.status).toBe('success');
+      expect(gasUtils.state).toBe(TxUtilsState.MINED);
+    }, 10_000);
+
+    it('does not run the onTxSent hook when the tx is not sent', async () => {
+      gasUtils.interrupt();
+      let hookRan = false;
+
+      await expect(
+        gasUtils.sendAndMonitorTransaction(request, undefined, undefined, {
+          onTxSent: () => {
+            hookRan = true;
+            return Promise.resolve();
+          },
+        }),
+      ).rejects.toThrow();
+      expect(hookRan).toBe(false);
+    }, 10_000);
+
     it('handles gas price spikes by retrying with higher gas price', async () => {
       // Disable all forms of mining
       await cheatCodes.setAutomine(false);
