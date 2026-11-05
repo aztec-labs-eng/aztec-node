@@ -1,13 +1,24 @@
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  NotFound,
+  PutObjectCommand,
+  S3Client,
+  S3ServiceException,
+} from '@aws-sdk/client-s3';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { findUnboundedContainers } from '@aztec-labs/foundation/testing';
 import type { FileStore } from '@aztec-labs/stdlib/file-store';
+import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
+import { Readable } from 'stream';
 
-import { getLatestSnapshotMetadata } from './download.js';
+import { S3FileStore } from '../file-store/s3.js';
+import { getLatestSnapshotMetadata, getSnapshotIndexPath } from './download.js';
 import {
   type SnapshotDataUrls,
   type SnapshotMetadata,
@@ -182,6 +193,50 @@ describe('snapshots', () => {
       expect(store.read).toHaveBeenCalledTimes(2);
       expect(store.save).toHaveBeenCalledTimes(2);
       expect(JSON.parse(uploadedIndex!).snapshots).toEqual([uploaded, ...snapshots]);
+    });
+
+    it('keeps older entries when the S3 store fails the index existence check during a retry', async () => {
+      // An S3 bucket holding the existing index, which fails the next PUT and then the next HEAD before recovering.
+      const objects = new Map<string, Buffer>([[getSnapshotIndexPath(metadata), Buffer.from(jsonStringify(index))]]);
+      const outage = ['PutObjectCommand', 'HeadObjectCommand'];
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- send's last overload is the callback form
+      jest.spyOn(S3Client.prototype, 'send').mockImplementation((command: unknown) => {
+        if (outage[0] === command?.constructor.name) {
+          outage.shift();
+          return Promise.reject(
+            new S3ServiceException({ name: 'InternalError', $fault: 'server', $metadata: { httpStatusCode: 500 } }),
+          );
+        }
+        if (command instanceof HeadObjectCommand || command instanceof GetObjectCommand) {
+          const data = objects.get(command.input.Key!);
+          if (!data) {
+            return Promise.reject(new NotFound({ message: 'Unknown', $metadata: { httpStatusCode: 404 } }));
+          }
+          return Promise.resolve(command instanceof GetObjectCommand ? { Body: Readable.from([data]) } : {});
+        }
+        if (command instanceof PutObjectCommand && command.input.Body instanceof Uint8Array) {
+          objects.set(command.input.Key!, Buffer.from(command.input.Body));
+          return Promise.resolve({});
+        }
+        return Promise.reject(new Error(`Unexpected command ${command}`));
+      });
+      const s3Store = new S3FileStore('bucket', '', { endpoint: 'http://localhost:9000' });
+      jest.spyOn(s3Store, 'upload').mockImplementation(dest => Promise.resolve(dest));
+
+      try {
+        const uploaded = await uploadSnapshotToIndex(
+          makeDataPaths(6, '/local/'),
+          { archiver: 1, worldState: 1 },
+          { ...metadata, l1BlockNumber: 6, l2BlockHash: '0x6', l2BlockNumber: 6 },
+          s3Store,
+          { retryBackoff: [0, 0] },
+        );
+
+        const savedIndex = JSON.parse(objects.get(getSnapshotIndexPath(metadata))!.toString());
+        expect(savedIndex.snapshots).toEqual([uploaded, ...snapshots]);
+      } finally {
+        jest.restoreAllMocks();
+      }
     });
 
     it('gives up once the backoff is exhausted', async () => {
