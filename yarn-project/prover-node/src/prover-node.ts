@@ -20,7 +20,7 @@ import {
   type L2BlockStreamEventHandler,
   L2TipsMemoryStore,
 } from '@aztec-labs/stdlib/block';
-import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { Checkpoint, CommonCheckpointData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import {
@@ -491,17 +491,12 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
           p => p.checkpoint.number === c.checkpointNumber && p.checkpoint.archive.root.equals(c.archive.root),
         ),
     );
-    // Proving a checkpoint reads the snapshot of the block before each of its blocks. Block 0 is the genesis snapshot,
-    // which is never pruned, so the oldest snapshot that can be missing is the one before its first block, or block 1's
-    // when it starts at block 1 and holds a second block.
-    const requiredSnapshots = unregistered.flatMap(c => {
-      const oldest = Math.max(c.startBlock - 1, 1);
-      return oldest <= c.startBlock + c.blockCount - 2 ? [oldest] : [];
-    });
-    if (requiredSnapshots.length === 0) {
+    // Checkpoints come in ascending order, so the first unregistered one that reads a prunable snapshot reads the
+    // oldest one.
+    const oldestRequiredSnapshot = unregistered.map(getOldestPrunableSnapshot).find(block => block !== undefined);
+    if (oldestRequiredSnapshot === undefined) {
       return false;
     }
-    const oldestRequiredSnapshot = Math.min(...requiredSnapshots);
     const { oldestHistoricBlockNumber } = (await this.worldState.status()).syncSummary;
     if (oldestRequiredSnapshot < oldestHistoricBlockNumber) {
       this.log.warn(`Not proving fully-proven epoch ${epoch}: world-state history it needs has been pruned`, {
@@ -939,6 +934,21 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       );
     }
   }
+}
+
+/**
+ * Returns the oldest world-state snapshot that proving the checkpoint reads and that pruning can remove, or undefined
+ * if it reads none. Proving block `b` reads the snapshot of block `b - 1`. The genesis snapshot (block 0) is never
+ * pruned, so a checkpoint starting at block 1 reads a prunable snapshot only if it holds a second block.
+ */
+function getOldestPrunableSnapshot({
+  startBlock,
+  blockCount,
+}: Pick<CommonCheckpointData, 'startBlock' | 'blockCount'>): BlockNumber | undefined {
+  if (startBlock > 1) {
+    return BlockNumber(startBlock - 1);
+  }
+  return blockCount > 1 ? BlockNumber(1) : undefined;
 }
 
 // Re-export so handlers can compare states externally.
