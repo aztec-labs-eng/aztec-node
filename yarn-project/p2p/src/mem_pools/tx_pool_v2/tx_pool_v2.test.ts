@@ -49,7 +49,9 @@ import {
 } from '../../msg_validators/tx_validator/gas_limits_validator.js';
 import { MaxFeePerGasValidator } from '../../msg_validators/tx_validator/gas_validator.js';
 import { AllowedSetupCallsMetaValidator } from '../../msg_validators/tx_validator/phases_validator.js';
-import type { TxMetaData } from './tx_metadata.js';
+import { TxPoolRejectionCode } from './eviction/interfaces.js';
+import { DEFAULT_TX_POOL_V2_CONFIG } from './interfaces.js';
+import { type TxMetaData, getMinimumPriceBumpFee } from './tx_metadata.js';
 import { AztecKVTxPoolV2 } from './tx_pool_v2.js';
 import { type MinedTxInfo, TxPoolV2Impl } from './tx_pool_v2_impl.js';
 
@@ -4064,6 +4066,82 @@ describe('TxPoolV2', () => {
       expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual([hashOf(victim), hashOf(replacement)].sort());
       expect(await pool.getTxStatus(original.getTxHash())).toBe('deleted');
     });
+
+    describe.each([{ atCapacity: false }, { atCapacity: true }])(
+      'outbidding a same-fee-payer tx (atCapacity: $atCapacity)',
+      ({ atCapacity }) => {
+        const sharedFeePayer = AztecAddress.fromBigIntUnsafe(999n);
+        const victimFee = 100;
+        const minimumFee = getMinimumPriceBumpFee(BigInt(victimFee), DEFAULT_TX_POOL_V2_CONFIG.priceBumpPercentage);
+
+        let victim: MockTx;
+        let pendingBefore: string[];
+
+        // maxFeesPerGas stays above every priority fee used here, so the priority fee is not capped.
+        const mockFeePayerTx = (seed: number, priorityFee: number | bigint, feePayer = sharedFeePayer) =>
+          mockTx(seed, {
+            feePayer,
+            maxPriorityFeesPerGas: new GasFees(priorityFee, priorityFee),
+            maxFeesPerGas: new GasFees(200, 200),
+            numberOfNonRevertiblePublicCallRequests: 1,
+          });
+
+        beforeEach(async () => {
+          victim = await mockFeePayerTx(1, victimFee);
+          const feeLimit = victim.getGasSettings().getFeeLimit().toBigInt();
+          // Every fee payer can cover one of these txs but not two
+          setFeePayerBalance(feeLimit + feeLimit / 2n);
+
+          if (atCapacity) {
+            await pool.updateConfig({ maxPendingTxCount: 2 });
+            const bystander = await mockFeePayerTx(2, 1, AztecAddress.fromBigIntUnsafe(1000n));
+            await pool.addPendingTxs([bystander], { feeComparisonOnly: true });
+          }
+          await pool.addPendingTxs([victim], { feeComparisonOnly: true });
+          pendingBefore = toStrings(await pool.getPendingTxHashes()).sort();
+          clearCallbackTracking();
+        });
+
+        it('RPC: ignores an incoming tx below the bumped fee', async () => {
+          const incoming = await mockFeePayerTx(3, minimumFee - 1n);
+
+          const result = await pool.addPendingTxs([incoming], { feeComparisonOnly: true });
+
+          expect(toStrings(result.ignored)).toEqual([hashOf(incoming)]);
+          expect(result.errors?.get(hashOf(incoming))).toEqual(
+            expect.objectContaining({
+              code: TxPoolRejectionCode.LOW_PRIORITY_FEE,
+              minimumPriorityFee: minimumFee,
+              txPriorityFee: minimumFee - 1n,
+            }),
+          );
+          expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual(pendingBefore);
+          expectNoCallbacks();
+        });
+
+        it('RPC: evicts the same-fee-payer tx at the bumped fee', async () => {
+          const incoming = await mockFeePayerTx(3, minimumFee);
+
+          const result = await pool.addPendingTxs([incoming], { feeComparisonOnly: true });
+
+          expect(toStrings(result.accepted)).toEqual([hashOf(incoming)]);
+          const expectedPending = [...pendingBefore.filter(h => h !== hashOf(victim)), hashOf(incoming)].sort();
+          expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual(expectedPending);
+          expect(await pool.getTxStatus(victim.getTxHash())).toBe('deleted');
+        });
+
+        it('gossip: evicts the same-fee-payer tx without a price bump', async () => {
+          const incoming = await mockFeePayerTx(3, victimFee + 1);
+
+          const result = await pool.addPendingTxs([incoming], { source: 'gossip' });
+
+          expect(toStrings(result.accepted)).toEqual([hashOf(incoming)]);
+          const expectedPending = [...pendingBefore.filter(h => h !== hashOf(victim)), hashOf(incoming)].sort();
+          expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual(expectedPending);
+          expect(await pool.getTxStatus(victim.getTxHash())).toBe('deleted');
+        });
+      },
+    );
   });
 
   describe('fee payer balance eviction rule (post-event)', () => {
