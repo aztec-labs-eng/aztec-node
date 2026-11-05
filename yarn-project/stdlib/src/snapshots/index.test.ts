@@ -136,5 +136,61 @@ describe('snapshots', () => {
       expect(store.exists).toHaveBeenCalledWith(`aztec-1-2-${rollup.toString()}/index.json`);
       expect(store.upload).toHaveBeenCalledTimes(6);
     });
+
+    it('retries failed data uploads', async () => {
+      store.exists.mockResolvedValue(false);
+      store.save.mockResolvedValue('index.json');
+      store.upload.mockRejectedValueOnce(new Error('InternalError')).mockImplementation(dest => Promise.resolve(dest));
+
+      await uploadSnapshotToIndex(
+        makeDataPaths(1, '/local/'),
+        { archiver: 1, worldState: 1 },
+        { ...metadata, l1BlockNumber: 1, l2BlockHash: '0x1', l2BlockNumber: 1 },
+        store,
+        { retryBackoff: [0] },
+      );
+
+      expect(store.upload).toHaveBeenCalledTimes(7);
+      expect(store.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-reads the index when retrying the index update', async () => {
+      store.exists.mockResolvedValue(true);
+      store.read.mockResolvedValue(Buffer.from(jsonStringify(index), 'utf-8'));
+
+      let uploadedIndex: string;
+      store.save.mockRejectedValueOnce(new Error('InternalError')).mockImplementation((_path, data) => {
+        uploadedIndex = data.toString();
+        return Promise.resolve('index.json');
+      });
+
+      const uploaded = await uploadSnapshotToIndex(
+        makeDataPaths(6, '/local/'),
+        { archiver: 1, worldState: 1 },
+        { ...metadata, l1BlockNumber: 6, l2BlockHash: '0x6', l2BlockNumber: 6 },
+        store,
+        { retryBackoff: [0] },
+      );
+
+      expect(store.read).toHaveBeenCalledTimes(2);
+      expect(store.save).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(uploadedIndex!).snapshots).toEqual([uploaded, ...snapshots]);
+    });
+
+    it('gives up once the backoff is exhausted', async () => {
+      store.upload.mockRejectedValue(new Error('InternalError'));
+
+      await expect(
+        uploadSnapshotToIndex(
+          makeDataPaths(1, '/local/'),
+          { archiver: 1, worldState: 1 },
+          { ...metadata, l1BlockNumber: 1, l2BlockHash: '0x1', l2BlockNumber: 1 },
+          store,
+          { retryBackoff: [0, 0] },
+        ),
+      ).rejects.toThrow('InternalError');
+
+      expect(store.save).not.toHaveBeenCalled();
+    });
   });
 });
