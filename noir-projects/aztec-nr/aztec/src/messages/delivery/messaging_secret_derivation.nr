@@ -28,37 +28,30 @@ pub(crate) fn compute_recipient_tsk_messaging_secret(tsk_app: Field, recipient: 
     )
 }
 
-/// A contract's choice of messaging-secret derivation.
-///
-/// Selected through the on-chain delivery builder's `via_*` methods. On-chain delivery tags and encrypts every message
-/// with a secret shared between the sender and the recipient, and there is
-/// [more than one way][`crate::messages::delivery::ResolvedMessagingSecretStrategy`] to establish it.
-/// Selecting a derivation instead lets the contract fix it, and its choice is honored over the wallet-resolved
-/// strategy.
+/// A contract's choice of messaging secret derivation, made with the on-chain builders' `via_*` methods (see
+/// [`OnchainUnconstrainedDelivery`](super::OnchainUnconstrainedDelivery)).
 #[derive(Eq)]
 pub(crate) struct MessagingSecretDerivation {
     kind: u8,
 }
 
 impl MessagingSecretDerivation {
-    /// Reuses an existing handshake for the pair, creating a fresh non-interactive one only when none exists.
+    /// See [`via_non_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_non_interactive_handshake).
     pub(crate) fn non_interactive_handshake() -> Self {
         Self { kind: NON_INTERACTIVE_HANDSHAKE }
     }
 
-    /// Reuses an existing handshake for the pair, creating a fresh interactive one only when none exists.
+    /// See [`via_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_interactive_handshake).
     pub(crate) fn interactive_handshake() -> Self {
         Self { kind: INTERACTIVE_HANDSHAKE }
     }
 
-    /// Derives the tag from the address-derived secret for the `(sender, recipient)` pair (a Diffie-Hellman exchange
-    /// between their addresses).
+    /// See [`via_address_derived_secret`](super::OnchainUnconstrainedDelivery::via_address_derived_secret).
     pub(crate) fn address_derived() -> Self {
         Self { kind: ADDRESS_DERIVED }
     }
 
-    /// Derives the tag from the recipient's tagging key, regardless of the sender. Requires PXE to hold the recipient's
-    /// keys, with the recipient in the execution's scopes.
+    /// See [`via_recipient_tsk_secret`](super::OnchainUnconstrainedDelivery::via_recipient_tsk_secret).
     pub(crate) fn recipient_tsk() -> Self {
         Self { kind: RECIPIENT_TSK }
     }

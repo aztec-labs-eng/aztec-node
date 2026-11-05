@@ -16,15 +16,11 @@ const RECIPIENT_TSK = 4;
  */
 export type ResolvedMessagingSecretStrategy =
   | {
-      /** A non-interactive handshake: the recipient re-derives the secret from the onchain handshake registry. */
+      /** A non-interactive handshake for the contract to establish. */
       type: 'non-interactive-handshake';
     }
   | {
-      /**
-       * An interactive handshake: the registry obtains the recipient's signed authorization through the custom
-       * request oracle, and the recipient learns the secret while signing. Nothing announcing the handshake is
-       * published onchain.
-       */
+      /** An interactive handshake for the contract to establish. */
       type: 'interactive-handshake';
     }
   | {
@@ -37,10 +33,7 @@ export type ResolvedMessagingSecretStrategy =
       secret: Fr;
     }
   | {
-      /**
-       * The recipient's messaging secret derived from their tagging key, ready to use. Sound for both delivery modes:
-       * constrained delivery proves the derivation.
-       */
+      /** The recipient's messaging secret derived from their tagging key, ready to use. */
       type: 'recipient-tsk';
       /** The recipient-tsk messaging secret. */
       secret: Fr;

@@ -226,7 +226,7 @@ export type MessagingSecretSource =
   | { kind: 'arbitrary-secret'; recipient: AztecAddress; secret: Point }
   /**
    * A handshake known by the x-coordinate of its ephemeral public key (the value a recipient learns while authorizing
-   * an interactive handshake, which emits no discoverable announcement). The ephemeral key's y-coordinate is always
+   * an interactive handshake, which emits no handshake log to discover). The ephemeral key's y-coordinate is always
    * positive by protocol construction, so the x-coordinate alone identifies it.
    */
   | { kind: 'handshake'; recipient: AztecAddress; ephPk: Fr };
