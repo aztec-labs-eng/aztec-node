@@ -5,7 +5,7 @@ import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
-import { timeoutPromise } from '@aztec-labs/foundation/timer';
+import { withTimeout } from '@aztec-labs/foundation/timer';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { AztecNode, AztecNodeAdminConfig } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
@@ -98,7 +98,7 @@ describe('invalidate blocks test', () => {
       promise.resolve({ checkpointNumber: BigInt(data.checkpointNumber) });
     });
 
-    return Promise.race([promise.promise, timeoutPromise(timeoutSeconds * 1000)]);
+    return withTimeout(promise.promise, timeoutSeconds * 1000);
   };
 
   it('posts an invalid block and next proposer invalidates it', async () => {
@@ -133,10 +133,11 @@ describe('invalidate blocks test', () => {
     // Note that we should expect more invalidations depending on when the patched config hits
     const targetCheckpointNumber = CheckpointNumber(initialCheckpointNumber + 4);
     logger.warn(`Waiting until checkpoint ${targetCheckpointNumber} has been mined to ensure the chain can progress`);
-    await Promise.race([
+    await withTimeout(
       monitor.waitUntilCheckpoint(targetCheckpointNumber),
-      timeoutPromise(constants.slotDuration * 8 * 1000, `Timeout waiting for checkpoint ${targetCheckpointNumber}`),
-    ]);
+      constants.slotDuration * 8 * 1000,
+      `Timeout waiting for checkpoint ${targetCheckpointNumber}`,
+    );
 
     // Ensure the nodes also sync to this block
     const targetBlockNumber = Number(targetCheckpointNumber);
