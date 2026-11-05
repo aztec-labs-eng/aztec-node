@@ -4,7 +4,7 @@ name: Port to Branch
 # (e.g. port-to-main, port-to-v5), as one standalone PR per target — there is
 # no accumulation/staging branch. A clean cherry-pick opens a normal PR; a
 # conflicted one is committed WITH its markers and opened as a draft (no CI,
-# unmergeable) for a human or ClaudeBox to resolve in a follow-up commit.
+# unmergeable) for a human to resolve in a follow-up commit.
 #
 # Runs on both `labeled` and `closed` because either can complete the
 # "merged AND labeled" condition: labels are usually applied before merge
@@ -85,11 +85,10 @@ jobs:
             end' "$RESULTS_FILE")
           gh pr comment "${{ github.event.pull_request.number }}" --body "$BODY"
 
-      - name: Notify Slack and dispatch ClaudeBox for conflicts and failures
+      - name: Notify Slack for conflicts and failures
         if: always() && steps.port.outcome != 'skipped'
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
           RESULTS_FILE: ${{ runner.temp }}/port-results.jsonl
           PR: ${{ github.event.pull_request.number }}
           TITLE: ${{ github.event.pull_request.title }}
@@ -102,9 +101,8 @@ jobs:
             TARGET=$(echo "$result" | jq -r '.target')
             STATUS=$(echo "$result" | jq -r '.status')
             PORT_PR_URL=$(echo "$result" | jq -r '.pr_url')
-            BRANCH=$(echo "$result" | jq -r '.branch')
 
-            # Post to #backports, derive the permalink for the ClaudeBox context link.
+            # Post to #backports.
             if [[ "$STATUS" == "conflicts" ]]; then
               TEXT=$(printf '⚠️ Port of <%s|#%s %s> to `%s` has conflicts: <%s|draft PR> (author: %s) (🤖)' \
                 "$URL" "$PR" "$TITLE" "$TARGET" "$PORT_PR_URL" "$AUTHOR")
@@ -117,21 +115,4 @@ jobs:
               -H "Content-type: application/json" \
               -d "$(jq -n --arg c "#backports" --arg t "$TEXT" '{channel:$c, text:$t}')")
             echo "Slack response: $RESP"
-            TS=$(echo "$RESP" | jq -r '.ts // empty')
-            CHANNEL_ID=$(echo "$RESP" | jq -r '.channel // empty')
-            LINK=""
-            if [[ -n "$TS" && -n "$CHANNEL_ID" ]]; then
-              LINK="https://aztecprotocol.slack.com/archives/$CHANNEL_ID/p${TS//./}"
-            fi
-
-            # ClaudeBox resolves conflicts on the already-pushed draft branch;
-            # plain failures only get the Slack notification.
-            if [[ "$STATUS" == "conflicts" ]]; then
-              gh workflow run claudebox.yml \
-                -f prompt="Port of PR #$PR ($TITLE) to $TARGET has conflicts. The conflicted cherry-pick is committed WITH ITS MARKERS on branch $BRANCH, draft PR: $PORT_PR_URL. Follow .claude/claudebox/port-to-branch.md to resolve the markers in a follow-up commit and mark the PR ready." \
-                -f link="${LINK:-$PORT_PR_URL}" \
-                -f target_ref="origin/$BRANCH" \
-                -f slack_channel="$CHANNEL_ID" \
-                -f slack_thread_ts="$TS"
-            fi
           done

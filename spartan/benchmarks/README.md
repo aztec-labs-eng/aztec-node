@@ -36,8 +36,7 @@ Every benchmark follows the same phases:
 4. **Run the benchmark** via `./.github/ci3.sh <target>` with `SKIP_NETWORK_DEPLOY=1`.
 5. **Scrape and publish** (inside the bench function, not the workflow).
 6. **Teardown**, unconditionally (`if: always()`).
-7. **Notify** `#alerts-next-scenario` on Slack. Failures on scheduled runs also dispatch a ClaudeBox
-   investigation; `workflow_dispatch` runs stay silent.
+7. **Notify** `#alerts-next-scenario` on Slack. `workflow_dispatch` runs stay silent.
 
 All four workflows are guarded on `github.repository == 'aztec-labs-eng/aztec-node'` so they only
 run there, and all use `concurrency` with `cancel-in-progress`.
