@@ -214,6 +214,24 @@ export function getMinimumPriceBumpFee(existingFee: bigint, priceBumpPercentage:
 }
 
 /**
+ * Returns the hashes of the txs that a fee payer's balance cannot cover, funding txs from highest to lowest priority.
+ * Each tx's claim amount is added to the remaining balance before its fee limit is charged.
+ */
+export function getUncoveredFeePayerTxs(balance: bigint, txs: TxMetaData[]): string[] {
+  const uncovered: string[] = [];
+  let remaining = balance;
+  for (const tx of [...txs].sort((a, b) => comparePriority(b, a))) {
+    const available = remaining + tx.claimAmount;
+    if (available >= tx.feeLimit) {
+      remaining = available - tx.feeLimit;
+    } else {
+      uncovered.push(tx.txHash);
+    }
+  }
+  return uncovered;
+}
+
+/**
  * Checks for nullifier conflicts between an incoming transaction and existing pool state.
  *
  * When the incoming tx shares nullifiers with existing pending txs:

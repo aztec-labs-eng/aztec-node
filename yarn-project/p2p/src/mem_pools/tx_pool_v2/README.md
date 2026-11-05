@@ -161,7 +161,7 @@ Checked before adding a transaction to the pending pool:
 | Rule | Purpose |
 |------|---------|
 | `NullifierConflictRule` | Handles transactions with conflicting nullifiers. Higher priority tx wins. For RPC submissions, a configurable price bump percentage is required. |
-| `FeePayerBalancePreAddRule` | Ensures fee payer has sufficient balance for all their pending txs. |
+| `FeePayerBalancePreAddRule` | Ensures fee payer has sufficient balance for all their pending txs. For RPC submissions, evicting a same-fee-payer tx requires the price bump. |
 | `LowPriorityPreAddRule` | Rejects txs when pool is full and new tx has lowest priority. |
 
 ### Post-Event Eviction Rules
@@ -237,7 +237,7 @@ await pool.updateConfig({
 
 ### Price Bump (RPC Transaction Replacement)
 
-When a transaction is submitted via RPC and clashes on nullifiers with an existing pool transaction, the incoming tx must pay at least `priceBumpPercentage`% more in priority fee (i.e. `>= existingFee + existingFee * bump / 100`) to replace it. This prevents spam via small fee increments. The same bump applies when the pool is full and the incoming tx needs to evict the lowest-priority tx.
+When a transaction is submitted via RPC and clashes on nullifiers with an existing pool transaction, the incoming tx must pay at least `priceBumpPercentage`% more in priority fee (i.e. `>= existingFee + existingFee * bump / 100`) to replace it. This prevents spam via small fee increments. The same bump applies when the pool is full and the incoming tx needs to evict the lowest-priority tx, and when the fee payer's balance cannot cover the incoming tx alongside its pending txs and the incoming tx needs to evict lower-priority txs from the same fee payer.
 
 - **Env var**: `P2P_RPC_PRICE_BUMP_PERCENTAGE` (default: 10)
 - **Scope**: RPC submissions only. P2P gossip uses `comparePriority` (fee + hash tiebreaker) with no bump.
