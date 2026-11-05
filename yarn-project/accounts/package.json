@@ -104,6 +104,6 @@
     "artifacts"
   ],
   "engines": {
-    "node": ">=20.16"
+    "node": ">=24"
   }
 }
