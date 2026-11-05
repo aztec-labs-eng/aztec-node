@@ -309,17 +309,23 @@ describe('FeePayerBalancePreAddRule', () => {
         expect(result.reason).toEqual(expect.objectContaining({ minimumPriorityFee: 110n }));
       });
 
-      it('does not apply the bump to an uncovered tx ranked above the incoming tx', async () => {
-        // The existing tx's fee limit exceeds the balance, so it is uncovered whether or not the incoming tx is added
-        const uncoveredMeta = createMeta('0x2222', { feeLimit: 200n, priorityFee: 200n });
-        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 50n });
-        const poolAccess = createPoolAccess(150n, [uncoveredMeta]);
+      it.each([
+        { ranked: 'above', incomingFee: 99n },
+        { ranked: 'below', incomingFee: 105n },
+      ])(
+        'does not apply the bump to a tx the balance cannot cover anyway, ranked $ranked the incoming tx',
+        async ({ incomingFee }) => {
+          // The existing tx's fee limit exceeds the balance, so it is uncovered whether or not the incoming tx is added
+          const uncoveredMeta = createMeta('0x2222', { feeLimit: 200n, priorityFee: 100n });
+          const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: incomingFee });
+          const poolAccess = createPoolAccess(150n, [uncoveredMeta]);
 
-        const result = await rule.check(incomingMeta, poolAccess, context);
+          const result = await rule.check(incomingMeta, poolAccess, context);
 
-        expect(result.shouldIgnore).toBe(false);
-        expect(result.txHashesToEvict).toEqual([uncoveredMeta.txHash]);
-      });
+          expect(result.shouldIgnore).toBe(false);
+          expect(result.txHashesToEvict).toEqual([uncoveredMeta.txHash]);
+        },
+      );
 
       it('evicts on any priority increase without the context', async () => {
         const existingMeta = createMeta('0x2222', { feeLimit: 100n, priorityFee: 100n });

@@ -161,7 +161,7 @@ Checked before adding a transaction to the pending pool:
 | Rule | Purpose |
 |------|---------|
 | `NullifierConflictRule` | Handles transactions with conflicting nullifiers. Higher priority tx wins. For RPC submissions, a configurable price bump percentage is required. |
-| `FeePayerBalancePreAddRule` | Ensures fee payer has sufficient balance for all their pending txs. |
+| `FeePayerBalancePreAddRule` | Ensures fee payer has sufficient balance for all their pending txs. For RPC submissions, evicting a same-fee-payer tx requires the price bump. |
 | `LowPriorityPreAddRule` | Rejects txs when pool is full and new tx has lowest priority. |
 
 ### Post-Event Eviction Rules
