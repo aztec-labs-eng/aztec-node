@@ -93,6 +93,7 @@ fn tag_from_secret_and_index(secret: Field, index: u32, mode: OnchainDeliveryMod
 
 mod test {
     use crate::context::PrivateContext;
+    use crate::messages::delivery::constrained_delivery::compute_recipient_tsk_sequence_nullifier;
     use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
     use crate::messages::delivery::{
         messaging_secret_derivation::MessagingSecretDerivation, ResolvedMessagingSecretStrategy,
@@ -225,6 +226,38 @@ mod test {
 
             // Constrained delivery emits the sequence nullifier for the (sender, recipient, secret) sequence.
             assert_eq(context.nullifiers.len(), 1);
+        });
+    }
+
+    #[test]
+    unconstrained fn constrained_delivery_emits_the_recipient_tsk_sequence_nullifier_for_a_resolved_recipient_tsk() {
+        let env = TestEnvironment::new();
+        let secret: Field = 7;
+        // Index > 0 so the secret is anchored via the previous sequence nullifier, not a key validation request.
+        let index: u32 = 3;
+
+        env.private_context(|context| {
+            mock_existing_handshake_secrets(Option::none());
+            let _ = OracleMock::mock("aztec_prv_resolveMessagingSecretStrategy").returns(
+                ResolvedMessagingSecretStrategy::recipient_tsk(secret),
+            );
+            let _ = OracleMock::mock("aztec_prv_getNextTaggingIndex").returns(index);
+            let _ = OracleMock::mock("aztec_prv_isNullifierPending").returns(false);
+
+            assert_eq(
+                resolve_and_derive_log_tag(
+                    context,
+                    OnchainDeliveryMode::onchain_constrained(),
+                    Option::none(),
+                ),
+                tag_from_secret_and_index(secret, index, OnchainDeliveryMode::onchain_constrained()),
+            );
+
+            assert_eq(context.nullifiers.len(), 1);
+            assert_eq(
+                context.nullifiers.get(0).inner.value,
+                compute_recipient_tsk_sequence_nullifier(RECIPIENT, secret, index),
+            );
         });
     }
 

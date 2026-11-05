@@ -1,11 +1,13 @@
 /* eslint-disable camelcase */
 import { MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_CIPHERTEXT_LEN, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import type { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import { Option } from '../noir-structs/option.js';
 import type { PendingTaggedLog } from '../noir-structs/pending_tagged_log.js';
+import type { ResolvedMessagingSecretStrategy } from '../noir-structs/resolved_messaging_secret_strategy.js';
 import type { ResolvedTx } from '../noir-structs/resolved_tx.js';
 import {
   type InferDeserializedParams,
@@ -19,6 +21,7 @@ import {
   EPHEMERAL_ARRAY,
   FIELD,
   FIXED_BOUNDED_VEC,
+  RESOLVED_MESSAGING_SECRET_STRATEGY,
   RESOLVED_TX,
   STRUCT,
   TX_HASH,
@@ -111,6 +114,20 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
   }),
   aztec_prv_resolveTaggingStrategy: legacyOracle({
     modernOracle: 'aztec_prv_resolveMessagingSecretStrategy',
+    returnType: {
+      legacyType: RESOLVED_MESSAGING_SECRET_STRATEGY,
+      // Contracts calling this name cannot parse the recipient-tsk kind. They can use its secret for unconstrained
+      // delivery, but cannot prove it for constrained delivery, so they get a non-interactive handshake there instead
+      // (which they can constrain).
+      mapping: (result, [_sender, _recipient, deliveryMode]): ResolvedMessagingSecretStrategy => {
+        if (result.type !== 'recipient-tsk') {
+          return result;
+        }
+        return deliveryMode === OnchainDeliveryMode.CONSTRAINED
+          ? { type: 'non-interactive-handshake' }
+          : { type: 'unconstrained-secret', secret: result.secret };
+      },
+    },
   }),
 };
 
@@ -153,10 +170,11 @@ export interface LegacyOracleEntry {
     mapping: (legacyArgs: any) => readonly unknown[] | Promise<readonly unknown[]>;
   };
   /**
-   * Old return wire. `legacyType` serializes the subset the old contract reads; `mapping` bridges the handler's
-   * current result to that subset's value type. Omit when the return wire is unchanged.
+   * Old return wire. `legacyType` serializes the subset the old contract reads; `mapping` bridges the handler's current
+   * result to that subset's value type, and also receives the args the handler was called with. Omit when the return
+   * wire is unchanged.
    */
-  returnType?: { legacyType: TypeMapping; mapping: (result: any) => unknown };
+  returnType?: { legacyType: TypeMapping; mapping: (result: any, handlerArgs: any) => unknown };
 }
 
 function legacyOracle<K extends keyof Registry, W = never, const TLegacyParams extends RegistryParam[] = []>(entry: {
@@ -167,7 +185,7 @@ function legacyOracle<K extends keyof Registry, W = never, const TLegacyParams e
       legacyArgs: ParamTypes<InferDeserializedParams<TLegacyParams>>,
     ) => HandlerArgsOf<K> | Promise<HandlerArgsOf<K>>;
   };
-  returnType?: { legacyType: TypeMapping<W>; mapping: (result: ReturnValueOf<K>) => W };
+  returnType?: { legacyType: TypeMapping<W>; mapping: (result: ReturnValueOf<K>, handlerArgs: HandlerArgsOf<K>) => W };
 }): LegacyOracleEntry {
   return entry;
 }
