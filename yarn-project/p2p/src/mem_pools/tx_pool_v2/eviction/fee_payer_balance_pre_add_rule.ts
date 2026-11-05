@@ -20,7 +20,7 @@ import {
  * - If incoming tx can be covered: accept, mark lower-priority txs for eviction if needed
  * - If incoming tx cannot be covered: ignore it
  * - With a price bump (RPC path): ignore the incoming tx if its priority fee is below the bumped fee of a tx it
- *   would evict
+ *   displaces (one the balance could cover without the incoming tx)
  */
 export class FeePayerBalancePreAddRule implements PreAddRule {
   public readonly name = 'FeePayerBalancePreAdd';

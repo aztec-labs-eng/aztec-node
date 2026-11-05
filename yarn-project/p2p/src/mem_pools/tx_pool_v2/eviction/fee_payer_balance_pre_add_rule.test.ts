@@ -327,6 +327,30 @@ describe('FeePayerBalancePreAddRule', () => {
         },
       );
 
+      it.each([
+        { incomingFee: 105n, accepted: false },
+        { incomingFee: 110n, accepted: true },
+      ])(
+        'requires the bump over a displaced tx even when another tx is already uncovered (fee $incomingFee)',
+        async ({ incomingFee, accepted }) => {
+          // Uncovered with or without the incoming tx
+          const uncoveredMeta = createMeta('0x2222', { feeLimit: 300n, priorityFee: 120n });
+          // Covered without the incoming tx, displaced by it
+          const displacedMeta = createMeta('0x3333', { feeLimit: 150n, priorityFee: 100n });
+          const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: incomingFee });
+          const poolAccess = createPoolAccess(200n, [uncoveredMeta, displacedMeta]);
+
+          const result = await rule.check(incomingMeta, poolAccess, context);
+
+          expect(result.shouldIgnore).toBe(!accepted);
+          if (accepted) {
+            expect(result.txHashesToEvict.sort()).toEqual([uncoveredMeta.txHash, displacedMeta.txHash].sort());
+          } else {
+            expect(result.reason).toEqual(expect.objectContaining({ minimumPriorityFee: 110n }));
+          }
+        },
+      );
+
       it('evicts on any priority increase without the context', async () => {
         const existingMeta = createMeta('0x2222', { feeLimit: 100n, priorityFee: 100n });
         const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 101n });
