@@ -102,7 +102,6 @@ jobs:
             STATUS=$(echo "$result" | jq -r '.status')
             PORT_PR_URL=$(echo "$result" | jq -r '.pr_url')
 
-            # Post to #backports.
             if [[ "$STATUS" == "conflicts" ]]; then
               TEXT=$(printf '⚠️ Port of <%s|#%s %s> to `%s` has conflicts: <%s|draft PR> (author: %s) (🤖)' \
                 "$URL" "$PR" "$TITLE" "$TARGET" "$PORT_PR_URL" "$AUTHOR")
