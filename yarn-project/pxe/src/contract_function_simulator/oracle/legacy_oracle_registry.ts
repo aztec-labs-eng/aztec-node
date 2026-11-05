@@ -1,5 +1,6 @@
 /* eslint-disable camelcase */
 import { MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_CIPHERTEXT_LEN, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
@@ -27,6 +28,8 @@ import {
   TX_HASH,
   type TypeMapping,
 } from './oracle_type_mappings.js';
+
+const log = createLogger('simulator:legacy_oracle_registry');
 
 const LEGACY_LOG_RETRIEVAL_RESPONSE: TypeMapping<LegacyLogRetrievalResponse> = STRUCT([
   { name: 'logPayload', type: FIXED_BOUNDED_VEC(FIELD, PRIVATE_LOG_CIPHERTEXT_LEN) },
@@ -119,13 +122,20 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
       // Contracts calling this name cannot parse the recipient-tsk kind. They can use its secret for unconstrained
       // delivery, but cannot prove it for constrained delivery, so they get a non-interactive handshake there instead
       // (which they can constrain).
-      mapping: (result, [_sender, _recipient, deliveryMode]): ResolvedMessagingSecretStrategy => {
+      mapping: (result, [sender, recipient, deliveryMode]): ResolvedMessagingSecretStrategy => {
         if (result.type !== 'recipient-tsk') {
           return result;
         }
-        return deliveryMode === OnchainDeliveryMode.CONSTRAINED
-          ? { type: 'non-interactive-handshake' }
-          : { type: 'unconstrained-secret', secret: result.secret };
+        if (deliveryMode === OnchainDeliveryMode.CONSTRAINED) {
+          log.warn(
+            'Contract called the retired resolveTaggingStrategy oracle, which cannot return the recipient-tsk ' +
+              'strategy, so its constrained delivery falls back to a non-interactive handshake. Recompile it against ' +
+              'Aztec.nr with oracle version 33.5 or later to use the recipient tsk.',
+            { sender, recipient },
+          );
+          return { type: 'non-interactive-handshake' };
+        }
+        return { type: 'unconstrained-secret', secret: result.secret };
       },
     },
   }),
