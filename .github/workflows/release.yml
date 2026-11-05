@@ -5,6 +5,8 @@
 # credentials in the repo — is requested by exactly one workflow whose only trigger is a v* tag,
 # rather than by an expression inside the CI workflow. The environment's deployment policy
 # (tag: v*) is then the whole story of which refs can publish.
+#
+# Other workflows trigger on this name via `workflow_run`; renaming it stops them silently.
 name: Release
 
 on:
