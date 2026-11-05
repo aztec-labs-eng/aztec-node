@@ -163,6 +163,13 @@ export class S3FileStore implements FileStore {
       if (code === 404 || code === 'NotFound' || code === 'NoSuchKey') {
         return false;
       }
+      // S3 answers a HEAD on a missing key with 403 instead of 404 when the credentials lack s3:ListBucket, so that
+      // the response does not reveal which keys exist. For such credentials a 403 is how a missing object looks.
+      if (code === 403) {
+        return false;
+      }
+      // Anything else (5xx, timeouts, connection errors) says nothing about whether the object exists. Rethrow so a
+      // caller never mistakes an outage for a missing object, e.g. by overwriting an existing file it could not see.
       throw err;
     }
   }

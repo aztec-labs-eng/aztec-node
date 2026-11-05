@@ -41,10 +41,14 @@ describe('S3FileStore', () => {
       await expect(store.exists('index.json')).resolves.toBe(false);
     });
 
+    it('returns false on access denied, which is how S3 reports a missing key without s3:ListBucket', async () => {
+      headError = serviceError('Unknown', 403);
+      await expect(store.exists('index.json')).resolves.toBe(false);
+    });
+
     it.each([
       ['a server error', () => serviceError('InternalError', 500)],
       ['service unavailable', () => serviceError('ServiceUnavailable', 503)],
-      ['access denied', () => serviceError('Unknown', 403)],
       ['a timeout', () => Object.assign(new Error('socket hang up'), { name: 'TimeoutError' })],
     ])('rejects on %s', async (_label, makeError) => {
       headError = makeError();
