@@ -94,7 +94,7 @@ export async function aztecStart(options: any, userLog: LogFn, debugLogger: Logg
     }
 
     const rpcServer = createNamespacedSafeJsonRpcServer(services, {
-      diagnostic: getOtelJsonRpcDiagnosticsMiddleware(),
+      diagnostic: getOtelJsonRpcDiagnosticsMiddleware(undefined, options.rpcTrustClientIdHeader),
       http200OnError: false,
       log: debugLogger,
       middlewares: [
