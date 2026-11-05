@@ -76,8 +76,8 @@ export const archiverConfigMappings: ConfigMappingsType<ArchiverConfig> = {
   archiverSkipHistoricalLogsCheck: {
     env: 'ARCHIVER_SKIP_HISTORICAL_LOGS_CHECK',
     description:
-      'Skip the startup check that probes the L1 RPC for historical Rollup contract logs. ' +
-      'Set to true to bypass the check when the connected RPC node is known to prune old logs.',
+      'Log a warning instead of failing startup when an L1 RPC returns empty results for Rollup logs it should ' +
+      'have, such as a node that silently drops pruned history.',
     ...booleanConfigHelper(false),
   },
   orphanPruneNoProposalTolerance: {
