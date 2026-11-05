@@ -2,19 +2,19 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
-import { type ComponentsVersions, checkCompressedComponentVersion } from '@aztec-labs/stdlib/versioning';
+import type { ComponentsVersions } from '@aztec-labs/stdlib/versioning';
 import { OtelMetricsAdapter, type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { Discv5, type Discv5EventEmitter, type IDiscv5CreateOptions } from '@nethermindeth/discv5';
 import { ENR, SignableENR } from '@nethermindeth/enr';
-import { Buffer } from 'buffer';
 import EventEmitter from 'events';
 
 import type { P2PConfig } from '../../config.js';
 import { createNodeENR } from '../../enr/generate-enr.js';
-import { AZTEC_ENR_KEY, Discv5Event, PeerEvent } from '../../types/index.js';
+import { Discv5Event, PeerEvent } from '../../types/index.js';
 import { convertToMultiaddr } from '../../util.js';
+import { validateAztecEnrVersion } from '../../versioning.js';
 import { type PeerDiscoveryService, PeerDiscoveryState } from '../service.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
 
@@ -217,12 +217,8 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
       );
       for (const enr of this.bootstrapNodeEnrs) {
         try {
-          if (this.config.bootstrapNodeEnrVersionCheck) {
-            const value = enr.kvs.get(AZTEC_ENR_KEY);
-            if (!value) {
-              throw new Error('ENR does not contain aztec key');
-            }
-            checkCompressedComponentVersion(Buffer.from(value).toString(), this.versions);
+          if (this.config.bootstrapNodeEnrVersionCheck && !validateAztecEnrVersion(enr, this.versions, this.logger)) {
+            continue;
           }
           this.discv5.addEnr(enr);
         } catch (e) {
@@ -375,13 +371,6 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
   }
 
   private validateEnr(enr: ENR): boolean {
-    // Check the peer is an aztec peer
-    const value = enr.kvs.get(AZTEC_ENR_KEY);
-    if (!value) {
-      this.logger.debug(`Peer node ${enr.nodeId} does not have aztec key in ENR`);
-      return false;
-    }
-
     // A malformed TCP field (e.g. a non-2-byte port) makes @nethermindeth/enr throw while building the
     // multiaddr. Reject such an ENR here so it's never emitted as a full peer or re-parsed by an
     // unguarded listener (which would crash the process). A missing TCP addr is allowed — those peers
@@ -393,22 +382,6 @@ export class DiscV5Service extends EventEmitter implements PeerDiscoveryService 
       return false;
     }
 
-    // And check it has the correct version
-    let compressedVersion;
-    try {
-      compressedVersion = Buffer.from(value).toString();
-      checkCompressedComponentVersion(compressedVersion, this.versions);
-      return true;
-    } catch (err: any) {
-      if (err.name === 'ComponentsVersionsError') {
-        this.logger.debug(`Peer node ${enr.nodeId} has incorrect version: ${err.message}`, {
-          compressedVersion,
-          expected: this.versions,
-        });
-      } else {
-        this.logger.error(`Error checking peer version`, err);
-      }
-    }
-    return false;
+    return validateAztecEnrVersion(enr, this.versions, this.logger);
   }
 }
