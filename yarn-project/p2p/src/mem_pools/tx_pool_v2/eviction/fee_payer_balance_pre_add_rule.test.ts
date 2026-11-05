@@ -1,6 +1,6 @@
 import { type TxMetaData, comparePriority, stubTxMetaData } from '../tx_metadata.js';
 import { FeePayerBalancePreAddRule } from './fee_payer_balance_pre_add_rule.js';
-import { type PreAddPoolAccess, TxPoolRejectionCode } from './interfaces.js';
+import { type PreAddContext, type PreAddPoolAccess, TxPoolRejectionCode } from './interfaces.js';
 
 describe('FeePayerBalancePreAddRule', () => {
   let rule: FeePayerBalancePreAddRule;
@@ -261,6 +261,75 @@ describe('FeePayerBalancePreAddRule', () => {
         expect(result.reason).toBeDefined();
         expect(result.reason!.code).toBe(TxPoolRejectionCode.INSUFFICIENT_FEE_PAYER_BALANCE);
         expect(result.reason!.message).toContain('insufficient balance');
+      });
+    });
+
+    describe('with priceBumpPercentage', () => {
+      const context: PreAddContext = { feeComparisonOnly: true, priceBumpPercentage: 10n };
+
+      it('ignores incoming tx below the bumped fee of a tx it would evict', async () => {
+        const existingMeta = createMeta('0x2222', { feeLimit: 100n, priorityFee: 100n });
+        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 109n });
+        const poolAccess = createPoolAccess(150n, [existingMeta]);
+
+        const result = await rule.check(incomingMeta, poolAccess, context);
+
+        expect(result).toEqual({
+          shouldIgnore: true,
+          txHashesToEvict: [],
+          reason: expect.objectContaining({
+            code: TxPoolRejectionCode.LOW_PRIORITY_FEE,
+            minimumPriorityFee: 110n,
+            txPriorityFee: 109n,
+          }),
+        });
+      });
+
+      it('evicts the tx when incoming tx meets the bumped fee', async () => {
+        const existingMeta = createMeta('0x2222', { feeLimit: 100n, priorityFee: 100n });
+        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 110n });
+        const poolAccess = createPoolAccess(150n, [existingMeta]);
+
+        const result = await rule.check(incomingMeta, poolAccess, context);
+
+        expect(result.shouldIgnore).toBe(false);
+        expect(result.txHashesToEvict).toEqual([existingMeta.txHash]);
+      });
+
+      it('requires the bump over the highest-fee tx it would evict', async () => {
+        const lowMeta = createMeta('0x2222', { feeLimit: 50n, priorityFee: 50n });
+        const highMeta = createMeta('0x3333', { feeLimit: 50n, priorityFee: 100n });
+        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 105n });
+        // Balance covers the incoming tx and nothing else
+        const poolAccess = createPoolAccess(100n, [lowMeta, highMeta]);
+
+        const result = await rule.check(incomingMeta, poolAccess, context);
+
+        expect(result.shouldIgnore).toBe(true);
+        expect(result.reason).toEqual(expect.objectContaining({ minimumPriorityFee: 110n }));
+      });
+
+      it('does not apply the bump to an uncovered tx ranked above the incoming tx', async () => {
+        // The existing tx's fee limit exceeds the balance, so it is uncovered whether or not the incoming tx is added
+        const uncoveredMeta = createMeta('0x2222', { feeLimit: 200n, priorityFee: 200n });
+        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 50n });
+        const poolAccess = createPoolAccess(150n, [uncoveredMeta]);
+
+        const result = await rule.check(incomingMeta, poolAccess, context);
+
+        expect(result.shouldIgnore).toBe(false);
+        expect(result.txHashesToEvict).toEqual([uncoveredMeta.txHash]);
+      });
+
+      it('evicts on any priority increase without the context', async () => {
+        const existingMeta = createMeta('0x2222', { feeLimit: 100n, priorityFee: 100n });
+        const incomingMeta = createMeta('0x1111', { feeLimit: 100n, priorityFee: 101n });
+        const poolAccess = createPoolAccess(150n, [existingMeta]);
+
+        const result = await rule.check(incomingMeta, poolAccess);
+
+        expect(result.shouldIgnore).toBe(false);
+        expect(result.txHashesToEvict).toEqual([existingMeta.txHash]);
       });
     });
   });
