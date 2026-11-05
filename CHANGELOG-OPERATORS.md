@@ -23,4 +23,40 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-_No entries yet._
+### Max-gas gossip rejections no longer disconnect the relayer ([#582](https://github.com/aztec-labs-eng/aztec-node/pull/582))
+
+The gossip max-gas check measures a transaction against this node's own read of the rollup's mana limit. In the minutes after governance raises that limit, a node that has not read the raise yet rejects transactions an updated peer is relaying honestly, and each rejection cost that peer a mid-tolerance penalty — six of them disconnected it. The penalty is now high tolerance, matching the other checks that fail on stale local state.
+
+Only reachable around a governance change to the mana limit, and nothing to configure. Lagged rejections still count briefly against a peer's gossipsub score; they no longer get it dropped or banned.
+
+### Validators check a checkpoint's opening block fees against L1 ([#517](https://github.com/aztec-labs-eng/aztec-node/pull/517))
+
+The block that opens a checkpoint was re-executed with the gas fees from the proposal's own header, so nothing compared those fees with L1's mana minimum before the block was stored. Validators now price that block themselves, the way the proposer does, and compare.
+
+Two rejection reasons are new in validator logs. `gas_fees_mismatch` means the proposal's fees differ from the price this node computes. `gas_fees_unavailable` means the price could not be read before the attestation deadline. Neither is slashable, since both rest on this node's own view of L1.
+
+A node that lacks the data waits through forced archiver syncs until the deadline rather than attesting against an approximate price, so a node with a slow or lagging L1 endpoint may now withhold attestations where it used to give them. A run of `gas_fees_unavailable` points at your L1 endpoint, not at the proposer.
+
+### Proving jobs retry when the machine fails, not only when the circuit does ([#532](https://github.com/aztec-labs-eng/aztec-node/pull/532))
+
+Witness generation runs `noir-execute` as a child process. A child killed by the OOM killer, a child that could not be spawned, and an OS-level file error all surfaced as plain errors, which the proving agent counted as permanent: the broker failed the job after a single attempt, that failure sank the checkpoint prover, and the node never proved the epoch. These are now classified as retryable, so `PROVER_BROKER_JOB_MAX_RETRIES` applies and any agent can pick the job up again. A genuine constraint failure is still permanent after one attempt, as before.
+
+A prover that was losing whole epochs to memory pressure will now work through them. The memory pressure is still worth fixing — retries make it survivable, not free.
+
+### An invalid checkpoint on L1 no longer costs the honest proposals behind it ([#527](https://github.com/aztec-labs-eng/aztec-node/pull/527), [#529](https://github.com/aztec-labs-eng/aztec-node/pull/529))
+
+A checkpoint with invalid attestations, posted at the number an honest proposer was about to use, did two kinds of damage. Every archiver compared it against the local proposed checkpoint of that number and evicted that proposal — and every proposal after it — before getting as far as rejecting the invalid one, so the next proposer built on the wrong parent and a slot was lost. Separately, a proposer that had built without a proposed parent never invalidated the bad checkpoint, so its own proposal could not land and the cleanup fell to a later slot.
+
+Archivers now keep a proposed checkpoint from a later slot than the L1 one, and a proposer invalidates the bad checkpoint standing in its way. Visible as slots no longer lost after someone posts a checkpoint every node rejects. Nothing to configure.
+
+### Relayers are no longer penalized for transactions that expire at a slot boundary ([#480](https://github.com/aztec-labs-eng/aztec-node/pull/480))
+
+A gossiped transaction is checked for expiry against the receiver's own next-slot timestamp, which advances a full slot at each boundary. A relayer a slot behind could be penalized for a transaction it had seen as valid, and repeated hits pushed honest peers past the gossip, publish and graylist thresholds. A transaction that expired within the last slot is now ignored with no penalty; one expired by more than a slot is still rejected and its sender penalized.
+
+Expect fewer peers scored down or dropped around slot boundaries.
+
+### A node that restarts at a new address is reachable again ([#631](https://github.com/aztec-labs-eng/aztec-node/pull/631))
+
+Peers replace a stored ENR only when they see a higher sequence number. A node that kept its peer ID but came back at a new IP published a sequence starting from zero, so peers kept the old record, kept dialling the old address, and the node drew no inbound connections until every peer expired it. The sequence is now seeded from the wall clock, so a restart always advertises a record peers accept. Bootnodes too.
+
+Worth knowing if you run on a scheduler that hands a rescheduled node a new address, or on a dynamic IP. Nothing to configure.
