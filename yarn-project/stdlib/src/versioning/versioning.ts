@@ -59,30 +59,39 @@ export class ComponentsVersionsError extends Error {
   }
 }
 
-/** Checks if the compressed string matches against the expected versions. Throws on mismatch. */
-export function checkCompressedComponentVersion(compressed: string, expected: ComponentsVersions) {
+/**
+ * Checks a compressed string against the supplied component versions, ignoring undefined expected fields.
+ * Throws on mismatch.
+ */
+export function checkCompressedComponentVersion(compressed: string, expected: Partial<ComponentsVersions>) {
   const [versionVersion, l1ChainId, l1RollupAddress, rollupVersion, l2ProtocolContractsHash, l2CircuitsVkTreeRoot] =
     compressed.split('-');
   if (versionVersion !== '00') {
     throw new ComponentsVersionsError('version', '00', versionVersion);
   }
-  if (l1ChainId !== expected.l1ChainId.toString()) {
+  if (expected.l1ChainId !== undefined && l1ChainId !== expected.l1ChainId.toString()) {
     throw new ComponentsVersionsError(`L1 chain ID`, expected.l1ChainId.toString(), l1ChainId);
   }
-  if (l1RollupAddress !== expected.l1RollupAddress.toString().slice(2, 10)) {
+  if (expected.l1RollupAddress !== undefined && l1RollupAddress !== expected.l1RollupAddress.toString().slice(2, 10)) {
     throw new ComponentsVersionsError(`L1 address`, expected.l1RollupAddress.toString(), l1RollupAddress);
   }
-  if (rollupVersion !== expected.rollupVersion.toString()) {
+  if (expected.rollupVersion !== undefined && rollupVersion !== expected.rollupVersion.toString()) {
     throw new ComponentsVersionsError('L2 chain version', expected.rollupVersion.toString(), rollupVersion);
   }
-  if (l2ProtocolContractsHash !== expected.l2ProtocolContractsHash.toString().slice(2, 10)) {
+  if (
+    expected.l2ProtocolContractsHash !== undefined &&
+    l2ProtocolContractsHash !== expected.l2ProtocolContractsHash.toString().slice(2, 10)
+  ) {
     throw new ComponentsVersionsError(
       `L2 protocol contracts vk tree root`,
       expected.l2ProtocolContractsHash.toString(),
       l2ProtocolContractsHash,
     );
   }
-  if (l2CircuitsVkTreeRoot !== expected.l2CircuitsVkTreeRoot.toString().slice(2, 10)) {
+  if (
+    expected.l2CircuitsVkTreeRoot !== undefined &&
+    l2CircuitsVkTreeRoot !== expected.l2CircuitsVkTreeRoot.toString().slice(2, 10)
+  ) {
     throw new ComponentsVersionsError(
       'L2 circuits vk tree root',
       expected.l2CircuitsVkTreeRoot.toString(),
