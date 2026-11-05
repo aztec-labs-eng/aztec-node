@@ -299,12 +299,9 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     );
     await validateAndLogHistoricalLogsAvailability(
       this.publicClient,
-      {
-        rollupAddress: this.l1Addresses.rollupAddress,
-        inboxAddress: this.l1Addresses.inboxAddress,
-        registryAddress: this.l1Addresses.registryAddress,
-        governanceProposerAddress: this.l1Addresses.governanceProposerAddress,
-      },
+      this.stores.blocks,
+      { l1BlockNumber: this.l1Constants.l1StartBlock, l1BlockHash: this.l1Constants.l1StartBlockHash },
+      { rollupAddress: this.l1Addresses.rollupAddress, inboxAddress: this.l1Addresses.inboxAddress },
       this.config.skipHistoricalLogsCheck ?? false,
       this.log.getBindings(),
     );
