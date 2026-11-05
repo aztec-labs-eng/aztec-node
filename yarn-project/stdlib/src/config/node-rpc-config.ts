@@ -60,6 +60,12 @@ export const nodeRpcConfigMappings: ConfigMappingsType<NodeRPCConfig> = {
     parseEnv: parseCommaSeparatedList,
     defaultValue: [],
   },
+  rpcTrustClientIdHeader: {
+    env: 'RPC_TRUST_CLIENT_ID_HEADER',
+    description:
+      'Trust x-aztec-client-id for RPC observability. Enable only behind a proxy that overwrites this header.',
+    ...booleanConfigHelper(false),
+  },
   rpcCorsAllowAnyOrigin: {
     env: 'RPC_CORS_ALLOW_ANY_ORIGIN',
     description: 'Allow credentialed cross-origin JSON RPC requests from any origin.',
@@ -100,6 +106,8 @@ export type NodeRPCConfig = {
   rpcCorsAllowedHeaders: string[];
   /** Whether to allow credentialed cross-origin requests from any origin. */
   rpcCorsAllowAnyOrigin: boolean;
+  /** Trust x-aztec-client-id for observability only when a proxy overwrites it and direct RPC access is blocked. */
+  rpcTrustClientIdHeader?: boolean;
   /**
    * Max time in ms an RPC query anchored on a block number exactly one ahead of the node tip is held, waiting for
    * the block to arrive. Defaults to twice the block duration when unset. 0 disables the hold-off.
