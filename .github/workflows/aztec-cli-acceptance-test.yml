@@ -9,7 +9,7 @@ on:
         required: true
         type: string
   workflow_run:
-    workflows: ["CI3"]
+    workflows: ["Release"]
     types:
       - completed
     branches:
