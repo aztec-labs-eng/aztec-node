@@ -1,6 +1,6 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 
-import { type TxMetaData, comparePriority } from '../tx_metadata.js';
+import { type TxMetaData, comparePriority, getMinimumPriceBumpFee, getUncoveredFeePayerTxs } from '../tx_metadata.js';
 import {
   type PreAddContext,
   type PreAddPoolAccess,
@@ -19,18 +19,27 @@ import {
  * - Walk through in priority order, tracking running balance
  * - If incoming tx can be covered: accept, mark lower-priority txs for eviction if needed
  * - If incoming tx cannot be covered: ignore it
+ * - With a price bump (RPC path): ignore the incoming tx if its priority fee is below the bumped fee of a tx it
+ *   displaces (one the balance could cover without the incoming tx)
  */
 export class FeePayerBalancePreAddRule implements PreAddRule {
   public readonly name = 'FeePayerBalancePreAdd';
 
   private log = createLogger('p2p:tx_pool_v2:fee_payer_balance_pre_add_rule');
 
-  async check(incomingMeta: TxMetaData, poolAccess: PreAddPoolAccess, _context?: PreAddContext): Promise<PreAddResult> {
+  async check(incomingMeta: TxMetaData, poolAccess: PreAddPoolAccess, context?: PreAddContext): Promise<PreAddResult> {
     // Get fee payer's on-chain balance
     const initialBalance = await poolAccess.getFeePayerBalance(incomingMeta.feePayer);
 
     // Get existing pending txs for this fee payer
     const existingTxs = poolAccess.getFeePayerPendingTxs(incomingMeta.feePayer);
+
+    // On the RPC path, evicting a tx requires the price bump unless the balance cannot cover that tx even without the
+    // incoming one (e.g. the balance dropped after it was added), since the incoming tx does not displace it.
+    const priceBumpPercentage = context?.priceBumpPercentage;
+    const alreadyUncovered = new Set(
+      priceBumpPercentage !== undefined ? getUncoveredFeePayerTxs(initialBalance, existingTxs) : [],
+    );
 
     // Create combined list with incoming tx
     const allTxs: Array<{
@@ -97,6 +106,25 @@ export class FeePayerBalancePreAddRule implements PreAddRule {
           };
         } else {
           // Existing tx cannot be covered after adding incoming - mark for eviction
+          if (priceBumpPercentage !== undefined && !alreadyUncovered.has(txInfo.txHash)) {
+            const minimumFee = getMinimumPriceBumpFee(txInfo.priorityFee, priceBumpPercentage);
+            if (incomingMeta.priorityFee < minimumFee) {
+              this.log.debug(
+                `Ignoring tx ${incomingMeta.txHash}: below the price bump to evict ${txInfo.txHash} from fee payer ${incomingMeta.feePayer}`,
+                { minimumFee, priorityFee: incomingMeta.priorityFee },
+              );
+              return {
+                shouldIgnore: true,
+                txHashesToEvict: [],
+                reason: {
+                  code: TxPoolRejectionCode.LOW_PRIORITY_FEE,
+                  message: `Fee payer ${incomingMeta.feePayer} cannot cover this tx alongside pending tx ${txInfo.txHash}. Required priority fee to evict it: ${minimumFee}, got: ${incomingMeta.priorityFee}`,
+                  minimumPriorityFee: minimumFee,
+                  txPriorityFee: incomingMeta.priorityFee,
+                },
+              };
+            }
+          }
           txsToEvict.push(txInfo.txHash);
         }
       }

@@ -5,7 +5,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import { DatabasePublicStateSource, type MerkleTreeReadOperations } from '@aztec-labs/stdlib/trees';
 
-import { type TxMetaData, comparePriority } from '../tx_metadata.js';
+import { getUncoveredFeePayerTxs } from '../tx_metadata.js';
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';
 import { EvictionEvent } from './interfaces.js';
 
@@ -92,29 +92,6 @@ export class FeePayerBalanceEvictionRule implements EvictionRule {
       )
     ).toBigInt();
 
-    const txs: TxMetaData[] = pool.getFeePayerPendingTxs(feePayerStr);
-
-    if (txs.length === 0) {
-      return [];
-    }
-
-    const txsToEvict: string[] = [];
-    let balance = initialBalance;
-
-    // Sort by priority descending (highest first), with hash as tiebreaker
-    txs.sort((a, b) => comparePriority(b, a));
-
-    for (const tx of txs) {
-      const available = balance + tx.claimAmount;
-      if (available >= tx.feeLimit) {
-        balance = available - tx.feeLimit;
-        continue;
-      }
-
-      // This tx cannot be covered - mark for eviction
-      txsToEvict.push(tx.txHash);
-    }
-
-    return txsToEvict;
+    return getUncoveredFeePayerTxs(initialBalance, pool.getFeePayerPendingTxs(feePayerStr));
   }
 }
