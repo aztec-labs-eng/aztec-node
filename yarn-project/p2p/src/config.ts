@@ -525,7 +525,7 @@ export const p2pConfigMappings: ConfigMappingsType<P2PConfig> = {
     env: 'TX_PUBLIC_SETUP_ALLOWLIST',
     parseEnv: (val: string) => parseAllowList(val),
     description:
-      'Additional entries to extend the default setup allow list. Format: I:address:selector[:flags],C:classId:selector[:flags]. Flags: os (onlySelf), rn (rejectNullMsgSender), cl=N (calldataLength), l2=N and da=N (L2 and DA gas the call needs in setup; txs whose gas limits leave setup less are rejected), joined with +. Static setup calls are always rejected. Only add functions that cannot revert for any calldata the entry allows: a failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.',
+      'Additional entries to extend the default setup allow list. Format: I:address:selector[:flags],C:classId:selector[:flags]. Flags: os (onlySelf), rn (rejectNullMsgSender), cl=N (calldataLength), l2=N and da=N (the most L2 and DA gas the call can use in setup, for any calldata the entry allows; txs whose gas limits leave setup less are rejected), joined with +. Static setup calls are always rejected. Only add functions that cannot revert for any calldata the entry allows: a failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.',
     printDefault: () =>
       'Default: AuthRegistry._set_authorized, AuthRegistry.set_authorized, FeeJuice._increase_public_balance',
   },
@@ -753,7 +753,8 @@ function parseFlags(flags: string, entry: string): AllowListFlags {
  * An optional flags segment can be appended after the selector:
  * `I:${address}:${selector}:${flags}` or `C:${classId}:${selector}:${flags}`
  * where flags is a `+`-separated list of: `os` (onlySelf), `rn` (rejectNullMsgSender), `cl=N` (calldataLength), and
- * `l2=N` / `da=N` (minGas: the L2 and DA gas the call needs in setup; a dimension left unset is zero).
+ * `l2=N` / `da=N` (minGas: the most L2 and DA gas the call can use in setup, for any calldata the entry allows; a
+ * dimension left unset is zero).
  *
  * @param value The string to parse
  * @returns A list of allowed elements
