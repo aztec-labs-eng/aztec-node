@@ -524,7 +524,7 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
 }
 
 /**
- * Creates a function that checks whether a tx's setup-phase calls are on the allow list.
+ * Creates a function that checks whether a tx's setup-phase calls pass the allow list checks.
  *
  * Uses the `PhasesTxValidator` on the full Tx. The result is stored as a boolean
  * flag in `TxMetaData.allowedSetupCalls` at receipt time, so the pending pool

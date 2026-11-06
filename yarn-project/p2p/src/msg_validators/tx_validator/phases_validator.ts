@@ -180,7 +180,7 @@ export interface HasAllowedSetupCallsData {
  * Checks the precomputed `allowedSetupCalls` flag on TxMetaData. The flag is
  * computed by running the PhasesTxValidator on the full Tx when it first enters
  * the pool. This lightweight validator is used during pending pool migration to
- * reject txs whose setup calls are not on the allow list.
+ * reject txs whose setup calls failed the allow list checks.
  */
 export class AllowedSetupCallsMetaValidator<T extends HasAllowedSetupCallsData> implements TxValidator<T> {
   #log: Logger;
@@ -191,7 +191,7 @@ export class AllowedSetupCallsMetaValidator<T extends HasAllowedSetupCallsData> 
 
   validateTx(tx: T): Promise<TxValidationResult> {
     if (!tx.allowedSetupCalls) {
-      this.#log.verbose(`Rejecting tx ${tx.txHash} because its setup calls are not on the allow list`);
+      this.#log.verbose(`Rejecting tx ${tx.txHash} because its setup calls failed the allow list checks`);
       return Promise.resolve({ result: 'invalid', reason: [TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED] });
     }
     return Promise.resolve({ result: 'valid' });

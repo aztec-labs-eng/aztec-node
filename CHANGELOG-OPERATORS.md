@@ -34,7 +34,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas
 
-Nodes now reject two more kinds of setup call, at gossip, RPC, block building and pending-pool migration:
+Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
 
 - **Static calls.** A static call cannot write state, so in setup it can only consume gas or fail. Every static setup call is now rejected with `Static setup calls are not allowed`, whatever function it targets. Before, the static flag was not checked.
 - **Too little gas for setup.** An entry can declare the gas its function needs in setup. A tx is rejected, with `Gas limits leave setup less gas than its allowed functions need`, when its gas limits leave setup less than the sum over its setup calls. The three default entries (AuthRegistry `_set_authorized` and `set_authorized`, FeeJuice `_increase_public_balance`) now carry the gas they consume. Custom entries declare it with the new `l2=N` and `da=N` flags; a dimension left out is zero, and an entry with neither has no gas requirement.
