@@ -1,12 +1,13 @@
 import type { TraceCallResponse, TraceTransactionResponse, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { findUnboundedContainers } from '@aztec-labs/foundation/testing';
 import { jest } from '@jest/globals';
 import type { Hex } from 'viem';
 
 import traceTransactionMultipleProposeFixture from '../test/fixtures/trace_transaction-multiplePropose.json' with { type: 'json' };
 import traceTransactionFixture from '../test/fixtures/trace_transaction-proxied.json' with { type: 'json' };
 import traceTransactionRevertFixture from '../test/fixtures/trace_transaction-randomRevert.json' with { type: 'json' };
-import { getSuccessfulCallsFromTrace } from './trace_tx.js';
+import { getSuccessfulCallsFromTrace, traceTransactionResponseSchema } from './trace_tx.js';
 
 describe('getSuccessfulCallsFromTrace', () => {
   let mockClient: ViemPublicDebugClient;
@@ -439,5 +440,11 @@ describe('getSuccessfulCallsFromTrace', () => {
         ]),
       ).rejects.toThrow();
     });
+  });
+});
+
+describe('traceTransactionResponseSchema', () => {
+  it('bounds every array before parsing its entries', () => {
+    expect(findUnboundedContainers(traceTransactionResponseSchema)).toEqual([]);
   });
 });
