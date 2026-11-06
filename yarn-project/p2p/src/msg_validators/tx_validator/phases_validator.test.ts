@@ -227,13 +227,21 @@ describe('PhasesTxValidator', () => {
     });
   });
 
-  it('does not fetch contract instance when matching by address', async () => {
-    const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-    await patchNonRevertibleFn(tx, 0, { address: allowedContract, selector: allowedSetupSelector1 });
+  describe('address entries', () => {
+    const makeTxCallingAllowedContract = async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      await patchNonRevertibleFn(tx, 0, { address: allowedContract, selector: allowedSetupSelector1 });
+      return tx;
+    };
 
-    await expectValid(tx);
+    it('allows a setup call to an address entry whose contract is deployed', async () => {
+      await expectValid(await makeTxCallingAllowedContract());
+    });
 
-    expect(contractDataSource.getContract).not.toHaveBeenCalled();
+    it('rejects a setup call to an address entry with no contract deployed', async () => {
+      contractDataSource.getContract.mockResolvedValue(undefined);
+      await expectInvalid(await makeTxCallingAllowedContract(), TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT);
+    });
   });
 
   describe('onlySelf validation', () => {
@@ -613,6 +621,12 @@ describe('PhasesTxValidator', () => {
     };
 
     it('allows a non-static set_authorized setup call with enough gas', async () => {
+      const tx = await makeSetAuthorizedTx({ isStaticCall: false });
+      await expectValid(tx);
+    });
+
+    it('allows a set_authorized setup call while no instance of the standard AuthRegistry is known', async () => {
+      contractDataSource.getContract.mockResolvedValue(undefined);
       const tx = await makeSetAuthorizedTx({ isStaticCall: false });
       await expectValid(tx);
     });
