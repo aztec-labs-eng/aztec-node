@@ -2,11 +2,7 @@ import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import {
-  CommitteeNotStableError,
-  type RollupContract,
-  type SlashingProposerContract,
-} from '@aztec-labs/ethereum/contracts';
+import type { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { unique } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -144,70 +140,6 @@ export async function awaitCommitteeExists({
   );
   logger.warn(`Committee has been formed`, { committee: committee!.map(c => c.toString()) });
   return committee!.map(c => c.toString() as `0x${string}`);
-}
-
-/**
- * Scans L2 slots forward from `minLeadSlots` ahead of the current slot, returning the first slot in
- * which `targetProposer` is the proposer.
- *
- * Scanning starts at `currentSlot + minLeadSlots` and only ever moves forward, so every returned slot
- * is at least `minLeadSlots` ahead — a caller can safely warp to `targetSlot - minLeadSlots` for a
- * settle buffer without risking a backwards warp. Stepping by a single slot examines both epoch
- * parities, which matters because the per-slot proposer is a different RANDAO-shuffled committee
- * member: searching only a fixed offset within each epoch can leave a 1-of-N target unexamined when
- * the epoch is short. A candidate in an epoch whose committee isn't sampled yet makes the proposer
- * lookup revert with EpochNotStable, and one whose seed can still change makes the epoch cache throw
- * CommitteeNotStableError; either way this warps one epoch forward and continues, keeping the
- * candidate at least `minLeadSlots` ahead of the new current slot. Throws after `maxSlotsToScan`.
- *
- * Unlike {@link advanceToEpochBeforeProposer}, this does not stop an epoch early — callers that want
- * to warp close to the target (rather than stage sequencers an epoch ahead) use this and warp the
- * final `minLeadSlots` in themselves.
- */
-export function findUpcomingProposerSlot({
-  epochCache,
-  cheatCodes,
-  targetProposer,
-  logger,
-  minLeadSlots,
-  maxSlotsToScan = 100,
-}: {
-  epochCache: EpochCacheInterface;
-  cheatCodes: RollupCheatCodes;
-  targetProposer: EthAddress;
-  logger: Logger;
-  minLeadSlots: number;
-  maxSlotsToScan?: number;
-}): Promise<SlotNumber> {
-  return testSpan('warp:find-proposer', async () => {
-    let candidate = Number(await cheatCodes.getSlot()) + minLeadSlots;
-
-    for (let scanned = 0; scanned < maxSlotsToScan; scanned++) {
-      let proposer: EthAddress | undefined;
-      try {
-        proposer = await getProposerFixingSeed(epochCache, cheatCodes, SlotNumber(candidate));
-      } catch (err) {
-        const notStable =
-          err instanceof CommitteeNotStableError || (err instanceof Error && err.message.includes('EpochNotStable'));
-        if (!notStable) {
-          throw err;
-        }
-        await cheatCodes.advanceToNextEpoch();
-        const newCurrentSlot = Number(await cheatCodes.getSlot());
-        // Keep the lead after the warp: never return a slot we could no longer warp ahead of.
-        candidate = Math.max(candidate, newCurrentSlot + minLeadSlots);
-        continue;
-      }
-
-      if (proposer && proposer.equals(targetProposer)) {
-        logger.warn(`Found target proposer ${targetProposer} at slot ${candidate}`);
-        return SlotNumber(candidate);
-      }
-      candidate++;
-    }
-
-    throw new Error(`Target proposer ${targetProposer} not found within ${maxSlotsToScan} slots`);
-  });
 }
 
 /**
