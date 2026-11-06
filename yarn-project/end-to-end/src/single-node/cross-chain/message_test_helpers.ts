@@ -43,8 +43,8 @@ export type SentInboxMessage = {
 export interface L1ToL2MessageHelpers {
   sendMessageToL2(message: {
     recipient: AztecAddress;
-    content: Fr;
-    secretHash: Fr;
+    publicContentHash: Fr;
+    privateContentHash: Fr;
   }): ReturnType<typeof sendL1ToL2Message>;
   /**
    * Sends `count` L1→L2 messages with random contents to `recipient` in one L1 transaction, bundling the
@@ -74,7 +74,7 @@ export function createL1ToL2MessageHelpers(deps: L1ToL2MessageHelperDeps): L1ToL
 
   // Sends an L1→L2 message from the harness L1 account. This suite skips the token bridge, so the
   // message context is built from the test's L1 handles rather than a CrossChainTestHarness.
-  const sendMessageToL2 = (message: { recipient: AztecAddress; content: Fr; secretHash: Fr }) =>
+  const sendMessageToL2 = (message: { recipient: AztecAddress; publicContentHash: Fr; privateContentHash: Fr }) =>
     sendL1ToL2Message(message, {
       l1Client: t.harnessL1Client,
       l1ContractAddresses: t.deployL1ContractsValues.l1ContractAddresses,

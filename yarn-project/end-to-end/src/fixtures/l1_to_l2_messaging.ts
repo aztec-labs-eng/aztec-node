@@ -11,7 +11,7 @@ import { type Hex, type TransactionReceipt, decodeEventLog, encodeFunctionData, 
 import { getLogger } from './utils.js';
 
 /** An L1-to-L2 message as the Inbox takes it. */
-export type L1ToL2MessageInput = { recipient: AztecAddress; content: Fr; secretHash: Fr };
+export type L1ToL2MessageInput = { recipient: AztecAddress; publicContentHash: Fr; privateContentHash: Fr };
 
 /** A sent L1-to-L2 message: its leaf hash, its global index in the message tree, and the L1 receipt that carried it. */
 export type SentL1ToL2Message = { msgHash: Fr; globalLeafIndex: Fr; txReceipt: TransactionReceipt };
@@ -52,7 +52,11 @@ export function encodeSendL2MessageData(message: L1ToL2MessageInput, version: bi
   return encodeFunctionData({
     abi: InboxAbi,
     functionName: 'sendL2Message',
-    args: [{ actor: message.recipient.toString(), version }, message.content.toString(), message.secretHash.toString()],
+    args: [
+      { actor: message.recipient.toString(), version },
+      message.publicContentHash.toString(),
+      message.privateContentHash.toString(),
+    ],
   });
 }
 
@@ -100,7 +104,7 @@ export async function sendL1ToL2MessagesInOneBlock(
 }
 
 export async function sendL1ToL2Message(
-  message: { recipient: AztecAddress; content: Fr; secretHash: Fr },
+  message: L1ToL2MessageInput,
   ctx: {
     l1Client: ExtendedViemWalletClient;
     l1ContractAddresses: Pick<L1ContractAddresses, 'inboxAddress' | 'rollupAddress'>;
@@ -113,13 +117,17 @@ export async function sendL1ToL2Message(
     client: ctx.l1Client,
   });
 
-  const { recipient, content, secretHash } = message;
+  const { recipient, publicContentHash, privateContentHash } = message;
 
   const version = await new RollupContract(ctx.l1Client, ctx.l1ContractAddresses.rollupAddress.toString()).getVersion();
 
   // We inject the message to Inbox
   const txHash = await inbox.write.sendL2Message(
-    [{ actor: recipient.toString(), version: BigInt(version) }, content.toString(), secretHash.toString()],
+    [
+      { actor: recipient.toString(), version: BigInt(version) },
+      publicContentHash.toString(),
+      privateContentHash.toString(),
+    ],
     {
       gas: 1_000_000n,
     },

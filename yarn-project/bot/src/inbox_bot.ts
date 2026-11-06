@@ -492,9 +492,9 @@ export class InboxBot implements BotLifecycle {
     const { batch } = await this.store.reserveBatch({
       scenario,
       intents: intents.map((intent, index) => ({
-        content: intent.content.toString(),
+        publicContentHash: intent.publicContentHash.toString(),
         secret: intent.secret.toString(),
-        secretHash: intent.secretHash.toString(),
+        privateContentHash: intent.privateContentHash.toString(),
         mode: modes.assigned[index],
       })),
       nextMode: modes.next,
@@ -950,9 +950,9 @@ export class InboxBot implements BotLifecycle {
   private async readIntents(batchId: string): Promise<L1ToL2MessageIntent[]> {
     const messages = await this.store.getBatchMessages(batchId);
     return messages.map(message => ({
-      content: Fr.fromHexString(message.content),
+      publicContentHash: Fr.fromHexString(message.publicContentHash),
       secret: Fr.fromHexString(message.secret),
-      secretHash: Fr.fromHexString(message.secretHash),
+      privateContentHash: Fr.fromHexString(message.privateContentHash),
     }));
   }
 
@@ -1335,7 +1335,7 @@ export class InboxBot implements BotLifecycle {
     }
     const request: InboxConsumptionRequest = {
       mode: preparing.mode,
-      content: Fr.fromHexString(preparing.content),
+      publicContentHash: Fr.fromHexString(preparing.publicContentHash),
       secret: Fr.fromHexString(preparing.secret),
       sender: EthAddress.fromString(preparing.sender!),
       leafIndex: new Fr(BigInt(preparing.globalLeafIndex!)),
@@ -1732,15 +1732,14 @@ export class InboxBot implements BotLifecycle {
   }
 
   /**
-   * The siloed nullifier a successful consumption of this message emits. `TestContract` consumes with a single
-   * secret field, which is the derivation {@link computeFeeJuiceMessageNullifier} implements; the kernel then
-   * silos it with the consuming contract's address.
+   * The siloed nullifier a successful consumption of this message emits. `TestContract` consumes with the claim
+   * secret as the whole private content, which is the derivation {@link computeFeeJuiceMessageNullifier} implements;
+   * the kernel then silos it with the consuming contract's address.
    */
   private async expectedConsumptionNullifier(message: InboxMessageRecord): Promise<Fr> {
-    const inner = await computeFeeJuiceMessageNullifier(
-      Fr.fromHexString(message.msgHash!),
+    const inner = await computeFeeJuiceMessageNullifier(Fr.fromHexString(message.msgHash!), [
       Fr.fromHexString(message.secret),
-    );
+    ]);
     return await siloNullifier(this.contractAddress, inner);
   }
 
@@ -1836,7 +1835,7 @@ export class InboxBot implements BotLifecycle {
 
     const request: InboxConsumptionRequest = {
       mode: opposite,
-      content: Fr.fromHexString(message.content),
+      publicContentHash: Fr.fromHexString(message.publicContentHash),
       secret: Fr.fromHexString(message.secret),
       sender: EthAddress.fromString(message.sender!),
       leafIndex: new Fr(BigInt(message.globalLeafIndex!)),
