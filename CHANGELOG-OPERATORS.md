@@ -1,6 +1,6 @@
 # Operator changelog
 
-Changes node operators have to act on, or will notice: CLI flags and environment variables, changed defaults, keystore and Helm values, node RPC methods, artifact locations, and behaviour visible in their logs, metrics or sync. Internal refactors, tests, CI, and changes that only reach contract or client developers do not belong here — those are the [developer migration notes](https://github.com/AztecProtocol/aztec-packages/blob/next/docs/docs-developers/docs/resources/migration_notes.md).
+Changes node operators have to act on, or will notice: CLI flags and environment variables, changed defaults, keystore and Helm values, node RPC methods, artifact locations, and behaviour visible in their logs, metrics or sync. Internal refactors, tests and CI do not belong here, and neither does anything only contract, app or wallet developers see: those go in the [developer changelog](./CHANGELOG-DEVELOPERS.md).
 
 Each release line keeps its own copy of this file on its own branch. This one is `main`, which ships as v7; the 6.x line's copy is on the `v6` branch. An entry belongs on every branch whose releases carry the change, which for a backport means both.
 
@@ -11,6 +11,15 @@ The published [operator changelog](https://github.com/AztecProtocol/aztec-packag
 One `###` heading per change, under the `## Unreleased` section, newest first. Name the flag or variable in the heading when there is one, and link the PR.
 
 Give the before and after for anything an operator has configured, and a **Migration** line whenever the change needs action. A change that needs none says so.
+
+A change to any of the following is breaking, and its entry says how to migrate:
+
+- **P2P wire format**: gossip message encoding, topics, req/resp protocols, peer scoring. Nodes on the old and new version must still interoperate, or the PR must say they can't.
+- **Database schema**: archiver, world state, p2p, and slasher stores. Bump the schema version and say whether nodes need a resync.
+- **Node RPC API**: public and admin JSON-RPC methods, their params and return types.
+- **Operator interface**: CLI flags, environment variables, config defaults, keystore format, Helm values.
+- **Protocol**: block, checkpoint, or blob format; constants; circuits; L1 contract interactions and ABIs; slashing conditions.
+- **Observability**: renamed or removed metrics and log fields that dashboards or alerts depend on.
 
 ```markdown
 ### `FOO_TIMEOUT_MS` replaces `FOO_TIMEOUT` ([#123](https://github.com/aztec-labs-eng/aztec-node/pull/123))
