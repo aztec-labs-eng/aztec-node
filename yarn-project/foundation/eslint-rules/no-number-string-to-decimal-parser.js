@@ -14,19 +14,9 @@ import { createCodePatternRule } from './create-code-pattern-rule.js';
 const DECIMAL_PARSERS = new Set(['parseGwei', 'parseEther', 'parseUnits']);
 const VIEM_MODULES = new Set(['viem', 'viem/utils']);
 
-const STRINGIFICATIONS = [
-  'String($value)',
-  'String?.($value)',
-  '$value.toString(...$_)',
-  '$value.toString?.(...$_)',
-  '$value?.toString(...$_)',
-  '$value?.toString?.(...$_)',
-  '$value["toString"](...$_)',
-  '$value["toString"]?.(...$_)',
-  '$value?.["toString"](...$_)',
-  '$value?.["toString"]?.(...$_)',
-  '`${$value}`',
-].map(invalid => compilePattern(invalid));
+const STRINGIFICATIONS = ['String($value)', '$value.toString(...$_)', '`${$value}`'].map(invalid =>
+  compilePattern(invalid),
+);
 
 /** @type {WeakMap<import('eslint').SourceCode, ReturnType<typeof createAnalysis>>} */
 const analyses = new WeakMap();
@@ -47,10 +37,12 @@ export default createCodePatternRule({
 
   patterns: [
     {
-      invalid: ['$parser($value, ...$_)', '$parser?.($value, ...$_)'],
+      invalid: '$parser($value, ...$_)',
       messageId: 'numberString',
       report({ $parser, $value }, { sourceCode }) {
-        if (!analyses.has(sourceCode)) analyses.set(sourceCode, createAnalysis(sourceCode));
+        if (!analyses.has(sourceCode)) {
+          analyses.set(sourceCode, createAnalysis(sourceCode));
+        }
         const analysis = analyses.get(sourceCode);
         const parser = analysis?.getParserName($parser);
         return parser && analysis.hasNumberString($value) ? { node: $value, data: { parser } } : false;
@@ -62,7 +54,9 @@ export default createCodePatternRule({
 /** @param {import('eslint').SourceCode} sourceCode */
 function createAnalysis(sourceCode) {
   const services = sourceCode.parserServices;
-  if (!services?.program || !services.esTreeNodeToTSNodeMap || !services.tsNodeToESTreeNodeMap) return undefined;
+  if (!services?.program || !services.esTreeNodeToTSNodeMap || !services.tsNodeToESTreeNodeMap) {
+    return undefined;
+  }
   /** @type {ts.Program} */
   const program = services.program;
   const checker = program.getTypeChecker();

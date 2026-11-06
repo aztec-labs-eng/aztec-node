@@ -18,15 +18,6 @@ const IGNORED_FIELDS = new Set([
   'typeParameters',
 ]);
 
-const EXPRESSION_WRAPPERS = new Set([
-  'ParenthesizedExpression',
-  'TSAsExpression',
-  'TSTypeAssertion',
-  'TSNonNullExpression',
-  'TSSatisfiesExpression',
-  'ChainExpression',
-]);
-
 /**
  * Identifies AST nodes among the primitive values and arrays stored in AST fields.
  * @param {unknown} value
@@ -34,13 +25,6 @@ const EXPRESSION_WRAPPERS = new Set([
  */
 function isNode(value) {
   return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string';
-}
-
-function unwrap(value) {
-  while (isNode(value) && EXPRESSION_WRAPPERS.has(value.type)) {
-    value = value['expression'];
-  }
-  return value;
 }
 
 /** @param {import('estree').Node} node */
@@ -150,9 +134,18 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
       }
     }
   }
-  if (replacement) visit(replacement.expression);
+  if (replacement) {
+    visit(replacement.expression);
+  }
   holes.sort((a, b) => b.start - a.start);
-  return { root: parsed.expression, symbols, references, preferred: preferred ?? '', holes, ignoreReturnValues };
+  return {
+    root: parsed.expression,
+    symbols,
+    references,
+    preferred: preferred ?? '',
+    holes,
+    ignoreReturnValues,
+  };
 }
 
 /**
@@ -167,10 +160,6 @@ export function matchPattern(pattern, node, sourceCode) {
   const bindings = new Map();
 
   function match(expected, actual, key = '', capture = true) {
-    if (isNode(expected) && (!capture || !isPlaceholder(expected))) {
-      expected = unwrap(expected);
-      actual = unwrap(actual);
-    }
     if (Array.isArray(expected)) {
       if (!Array.isArray(actual)) {
         return false;

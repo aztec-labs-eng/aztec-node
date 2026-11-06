@@ -60,8 +60,7 @@ counts, and assignments to outer state. The preferred expression is rendered int
 
 `createCodePatternRule` is the shared factory underneath `createPreferUtilityRule`. It also supports diagnostics with
 no preferred expression. Supply ESLint `meta`, a `messageId` on each pattern, and a `report(captures, helpers)` callback
-that returns `{ node, data }` or `false`. A `guard` may still reject a match before reporting. Type-only expression
-wrappers do not affect matching; optional call and member flags remain significant.
+that returns `{ node, data }` or `false`. A `guard` may still reject a match before reporting.
 
 `aztec-custom/no-number-string-to-decimal-parser` uses this factory to report number stringification passed to viem's
 `parseGwei`, `parseEther`, and `parseUnits`. Its conversion patterns include `String($value)`, `$value.toString(...$_)`,

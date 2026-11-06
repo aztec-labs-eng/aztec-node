@@ -53,11 +53,17 @@ export function createCodePatternRule({ meta, patterns, implementations = {} }) 
               }
             }
             for (const pattern of compiled) {
-              if (pattern.code.root.type !== node.type) continue;
+              if (pattern.code.root.type !== node.type) {
+                continue;
+              }
               const captures = matchPattern(pattern.code, node, sourceCode);
-              if (!captures || (pattern.guard && !pattern.guard(captures, helpers))) continue;
+              if (!captures || (pattern.guard && !pattern.guard(captures, helpers))) {
+                continue;
+              }
               const report = pattern.report?.(captures, helpers);
-              if (report === false) continue;
+              if (report === false) {
+                continue;
+              }
               context.report({
                 node: report?.node ?? node,
                 messageId: pattern.messageId,
