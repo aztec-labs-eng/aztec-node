@@ -2,6 +2,7 @@ import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FunctionSelector, countArgumentsSize, getAllFunctionAbis } from '@aztec-labs/stdlib/abi';
 import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Gas } from '@aztec-labs/stdlib/gas';
 import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 
 /**
@@ -12,7 +13,7 @@ export async function buildAllowedElement(
   artifact: ContractArtifact,
   target: { address: AztecAddress } | { classId: Fr },
   functionName: string,
-  opts?: { onlySelf?: boolean; rejectNullMsgSender?: boolean },
+  opts?: { onlySelf?: boolean; rejectNullMsgSender?: boolean; isStaticCall?: boolean; minGas?: Gas },
 ): Promise<AllowedElement> {
   const allFunctions = getAllFunctionAbis(artifact);
   const fn = allFunctions.find(f => f.name === functionName);
@@ -27,5 +28,7 @@ export async function buildAllowedElement(
     calldataLength,
     ...(opts?.onlySelf ? { onlySelf: true } : {}),
     ...(opts?.rejectNullMsgSender ? { rejectNullMsgSender: true } : {}),
+    ...(opts?.isStaticCall ? { isStaticCall: true } : {}),
+    ...(opts?.minGas ? { minGas: opts.minGas } : {}),
   } as AllowedElement;
 }

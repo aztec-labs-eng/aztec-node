@@ -1,19 +1,25 @@
-import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { NULL_MSG_SENDER_CONTRACT_ADDRESS, PUBLIC_TX_L2_GAS_OVERHEAD, TX_DA_GAS_OVERHEAD } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry';
 import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { Gas } from '@aztec-labs/stdlib/gas';
+import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 import { makeAztecAddress, makeSelector, mockTx } from '@aztec-labs/stdlib/testing';
 import {
   TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED,
   TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT,
+  TX_ERROR_SETUP_INSUFFICIENT_GAS,
   TX_ERROR_SETUP_NULL_MSG_SENDER,
   TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER,
   TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH,
+  TX_ERROR_SETUP_WRONG_STATIC_FLAG,
   type Tx,
 } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
 
+import { getDefaultAllowedSetupFunctions } from './allowed_public_setup.js';
 import { PhasesTxValidator } from './phases_validator.js';
 import { patchNonRevertibleFn } from './test_utils.js';
 
@@ -486,6 +492,183 @@ describe('PhasesTxValidator', () => {
       });
 
       await expectValid(tx);
+    });
+  });
+
+  describe('isStaticCall validation', () => {
+    let staticContract: AztecAddress;
+    let staticSelector: FunctionSelector;
+    let staticClassId: Fr;
+
+    beforeEach(() => {
+      staticContract = makeAztecAddress(80);
+      staticSelector = makeSelector(80);
+      staticClassId = Fr.random();
+
+      txValidator = new PhasesTxValidator(
+        contractDataSource,
+        [
+          { address: staticContract, selector: staticSelector, isStaticCall: true },
+          { classId: staticClassId, selector: staticSelector, isStaticCall: true },
+          { address: allowedContract, selector: allowedSetupSelector1 },
+        ],
+        timestamp,
+      );
+    });
+
+    const mockClassOf = (address: AztecAddress, classId: Fr) =>
+      contractDataSource.getContract.mockImplementationOnce(contractAddress =>
+        Promise.resolve(
+          address.equals(contractAddress)
+            ? ({ currentContractClassId: classId, originalContractClassId: Fr.random() } as any)
+            : undefined,
+        ),
+      );
+
+    it('rejects a static call to an entry without the static flag', async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      await patchNonRevertibleFn(tx, 0, {
+        address: allowedContract,
+        selector: allowedSetupSelector1,
+        isStaticCall: true,
+      });
+
+      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
+    });
+
+    it('allows a static call to an address entry with the static flag', async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      await patchNonRevertibleFn(tx, 0, { address: staticContract, selector: staticSelector, isStaticCall: true });
+
+      await expectValid(tx);
+    });
+
+    it('rejects a non-static call to an address entry with the static flag', async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      await patchNonRevertibleFn(tx, 0, { address: staticContract, selector: staticSelector, isStaticCall: false });
+
+      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
+    });
+
+    it('allows a static call to a class entry with the static flag', async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      const address = await patchNonRevertibleFn(tx, 0, { selector: staticSelector, isStaticCall: true });
+      mockClassOf(address, staticClassId);
+
+      await expectValid(tx);
+    });
+
+    it('rejects a non-static call to a class entry with the static flag', async () => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      const address = await patchNonRevertibleFn(tx, 0, { selector: staticSelector, isStaticCall: false });
+      mockClassOf(address, staticClassId);
+
+      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
+    });
+  });
+
+  describe('minGas validation', () => {
+    const gasUsed = new Gas(1_000, 50_000);
+    const minGas1 = new Gas(64, 30_000);
+    const minGas2 = new Gas(128, 20_000);
+    let unmeteredSelector: FunctionSelector;
+
+    beforeEach(() => {
+      unmeteredSelector = makeSelector(90);
+      txValidator = new PhasesTxValidator(
+        contractDataSource,
+        [
+          { address: allowedContract, selector: allowedSetupSelector1, minGas: minGas1 },
+          { address: allowedContract, selector: allowedSetupSelector2, minGas: minGas2 },
+          { address: allowedContract, selector: unmeteredSelector },
+        ],
+        timestamp,
+      );
+    });
+
+    const makeTx = async (selectors: FunctionSelector[], gasLimits: Gas) => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: selectors.length,
+        numberOfRevertiblePublicCallRequests: 0,
+        gasUsed,
+        gasLimits,
+      });
+      for (const [i, selector] of selectors.entries()) {
+        await patchNonRevertibleFn(tx, i, { address: allowedContract, selector });
+      }
+      return tx;
+    };
+
+    it('allows gas limits that leave setup exactly the minGas', async () => {
+      await expectValid(await makeTx([allowedSetupSelector1], gasUsed.add(minGas1)));
+    });
+
+    it('rejects gas limits that leave setup one unit of L2 gas short', async () => {
+      const tx = await makeTx([allowedSetupSelector1], gasUsed.add(minGas1).sub(new Gas(0, 1)));
+      await expectInvalid(tx, TX_ERROR_SETUP_INSUFFICIENT_GAS);
+    });
+
+    it('rejects gas limits that leave setup one unit of DA gas short', async () => {
+      const tx = await makeTx([allowedSetupSelector1], gasUsed.add(minGas1).sub(new Gas(1, 0)));
+      await expectInvalid(tx, TX_ERROR_SETUP_INSUFFICIENT_GAS);
+    });
+
+    it('sums the minGas of every setup call', async () => {
+      const selectors = [allowedSetupSelector1, allowedSetupSelector2];
+      const required = gasUsed.add(minGas1).add(minGas2);
+
+      await expectValid(await makeTx(selectors, required));
+      await expectInvalid(await makeTx(selectors, required.sub(new Gas(0, 1))), TX_ERROR_SETUP_INSUFFICIENT_GAS);
+    });
+
+    it('imposes no gas requirement for entries without minGas', async () => {
+      await expectValid(await makeTx([unmeteredSelector], gasUsed));
+    });
+  });
+
+  describe('default allow list', () => {
+    const privateGasUsed = new Gas(TX_DA_GAS_OVERHEAD, PUBLIC_TX_L2_GAS_OVERHEAD);
+    let setAuthorized: AllowedElement;
+
+    beforeEach(async () => {
+      const defaults = await getDefaultAllowedSetupFunctions();
+      setAuthorized = defaults.find(
+        e => 'address' in e && e.address.equals(STANDARD_AUTH_REGISTRY_ADDRESS) && !e.onlySelf,
+      )!;
+      txValidator = new PhasesTxValidator(contractDataSource, defaults, timestamp);
+    });
+
+    // Without explicit gas limits, mockTx uses the per-tx maximums, which leave setup plenty of gas.
+    const makeSetAuthorizedTx = async (opts: { isStaticCall: boolean; gasLimits?: Gas }) => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 1,
+        numberOfRevertiblePublicCallRequests: 0,
+        gasUsed: privateGasUsed,
+        ...(opts.gasLimits ? { gasLimits: opts.gasLimits } : {}),
+      });
+      await patchNonRevertibleFn(tx, 0, {
+        address: STANDARD_AUTH_REGISTRY_ADDRESS,
+        selector: setAuthorized.selector,
+        args: [new Fr(7), new Fr(1)],
+        msgSender: makeAztecAddress(),
+        isStaticCall: opts.isStaticCall,
+      });
+      return tx;
+    };
+
+    it('allows a non-static set_authorized setup call with enough gas', async () => {
+      const tx = await makeSetAuthorizedTx({ isStaticCall: false });
+      await expectValid(tx);
+    });
+
+    it('rejects a static set_authorized setup call', async () => {
+      const tx = await makeSetAuthorizedTx({ isStaticCall: true });
+      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
+    });
+
+    it('rejects a set_authorized setup call when the gas limits leave no gas for setup', async () => {
+      const tx = await makeSetAuthorizedTx({ isStaticCall: false, gasLimits: privateGasUsed });
+      await expectInvalid(tx, TX_ERROR_SETUP_INSUFFICIENT_GAS);
     });
   });
 });
