@@ -1,10 +1,18 @@
+import { AbortError } from '../error/index.js';
 import { FifoMemoryQueue } from './fifo_memory_queue.js';
+
+/** A function waiting in a {@link SerialQueue}, with a way to reject its caller if it never runs. */
+type QueuedFn = {
+  run: () => Promise<void>;
+  reject: (err: Error) => void;
+};
 
 /**
  * A more specialized fifo queue that enqueues functions to execute. Enqueued functions are executed in serial.
+ * Cancelling the queue rejects the promises returned by `put` for any functions that had not started yet.
  */
 export class SerialQueue {
-  private readonly queue = new FifoMemoryQueue<() => Promise<void>>();
+  private readonly queue = new FifoMemoryQueue<QueuedFn>();
   private runningPromises: Promise<void>[] = [];
   private started = false;
 
@@ -18,7 +26,7 @@ export class SerialQueue {
     if (this.started) {
       return;
     }
-    this.runningPromises = Array.from({ length: numWorkers }, () => this.queue.process(fn => fn()));
+    this.runningPromises = Array.from({ length: numWorkers }, () => this.queue.process(fn => fn.run()));
     this.started = true;
   }
 
@@ -33,14 +41,22 @@ export class SerialQueue {
   }
 
   /**
-   * Cancels the processing of the remaining functions in the serial queue and resolves the running promise.
-   * Any enqueued functions that have not yet been executed will be discarded. The queue can still accept new
-   * functions after cancellation, but the previously enqueued functions will not be re-processed.
+   * Cancels the processing of the remaining functions in the serial queue. Functions that are already running are
+   * left to finish. Enqueued functions that have not started are discarded, and the promises returned by their `put`
+   * calls reject with an {@link AbortError}. The queue accepts no new functions after cancellation: later `put` calls
+   * reject.
    *
-   * @returns The running promise which resolves when the current executing function (if any) completes.
+   * @returns A promise which resolves when the functions running at the time of cancellation (if any) complete.
    */
   public cancel() {
+    const discarded: QueuedFn[] = [];
+    for (let fn = this.queue.getImmediate(); fn !== undefined; fn = this.queue.getImmediate()) {
+      discarded.push(fn);
+    }
     this.queue.cancel();
+    for (const fn of discarded) {
+      fn.reject(new AbortError('Serial queue was cancelled before the function ran'));
+    }
     return Promise.all(this.runningPromises).then(() => {});
   }
 
@@ -59,17 +75,21 @@ export class SerialQueue {
    * Enqueues fn for execution on the serial queue.
    * Returns the result of the function after execution.
    * @param fn - The function to enqueue.
-   * @returns A resolution promise. Rejects if the function does, or if the function could not be enqueued.
+   * @returns A resolution promise. Rejects if the function does, if the function could not be enqueued, or with an
+   * {@link AbortError} if the queue is cancelled before the function starts.
    */
   public put<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
     return new Promise((resolve, reject) => {
-      const accepted = this.queue.put(async () => {
-        try {
-          const res = await fn();
-          resolve(res);
-        } catch (e) {
-          reject(e);
-        }
+      const accepted = this.queue.put({
+        run: async () => {
+          try {
+            const res = await fn();
+            resolve(res);
+          } catch (e) {
+            reject(e);
+          }
+        },
+        reject,
       });
       if (!accepted) {
         reject(new Error('Could not enqueue function'));
