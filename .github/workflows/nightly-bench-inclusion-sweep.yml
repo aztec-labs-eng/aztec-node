@@ -29,12 +29,9 @@ concurrency:
   group: nightly-bench-inclusion-sweep-${{ github.ref }}
   cancel-in-progress: true
 
-# actions: write lets the failure paths dispatch claudebox.yml with the built-in token
-# and caps the called deploy-network.yml high enough for its failure handler.
 # id-token: write lets this and the called workflows assume the AWS role via OIDC.
 permissions:
   contents: read
-  actions: write
   id-token: write
 
 jobs:
@@ -211,11 +208,9 @@ jobs:
       - name: Notify Slack on failure
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           IMAGE="${{ needs.select-image.outputs.docker_image || 'unknown' }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
+          ./ci3/slack_notify \
             "Nightly inclusion sweep FAILED (image ${IMAGE}): <${RUN_URL}|View Run> (🤖)" \
-            "Nightly inclusion sweep failed (image ${IMAGE}). CI run: ${RUN_URL}. Deploy/wait failures fail the whole sweep; a failed individual point drops only that point." \
-            --link "$RUN_URL"
+            "#alerts-next-scenario"

@@ -40,12 +40,11 @@ concurrency:
   group: test-network-scenarios-${{ inputs.namespace || 'nightly' }}
   cancel-in-progress: true
 
-# actions: write lets the failure handler dispatch claudebox.yml with the built-in
-# token (and covers wait_for_release's workflow-run queries).
+# actions: read covers wait_for_release's workflow-run queries.
 # id-token: write lets the job assume the AWS role via OIDC.
 permissions:
   contents: read
-  actions: write
+  actions: read
   id-token: write
 
 jobs:
@@ -237,17 +236,15 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
         run: ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
 
-      - name: Notify Slack and dispatch ClaudeBox on failure
+      - name: Notify Slack on failure
         if: failure()
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
           ENV_FILE: ${{ needs.select-image.outputs.env_file }}
           TEST_SET: ${{ matrix.test_set }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CONTEXT="set ${TEST_SET}, image ${DOCKER_IMAGE:-unset}, env ${ENV_FILE}"
-          ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
+          ./ci3/slack_notify \
             "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
-            "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \
-            --link "$RUN_URL"
+            "#alerts-next-scenario"
