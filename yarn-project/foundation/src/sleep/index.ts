@@ -73,7 +73,8 @@ export class InterruptibleSleep {
 /**
  * Puts the current execution context to sleep for a specified duration.
  * This simulates a blocking sleep operation by using an asynchronous function and a Promise that resolves after the given duration.
- * The sleep function can be interrupted by the 'interrupt' method of the InterruptibleSleep class.
+ * Use this instead of `new Promise(resolve => setTimeout(resolve, ms))`. It cannot be cut short: when a `stop()` must
+ * interrupt the wait, use an {@link InterruptibleSleep} instance instead, or `RunningPromise` for a periodic loop.
  *
  * @param ms - The duration in milliseconds for which the sleep operation should last.
  * @param returnValue - The return value of the promise.

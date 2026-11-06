@@ -37,9 +37,19 @@ export function* makeBackoff(retries: number[]) {
  * Retry a given asynchronous function with a specific backoff strategy, until it succeeds or backoff generator ends.
  * It logs the error and retry interval in case an error is caught. The function can be named for better log output.
  *
+ * Use this instead of a hand-written `while (true) { try { ... } catch { await sleep(...) } }` loop. It retries on a
+ * thrown error; to wait for a condition to become true instead, use {@link retryUntil}.
+ *
+ * The default backoff never ends, so the call only settles once `fn` succeeds or throws {@link NoRetryError}. Pass
+ * `makeBackoff([...])` for a bounded number of attempts, after which the last error is rethrown.
+ *
+ * @example
+ * const receipt = await retry(() => client.getReceipt(txHash), 'get receipt', makeBackoff([1, 2, 4]), this.log);
+ *
  * @param fn - The asynchronous function to be retried.
  * @param name - The optional name of the operation, used for logging purposes.
- * @param backoff - The optional backoff generator providing the intervals in seconds between retries. Defaults to a predefined series.
+ * @param backoff - The optional backoff generator providing the intervals in **seconds** between retries. Defaults to
+ * {@link backoffGenerator}, which never ends.
  * @param log - Logger to use for logging.
  * @param failSilently - Do not log errors while retrying.
  * @returns A Promise that resolves with the successful result of the provided function, or rejects if backoff generator ends.
@@ -105,6 +115,13 @@ function resolveRetryUntilTimeoutSeconds(timeout: RetryUntilTimeout): number {
  * The function is retried periodically with a fixed interval between attempts. The operation can be named for better error messages.
  * Will never timeout if the value is 0.
  *
+ * Use this instead of a hand-written polling loop with `sleep`. Polling stops only on a truthy result, so a function
+ * whose success value can be `0`, `false` or `''` must wrap it (e.g. return `{ value }`). Errors thrown by `fn` are not
+ * retried: they reject the call immediately. To retry on errors, use {@link retry}.
+ *
+ * @example
+ * await retryUntil(async () => (await node.getBlockNumber()) >= target, 'block number', 60, 0.5);
+ *
  * @param fn - The asynchronous function to be retried, which should return a truthy value upon success or undefined otherwise.
  * @param name - The optional name of the operation, used for generating timeout error message.
  * @param timeout - The maximum time to keep retrying before throwing a timeout error. Accepts a number of
@@ -138,7 +155,8 @@ export async function retryUntil<T>(
 
 /**
  * Retry an asynchronous function until it returns a truthy value or the maximum number of retries is exceeded.
- * The function is retried periodically with a fixed interval between attempts.
+ * The function is retried periodically with a fixed interval between attempts. Same truthiness and error semantics as
+ * {@link retryUntil}, but bounded by attempts rather than time.
  *
  * @param fn - The asynchronous function to be retried, which should return a truthy value upon success or undefined otherwise.
  * @param name - The optional name of the operation, used for generating error messages.
