@@ -29,10 +29,34 @@ There are no automatic fixes. `times` passes only the index to its callback, whe
 first. Moving a `.fill(value)` expression into a callback can also change evaluation frequency and object identity.
 `times` requires a valid array length; `Array.from` also accepts lengths that need clamping or truncating.
 
-`createPreferUtilityRule` shares rule metadata, reporting, type helpers, and implementation exclusions. Individual rules
-supply AST matchers and messages showing the preferred helper call. ESLint parses the file once; the rules reuse its AST
-and scope information. Matching code examples alone would not establish callback binding identity or distinguish array
-methods, numeric addition, and Buffer receivers from similar-looking code with different behavior.
+`createPreferUtilityRule` parses each `invalid` and `preferred` expression once. The shared matcher reuses ESLint's
+source AST and scope information. For example:
+
+```js
+createPreferUtilityRule({
+  description: 'Prefer compactArray for removing undefined elements',
+  messageId: 'preferCompactArray',
+  importFrom: '@aztec-labs/foundation/collection',
+  implementations: { 'collection/array.ts': ['compactArray'] },
+  patterns: [{
+    invalid: '$items.filter($item => $item !== undefined)',
+    preferred: 'compactArray($items)',
+    guard: ({ $items }, { getArrayElementType }) => !!getArrayElementType($items),
+  }],
+});
+```
+
+`$name` captures an expression or callback parameter. Repeated callback references must resolve to that same parameter;
+literal globals such as `undefined`, `Promise`, and `Array` must be unshadowed. `$_` ignores one subtree, and `...$_`
+allows unused trailing call arguments. An `invalid` array lists alternative patterns with the same preferred expression.
+
+Type annotations, parentheses, string quote styles, and object property shorthand do not affect matching. Inline
+functions accept expression bodies or one return statement, including function expressions. `ignoreReturnValues` also
+allows one expression statement when callback return values are ignored, as in Promise executors and timer callbacks.
+Async and generator flags, optional calls, operators, extra statements, and extra object properties remain significant.
+
+Guards retain the checks syntax cannot establish: array and Buffer types, primitive numeric types, resolver reference
+counts, and assignments to outer state. The preferred expression is rendered into the warning; it is not an autofix.
 
 For example:
 

@@ -1,21 +1,52 @@
 // @ts-check
+import { compilePattern, matchPattern, renderPreferred } from './code-pattern.js';
 import { createTypeHelpers } from './utils.js';
 
 /**
- * Builds a utility-preference rule from AST matchers and replacement messages.
- * ESLint owns parsing; all matchers share its source, scope manager, and TypeScript program.
+ * Describes equivalent syntax forms and the semantic guard needed before reporting them.
+ * @typedef {{
+ *   invalid: string | string[],
+ *   preferred: string,
+ *   messageId?: string,
+ *   importFrom?: string,
+ *   ignoreReturnValues?: boolean,
+ *   guard?: (
+ *     captures: Record<string, import('estree').Node>,
+ *     helpers: { sourceCode: import('eslint').SourceCode } & ReturnType<typeof createTypeHelpers>,
+ *   ) => boolean,
+ * }} UtilityPattern
+ */
+
+/**
+ * Builds a rule from code templates, sharing AST matching, bindings, reporting, and type helpers.
+ * Pattern strings are parsed once; source files reuse ESLint's AST and TypeScript program.
  * @param {{
  *   description: string,
- *   messages: Record<string, string>,
+ *   messageId: string,
+ *   importFrom: string,
+ *   message?: string,
  *   implementations?: Record<string, string[]>,
- *   matchers: Record<string, (
- *     node: import('eslint').Rule.Node,
- *     helpers: { sourceCode: import('eslint').SourceCode } & ReturnType<typeof createTypeHelpers>,
- *   ) => string | undefined>,
+ *   patterns: UtilityPattern[],
  * }} options
  * @returns {import('eslint').Rule.RuleModule}
  */
-export function createPreferUtilityRule({ description, messages, implementations = {}, matchers }) {
+export function createPreferUtilityRule({
+  description,
+  messageId,
+  importFrom,
+  message = "Use {{preferred}} from '{{importFrom}}' instead.",
+  implementations = {},
+  patterns,
+}) {
+  const compiled = patterns.flatMap(pattern =>
+    (Array.isArray(pattern.invalid) ? pattern.invalid : [pattern.invalid]).map(invalid => ({
+      ...pattern,
+      messageId: pattern.messageId ?? messageId,
+      importFrom: pattern.importFrom ?? importFrom,
+      code: compilePattern(invalid, pattern.preferred, pattern.ignoreReturnValues),
+    })),
+  );
+  const messages = Object.fromEntries(compiled.map(pattern => [pattern.messageId, message]));
   return {
     meta: { type: 'suggestion', docs: { description }, messages, schema: [] },
     create(context) {
@@ -27,7 +58,7 @@ export function createPreferUtilityRule({ description, messages, implementations
         .flatMap(([, names]) => names);
 
       return Object.fromEntries(
-        Object.entries(matchers).map(([selector, match]) => [
+        [...new Set(compiled.map(pattern => pattern.code.root.type))].map(selector => [
           selector,
           node => {
             for (let parent = node.parent; parent; parent = parent.parent) {
@@ -35,9 +66,20 @@ export function createPreferUtilityRule({ description, messages, implementations
                 return;
               }
             }
-            const messageId = match(node, helpers);
-            if (messageId) {
-              context.report({ node, messageId });
+            for (const pattern of compiled) {
+              if (pattern.code.root.type !== node.type) continue;
+              const captures = matchPattern(pattern.code, node, sourceCode);
+              if (captures && (!pattern.guard || pattern.guard(captures, helpers))) {
+                context.report({
+                  node,
+                  messageId: pattern.messageId,
+                  data: {
+                    preferred: renderPreferred(pattern.code, captures, sourceCode),
+                    importFrom: pattern.importFrom,
+                  },
+                });
+                return;
+              }
             }
           },
         ]),

@@ -41,3 +41,14 @@ tester.run('prefer-sleep', rule, {
     '{ const setTimeout = customTimer; } new Promise(resolve => setTimeout(resolve, 100));',
   ].map(code => ({ code, errors: [{ messageId: 'preferSleep' }] })),
 });
+
+new RuleTester().run('prefer-sleep (Espree)', rule, {
+  valid: [
+    'function wait(Promise) { return new Promise(resolve => setTimeout(resolve, 100)); }',
+    'new Promise(resolve => setTimeout?.(resolve, 100));',
+  ],
+  invalid: [
+    'await new Promise(resolve => setTimeout(resolve, 100));',
+    'new Promise(function (resolve) { setTimeout(() => { resolve(); }, 100); });',
+  ].map(code => ({ code, errors: [{ messageId: 'preferSleep' }] })),
+});

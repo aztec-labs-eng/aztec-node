@@ -43,3 +43,14 @@ tester.run('prefer-times', rule, {
     '{ const Array = customArray; } Array.from({ length: size });',
   ].map(code => ({ code, errors: [{ messageId: 'preferTimes' }] })),
 });
+
+new RuleTester().run('prefer-times (Espree)', rule, {
+  valid: [
+    'function generate(Array) { return Array.from({ length: size }); }',
+    'Array.from({ [lengthKey]: size });',
+    'Array?.from({ length: size });',
+  ],
+  invalid: ['Array.from({ "length": size }, createItem);', 'new Array(size).fill(0).map((_, i) => i * 2);'].map(
+    code => ({ code, errors: [{ messageId: 'preferTimes' }] }),
+  ),
+});

@@ -31,24 +31,6 @@ export function isGlobalIdentifier(sourceCode, node, name) {
 }
 
 /**
- * Matches an ordinary method call, excluding optional calls and computed properties.
- * @param {import('estree').Node} node
- * @param {string} name
- * @returns {node is import('estree').SimpleCallExpression & { callee: import('estree').MemberExpression }}
- */
-export function isMethodCall(node, name) {
-  return (
-    node.type === 'CallExpression' &&
-    !node.optional &&
-    node.callee.type === 'MemberExpression' &&
-    !node.callee.optional &&
-    !node.callee.computed &&
-    node.callee.property.type === 'Identifier' &&
-    node.callee.property.name === name
-  );
-}
-
-/**
  * Matches synchronous inline functions whose bodies can be inspected directly.
  * @param {import('estree').Node} node
  * @returns {node is import('estree').ArrowFunctionExpression | import('estree').FunctionExpression}
