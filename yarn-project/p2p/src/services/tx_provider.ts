@@ -204,7 +204,8 @@ export class TxProvider implements ITxProvider {
       );
     }
 
-    if (missingTxHashes.size > 0) {
+    // Txs left over after the caller aborted were never sought to the end, so they are not retrieval failures.
+    if (missingTxHashes.size > 0 && !opts.signal?.aborted) {
       this.instrumentation.incMissingTxs(missingTxHashes.size);
     }
 

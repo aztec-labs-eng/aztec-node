@@ -32,6 +32,16 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Prover nodes prove epochs that an early proof already covered
+
+A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
+
+Prover nodes now prove such an epoch in full while L1 holds no full-epoch proof of it from their prover id, and catch-up after a restart no longer skips it. Expect extra proving work and an extra proof submission for each epoch covered this way. A node with `PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` set still proves only the epochs requested through `startProof`.
+
+Stopping a prover node no longer waits for its checkpoints' tx gathering to finish, which could take up to `PROVER_NODE_TX_GATHERING_TIMEOUT_MS`. A gather cut short by a stop or a prune logs `Retrieved N out of M txs for block` at `verbose` with `aborted: true` instead of at `warn`, and its missing txs no longer count toward `aztec.tx_collector.missing_txs_count`.
+
+**Migration**: none.
+
 ### Nightly tags from `main` are now `v7.0.0-nightly.<date>` ([#656](https://github.com/aztec-labs-eng/aztec-node/pull/656))
 
 `main` has moved to the 7.0.0 line, and the 6.x line now lives on the `v6` branch, which cuts its own nightlies. Both are tagged every night, so `v6.1.0-nightly.20261105` and `v7.0.0-nightly.20261105` both exist and are different code.

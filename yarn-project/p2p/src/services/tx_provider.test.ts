@@ -1,6 +1,7 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { P2PClient, type PeerId, type TxPoolV2, TxProvider } from '@aztec-labs/p2p';
+import { L2Block } from '@aztec-labs/stdlib/block';
 import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
 import { makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
 import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
@@ -135,6 +136,28 @@ describe('TxProvider', () => {
     const proposal = await buildProposal([], hashes);
     const results = await txProvider.getTxsForBlockProposal(proposal, blockNumber, opts);
     await checkResults(results, { txs: original, missingTxs: [] });
+  });
+
+  it("stops collecting a block's txs when the caller aborts", async () => {
+    const block = await L2Block.random(blockNumber, { txsPerBlock: 2 });
+    const hashes = block.body.txEffects.map(txEffect => txEffect.txHash);
+    // The collector settles only when the caller's signal aborts, standing in for a collection that would otherwise
+    // run until its deadline.
+    txCollection.collectFastFor.mockImplementation(
+      (_request, _txHashes, collectOpts) =>
+        new Promise(resolve => {
+          if (collectOpts.signal?.aborted) {
+            resolve([]);
+          }
+          collectOpts.signal?.addEventListener('abort', () => resolve([]));
+        }),
+    );
+    const abortController = new AbortController();
+
+    const resultPromise = txProvider.getTxsForBlock(block, { deadline: opts.deadline, signal: abortController.signal });
+    abortController.abort();
+
+    await checkResults(await resultPromise, { txs: [], missingTxs: hashes });
   });
 
   it('still reports a tx as missing when the final pool re-check does not find it', async () => {

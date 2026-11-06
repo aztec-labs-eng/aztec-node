@@ -734,16 +734,22 @@ describe('CheckpointProver', () => {
       await prover.whenDone();
 
       txProvider.getTxsForBlock.mockReset();
-      txProvider.getTxsForBlock.mockImplementation((block, opts) =>
-        Promise.resolve(
+      txProvider.getTxsForBlock.mockImplementation((block, opts) => {
+        const hashes = block.body.txEffects.map(txEffect => txEffect.txHash);
+        return Promise.resolve(
           opts.signal?.aborted
-            ? { txs: [], missingTxs: block.body.txEffects.map(txEffect => txEffect.txHash) }
-            : { txs: [fakeTx('0xaa')], missingTxs: [] },
-        ),
-      );
+            ? { txs: [], missingTxs: hashes }
+            : { txs: hashes.map(hash => fakeTx(hash.toString())), missingTxs: [] },
+        );
+      });
 
       const uploaded = await prover.getTxsForUpload();
-      expect(uploaded.get('0xaa')).toBeDefined();
+      const expectedHashes = checkpoint.blocks.flatMap(block =>
+        block.body.txEffects.map(txEffect => txEffect.txHash.toString()),
+      );
+      expect(checkpoint.blocks.length).toBeGreaterThan(1);
+      expect(expectedHashes.length).toBeGreaterThan(checkpoint.blocks[0].body.txEffects.length);
+      expect([...uploaded.keys()].sort()).toEqual(expectedHashes.sort());
     });
 
     it('failure-upload re-fetches from the pool and builds complete EpochProvingJobData', async () => {
