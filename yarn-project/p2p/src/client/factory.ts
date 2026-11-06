@@ -31,6 +31,7 @@ import {
   createTxValidatorForOnDemandReceivedTxs,
   createTxValidatorForTransactionsEnteringPendingTxPool,
   getDefaultAllowedSetupFunctions,
+  warnOnSetupEntriesWithoutMinGas,
 } from '../msg_validators/index.js';
 import { TxValidationCache } from '../msg_validators/tx_validator/tx_validation_cache.js';
 import { DummyP2PService } from '../services/dummy_service.js';
@@ -103,6 +104,7 @@ export async function createP2PClient(
   const rollupAddress = inputConfig.rollupAddress.toString().toLowerCase().replace(/^0x/, '');
   const txFileStoreBasePath = `aztec-${inputConfig.l1ChainId}-${inputConfig.rollupVersion}-0x${rollupAddress}`;
 
+  warnOnSetupEntriesWithoutMinGas(inputConfig.txPublicSetupAllowListExtend ?? [], logger);
   const allowedInSetup = [
     ...(await getDefaultAllowedSetupFunctions()),
     ...(inputConfig.txPublicSetupAllowListExtend ?? []),

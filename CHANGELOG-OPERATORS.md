@@ -37,7 +37,7 @@ setting it starts with the default of 30s rather than the value it was given.
 Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
 
 - **Static calls.** A static call cannot write state, so in setup it can only consume gas or fail. Every static setup call is now rejected with `Static setup calls are not allowed`, whatever function it targets. Before, the static flag was not checked.
-- **Too little gas for setup.** An entry can declare the most gas its function can use in setup, for any calldata the entry allows. A tx is rejected, with `Gas limits leave setup less gas than its allowed functions need`, when its gas limits leave setup less than the sum over its setup calls. The three default entries (AuthRegistry `_set_authorized` and `set_authorized`, FeeJuice `_increase_public_balance`) now carry the gas they consume. Custom entries declare it with the new `l2=N` and `da=N` flags; a dimension left out is zero, and an entry with neither has no gas requirement.
+- **Too little gas for setup.** An entry can declare the most gas its function can use in setup, for any calldata the entry allows. A tx is rejected, with `Gas limits leave setup less gas than its allowed functions need`, when its gas limits leave setup less than the sum over its setup calls. The three default entries (AuthRegistry `_set_authorized` and `set_authorized`, FeeJuice `_increase_public_balance`) now carry the gas they consume. Custom entries declare it with the new `l2=N` and `da=N` flags; a dimension left out is zero, and an entry with neither has no gas requirement. The node logs a warning at startup, and when the allow list is changed at runtime, for each custom entry without them.
 
 ```
 # before: only address, selector and the os/rn/cl flags were checked
@@ -52,7 +52,7 @@ A peer that gossips a tx failing any setup allow list check, old or new, now get
 
 Only allow list functions that cannot revert for any calldata their entry allows. A failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.
 
-**Migration**: none for existing allow list strings, which parse as before. A custom entry that targets a `#[view]` function, which only works when called statically, no longer admits any tx: remove it. Older nodes reject the `l2=` and `da=` flags with an `unknown flag` error when they read their config, so do not put them in a network config shared with nodes that have not upgraded.
+**Migration**: existing allow list strings parse as before. For each custom entry, measure the most gas its function can use in setup, for any calldata the entry allows, and declare it with `l2=N` and `da=N`; without them, txs whose gas limits leave too little for that call are still admitted. A custom entry that targets a `#[view]` function, which only works when called statically, no longer admits any tx: remove it. Older nodes reject the `l2=` and `da=` flags with an `unknown flag` error when they read their config, so do not put them in a network config shared with nodes that have not upgraded.
 
 ### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 

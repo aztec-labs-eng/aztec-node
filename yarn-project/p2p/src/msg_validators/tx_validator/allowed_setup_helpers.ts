@@ -1,4 +1,5 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
 import { FunctionSelector, countArgumentsSize, getAllFunctionAbis } from '@aztec-labs/stdlib/abi';
 import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -30,4 +31,20 @@ export async function buildAllowedElement(
     ...(opts?.rejectNullMsgSender ? { rejectNullMsgSender: true } : {}),
     ...(opts?.minGas ? { minGas: opts.minGas } : {}),
   } as AllowedElement;
+}
+
+/**
+ * Logs a warning for each operator-provided setup allow list entry that declares no minimum gas, since the setup gas
+ * of calls to it is not checked at admission. Returns the entries it warned about.
+ */
+export function warnOnSetupEntriesWithoutMinGas(customEntries: AllowedElement[], log: Logger): AllowedElement[] {
+  const unmetered = customEntries.filter(entry => entry.minGas === undefined);
+  for (const entry of unmetered) {
+    const target = 'address' in entry ? { address: entry.address.toString() } : { classId: entry.classId.toString() };
+    log.warn(
+      'Setup allow list entry has no minimum gas (l2=N, da=N), so the setup gas of calls to it is not checked. Declare the most gas the call can use in setup.',
+      { ...target, selector: entry.selector.toString() },
+    );
+  }
+  return unmetered;
 }
