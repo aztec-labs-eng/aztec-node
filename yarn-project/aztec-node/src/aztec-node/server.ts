@@ -25,7 +25,7 @@ import { Timer } from '@aztec-labs/foundation/timer';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
 import { uploadSnapshot } from '@aztec-labs/node-lib/actions';
-import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p';
+import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getSetupAllowList } from '@aztec-labs/p2p';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import type { ProverNode } from '@aztec-labs/prover-node';
 import { SequencerClient } from '@aztec-labs/sequencer-client';
@@ -453,8 +453,8 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return Promise.resolve(this.p2pClient.getEnr()?.encodeTxt());
   }
 
-  public async getAllowedPublicSetup(): Promise<AllowedElement[]> {
-    return [...(await getDefaultAllowedSetupFunctions()), ...(this.config.txPublicSetupAllowListExtend ?? [])];
+  public getAllowedPublicSetup(): Promise<AllowedElement[]> {
+    return getSetupAllowList(this.config);
   }
 
   /**
@@ -854,10 +854,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
         blockNumber,
         l1ChainId: this.l1ChainId,
         rollupVersion: this.version,
-        setupAllowList: [
-          ...(await getDefaultAllowedSetupFunctions()),
-          ...(this.config.txPublicSetupAllowListExtend ?? []),
-        ],
+        setupAllowList: await getSetupAllowList(this.config),
         gasFees: skipFeeEnforcement ? GasFees.empty() : await this.getNextBlockMinFees(),
         skipFeeEnforcement,
         isSimulation,
