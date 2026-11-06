@@ -13,7 +13,8 @@ use crate::protocol::traits::{Deserialize, Serialize};
 ///
 /// PXE searches for logs tagged with the secrets it manages for `scope` and with `provided_secrets`, which are secrets
 /// it cannot derive itself, such as those of the handshakes
-/// [`get_handshake_secrets`](crate::messages::delivery::handshake::get_handshake_secrets) discovers onchain.
+/// [`get_handshake_secrets`](crate::messages::delivery::handshake::get_handshake_secrets) discovers onchain. Each log
+/// comes with the messaging secret that found it.
 pub(crate) unconstrained fn get_pending_tagged_logs(
     scope: AztecAddress,
     provided_secrets: EphemeralArray<ProvidedSecret>,
@@ -21,7 +22,7 @@ pub(crate) unconstrained fn get_pending_tagged_logs(
     get_pending_tagged_logs_oracle(scope, provided_secrets)
 }
 
-#[oracle(aztec_utl_getPendingTaggedLogsV2)]
+#[oracle(aztec_utl_getPendingTaggedLogsV3)]
 unconstrained fn get_pending_tagged_logs_oracle(
     scope: AztecAddress,
     provided_secrets: EphemeralArray<ProvidedSecret>,

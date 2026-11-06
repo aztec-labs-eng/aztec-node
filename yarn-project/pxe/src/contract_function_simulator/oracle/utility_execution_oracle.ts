@@ -55,7 +55,11 @@ import { createContractLogger, logContractMessage, stripAztecnrLogPrefix } from 
 import { EventService, type EventValidationTxData } from '../../events/event_service.js';
 import type { UtilityCallAuthorizationRequest } from '../../hooks/authorize_utility_call.js';
 import type { ExecutionHooks } from '../../hooks/index.js';
-import { LogService, type RetrievedTaggedLog } from '../../logs/log_service.js';
+import {
+  LogService,
+  type RetrievedTaggedLog,
+  type RetrievedTaggedLogWithMessagingSecret,
+} from '../../logs/log_service.js';
 import { type TxOnchainContext, TxResolverService } from '../../messages/tx_resolver_service.js';
 import { NoteService, type NoteValidationTxData } from '../../notes/note_service.js';
 import { ORACLE_VERSION_MAJOR } from '../../oracle_version.js';
@@ -690,7 +694,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /** Fetches pending tagged logs into a freshly allocated ephemeral array and returns it. */
-  public async getPendingTaggedLogsV2(
+  public async getPendingTaggedLogsV3(
     scope: AztecAddress,
     providedSecrets: EphemeralArray<ProvidedSecret>,
   ): Promise<EphemeralArray<PendingTaggedLog>> {
@@ -1418,8 +1422,12 @@ async function isStandardHandshakeRegistryUtilityRead(
   return matches.some(Boolean);
 }
 
-function toPendingTaggedLog(retrievedLog: RetrievedTaggedLog): PendingTaggedLog {
-  return { log: retrievedLog.logData, context: toResolvedTx(retrievedLog) };
+function toPendingTaggedLog(retrievedLog: RetrievedTaggedLogWithMessagingSecret): PendingTaggedLog {
+  return {
+    log: retrievedLog.logData,
+    context: toResolvedTx(retrievedLog),
+    messagingSecret: retrievedLog.messagingSecret.secret,
+  };
 }
 
 function toResolvedTx(tx: TxOnchainContext): ResolvedTx {

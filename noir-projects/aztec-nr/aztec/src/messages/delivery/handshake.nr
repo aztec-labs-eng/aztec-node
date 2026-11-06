@@ -36,8 +36,8 @@ pub struct HandshakePage {
 /// The app-siloed handshake secrets the registry returns for a `(sender, recipient)` pair.
 #[derive(Deserialize, Eq, Serialize)]
 pub struct AppSiloedHandshakeSecrets {
-    /// The app-siloed shared secret, used to derive the recipient's discovery tag. The recipient can reconstruct
-    /// it from the handshake's public ephemeral key via ECDH.
+    /// The handshake's messaging secret. The recipient can reconstruct it from the handshake's public ephemeral key
+    /// via ECDH.
     pub shared: Field,
     /// The app-siloed sender-only secret, folded into the constrained-delivery sequence nullifier so only the
     /// sender can advance a sequence. The recipient cannot reconstruct it: it derives from a random secret stored
@@ -115,7 +115,7 @@ pub fn forgery_protected_eph_pk(eph_pk: EmbeddedCurvePoint, recipient_point: Emb
 /// Reads the existing app-siloed handshake secrets for `(sender, recipient)` from the registry.
 ///
 /// Returns `None` when no handshake has been registered for the pair yet, in which case the caller decides how to
-/// source a messaging secret (see [`super::tag::derive_log_tag`]).
+/// source a messaging secret (see [`super::tag::resolve_delivery_messaging_secret`]).
 ///
 /// ## Batching
 ///

@@ -168,6 +168,20 @@ describe('syncTaggedPrivateLogs', () => {
     expect(await taggingStore.getHighestFinalizedIndex(secrets[2], CHANGE_SET_ID)).toBeUndefined();
   });
 
+  it('returns each log with the secret whose tag found it', async () => {
+    const secrets = await makeSecrets(2, OnchainDeliveryMode.UNCONSTRAINED);
+    mockNodeWithLogs([
+      await computeSiloedTagForIndex(secrets[0], 3),
+      await computeSiloedTagForIndex(secrets[1], 7),
+      await computeSiloedTagForIndex(secrets[1], 8),
+    ]);
+
+    const logs = await sync(secrets);
+
+    const returnedSecrets = logs.map(({ messagingSecret }) => messagingSecret.toString()).sort();
+    expect(returnedSecrets).toEqual([secrets[0], secrets[1], secrets[1]].map(secret => secret.toString()).sort());
+  });
+
   it('does not advance aged index for recent logs', async () => {
     const secret = await randomMessagingSecret(OnchainDeliveryMode.UNCONSTRAINED);
 

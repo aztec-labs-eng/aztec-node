@@ -27,16 +27,25 @@ use crate::protocol::address::AztecAddress;
 ///
 /// Events are processed by computing an event commitment from the serialized event data and its randomness field, then
 /// enqueueing the event data and commitment for validation.
+///
+/// `messaging_secret` is the secret whose tag found the message, for messages delivered onchain, and `None` for
+/// messages delivered offchain.
 pub unconstrained fn process_message_ciphertext(
     contract_address: AztecAddress,
     compute_note_hash: ComputeNoteHash,
     compute_note_nullifier: ComputeNoteNullifier,
     process_custom_message: Option<CustomMessageHandler>,
     message_ciphertext: BoundedVec<Field, MESSAGE_CIPHERTEXT_LEN>,
+    messaging_secret: Option<Field>,
     resolved_tx: ResolvedTx,
     recipient: AztecAddress,
 ) {
-    let message_plaintext_option = AES128::decrypt(message_ciphertext, recipient, contract_address);
+    let message_plaintext_option = decrypt_message_ciphertext(
+        message_ciphertext,
+        messaging_secret,
+        recipient,
+        contract_address,
+    );
 
     if message_plaintext_option.is_some() {
         process_message_plaintext(
@@ -51,6 +60,32 @@ pub unconstrained fn process_message_ciphertext(
     } else {
         aztecnr_warn_log_format!("Could not decrypt message ciphertext from tx {0}, ignoring")([resolved_tx.tx_hash]);
     }
+}
+
+/// Decrypts a message with its messaging secret or address keys.
+unconstrained fn decrypt_message_ciphertext(
+    message_ciphertext: BoundedVec<Field, MESSAGE_CIPHERTEXT_LEN>,
+    messaging_secret: Option<Field>,
+    recipient: AztecAddress,
+    contract_address: AztecAddress,
+) -> Option<BoundedVec<Field, MESSAGE_PLAINTEXT_LEN>> {
+    messaging_secret.and_then(|secret| AES128::decrypt_with_messaging_secret(message_ciphertext, secret)).or_else(|| {
+        // In most cases, we'd attempt decryption with the address keys only if the messaging secret is not present.
+        // There are some rare scenarios however in which we _do_ have a messaging secret, but decryption using it fails
+        // and so we fall back to this mechanism. These include contracts that are upgraded from a version that did not
+        // encrypt with messaging secrets to one that does, and therefore would need to process older messages.
+        //
+        // However, this opens the door for an annoying situation: a message encrypted with no messaging secret might
+        // still be successfully decrypted into garbage data which nonetheless has the right shape for a message. Its
+        // processing would later fail (e.g. because it references a note that doesn't actually exist), but we'd be
+        // skipping decryption with the address keys, which is the one path that would've yielded the correct result.
+        //
+        // We consider this risk to be acceptable because a) the number of these messages that a contract would need to
+        // process is finite and bounded (as e.g. it'd not emit any more after the upgrade), and b) decrypting with the
+        // wrong messaging secret fails except with probability around 2^-112, which is how often a wrongly decrypted
+        // header has the exact length of a valid one.
+        AES128::decrypt(message_ciphertext, recipient, contract_address)
+    })
 }
 
 pub(crate) unconstrained fn process_message_plaintext(
@@ -132,5 +167,97 @@ pub(crate) unconstrained fn process_message_plaintext(
         }
     } else {
         aztecnr_warn_log_format!("Could not decode message plaintext from tx {0}, ignoring")([resolved_tx.tx_hash]);
+    }
+}
+
+mod test {
+    use crate::messages::encryption::{aes128::AES128, message_encryption::MessageEncryption};
+    use crate::test::helpers::test_environment::TestEnvironment;
+    use super::decrypt_message_ciphertext;
+
+    global PLAINTEXT: [Field; 3] = [1, 2, 3];
+    global MESSAGING_SECRET: Field = 42;
+
+    #[test]
+    unconstrained fn decrypts_with_the_messaging_secret() {
+        let mut env = TestEnvironment::new();
+        let recipient = env.create_light_account();
+
+        env.private_context(|context| {
+            let ciphertext = AES128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
+
+            assert_eq(
+                decrypt_message_ciphertext(
+                    BoundedVec::from_array(ciphertext),
+                    Option::some(MESSAGING_SECRET),
+                    recipient,
+                    context.this_address(),
+                )
+                    .unwrap(),
+                BoundedVec::from_array(PLAINTEXT),
+            );
+        });
+    }
+
+    #[test]
+    unconstrained fn falls_back_to_the_address_keys_when_the_messaging_secret_fails() {
+        let mut env = TestEnvironment::new();
+        let recipient = env.create_light_account();
+
+        env.private_context(|context| {
+            let contract_address = context.this_address();
+            let ciphertext = AES128::encrypt(PLAINTEXT, recipient, contract_address);
+
+            assert_eq(
+                decrypt_message_ciphertext(
+                    BoundedVec::from_array(ciphertext),
+                    Option::some(MESSAGING_SECRET),
+                    recipient,
+                    contract_address,
+                )
+                    .unwrap(),
+                BoundedVec::from_array(PLAINTEXT),
+            );
+        });
+    }
+
+    #[test]
+    unconstrained fn decrypts_with_the_address_keys_without_a_messaging_secret() {
+        let mut env = TestEnvironment::new();
+        let recipient = env.create_light_account();
+
+        env.private_context(|context| {
+            let contract_address = context.this_address();
+            let ciphertext = AES128::encrypt(PLAINTEXT, recipient, contract_address);
+
+            assert_eq(
+                decrypt_message_ciphertext(
+                    BoundedVec::from_array(ciphertext),
+                    Option::none(),
+                    recipient,
+                    contract_address,
+                )
+                    .unwrap(),
+                BoundedVec::from_array(PLAINTEXT),
+            );
+        });
+    }
+
+    #[test]
+    unconstrained fn fails_when_neither_the_messaging_secret_nor_the_address_keys_decrypt() {
+        let mut env = TestEnvironment::new();
+        let recipient = env.create_light_account();
+
+        env.private_context(|context| {
+            let ciphertext = AES128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
+
+            assert(decrypt_message_ciphertext(
+                BoundedVec::from_array(ciphertext),
+                Option::some(MESSAGING_SECRET + 1),
+                recipient,
+                context.this_address(),
+            )
+                .is_none());
+        });
     }
 }

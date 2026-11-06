@@ -549,10 +549,11 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
         expectDimensions(builder, result.dimensions, { NOTE_HASH_SILOING: MAX_NOTE_HASHES_PER_TX });
       });
 
-      it('pads private logs with a curve point x-coordinate where a message carries its ephemeral public key', async () => {
-        // An aztec-nr message log starts with its tag, followed by its ephemeral public key's x-coordinate. A uniformly
-        // random field is a valid x-coordinate about half of the time, so a single run could pass by chance.
-        const EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX = 1;
+      it('pads private logs with a curve point x-coordinate in the salt or ephemeral public key field', async () => {
+        // An aztec-nr message log starts with its tag, followed by its salt or its ephemeral public key's x-coordinate,
+        // both curve point x-coordinates. A uniformly random field is a valid x-coordinate about half of the time, so a
+        // single run could pass by chance.
+        const SALT_OR_EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX = 1;
         const NUM_RUNS = 10;
         kernel.addNullifier();
 
@@ -563,9 +564,9 @@ describe('PrivateKernelResetPrivateInputsBuilder', () => {
           const result = await builder.build(inputsProvider, new PaddedSideEffectAmounts(0, 0, 0, 0, 0, 1));
 
           const [paddedLog] = result.paddedSideEffects.privateLogs.filter(log => !log.isEmpty());
-          const ephemeralPublicKeyX = paddedLog.fields[EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX];
+          const saltOrEphemeralPublicKeyX = paddedLog.fields[SALT_OR_EPHEMERAL_PUBLIC_KEY_X_FIELD_INDEX];
           // Rejects when no point on the curve has this x-coordinate.
-          await expect(Point.fromXAndSign(ephemeralPublicKeyX, true)).resolves.toBeInstanceOf(Point);
+          await expect(Point.fromXAndSign(saltOrEphemeralPublicKeyX, true)).resolves.toBeInstanceOf(Point);
         }
       });
     });

@@ -4,8 +4,8 @@ use super::mode::{DeliveryMode, OnchainDeliveryMode};
 
 /// Specifies how to deliver a message to a recipient.
 ///
-/// All messages are delivered encrypted to their recipient's public address key, so no other account will be able to
-/// read their contents. This struct instead configures which **guarantees** exist regarding delivery.
+/// All messages are delivered encrypted for their recipient, so no other account will be able to read their contents.
+/// This struct instead configures which **guarantees** exist regarding delivery.
 ///
 /// There are two aspects to delivery guarantees:
 /// - the medium on which the message is sent (off-chain or on-chain)
@@ -128,9 +128,9 @@ impl MessageDelivery {
     ///
     /// ## Privacy
     ///
-    /// The message itself reveals no information on-chain about sender, recipient, or contents: obtaining the plaintext
-    /// requires the recipient's private address keys, and recognizing that a log was sent between a given sender and
-    /// recipient requires their shared messaging secret, which no third party can compute.
+    /// The message itself reveals no information on-chain about sender, recipient, or contents: both obtaining the
+    /// plaintext and recognizing that a log was sent between a given sender and recipient require their shared
+    /// messaging secret, which no third party can compute.
     ///
     /// The exception is the discovery tag. Reaching a recipient the sender has not handshaked with before establishes,
     /// by default, a non-interactive handshake. This reveals to anyone who knows the recipient's address that a
@@ -163,7 +163,7 @@ impl MessageDelivery {
     ///
     /// The message will be stored on-chain in a private log, as part of the transaction's effects, and will be
     /// retrievable in the future without requiring any backups. The ciphertext will be decryptable by the recipient
-    /// using their address private key and the ephemeral public key that accompanies the message.
+    /// using the messaging secret that tags it.
     ///
     /// The log will be tagged in such a way that the recipient will be able to efficiently find it after querying for
     /// handshakes.
@@ -182,9 +182,9 @@ impl MessageDelivery {
     ///
     /// ## Privacy
     ///
-    /// The message itself reveals no information on-chain about sender, recipient, or contents: obtaining the plaintext
-    /// requires the recipient's private address keys, and recognizing that a log was sent between a given sender and
-    /// recipient requires their shared messaging secret, which no third party can compute.
+    /// The message itself reveals no information on-chain about sender, recipient, or contents: both obtaining the
+    /// plaintext and recognizing that a log was sent between a given sender and recipient require their shared
+    /// messaging secret, which no third party can compute.
     ///
     /// The exception is the discovery tag. Constrained delivery is always backed by a handshake, established by
     /// default as a non-interactive one the first time the sender reaches the recipient. A non-interactive handshake

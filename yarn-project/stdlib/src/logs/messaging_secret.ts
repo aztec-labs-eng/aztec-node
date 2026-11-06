@@ -19,7 +19,7 @@ const OnchainDeliveryModeSchema = z.union([
 const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
 
 /**
- * Messaging secret used for log tagging.
+ * Messaging secret used for log tagging and message encryption.
  *
  * It bundles a secret siloed to an app contract with the delivery mode whose tag stream it backs. Each way of deriving
  * the secret has one constructor, so that the sending and the receiving side agree on it:

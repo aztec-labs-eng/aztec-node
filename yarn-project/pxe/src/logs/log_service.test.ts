@@ -438,7 +438,35 @@ describe('LogService', () => {
       expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
     });
 
-    it('scans only provided secrets for a recipient whose keys are not held', async () => {
+    it('returns each log with the messaging secret that found it', async () => {
+      const providedSecret = new MessagingSecret(Fr.random(), contractAddress, OnchainDeliveryMode.UNCONSTRAINED);
+      const tskLog = randomPrivateLogResult({ includeEffects: true });
+      const providedLog = randomPrivateLogResult({ includeEffects: true });
+      servePrivateLogsByTag(
+        aztecNode,
+        new Map([
+          [(await recipientTskTag(recipient)).toString(), tskLog],
+          [(await SiloedTag.compute({ extendedSecret: providedSecret, index: 0 })).toString(), providedLog],
+        ]),
+      );
+
+      const logs = await logService.fetchTaggedLogs(contractAddress, recipient, [providedSecret]);
+
+      const recipientTskSecret = await MessagingSecret.computeFromRecipientTsk(
+        await keyStore.getMasterTaggingSecretKey(recipient),
+        contractAddress,
+        recipient,
+      );
+      expect(logs.map(l => [l.txHash, l.messagingSecret])).toEqual(
+        expect.arrayContaining([
+          [tskLog.txHash, recipientTskSecret],
+          [providedLog.txHash, providedSecret],
+        ]),
+      );
+      expect(logs).toHaveLength(2);
+    });
+
+    it('scans registered and provided secrets for a recipient whose keys are not held', async () => {
       const keylessRecipient = await AztecAddress.random();
       scopes.push(keylessRecipient);
       await messagingSecretSourcesStore.addSharedSecret(keylessRecipient, 'arbitrary-secret', sharedSecret);
@@ -456,7 +484,8 @@ describe('LogService', () => {
 
       const logs = await logService.fetchTaggedLogs(contractAddress, keylessRecipient, [providedSecret]);
 
-      expect(logs.map(l => l.txHash)).toEqual([providedLog.txHash]);
+      expect(logs.map(l => l.txHash)).toEqual(expect.arrayContaining([registeredLog.txHash, providedLog.txHash]));
+      expect(logs).toHaveLength(2);
     });
 
     it('rejects a recipient outside the allowed scopes', async () => {

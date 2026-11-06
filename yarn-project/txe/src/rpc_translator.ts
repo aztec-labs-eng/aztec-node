@@ -632,11 +632,11 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_utl_getPendingTaggedLogsV2(...inputs: ForeignCallArgs) {
+  aztec_utl_getPendingTaggedLogsV3(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_utl_getPendingTaggedLogsV2',
+      oracle: 'aztec_utl_getPendingTaggedLogsV3',
       inputs,
-      handler: ([scope, providedSecrets]) => this.handlerAsUtility().getPendingTaggedLogsV2(scope, providedSecrets),
+      handler: ([scope, providedSecrets]) => this.handlerAsUtility().getPendingTaggedLogsV3(scope, providedSecrets),
     });
   }
 

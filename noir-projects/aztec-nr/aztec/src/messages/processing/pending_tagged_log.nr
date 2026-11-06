@@ -8,4 +8,6 @@ pub(crate) struct PendingTaggedLog {
     pub log: BoundedVec<Field, PRIVATE_LOG_SIZE_IN_FIELDS>,
     // Context of the message included in the log.
     pub context: ResolvedTx,
+    // The messaging secret whose tag found the log.
+    pub messaging_secret: Field,
 }

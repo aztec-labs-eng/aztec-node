@@ -185,7 +185,8 @@ export class LogService {
   }
 
   /**
-   * Fetches the pending tagged logs for a recipient across all its messaging secrets for the contract.
+   * Fetches the pending tagged logs for a recipient across all its messaging secrets for the contract, each with the
+   * messaging secret that found it.
    *
    * @param providedSecrets - App-siloed secrets that PXE cannot enumerate itself, passed in by the contract as it
    * syncs, such as those of the handshakes it discovers onchain. PXE searches them alongside the secrets derived from
@@ -195,7 +196,7 @@ export class LogService {
     contractAddress: AztecAddress,
     recipient: AztecAddress,
     providedSecrets: MessagingSecret[],
-  ): Promise<RetrievedTaggedLog[]> {
+  ): Promise<RetrievedTaggedLogWithMessagingSecret[]> {
     assertAllowedScope(recipient, this.scopes);
 
     this.log.verbose(
@@ -204,21 +205,19 @@ export class LogService {
 
     const l2Tips = await this.l2TipsStore.getL2Tips();
 
-    // Without the recipient's keys we'd be unable to decrypt any messages found, so we skip them and only search for
-    // `providedSecrets`.
+    // The secrets derived from the recipient's keys can only be computed when PXE holds those keys. Registered and
+    // provided secrets need no keys, and the messages they find are encrypted with the messaging secret itself.
     const recipientKeys = await this.#getRecipientKeys(recipient);
     if (!recipientKeys) {
-      this.log.warn(`Searching only provided messaging secrets for ${recipient}, whose keys are not held`, {
+      this.log.warn(`Skipping messaging secrets derived from the keys of ${recipient}, which are not held`, {
         recipient,
         contractAddress,
       });
     }
-    const [keyDerivedSecrets, registeredSecrets] = recipientKeys
-      ? await allToCompletion([
-          this.#getSecretsDerivedFromRecipientKeys(recipientKeys, contractAddress),
-          this.#getSecretsRegisteredForRecipient(recipient, contractAddress),
-        ])
-      : [[], []];
+    const [keyDerivedSecrets, registeredSecrets] = await allToCompletion([
+      recipientKeys ? this.#getSecretsDerivedFromRecipientKeys(recipientKeys, contractAddress) : Promise.resolve([]),
+      this.#getSecretsRegisteredForRecipient(recipient, contractAddress),
+    ]);
 
     // These can overlap (a sender that is also a PXE account, or a registered secret that coincides with a key-derived
     // or provided one), so we deduplicate the combined set.
@@ -234,7 +233,7 @@ export class LogService {
       this.changeSetId,
     );
 
-    return logs.map(log => LogService.#toRetrievedTaggedLog(log));
+    return logs.map(({ log, messagingSecret }) => ({ ...LogService.#toRetrievedTaggedLog(log), messagingSecret }));
   }
 
   /** The recipient's key material, if PXE holds it. */
@@ -327,4 +326,10 @@ export type RetrievedTaggedLog = TxOnchainContext & {
   /** The raw log payload, tag included. */
   logData: Fr[];
   blockTimestamp: UInt64;
+};
+
+/** A tagged log found by one of a recipient's messaging secrets. */
+export type RetrievedTaggedLogWithMessagingSecret = RetrievedTaggedLog & {
+  /** The messaging secret whose tag found the log. */
+  messagingSecret: MessagingSecret;
 };

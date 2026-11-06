@@ -214,6 +214,7 @@ unconstrained fn sync_state_with_secrets(
                 compute_note_nullifier,
                 process_custom_message,
                 message_ciphertext,
+                Option::some(pending_tagged_log.messaging_secret),
                 pending_tagged_log.context,
                 scope,
             );
@@ -229,6 +230,7 @@ unconstrained fn sync_state_with_secrets(
                 compute_note_nullifier,
                 process_custom_message,
                 msg.message_ciphertext,
+                Option::none(),
                 msg.resolved_tx,
                 scope,
             );
@@ -277,11 +279,11 @@ mod test {
             // Mock the oracle call to return a known base slot, then populate an ephemeral
             // array at that slot so do_sync_state processes a non-empty log list.
             let base_slot = 42;
-            let mock = std::test::OracleMock::mock("aztec_utl_getPendingTaggedLogsV2");
+            let mock = std::test::OracleMock::mock("aztec_utl_getPendingTaggedLogsV3");
             let _ = mock.returns(base_slot);
 
             let logs: EphemeralArray<PendingTaggedLog> = EphemeralArray::at(base_slot);
-            logs.push(PendingTaggedLog { log: BoundedVec::new(), context: std::mem::zeroed() });
+            logs.push(PendingTaggedLog { log: BoundedVec::new(), context: std::mem::zeroed(), messaging_secret: 0 });
             assert_eq(logs.len(), 1);
 
             let no_handler: Option<CustomMessageHandler> = Option::none();

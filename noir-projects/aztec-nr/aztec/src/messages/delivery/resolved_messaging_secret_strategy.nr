@@ -36,7 +36,7 @@ impl ResolvedMessagingSecretStrategy {
         self.kind == UNCONSTRAINED_SECRET
     }
 
-    /// Resolves this strategy into the [`DeliveryMessagingSecret`] backing the message tag.
+    /// Resolves this strategy into the [`DeliveryMessagingSecret`] backing the message's tag and encryption.
     pub(crate) fn into_delivery_messaging_secret(
         self,
         context: &mut PrivateContext,
