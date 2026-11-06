@@ -99,6 +99,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
+- **`getAllPublicEvents` returns every public event that matches a filter, oldest first** ([#624](https://github.com/aztec-labs-eng/aztec-node/pull/624)), from `@aztec-labs/aztec.js/events`. The filter is either a block range, whose `fromBlock` is required, or a `txHash`. Every page the read fetches comes from the fork of its `referenceBlock`, which defaults to the node's latest block when the read starts: the read throws if that block leaves the chain, and returns no events after it. One call can make many requests to the node and holds every event in memory, so split long ranges.
+
 #### Breaking changes
 
 - **The packages require Node.js 24** ([#674](https://github.com/aztec-labs-eng/aztec-node/pull/674)). Every package's `engines.node` is now `>=24`, up from `>=20.16`.
@@ -106,6 +108,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 - **`L1RollupConstants` no longer has `rollupManaLimit`** ([#546](https://github.com/aztec-labs-eng/aztec-node/pull/546)). Governance can raise the limit on L1 at any time, so read it with `RollupContract.getManaLimit()`. The node's `getL1Constants` still returns the field, filled with the live value, but it is deprecated and no longer part of the response type.
 
 #### Deprecations
+
+- **`getPublicEvents` is deprecated in favour of `getAllPublicEvents`** ([#624](https://github.com/aztec-labs-eng/aztec-node/pull/624)). It returns a single page of events, so a caller that reads only `events` misses the rest. `GetPublicEventsResult`, `PublicEventFilter`, `PublicEventFilterSchema` and `EventCursor` are deprecated with it. All of them keep working.
 
 #### Fixes
 
