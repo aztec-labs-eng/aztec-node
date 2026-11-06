@@ -252,11 +252,15 @@ export class CheckpointProver {
     this.subTreeProofs.reject(err);
   }
 
-  /** Fetches every tx in this checkpoint from the tx pool (by hash, via the block tx effects). */
+  /**
+   * Fetches every tx in this checkpoint from the tx pool (by hash, via the block tx effects). Cancelling the prover
+   * stops the fetch, so a stop does not wait out the gathering timeout.
+   */
   private async fetchTxs(): Promise<{ txs: Map<string, Tx>; missingTxs: TxHash[] }> {
     const deadline = new Date(this.deps.dateProvider.now() + this.deps.txGatheringTimeoutMs);
+    const signal = this.abortController.signal;
     const txsByBlock = await Promise.all(
-      this.checkpoint.blocks.map(block => this.deps.txProvider.getTxsForBlock(block, { deadline })),
+      this.checkpoint.blocks.map(block => this.deps.txProvider.getTxsForBlock(block, { deadline, signal })),
     );
     const txs = txsByBlock.flatMap(({ txs }) => txs);
     const missingTxs = txsByBlock.flatMap(({ missingTxs }) => missingTxs);

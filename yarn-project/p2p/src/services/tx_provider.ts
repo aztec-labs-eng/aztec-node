@@ -72,7 +72,10 @@ export class TxProvider implements ITxProvider {
   }
 
   /** Gathers txs from the tx pool, remote rpc nodes, and reqresp. */
-  public getTxsForBlock(block: L2Block, opts: { deadline: Date }): Promise<{ txs: Tx[]; missingTxs: TxHash[] }> {
+  public getTxsForBlock(
+    block: L2Block,
+    opts: { deadline: Date; signal?: AbortSignal },
+  ): Promise<{ txs: Tx[]; missingTxs: TxHash[] }> {
     return this.getOrderedTxsFromAllSources(
       { type: 'block', block },
       block.toBlockInfo(),
@@ -85,7 +88,7 @@ export class TxProvider implements ITxProvider {
     request: FastCollectionRequestInput,
     blockInfo: L2BlockInfo,
     txHashes: TxHash[],
-    opts: { pinnedPeer: PeerId | undefined; deadline: Date },
+    opts: { pinnedPeer: PeerId | undefined; deadline: Date; signal?: AbortSignal },
   ) {
     const [durationMs, result] = await elapsed(() => this.getTxsFromAllSources(request, blockInfo, txHashes, opts));
     const { missingTxHashes, txsFromMempool, txsFromNetwork, txsFromProposal } = result;
@@ -122,7 +125,7 @@ export class TxProvider implements ITxProvider {
     request: FastCollectionRequestInput,
     blockInfo: L2BlockInfo,
     txHashes: TxHash[],
-    opts: { pinnedPeer: PeerId | undefined; deadline: Date },
+    opts: { pinnedPeer: PeerId | undefined; deadline: Date; signal?: AbortSignal },
   ) {
     const missingTxHashes = new Set(txHashes.map(txHash => txHash.toString()));
     if (missingTxHashes.size === 0) {
@@ -214,7 +217,7 @@ export class TxProvider implements ITxProvider {
   private async collectFromP2P(
     input: FastCollectionRequestInput,
     txHashes: TxHash[] | string[],
-    opts: { deadline: Date; pinnedPeer?: PeerId },
+    opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
   ): Promise<Tx[]> {
     const requestedAt = Date.now();
     const result = await this.txCollection.collectFastFor(input, txHashes, opts);
