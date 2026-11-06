@@ -6,7 +6,7 @@ import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 
-import type { CallInfo } from './types.js';
+import { type CallInfo, MAX_L1_TRACE_LEN } from './types.js';
 
 /** Zod schema for trace action from trace_transaction */
 const traceActionSchema = z.object({
@@ -28,7 +28,7 @@ const traceResultSchema = z.object({
 const traceEntryBaseSchema = z.object({
   error: z.string().nullish(),
   subtraces: z.number(),
-  traceAddress: z.array(z.number()),
+  traceAddress: z.array(z.number()).max(MAX_L1_TRACE_LEN),
 });
 
 /** Zod schema for a call entry from trace_transaction. Calls that halted (e.g. out of gas) have a null result. */
@@ -56,7 +56,7 @@ type TraceTransaction = z.infer<typeof traceSchema>;
 type CallTrace = z.infer<typeof callTraceSchema>;
 
 /** Zod schema for the full trace_transaction response (array of traces) */
-export const traceTransactionResponseSchema: ZodFor<TraceTransaction[]> = z.array(traceSchema);
+export const traceTransactionResponseSchema: ZodFor<TraceTransaction[]> = z.array(traceSchema).max(MAX_L1_TRACE_LEN);
 
 /** Narrows a validated entry to a call; the schema only accepts 'call' entries that match the call schema. */
 function isCallTrace(trace: TraceTransaction): trace is CallTrace {

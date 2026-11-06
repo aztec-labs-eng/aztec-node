@@ -103,7 +103,7 @@ export class PrivateLog {
   static get schema() {
     return z
       .object({
-        fields: z.array(schemas.Fr),
+        fields: z.array(schemas.Fr).max(PRIVATE_LOG_SIZE_IN_FIELDS),
         emittedLength: z.number(),
       })
       .strict()

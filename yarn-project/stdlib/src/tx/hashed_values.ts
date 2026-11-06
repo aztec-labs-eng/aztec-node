@@ -3,9 +3,16 @@ import { BufferReader, BufferSink, serializeToSink } from '@aztec-labs/foundatio
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
+import { MAX_FUNCTION_ARGS_LEN } from '../abi/function_call.js';
 import { computeCalldataHash, computeVarArgsHash } from '../hash/index.js';
 import { type ZodFor, schemas } from '../schemas/schemas.js';
 import { Vector } from '../types/index.js';
+
+/**
+ * Bound for the hashed argument preimages a single tx request carries, one per call or authwit it hashes arguments for.
+ * The protocol sets none; real requests carry a handful.
+ */
+export const MAX_HASHED_ARGS_PER_TX = 1024;
 
 /**
  * A container for storing a list of values and their hash.
@@ -26,18 +33,17 @@ export class HashedValues {
     return this.values.length + 1 /* hash */;
   }
 
+  /** Schema that accepts up to {@link MAX_FUNCTION_ARGS_LEN} values, the bound for any function's arguments. */
   static get schema(): ZodFor<HashedValues> {
-    return HashedValues.schemaFor();
+    return HashedValues.schemaFor(MAX_FUNCTION_ARGS_LEN);
   }
 
   /**
-   * Returns a schema that additionally rejects more than `maxValues` values. The bound belongs to the caller
-   * rather than to this class: the same container carries public calldata, private call arguments and authwit
-   * arguments, and those have different limits.
+   * Returns a schema that rejects more than `maxValues` values, for callers whose values have a tighter limit than
+   * `schema` applies, such as public calldata.
    */
-  static schemaFor(maxValues?: number): ZodFor<HashedValues> {
-    const values = maxValues === undefined ? z.array(schemas.Fr) : z.array(schemas.Fr).max(maxValues);
-    return z.object({ values, hash: schemas.Fr }).transform(HashedValues.from);
+  static schemaFor(maxValues: number): ZodFor<HashedValues> {
+    return z.object({ values: z.array(schemas.Fr).max(maxValues), hash: schemas.Fr }).transform(HashedValues.from);
   }
 
   static from(fields: FieldsOf<HashedValues>): HashedValues {

@@ -476,6 +476,41 @@ describe('TxCollection', () => {
         expect(collected).toEqual([]);
       });
 
+      it('aborting the signal cancels in-flight fast collection', async () => {
+        deadline = new Date(dateProvider.now() + 10_000);
+        const collectorPromise = promiseWithResolvers<Tx[]>();
+        setReqRespResponse(collectorPromise.promise);
+        const abortController = new AbortController();
+
+        const collectionPromise = txCollection.collectFastForBlock(block, txHashes, {
+          deadline,
+          signal: abortController.signal,
+        });
+
+        await sleep(100);
+        abortController.abort();
+        collectorPromise.resolve([]);
+
+        const collected = await collectionPromise;
+        expect(dateProvider.now()).toBeLessThan(+deadline);
+        expect(collected).toEqual([]);
+      });
+
+      it('skips collection when the signal is already aborted', async () => {
+        deadline = new Date(dateProvider.now() + 10_000);
+        const abortController = new AbortController();
+        abortController.abort();
+
+        const collected = await txCollection.collectFastForBlock(block, txHashes, {
+          deadline,
+          signal: abortController.signal,
+        });
+
+        expect(collected).toEqual([]);
+        expect(nodes[0].getTxsByHash).not.toHaveBeenCalled();
+        expect(txCollection.reqRespTxsCollector).not.toHaveBeenCalled();
+      });
+
       // Step 9: stopCollectingForBlocksAfter cancels in-flight fast collection
       it('stopCollectingForBlocksAfter cancels in-flight fast collection', async () => {
         deadline = new Date(dateProvider.now() + 10_000);

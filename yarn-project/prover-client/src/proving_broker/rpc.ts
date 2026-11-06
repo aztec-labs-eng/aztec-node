@@ -17,6 +17,8 @@ import { type ComponentsVersions, getVersioningResponseHandler } from '@aztec-la
 import { makeTracedFetch } from '@aztec-labs/telemetry-client';
 import { z } from 'zod';
 
+import { provingRequestTypeCount } from './config.js';
+
 /**
  * Max JSON-RPC request body the broker clients will send.
  *
@@ -36,10 +38,11 @@ export function* proverBrokerBackoff() {
   }
 }
 
+/** Job ids a caller asks about in one `getCompletedJobs` call. The broker facade asks in batches of 1000. */
+const MAX_COMPLETED_JOBS_QUERY_LEN = 32_768;
+
 // A valid allowList has at most one entry per proving-request type. Without a cap its length is bounded
 // only by the request body, so a caller could send a huge list the broker clones, sorts, and scans each poll.
-const provingRequestTypeCount = Object.values(ProvingRequestType).filter(v => typeof v === 'number').length;
-
 export const ProvingJobFilterSchema = z.object({
   allowNewJobs: z.boolean().optional(),
   allowList: z.array(z.nativeEnum(ProvingRequestType)).max(provingRequestTypeCount),
@@ -54,7 +57,10 @@ export const ProvingJobProducerSchema: ApiSchemaFor<ProvingJobProducer> = {
   enqueueProvingJob: z.function({ input: z.tuple([ProvingJob]), output: ProvingJobStatus }),
   getProvingJobStatus: z.function({ input: z.tuple([ProvingJobId]), output: ProvingJobStatus }),
   cancelProvingJob: z.function({ input: z.tuple([ProvingJobId]), output: z.void() }),
-  getCompletedJobs: z.function({ input: z.tuple([z.array(ProvingJobId)]), output: z.array(ProvingJobId) }),
+  getCompletedJobs: z.function({
+    input: z.tuple([z.array(ProvingJobId).max(MAX_COMPLETED_JOBS_QUERY_LEN)]),
+    output: z.array(ProvingJobId),
+  }),
 };
 
 export const ProvingJobConsumerSchema: ApiSchemaFor<ProvingJobConsumer> = {

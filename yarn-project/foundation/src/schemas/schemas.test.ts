@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { Buffer32 } from '../buffer/buffer32.js';
 import { schemas } from './schemas.js';
-import { optional } from './utils.js';
+import { boundedRecord, optional, withMaxDepth } from './utils.js';
 
 describe('schemas', () => {
   describe('optional', () => {
@@ -21,6 +21,67 @@ describe('schemas', () => {
       expect(schema.parse('x')).toEqual('x');
     });
   });
+
+  describe('boundedRecord', () => {
+    const schema = boundedRecord(z.string(), z.number(), 2);
+
+    it('parses a record within the bound', () => {
+      expect(schema.parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+    });
+
+    it('rejects an oversized record of invalid entries with a single issue', () => {
+      const input = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`k${i}`, 'not a number']));
+      expect(schema.safeParse(input).error?.issues).toHaveLength(1);
+    });
+
+    it('rejects an array as a type mismatch without enumerating its elements', () => {
+      const array = new Proxy(new Array(1_000_000).fill(0), {
+        ownKeys: () => {
+          throw new Error('enumerated the array');
+        },
+      });
+      expect(schema.safeParse(array).error?.issues).toEqual([
+        expect.objectContaining({ code: 'invalid_type', expected: 'record' }),
+      ]);
+    });
+  });
+
+  describe('withMaxDepth', () => {
+    type Tree = { children: Tree[] };
+    const tree: z.ZodType<Tree> = z.object({ children: z.array(z.lazy(() => tree)).max(10) });
+    const nest = (depth: number): Tree => {
+      let node: Tree = { children: [] };
+      for (let i = 0; i < depth; i++) {
+        node = { children: [node] };
+      }
+      return node;
+    };
+
+    it('parses input within the depth bound', () => {
+      expect(withMaxDepth(tree, 64).parse(nest(10))).toEqual(nest(10));
+    });
+
+    it('rejects input nested past the bound without recursing into it', () => {
+      expect(() => tree.safeParse(nest(20_000))).toThrow(RangeError);
+      expect(withMaxDepth(tree, 64).safeParse(nest(20_000)).success).toBe(false);
+    });
+
+    it('counts the root as depth zero for both arrays and objects', () => {
+      expect(withMaxDepth(z.unknown(), 4).safeParse({ a: { b: { c: {} } } }).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 3).safeParse({ a: { b: { c: {} } } }).success).toBe(false);
+      expect(withMaxDepth(z.unknown(), 3).safeParse([[[]]]).success).toBe(true);
+      expect(withMaxDepth(z.unknown(), 2).safeParse([[[]]]).success).toBe(false);
+    });
+
+    it('accepts wide shallow input and rejects one deep element among many', () => {
+      const schema = withMaxDepth(z.unknown(), 4);
+      const wide: unknown[] = Array.from({ length: 100_000 }, () => ({ a: [] }));
+      expect(schema.safeParse(wide).success).toBe(true);
+      wide.splice(50_000, 0, { a: [[[]]] });
+      expect(schema.safeParse(wide).success).toBe(false);
+    });
+  });
+
   describe('Buffer32', () => {
     it('parses a valid hex string into a Buffer32', () => {
       const buffer32 = Buffer32.random();

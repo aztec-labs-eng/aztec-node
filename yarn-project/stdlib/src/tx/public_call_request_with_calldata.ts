@@ -1,3 +1,4 @@
+import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, BufferSink, serializeToSink } from '@aztec-labs/foundation/serialize';
@@ -36,7 +37,7 @@ export class PublicCallRequestWithCalldata {
     return z
       .object({
         request: PublicCallRequest.schema,
-        calldata: z.array(schemas.Fr),
+        calldata: z.array(schemas.Fr).max(MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS),
       })
       .transform(PublicCallRequestWithCalldata.from);
   }

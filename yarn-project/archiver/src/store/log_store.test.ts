@@ -749,5 +749,30 @@ describe('LogStore', () => {
       expect(result[1].length).toBe(3);
       expect(result[2].length).toBe(1);
     });
+
+    it('keeps the block range across pages', async () => {
+      const tag = new Tag(new Fr(0xbeef));
+      const ckpts = await buildChainedCheckpointsWithLogs(6, {
+        numTxsPerBlock: 1,
+        publicLogs: { numLogsPerTx: 1, contractAddress: CONTRACT },
+      });
+      for (const ckpt of ckpts) {
+        ckpt.checkpoint.blocks[0].body.txEffects[0].publicLogs[0].fields[0] = tag.value;
+      }
+      const blocks = ckpts.map(c => c.checkpoint.blocks[0]);
+      await blockStore.addCheckpoints(ckpts);
+      await logStore.addLogs(blocks);
+
+      const [res] = await queryAllPublicLogsByTags(logStore, {
+        contractAddress: CONTRACT,
+        tags: [tag],
+        fromBlock: BlockNumber(2),
+        toBlock: BlockNumber(5),
+        // Blocks 2-4 match, one more than a page, so the second page must still stop before block 5.
+        limitPerTag: 2,
+      });
+
+      expect(res.map(l => l.blockNumber)).toEqual([BlockNumber(2), BlockNumber(3), BlockNumber(4)]);
+    });
   });
 });

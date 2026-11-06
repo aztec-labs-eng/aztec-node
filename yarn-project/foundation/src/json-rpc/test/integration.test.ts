@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { JsonRpcFetch } from '../client/fetch.js';
 import { createSafeJsonRpcClient } from '../client/safe_json_rpc_client.js';
 import { TestNote, TestState, type TestStateApi, TestStateSchema } from '../fixtures/test_state.js';
@@ -194,5 +196,11 @@ describe('JsonRpc integration', () => {
       const client = createSafeJsonRpcClient<TestStateApi>(url, TestStateSchema);
       await expect(() => client.getNote(1)).rejects.toThrow('Method not found: getNote');
     });
+  });
+
+  it('refuses to set up an API whose parameters are not size-bounded', async () => {
+    const schema = { sum: z.function({ input: z.tuple([z.array(z.number())]), output: z.number() }) };
+    const handler = { sum: (values: number[]) => Promise.resolve(values.length) };
+    await expect(createJsonRpcTestSetup(handler, schema)).rejects.toThrow('sum(0)[]');
   });
 });

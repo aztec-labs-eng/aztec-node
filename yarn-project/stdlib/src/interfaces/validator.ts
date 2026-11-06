@@ -29,6 +29,7 @@ import {
   ValidatorHASignerConfigSchema,
 } from '../ha-signing/index.js';
 import { AllowedElementSchema } from './allowed_element.js';
+import { MAX_ADMIN_CONFIG_LIST_LEN, MAX_ADMIN_VALIDATOR_LIST_LEN } from './api_limit.js';
 
 /**
  * Validator client configuration
@@ -113,9 +114,9 @@ export type ValidatorClientFullConfig = ValidatorClientConfig &
 export const ValidatorClientConfigSchema = zodFor<Omit<ValidatorClientConfig, 'validatorPrivateKeys'>>()(
   ValidatorHASignerConfigSchema.merge(LocalSignerConfigSchema).extend({
     l1ChainId: z.number().int().nonnegative(),
-    validatorAddresses: z.array(schemas.EthAddress).optional(),
+    validatorAddresses: z.array(schemas.EthAddress).max(MAX_ADMIN_VALIDATOR_LIST_LEN).optional(),
     disableValidator: z.boolean(),
-    disabledValidators: z.array(schemas.EthAddress),
+    disabledValidators: z.array(schemas.EthAddress).max(MAX_ADMIN_VALIDATOR_LIST_LEN),
     attestationPollingIntervalMs: z.number().min(0),
     alwaysReexecuteBlockProposals: z.boolean().optional(),
     fishermanMode: z.boolean().optional(),
@@ -132,7 +133,7 @@ export const ValidatorClientConfigSchema = zodFor<Omit<ValidatorClientConfig, 'v
 
 export const ValidatorClientFullConfigSchema = zodFor<Omit<ValidatorClientFullConfig, 'validatorPrivateKeys'>>()(
   ValidatorClientConfigSchema.extend({
-    txPublicSetupAllowListExtend: z.array(AllowedElementSchema).optional(),
+    txPublicSetupAllowListExtend: z.array(AllowedElementSchema).max(MAX_ADMIN_CONFIG_LIST_LEN).optional(),
     broadcastInvalidBlockProposal: z.boolean().optional(),
     blockDurationMs: z.number().positive(),
     maxBlocksPerCheckpoint: z.number().positive().optional(),

@@ -10,6 +10,18 @@ export const hexSchema = z.string().refine(isHex, 'Not a valid hex string').tran
 // Copied from zod internals, which was copied from https://stackoverflow.com/questions/7860392/determine-if-string-is-in-base64-using-javascript
 const base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
 
+const isByte = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255;
+
+/**
+ * Byte array checked as a whole, so a malformed array yields a single issue rather than one per element. A buffer has
+ * no natural size bound to declare with `.max()`, so this is what keeps an oversized array of junk from allocating
+ * memory proportional to its length.
+ */
+const byteArraySchema = z.custom<number[]>(
+  value => Array.isArray(value) && value.every(isByte),
+  'Not a valid byte array',
+);
+
 /** Schema for a buffer represented as a base64 string or a Buffer object. */
 export const bufferSchema: ZodFor<Buffer> = z.union([
   // Serialization from base64 string.
@@ -23,7 +35,7 @@ export const bufferSchema: ZodFor<Buffer> = z.union([
   z
     .object({
       type: z.literal('Buffer'),
-      data: z.array(z.number().int().min(0).max(255)),
+      data: byteArraySchema,
     })
     .transform(({ data }) => Buffer.from(data)),
   // Serialization from Buffer
@@ -89,14 +101,95 @@ export function bufferSchemaFor<TClass extends { fromBuffer(buf: Buffer): any }>
   return bufferSchema.refine(refinement ?? (() => true), 'Not a valid buffer').transform(klazz.fromBuffer.bind(klazz));
 }
 
-/** Creates a schema for a js Map type that matches the serialization used in jsonStringify. */
-export function mapSchema<TKey, TValue>(key: ZodFor<TKey>, value: ZodFor<TValue>): ZodFor<Map<TKey, TValue>> {
-  return z.array(z.tuple([key, value])).transform(entries => new Map(entries));
+/**
+ * Creates a schema for a js Map type that matches the serialization used in jsonStringify.
+ * @param maxSize - Maximum number of entries. `Infinity` leaves the entry list unbounded, for data that is never parsed
+ * from untrusted input.
+ */
+export function mapSchema<TKey, TValue>(
+  key: ZodFor<TKey>,
+  value: ZodFor<TValue>,
+  maxSize: number,
+): ZodFor<Map<TKey, TValue>> {
+  return boundedArray(z.tuple([key, value]), maxSize).transform(parsed => new Map(parsed));
 }
 
-/** Creates a schema for a js Set type that matches the serialization used in jsonStringify. */
-export function setSchema<T>(value: ZodFor<T>): ZodFor<Set<T>> {
-  return z.array(value).transform(entries => new Set(entries));
+/**
+ * Creates a schema for a js Set type that matches the serialization used in jsonStringify.
+ * @param maxSize - Maximum number of entries. `Infinity` leaves the entry list unbounded, for data that is never parsed
+ * from untrusted input.
+ */
+export function setSchema<T>(value: ZodFor<T>, maxSize: number): ZodFor<Set<T>> {
+  return boundedArray(value, maxSize).transform(parsed => new Set(parsed));
+}
+
+function boundedArray<T extends ZodTypeAny>(item: T, maxSize: number) {
+  return Number.isFinite(maxSize) ? z.array(item).max(maxSize) : z.array(item);
+}
+
+/**
+ * Pipes whose input guard checks the size of the record they feed before it parses any entry, which zod's own checks
+ * cannot show. This is the opt-out of the unbounded-container walker, the only reader: it treats a record that is the
+ * immediate output of one of these pipes as bounded. Only `boundedRecord` adds to it.
+ */
+export const sizeCheckedBeforeParse = new WeakSet<z.core.$ZodType>();
+
+/**
+ * Creates a record schema that rejects objects with more than `maxKeys` keys before parsing any entry. A record has no
+ * size bound zod checks up front, and a `.refine` on the record would only run after every entry was parsed. Input that
+ * is not a plain object skips the key count and is rejected by the record itself, so an array is never enumerated.
+ */
+export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends ZodTypeAny>(
+  key: TKey,
+  value: TValue,
+  maxKeys: number,
+) {
+  const guarded = z
+    .custom<object>(input => !z.core.util.isPlainObject(input) || Object.keys(input).length <= maxKeys, {
+      message: `Must have at most ${maxKeys} entries`,
+    })
+    .pipe(z.record(key, value));
+  sizeCheckedBeforeParse.add(guarded);
+  return guarded;
+}
+
+/**
+ * Wraps a recursive schema so that input nested more than `maxDepth` arrays or objects deep fails before zod recurses
+ * into it. Parsing deeply nested input through `z.lazy` otherwise overflows the stack.
+ */
+export function withMaxDepth<T extends ZodTypeAny>(schema: T, maxDepth: number) {
+  return z
+    .custom<unknown>(input => !isNestedDeeperThan(input, maxDepth), {
+      message: `Must not be nested more than ${maxDepth} levels deep`,
+    })
+    .pipe(schema);
+}
+
+// Runs before the inner schema's size caps. Arrays are walked by index, which allocates nothing per element, so a wide
+// array costs no memory before `.max()` rejects it. Objects are walked with `for…in`, for which V8 collects the full
+// key list before the first iteration, so a wide object costs memory proportional to its key count, the same order as
+// the parsed object itself. Recursion is bounded by `maxDepth`.
+function isNestedDeeperThan(value: unknown, maxDepth: number, depth = 0): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  if (depth >= maxDepth) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (isNestedDeeperThan(value[i], maxDepth, depth + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  for (const key in value) {
+    if (Object.hasOwn(value, key) && isNestedDeeperThan(Reflect.get(value, key), maxDepth, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Given an already parsed and validated object, extracts the keys defined in the given schema. Does not validate again. */

@@ -10,6 +10,7 @@ import { DebugLog } from '../logs/debug_log.js';
 import { NullishToUndefined } from '../schemas/schemas.js';
 import { TxEffect } from '../tx/tx_effect.js';
 import { GlobalVariables } from './global_variables.js';
+import { MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX } from './tx.js';
 
 /** Return values of simulating a circuit. */
 export type ProcessReturnValues = Fr[] | undefined;
@@ -85,7 +86,7 @@ export class PublicSimulationOutput {
         revertReason: SimulationError.schema.optional(),
         globalVariables: GlobalVariables.schema,
         txEffect: TxEffect.schema,
-        publicReturnValues: z.array(NestedProcessReturnValues.schema),
+        publicReturnValues: z.array(NestedProcessReturnValues.schema).max(MAX_PUBLIC_FUNCTION_CALLDATA_PER_TX),
         gasUsed: z.object({
           totalGas: Gas.schema,
           teardownGas: Gas.schema,
