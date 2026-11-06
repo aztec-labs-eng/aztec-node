@@ -272,7 +272,7 @@ export function makePublicLog(
 ): PublicLog {
   return PublicLog.from({
     contractAddress,
-    fields: new Array(10).fill(null).map((_, i) => (!i ? tag.value : new Fr(tag.value.toBigInt() + BigInt(i)))),
+    fields: times(10, i => (!i ? tag.value : new Fr(tag.value.toBigInt() + BigInt(i)))),
   });
 }
 

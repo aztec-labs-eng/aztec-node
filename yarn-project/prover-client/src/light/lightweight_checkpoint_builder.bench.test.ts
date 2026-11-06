@@ -1,6 +1,6 @@
 import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { sum, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -163,7 +163,7 @@ describe('LightweightCheckpointBuilder benchmarks', () => {
       for (const [step, ms] of Object.entries(timings)) {
         results.push({ name: `${prefix}/${step}`, value: ms, unit: 'ms' });
       }
-      const total = Object.values(timings).reduce((a, b) => a + b, 0);
+      const total = sum(Object.values(timings));
       results.push({ name: `${prefix}/total`, value: total, unit: 'ms' });
 
       await fork.close();

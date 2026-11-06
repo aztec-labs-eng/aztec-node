@@ -11,6 +11,7 @@ import {
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
@@ -53,14 +54,11 @@ function maximumFixture(): TxEffect {
     RevertCode.OK,
     TxHash.fromBigInt(0x1234n),
     new Fr(42),
-    Array.from({ length: MAX_NOTE_HASHES_PER_TX }, (_, i) => new Fr(i + 1)),
-    Array.from({ length: MAX_NULLIFIERS_PER_TX }, (_, i) => new Fr(i + 101)),
-    Array.from({ length: MAX_L2_TO_L1_MSGS_PER_TX }, (_, i) => new Fr(i + 201)),
-    Array.from(
-      { length: MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX },
-      (_, i) => new PublicDataWrite(new Fr(i + 301), new Fr(i + 401)),
-    ),
-    Array.from({ length: MAX_PRIVATE_LOGS_PER_TX }, (_, i) =>
+    times(MAX_NOTE_HASHES_PER_TX, i => new Fr(i + 1)),
+    times(MAX_NULLIFIERS_PER_TX, i => new Fr(i + 101)),
+    times(MAX_L2_TO_L1_MSGS_PER_TX, i => new Fr(i + 201)),
+    times(MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX, i => new PublicDataWrite(new Fr(i + 301), new Fr(i + 401))),
+    times(MAX_PRIVATE_LOGS_PER_TX, i =>
       PrivateLog.fromBlobFields(PRIVATE_LOG_SIZE_IN_FIELDS, Array(PRIVATE_LOG_SIZE_IN_FIELDS).fill(new Fr(i + 501))),
     ),
     [new PublicLog(AztecAddress.fromBigIntUnsafe(601n), Array(MAX_PUBLIC_LOG_SIZE_IN_FIELDS).fill(new Fr(601)))],

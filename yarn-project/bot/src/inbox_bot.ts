@@ -3,6 +3,7 @@ import { createLogger } from '@aztec-labs/aztec.js/log';
 import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
 import { type MinedTxReceipt, SortedTxStatuses, TxHash, TxStatus } from '@aztec-labs/aztec.js/tx';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
@@ -720,7 +721,7 @@ export class InboxBot implements BotLifecycle {
   private async recheckMinedBatches(): Promise<void> {
     const now = this.dateProvider.now();
     const active = await this.store.getActiveMessages();
-    const batchIds = [...new Set(active.map(message => message.batchId))];
+    const batchIds = unique(active.map(message => message.batchId));
 
     for (const batchId of batchIds) {
       const batch = await this.store.getBatch(batchId);

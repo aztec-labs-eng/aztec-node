@@ -1,6 +1,6 @@
 import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX } from '@aztec-labs/constants';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -137,9 +137,9 @@ describe('Native World State: benchmarks', () => {
   ) => {
     const fork = await worldState.fork();
     const treeInfo = await fork.getTreeInfo(treeId);
-    const indices = Array.from({ length: numRetrievals }, () =>
-      Math.floor(Math.random() * Number(treeInfo.size - 1n)),
-    ).map(m => BigInt(m));
+    const indices = times(numRetrievals, () => Math.floor(Math.random() * Number(treeInfo.size - 1n))).map(m =>
+      BigInt(m),
+    );
 
     const startTime = performance.now();
 
@@ -161,9 +161,9 @@ describe('Native World State: benchmarks', () => {
   ) => {
     const fork = await worldState.fork();
     const treeInfo = await fork.getTreeInfo(treeId);
-    const indices = Array.from({ length: numRetrievals }, () =>
-      Math.floor(Math.random() * Number(treeInfo.size - 1n)),
-    ).map(m => BigInt(m));
+    const indices = times(numRetrievals, () => Math.floor(Math.random() * Number(treeInfo.size - 1n))).map(m =>
+      BigInt(m),
+    );
 
     const startTime = performance.now();
 
@@ -257,7 +257,7 @@ describe('Native World State: benchmarks', () => {
     await fork.close();
 
     const values = block.body.txEffects.flatMap(txEffect => txEffect.nullifiers.map(nullifier => nullifier.toBuffer()));
-    const initialValues = Array.from({ length: startSize }, (_, i) => new Fr(i).toBuffer());
+    const initialValues = times(startSize, i => new Fr(i).toBuffer());
 
     const duration = await runDataRetrievalByValue(
       1024,
@@ -276,7 +276,7 @@ describe('Native World State: benchmarks', () => {
 
     const treeInfo = await fork.getTreeInfo(MerkleTreeId.NULLIFIER_TREE);
     const startSize = Number(treeInfo.size);
-    const randomValues = Array.from({ length: startSize }, () => Fr.random());
+    const randomValues = times(startSize, () => Fr.random());
     await fork.close();
 
     const duration = await runDataRetrievalByValue(

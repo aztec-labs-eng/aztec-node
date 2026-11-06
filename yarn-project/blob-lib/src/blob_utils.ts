@@ -1,6 +1,8 @@
 import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 
 import type { BatchedBlob } from './batched_blob.js';
@@ -22,7 +24,7 @@ export function getPrefixedEthBlobCommitments(blobs: Blob[]): `0x${string}` {
   const blobBuf = Buffer.concat(blobs.map(blob => blob.commitment));
 
   const buf = Buffer.concat([lenBuf, blobBuf]);
-  return `0x${buf.toString('hex')}`;
+  return bufferToHex(buf);
 }
 
 /**
@@ -38,9 +40,7 @@ export async function getBlobsPerL1Block(fields: Fr[]): Promise<Blob[]> {
 
   const numBlobs = Math.ceil(fields.length / FIELDS_PER_BLOB);
   return await Promise.all(
-    Array.from({ length: numBlobs }, (_, i) =>
-      Blob.fromFields(fields.slice(i * FIELDS_PER_BLOB, (i + 1) * FIELDS_PER_BLOB)),
-    ),
+    times(numBlobs, i => Blob.fromFields(fields.slice(i * FIELDS_PER_BLOB, (i + 1) * FIELDS_PER_BLOB))),
   );
 }
 
@@ -81,5 +81,5 @@ export function getEthBlobEvaluationInputs(batchedBlob: BatchedBlob): `0x${strin
     batchedBlob.commitment.compress(),
     batchedBlob.q.compress(),
   ]);
-  return `0x${buf.toString('hex')}`;
+  return bufferToHex(buf);
 }

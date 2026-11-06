@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
@@ -267,7 +268,7 @@ describe('FactStore', () => {
     });
 
     it('staged facts combine with committed ones', async () => {
-      const payloads = Array.from({ length: 4 }, () => Fr.random());
+      const payloads = times(4, () => Fr.random());
       await store.recordFact(collectionKey1, factTypeA, [payloads[0]], undefined, CHANGE_SET);
       await store.recordFact(collectionKey1, factTypeA, [payloads[1]], undefined, CHANGE_SET);
       await commit();

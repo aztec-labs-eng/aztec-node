@@ -14,6 +14,7 @@ import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { SequencerClient, SequencerEvents } from '@aztec-labs/sequencer-client';
 import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
@@ -66,7 +67,7 @@ describe('single-node/sequencer/escape_hatch_vote_only', () => {
   beforeEach(async () => {
     const validatorOffset = 10;
     const validators = times(COMMITTEE_SIZE, i => {
-      const privateKey = `0x${getPrivateKeyFromIndex(i + validatorOffset)!.toString('hex')}` as const;
+      const privateKey = bufferToHex(getPrivateKeyFromIndex(i + validatorOffset)!);
       const account = privateKeyToAccount(privateKey);
       const address = EthAddress.fromString(account.address);
       expect(address).not.toBe(escapeHatchProposerAddress);

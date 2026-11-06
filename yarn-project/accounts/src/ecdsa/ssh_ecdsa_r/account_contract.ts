@@ -1,6 +1,7 @@
 import type { AuthWitnessProvider } from '@aztec-labs/aztec.js/account';
 import { EcdsaSignature } from '@aztec-labs/foundation/crypto/ecdsa';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import { Buffer } from 'buffer';
@@ -70,7 +71,7 @@ class SSHEcdsaRAuthWitnessProvider implements AuthWitnessProvider {
       s = Buffer.from(Uint8Array.prototype.slice.call(s, 1));
     }
 
-    const maybeHighS = BigInt(`0x${s.toString('hex')}`);
+    const maybeHighS = BigInt(bufferToHex(s));
 
     // ECDSA signatures must have a low S value so they can be used as a nullifier. BB forces a value of 27 for v, so
     // only one PublicKey can verify the signature (and not its negated counterpart) https://ethereum.stackexchange.com/a/55728

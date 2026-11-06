@@ -1,5 +1,6 @@
 import { assertMemberLength } from '../array/array.js';
 import { toBigIntBE, toBufferBE } from '../bigint-buffer/index.js';
+import { times } from '../collection/index.js';
 import { Fr } from '../curves/bn254/field.js';
 import { schemas } from '../schemas/schemas.js';
 import { BufferReader, type Tuple, serializeToBuffer } from '../serialize/index.js';
@@ -48,13 +49,7 @@ export class MembershipWitness<N extends number> {
    * @returns Random membership witness.
    */
   public static random<N extends number>(pathSize: N) {
-    return new MembershipWitness<N>(
-      pathSize,
-      0n,
-      Array(pathSize)
-        .fill(0)
-        .map(() => Fr.random()) as Tuple<Fr, N>,
-    );
+    return new MembershipWitness<N>(pathSize, 0n, times(pathSize, () => Fr.random()) as Tuple<Fr, N>);
   }
 
   /**
@@ -64,9 +59,7 @@ export class MembershipWitness<N extends number> {
    * @returns Membership witness with zero sibling path.
    */
   public static empty<N extends number>(pathSize: N, leafIndex = 0n): MembershipWitness<N> {
-    const arr = Array(pathSize)
-      .fill(0)
-      .map(() => Fr.ZERO) as Tuple<Fr, N>;
+    const arr = times(pathSize, () => Fr.ZERO) as Tuple<Fr, N>;
     return new MembershipWitness<N>(pathSize, leafIndex, arr);
   }
 

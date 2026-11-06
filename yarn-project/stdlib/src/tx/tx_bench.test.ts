@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { BufferSink } from '@aztec-labs/foundation/serialize';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { createHash } from 'node:crypto';
@@ -214,7 +215,7 @@ describe('Tx', () => {
   // realistic per-tx cost (cold sink-size hint, no per-instance state warmed), the inverse of the
   // steady-state cases above which reuse one Tx across thousands of calls.
   it('serializes 100 freshly constructed private-only txs (cold)', async () => {
-    const pool = await Promise.all(Array.from({ length: RUNS }, (_, i) => mockTxForRollup(1000 + i)));
+    const pool = await Promise.all(times(RUNS, i => mockTxForRollup(1000 + i)));
     for (let i = 0; i < RUNS; i++) {
       const tx = pool[i];
       const start = process.hrtime.bigint();
@@ -225,7 +226,7 @@ describe('Tx', () => {
   });
 
   it('serializes 100 freshly constructed public txs (cold)', async () => {
-    const pool = await Promise.all(Array.from({ length: RUNS }, (_, i) => mockTx(1000 + i)));
+    const pool = await Promise.all(times(RUNS, i => mockTx(1000 + i)));
     for (let i = 0; i < RUNS; i++) {
       const tx = pool[i];
       const start = process.hrtime.bigint();

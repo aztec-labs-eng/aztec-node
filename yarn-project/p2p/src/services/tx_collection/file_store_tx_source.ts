@@ -1,4 +1,4 @@
-import { partitionAsync } from '@aztec-labs/foundation/collection';
+import { compactArray, partitionAsync } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
@@ -83,7 +83,7 @@ export class FileStoreTxSource implements TxSource {
       }),
     );
 
-    const txs = results.filter(tx => tx !== undefined);
+    const txs = compactArray(results);
     const [validTxs, invalidTxs] = await partitionAsync(
       txs,
       async ({ tx, downloadDuration, downloadSize }): Promise<boolean> => {
@@ -125,5 +125,5 @@ export async function createFileStoreTxSources(
   const sources = await Promise.all(
     urls.map(url => FileStoreTxSource.create(url, basePath, txValidator, log, telemetry)),
   );
-  return sources.filter((s): s is FileStoreTxSource => s !== undefined);
+  return compactArray(sources);
 }

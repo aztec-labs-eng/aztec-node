@@ -1,6 +1,6 @@
 import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec-labs/constants';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd, sum } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, sum, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -17,7 +17,7 @@ const logger = createLogger('prover-client:test:checkpoint-sub-tree-orchestrator
 /** A full tx-worth of L2-to-L1 messages, padded to the per-tx maximum. */
 const makeL2ToL1Messages = (count: number) =>
   padArrayEnd(
-    Array.from({ length: count }, (_, i) => makeScopedL2ToL1Message((i + 1) * 789)),
+    times(count, i => makeScopedL2ToL1Message((i + 1) * 789)),
     ScopedL2ToL1Message.empty(),
     MAX_L2_TO_L1_MSGS_PER_TX,
   );

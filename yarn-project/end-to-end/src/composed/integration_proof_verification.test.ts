@@ -7,6 +7,7 @@ import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { readFile } from 'fs/promises';
@@ -113,7 +114,7 @@ describe('proof_verification', () => {
 
   describe('honk verifier', () => {
     it('verifies proof', async () => {
-      const proofStr = `0x${proof.withoutPublicInputs().toString('hex')}` as Hex;
+      const proofStr = bufferToHex(proof.withoutPublicInputs()) as Hex;
       const proofPublicInputs = proof.extractPublicInputs().map(x => x.toString());
 
       await expect(verifierContract.read.verify([proofStr, proofPublicInputs])).resolves.toBeTruthy();

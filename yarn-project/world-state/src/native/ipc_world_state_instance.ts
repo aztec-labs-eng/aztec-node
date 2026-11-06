@@ -25,6 +25,7 @@ import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
@@ -801,10 +802,10 @@ export class IpcWorldState implements NativeWorldStateInstance {
   }
 
   private async send<T>(operation: WorldStateOperationName, request: () => Promise<T>): Promise<T> {
-    const start = performance.now();
+    const timer = new Timer();
     try {
       const response = await request();
-      const durationMs = performance.now() - start;
+      const durationMs = timer.ms();
       this.log.trace(`Call ${operation} took (ms)`, { duration: durationMs });
       this.instrumentation.recordRoundTrip(durationMs * 1000, operation);
       return response;

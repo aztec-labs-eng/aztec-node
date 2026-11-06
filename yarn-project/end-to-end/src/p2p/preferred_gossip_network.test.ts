@@ -1,6 +1,7 @@
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { TxHash } from '@aztec-labs/aztec.js/tx';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { ENR, type P2PClient, type P2PService, type PeerId } from '@aztec-labs/p2p';
@@ -207,7 +208,7 @@ describe('e2e_p2p_preferred_network', () => {
       disableValidator: true,
 
       // The regular nodes will attempt to connect to the preferred nodes but they should fail the authentication
-      preferredPeers: preferredNodeEnrs.filter(enr => enr !== undefined),
+      preferredPeers: compactArray(preferredNodeEnrs),
     };
 
     t.logger.info('Creating nodes');
@@ -231,7 +232,7 @@ describe('e2e_p2p_preferred_network', () => {
     const validatorConfig: AztecNodeConfig = {
       ...t.ctx.aztecNodeConfig,
       disableValidator: false,
-      preferredPeers: preferredNodeEnrs.filter(enr => enr !== undefined),
+      preferredPeers: compactArray(preferredNodeEnrs),
     };
 
     validators = await createNodes(
@@ -255,7 +256,7 @@ describe('e2e_p2p_preferred_network', () => {
       ...t.ctx.aztecNodeConfig,
       p2pDiscoveryDisabled: true,
       disableValidator: false,
-      preferredPeers: preferredNodeEnrs.filter(enr => enr !== undefined),
+      preferredPeers: compactArray(preferredNodeEnrs),
     };
 
     const noDiscoveryValidators = await createNodes(

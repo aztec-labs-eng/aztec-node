@@ -1,3 +1,4 @@
+import { compactArray } from '@aztec-labs/foundation/collection';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { Semaphore } from '@aztec-labs/foundation/queue';
@@ -292,9 +293,7 @@ export class ContractSyncService implements OperationContributor {
 
   /** Collects all relevant scope promises (including in-flight ones from concurrent calls) and awaits them. */
   async #awaitSync(contractAddress: AztecAddress, scopes: AztecAddress[]): Promise<void> {
-    const promises = scopes
-      .map(scope => this.syncedContracts.get(toKey(contractAddress, scope)))
-      .filter(p => p !== undefined);
+    const promises = compactArray(scopes.map(scope => this.syncedContracts.get(toKey(contractAddress, scope))));
     await allToCompletion(promises);
   }
 }

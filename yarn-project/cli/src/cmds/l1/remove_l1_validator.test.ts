@@ -1,6 +1,7 @@
 import { startAnvil } from '@aztec-labs/ethereum/test';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 import { Command } from 'commander';
 import { mnemonicToAccount } from 'viem/accounts';
@@ -11,7 +12,7 @@ import { getLatestInitiateWithdrawArgs } from './l1_rpc_test_utils.js';
 
 const mnemonic = 'test test test test test test test test test test test junk';
 const withdrawer = mnemonicToAccount(mnemonic);
-const withdrawerKey = `0x${Buffer.from(withdrawer.getHdKey().privateKey!).toString('hex')}`;
+const withdrawerKey = bufferToHex(Buffer.from(withdrawer.getHdKey().privateKey!));
 const validator = EthAddress.random();
 const recipient = EthAddress.random();
 // The command only builds and sends the transaction, so any address without code accepts it.

@@ -1,5 +1,6 @@
 import { Blob, type BlobJson, computeEthVersionedBlobHash } from '@aztec-labs/blob-lib';
 import { shuffle } from '@aztec-labs/foundation/array';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
@@ -356,12 +357,10 @@ export class HttpBlobClient implements BlobClientInterface {
 
     // Helper to get missing blob hashes that we still need to fetch
     const getMissingBlobHashes = (): Buffer[] =>
-      blobHashes
-        .map((bh, i) => (resultBlobs[i] === undefined ? bh : undefined))
-        .filter((bh): bh is Buffer => bh !== undefined);
+      compactArray(blobHashes.map((bh, i) => (resultBlobs[i] === undefined ? bh : undefined)));
 
     // Return the result, ignoring any undefined ones
-    const getFilledBlobs = (): Blob[] => resultBlobs.filter((b): b is Blob => b !== undefined);
+    const getFilledBlobs = (): Blob[] => compactArray(resultBlobs);
 
     // Helper to fill in results from fetched blobs
     const fillResults = async (fetchedBlobs: BlobJson[]): Promise<Blob[]> => {
@@ -586,7 +585,7 @@ export class HttpBlobClient implements BlobClientInterface {
       }
 
       try {
-        const blobHashStrings = blobHashes.map(h => `0x${h.toString('hex')}`);
+        const blobHashStrings = blobHashes.map(h => bufferToHex(h));
         this.log.trace(`Attempting to get ${blobHashStrings.length} blobs from filestore`, {
           url: client.getBaseUrl(),
           ...ctx,
@@ -615,7 +614,7 @@ export class HttpBlobClient implements BlobClientInterface {
     l1ConsensusHostIndex?: number,
   ): Promise<Blob[]> {
     const blobs = await this.getBlobsFromHost(hostUrl, blockHashOrSlot, l1ConsensusHostIndex, blobHashes);
-    return (await processFetchedBlobs(blobs, blobHashes, this.log)).filter((b): b is Blob => b !== undefined);
+    return compactArray(await processFetchedBlobs(blobs, blobHashes, this.log));
   }
 
   public async getBlobsFromHost(
@@ -653,7 +652,7 @@ export class HttpBlobClient implements BlobClientInterface {
     if (blobHashes && blobHashes.length > 0) {
       const params = new URLSearchParams();
       for (const hash of blobHashes) {
-        params.append('versioned_hashes', `0x${hash.toString('hex')}`);
+        params.append('versioned_hashes', bufferToHex(hash));
       }
       baseUrl += `?${params.toString()}`;
     }

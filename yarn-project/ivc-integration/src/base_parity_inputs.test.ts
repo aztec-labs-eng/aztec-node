@@ -12,6 +12,7 @@
 import { Noir } from '@aztec-foundation/noir-noir_js';
 
 import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
@@ -37,7 +38,7 @@ describe('Inbox Parity Benchmark Inputs', () => {
 
     // Generate random L1-to-L2 messages that fill the 256-message rung.
     logger.info(`Generating ${INBOX_PARITY_SIZE_MEDIUM} random L1-to-L2 messages...`);
-    const l1ToL2Messages = new Array(INBOX_PARITY_SIZE_MEDIUM).fill(null).map(() => Fr.random());
+    const l1ToL2Messages = times(INBOX_PARITY_SIZE_MEDIUM, () => Fr.random());
 
     // Create InboxParity inputs (picks the 256 rung for 256 messages).
     const inputs = InboxParityPrivateInputs.fromMessages(l1ToL2Messages, Fr.ZERO, Fr.random());

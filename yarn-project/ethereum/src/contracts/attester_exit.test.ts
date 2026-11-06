@@ -1,5 +1,6 @@
 import { GovernanceAbi, RollupAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -47,7 +48,7 @@ describeAcrossL1Forks('attester exit client integration', () => {
       entryQueueBootstrapValidatorSetSize: validatorCount,
       entryQueueBootstrapFlushSize: validatorCount,
       entryQueueMaxFlushSize: validatorCount,
-      initialValidators: Array.from({ length: validatorCount }, (_, index) => ({
+      initialValidators: times(validatorCount, index => ({
         attester:
           index < attesters.length
             ? EthAddress.fromString(attesters[index].address)

@@ -5,6 +5,7 @@ import {
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -87,7 +88,7 @@ describe('TxPoolV2 finalization stall', () => {
   // Large public calldata mimics the complex public-heavy txs seen on mainnet when the stalls occurred.
   const createTxBatch = (count: number, startSeed = 1): Promise<Tx[]> =>
     Promise.all(
-      Array.from({ length: count }, (_, i) =>
+      times(count, i =>
         mockTx((startSeed + i) * 100, {
           publicCalldataSize: 1000,
           maxPriorityFeesPerGas: new GasFees(((startSeed + i) % 100) + 1, ((startSeed + i) % 100) + 1),

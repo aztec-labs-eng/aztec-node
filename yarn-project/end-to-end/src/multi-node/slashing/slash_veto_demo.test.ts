@@ -8,9 +8,11 @@ import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { times } from '@aztec-labs/foundation/collection';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { bufferToHex } from '@aztec-labs/foundation/string';
+import { Timer } from '@aztec-labs/foundation/timer';
 import assert from 'assert';
 import { encodeFunctionData, getContract } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -90,7 +92,7 @@ describe('veto slash', () => {
     });
 
     // Create only the first NUM_NODES validators' nodes; the last validator shows as offline.
-    nodes = await Promise.all(Array.from({ length: NUM_NODES }, (_, i) => test.createValidatorNodeAt(i)));
+    nodes = await Promise.all(times(NUM_NODES, i => test.createValidatorNodeAt(i)));
 
     vetoerL1Client = createExtendedL1Client(
       test.context.config.l1RpcUrls,
@@ -175,11 +177,11 @@ describe('veto slash', () => {
       //                                       //
       //#######################################//
 
-      const startTime = Date.now();
+      const timer = new Timer();
       debugLogger.info('Waiting for submittable round...');
       const submittableRound = await waitForSubmittableRound(slashingProposer, rollup, debugLogger);
 
-      const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      const totalTime = (timer.ms() / 1000).toFixed(1);
       debugLogger.info(`✅ Received submittable round after ${totalTime}s`);
       debugLogger.info(`\n\nsubmittableRound: ${submittableRound.round}\n\n`);
       debugLogger.info(`\n\nsubmittablePayload: ${submittableRound.payload}\n\n`);

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { InMemoryFileStore } from '@aztec-labs/stdlib/file-store';
@@ -177,11 +178,7 @@ describe('TxFileStore', () => {
       });
 
       // Add 20 txs at once
-      const txs = await Promise.all(
-        Array(20)
-          .fill(0)
-          .map(() => makeTx()),
-      );
+      const txs = await Promise.all(times(20, () => makeTx()));
       await txPool.addPendingTxs(txs);
 
       await txFileStore!.flush();

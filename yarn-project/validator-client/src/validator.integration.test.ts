@@ -6,7 +6,7 @@ import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/ep
 import { TestEpochCache } from '@aztec-labs/epoch-cache/test';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -437,7 +437,7 @@ describe('ValidatorClient Integration', () => {
     setBuildTimeForSlot(slotNumber);
 
     // Generate fee payer addresses and pre-fund them
-    feePayerAddresses = await Promise.all(Array.from({ length: 10 }, () => AztecAddress.random()));
+    feePayerAddresses = await Promise.all(times(10, () => AztecAddress.random()));
     const genesisValues = await getGenesisValues(feePayerAddresses);
     genesisArchiveRoot = genesisValues.genesisArchiveRoot;
     genesis = genesisValues.genesis;

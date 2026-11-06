@@ -3,7 +3,7 @@ import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { unique } from '@aztec-labs/foundation/collection';
+import { times, unique } from '@aztec-labs/foundation/collection';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -149,7 +149,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
   // all remaining observers record `attestation-missed` for the stopped node and that an INACTIVITY
   // offense is emitted for it.
   it('slashes an attestor that gets stopped after the network is running', async () => {
-    nodes = await Promise.all(Array.from({ length: NUM_VALIDATORS }, (_, i) => test.createValidatorNodeAt(i)));
+    nodes = await Promise.all(times(NUM_VALIDATORS, i => test.createValidatorNodeAt(i)));
 
     await awaitCommitteeExists({ rollup, logger: test.logger });
 
@@ -213,9 +213,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
     const targetAddress = maliciousNode.getSequencer()!.validatorAddresses![0] as EthAddress;
     test.logger.warn(`Malicious node validator address: ${targetAddress}`, { maliciousOverride });
 
-    const honestNodes = await Promise.all(
-      Array.from({ length: NUM_VALIDATORS - 1 }, (_, i) => test.createValidatorNodeAt(i + 1)),
-    );
+    const honestNodes = await Promise.all(times(NUM_VALIDATORS - 1, i => test.createValidatorNodeAt(i + 1)));
 
     nodes = [maliciousNode, ...honestNodes];
 

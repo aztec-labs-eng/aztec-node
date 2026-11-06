@@ -6,9 +6,10 @@ import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { times, timesAsync, unique } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { expect, jest } from '@jest/globals';
 import { createPublicClient, fallback, http } from 'viem';
 
@@ -128,7 +129,7 @@ describe('multi-blocks-per-slot network test', () => {
     const feePaymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress());
 
     logger.info(`Slot before proving: ${await rollup.getSlotNumber()}`);
-    const proofStartMs = Date.now();
+    const proofTimer = new Timer();
     const txs = await timesAsync(TX_COUNT, i => {
       const from = testAccounts.accounts[i % testAccounts.accounts.length];
       return proveInteraction(
@@ -137,23 +138,19 @@ describe('multi-blocks-per-slot network test', () => {
         { from, fee: { paymentMethod: feePaymentMethod } },
       );
     });
-    logger.info(`Proved ${txs.length} txs in ${(Date.now() - proofStartMs) / 1000}s`);
+    logger.info(`Proved ${txs.length} txs in ${proofTimer.ms() / 1000}s`);
 
     // small batch to avoid oversized requests
     const txHashes: TxHash[] = [];
-    const submitStartMs = Date.now();
+    const submitTimer = new Timer();
     for (let i = 0; i < txs.length; i += TX_SEND_BATCH_SIZE) {
       const batch = txs.slice(i, i + TX_SEND_BATCH_SIZE);
       logger.info(`Submitting tx batch ${i / TX_SEND_BATCH_SIZE + 1}/${Math.ceil(txs.length / TX_SEND_BATCH_SIZE)}`);
       const batchHashes = (await Promise.all(batch.map(tx => tx.send({ wait: NO_WAIT })))) as TxHash[];
       txHashes.push(...batchHashes);
-      logger.info(
-        `Submitted batch ${i / TX_SEND_BATCH_SIZE + 1} at t=${((Date.now() - submitStartMs) / 1000).toFixed(1)}s`,
-      );
+      logger.info(`Submitted batch ${i / TX_SEND_BATCH_SIZE + 1} at t=${(submitTimer.ms() / 1000).toFixed(1)}s`);
     }
-    logger.info(
-      `Submitted ${txHashes.length} txs in ${(Date.now() - submitStartMs) / 1000}s (total ${(Date.now() - proofStartMs) / 1000}s)`,
-    );
+    logger.info(`Submitted ${txHashes.length} txs in ${submitTimer.ms() / 1000}s (total ${proofTimer.ms() / 1000}s)`);
     logger.info(`Slot after submit: ${await rollup.getSlotNumber()}`);
 
     const receipts = await retryUntil(
@@ -182,15 +179,12 @@ describe('multi-blocks-per-slot network test', () => {
     );
 
     const txBlockNumbers = receipts.map(receipt => Number(receipt!.blockNumber));
-    const uniqueTxBlockNumbers = [...new Set(txBlockNumbers)];
+    const uniqueTxBlockNumbers = unique(txBlockNumbers);
     const minTxBlockNumber = Math.min(...txBlockNumbers);
     const maxTxBlockNumber = Math.max(...txBlockNumbers);
 
     // Fetch all block headers in the range to check for MBPS (not just blocks with our txs)
-    const allBlockNumbers = Array.from(
-      { length: maxTxBlockNumber - minTxBlockNumber + 1 },
-      (_, i) => minTxBlockNumber + i,
-    );
+    const allBlockNumbers = times(maxTxBlockNumber - minTxBlockNumber + 1, i => minTxBlockNumber + i);
     const allHeaders = await Promise.all(
       allBlockNumbers.map(blockNumber => aztecNode.getBlockData(BlockNumber(blockNumber)).then(b => b?.header)),
     );

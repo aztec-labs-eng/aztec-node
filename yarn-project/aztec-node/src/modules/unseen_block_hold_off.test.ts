@@ -1,4 +1,5 @@
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -566,9 +567,7 @@ describe('UnseenBlockHoldOff', () => {
       });
 
       it('fails fast once the concurrent-hold cap is saturated', async () => {
-        const held = Array.from({ length: MAX_CONCURRENT_HOLDS }, () =>
-          holdOff.getBlockData({ hash: BlockHash.random() }),
-        );
+        const held = times(MAX_CONCURRENT_HOLDS, () => holdOff.getBlockData({ hash: BlockHash.random() }));
         await sleep(50);
         expect(holdOff.holds).toEqual(MAX_CONCURRENT_HOLDS);
 
@@ -584,9 +583,7 @@ describe('UnseenBlockHoldOff', () => {
 
   describe('concurrency cap', () => {
     it('fails fast once the cap is saturated and holds again after they release', async () => {
-      const held = Array.from({ length: MAX_CONCURRENT_HOLDS }, () =>
-        holdOff.getBlockData({ hash: BlockHash.random() }),
-      );
+      const held = times(MAX_CONCURRENT_HOLDS, () => holdOff.getBlockData({ hash: BlockHash.random() }));
       // Let the initial miss of every held request land so they are all counted before the next call.
       await sleep(50);
       expect(holdOff.holds).toEqual(MAX_CONCURRENT_HOLDS);

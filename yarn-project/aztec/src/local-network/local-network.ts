@@ -14,6 +14,7 @@ import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addre
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { LogFn } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
@@ -149,13 +150,11 @@ export async function createLocalNetwork(config: Partial<LocalNetworkConfig> = {
     aztecNodeConfig.sequencerPublisherPrivateKeys[0].getValue() === NULL_KEY
   ) {
     const privKey = hdAccount.getHdKey().privateKey;
-    aztecNodeConfig.sequencerPublisherPrivateKeys = [
-      new SecretValue(`0x${Buffer.from(privKey!).toString('hex')}` as const),
-    ];
+    aztecNodeConfig.sequencerPublisherPrivateKeys = [new SecretValue(bufferToHex(Buffer.from(privKey!)))];
   }
   if (!aztecNodeConfig.validatorPrivateKeys?.getValue().length) {
     const privKey = hdAccount.getHdKey().privateKey;
-    aztecNodeConfig.validatorPrivateKeys = new SecretValue([`0x${Buffer.from(privKey!).toString('hex')}`]);
+    aztecNodeConfig.validatorPrivateKeys = new SecretValue([bufferToHex(Buffer.from(privKey!))]);
   }
   aztecNodeConfig.coinbase = EthAddress.fromString(
     privateKeyToAddress(aztecNodeConfig.validatorPrivateKeys.getValue()[0]),

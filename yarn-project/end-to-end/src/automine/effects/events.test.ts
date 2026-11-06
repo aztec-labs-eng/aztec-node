@@ -5,6 +5,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { CustomMessageContract, type MultiLogEvent } from '@aztec-labs/noir-test-contracts.js/CustomMessage';
 import { EventOnlyContract, type TestEvent } from '@aztec-labs/noir-test-contracts.js/EventOnly';
 import { type LargeEvent, LargePublicEventContract } from '@aztec-labs/noir-test-contracts.js/LargePublicEvent';
@@ -155,7 +156,7 @@ describe('automine/effects/events', () => {
     // Sends emit_large_event with 11 random Fr fields, retrieves via getAllPublicEvents, and asserts
     // the returned event's data array matches.
     it('emits and retrieves a public event with more than MAX_EVENT_SERIALIZED_LEN fields', async () => {
-      const data = Array.from({ length: 11 }, () => Fr.random());
+      const data = times(11, () => Fr.random());
 
       const { receipt: tx } = await largePublicEventContract.methods.emit_large_event(data).send({ from: account });
 

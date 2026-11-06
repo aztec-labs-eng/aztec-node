@@ -1,5 +1,6 @@
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
@@ -632,7 +633,7 @@ export class SessionManager {
 
   /** Distinct epochs with checkpoints in the store, ascending. The store drops an epoch once its window closes. */
   private storedEpochs(): EpochNumber[] {
-    return Array.from(new Set(this.deps.checkpointStore.list().map(p => p.epochNumber)));
+    return unique(this.deps.checkpointStore.list().map(p => p.epochNumber));
   }
 
   private checkpointsInEpoch(epoch: EpochNumber, l1Constants: L1RollupConstants): CheckpointProver[] {

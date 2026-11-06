@@ -439,7 +439,7 @@ describe(`prove ${TARGET_TPS}TPS test`, () => {
     let i = 0;
 
     while (performance.now() < sendDeadline) {
-      const loopStart = performance.now();
+      const loopTimer = new Timer();
 
       // look for a wallet with an available tx
       let producer: WalletTxProducer | undefined;
@@ -463,7 +463,7 @@ describe(`prove ${TARGET_TPS}TPS test`, () => {
       i++;
 
       // sleep to maintain target TPS
-      const elapsed = performance.now() - loopStart;
+      const elapsed = loopTimer.ms();
       if (elapsed < msPerTx) {
         await sleep(msPerTx - elapsed);
       }

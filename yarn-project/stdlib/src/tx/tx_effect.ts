@@ -18,6 +18,7 @@ import {
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
 } from '@aztec-labs/constants';
 import { type FieldsOf, makeTuple, makeTupleAsync } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -227,7 +228,7 @@ export class TxEffect {
       makeTuple(count(MAX_L2_TO_L1_MSGS_PER_TX, numL2ToL1Msgs), Fr.random),
       makeTuple(count(MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX, numPublicDataWrites), PublicDataWrite.random),
       makeTuple(count(MAX_PRIVATE_LOGS_PER_TX, numPrivateLogs), () => PrivateLog.random()),
-      await Promise.all(new Array(numPublicCallsPerTx * numPublicLogsPerCall).fill(null).map(() => PublicLog.random())),
+      await Promise.all(times(numPublicCallsPerTx * numPublicLogsPerCall, () => PublicLog.random())),
       await makeTupleAsync(count(MAX_CONTRACT_CLASS_LOGS_PER_TX, numContractClassLogs), ContractClassLog.random),
     );
   }

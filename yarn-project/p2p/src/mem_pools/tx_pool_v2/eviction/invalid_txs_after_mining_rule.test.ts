@@ -1,4 +1,5 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
@@ -30,7 +31,7 @@ describe('InvalidTxsAfterMiningRule', () => {
     deleteTxsMock = jest.fn(() => Promise.resolve());
     return {
       getPendingTxs: () => pendingTxs,
-      getPendingFeePayers: () => [...new Set(pendingTxs.map(t => t.feePayer))],
+      getPendingFeePayers: () => unique(pendingTxs.map(t => t.feePayer)),
       getFeePayerPendingTxs: (feePayer: string) => pendingTxs.filter(t => t.feePayer === feePayer),
       getPendingTxCount: () => pendingTxs.length,
       getLowestPriorityPending: () => [],

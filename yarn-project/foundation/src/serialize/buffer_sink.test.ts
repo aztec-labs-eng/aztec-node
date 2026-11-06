@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 
+import { times } from '../collection/index.js';
 import { Fq, Fr } from '../curves/bn254/field.js';
 import { BufferReader } from './buffer_reader.js';
 import { BufferSink, serializeArrayToSink, serializeToSink } from './buffer_sink.js';
@@ -129,7 +130,7 @@ describe('BufferSink', () => {
   describe('capacity growth', () => {
     it('grows from a tiny initial capacity without corrupting data', () => {
       const sink = new BufferSink(1);
-      const values = Array.from({ length: 300 }, (_, i) => BigInt(i) * 7n);
+      const values = times(300, i => BigInt(i) * 7n);
       for (const v of values) {
         sink.writeField(v);
       }
@@ -240,7 +241,7 @@ describe('BufferSink', () => {
     });
 
     it('round-trips a field vector written via serializeArrayToSink', () => {
-      const fields = Array.from({ length: 5 }, () => Fr.random());
+      const fields = times(5, () => Fr.random());
       const sink = new BufferSink();
       serializeArrayToSink(sink, fields, 4);
 

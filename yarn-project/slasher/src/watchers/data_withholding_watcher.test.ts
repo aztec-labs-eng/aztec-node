@@ -1,5 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
@@ -83,9 +84,9 @@ describe('DataWithholdingWatcher', () => {
    * Each block's header.getSlot() returns the checkpoint's slot (single-block-per-checkpoint test default).
    */
   const makePublished = (slot: number, txCount: number, blockCount = 1): PublishedCheckpoint => {
-    const blocks = Array.from({ length: blockCount }, () => ({
+    const blocks = times(blockCount, () => ({
       header: { getSlot: () => SlotNumber(slot) },
-      body: { txEffects: Array.from({ length: txCount }, () => ({ txHash: TxHash.random() })) },
+      body: { txEffects: times(txCount, () => ({ txHash: TxHash.random() })) },
     }));
     return {
       checkpoint: {

@@ -2,6 +2,7 @@ import { Buffer } from 'buffer';
 
 import { toBufferBE } from '../bigint-buffer/index.js';
 import { Fr } from '../curves/bn254/field.js';
+import { bufferToHex } from '../string/index.js';
 import type { Tuple } from './types.js';
 
 /**
@@ -192,7 +193,7 @@ export function fromFieldsTuple(fields: Tuple<Fr, 2>): Buffer {
 }
 
 export function toHumanReadable(buf: Buffer, maxLen?: number): string {
-  const result = buf.every(byte => byte >= 32 && byte <= 126) ? buf.toString('ascii') : `0x${buf.toString('hex')}`;
+  const result = buf.every(byte => byte >= 32 && byte <= 126) ? buf.toString('ascii') : bufferToHex(buf);
   if (maxLen && result.length > maxLen) {
     return result.slice(0, maxLen) + '...';
   }

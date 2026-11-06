@@ -12,6 +12,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { BenchmarkingContract } from '@aztec-labs/noir-test-contracts.js/Benchmarking';
 import { GasFees } from '@aztec-labs/stdlib/gas';
@@ -97,7 +98,7 @@ describe('block capacity benchmark', () => {
     // Create WorkerWallets in parallel
     logger.info(`Creating ${NUM_WALLETS} worker wallet(s)...`);
     testWallets = await Promise.all(
-      Array.from({ length: NUM_WALLETS }, (_, i) => {
+      times(NUM_WALLETS, i => {
         logger.info(`Creating wallet ${i + 1}/${NUM_WALLETS}`);
         return createWorkerWalletClient(rpcUrl, txRealProofs, logger);
       }),
@@ -252,7 +253,7 @@ describe('block capacity benchmark', () => {
 
     // 2. Send all pre-proven txs to mempool
     logger.info(`[${label}] Sending ${provenTxs.length} pre-proven txs to mempool`);
-    const sendStartMs = Date.now();
+    const sendTimer = new Timer();
 
     let sentCount = 0;
     const txSize = provenTxs[0].toBuffer().length;
@@ -266,7 +267,7 @@ describe('block capacity benchmark', () => {
       }
     });
 
-    const sendDurationMs = Date.now() - sendStartMs;
+    const sendDurationMs = sendTimer.ms();
     logger.info(`[${label}] All ${provenTxs.length} txs sent to mempool`, { sendDurationMs });
 
     // 3. Re-enable block building

@@ -1,6 +1,7 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
+import { FifoSet } from '@aztec-labs/foundation/fifo-set';
 import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { Timer, executeTimeout } from '@aztec-labs/foundation/timer';
@@ -1365,20 +1366,11 @@ export class LibP2PService extends WithTracer implements P2PService {
 
   // Bounded set of accepted checkpoint-attestation identities (slot, payload hash, signature bytes), so a
   // re-encoded copy of an accepted attestation is ignored before the expensive signature recovery.
-  private readonly recentAcceptedAttestations = new Set<string>();
   private static readonly MAX_RECENT_ATTESTATIONS = 8192;
+  private readonly recentAcceptedAttestations = FifoSet.withLimit<string>(LibP2PService.MAX_RECENT_ATTESTATIONS);
 
   private rememberAcceptedAttestation(key: string): void {
-    if (this.recentAcceptedAttestations.has(key)) {
-      return;
-    }
-    this.recentAcceptedAttestations.add(key);
-    if (this.recentAcceptedAttestations.size > LibP2PService.MAX_RECENT_ATTESTATIONS) {
-      const oldest = this.recentAcceptedAttestations.keys().next().value;
-      if (oldest !== undefined) {
-        this.recentAcceptedAttestations.delete(oldest);
-      }
-    }
+    this.recentAcceptedAttestations.addIfAbsent(key);
   }
 
   /** Validates a checkpoint attestation and adds it to the pool. Penalizes the peer if validation fails. */

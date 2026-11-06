@@ -9,6 +9,7 @@ import { Noir } from '@aztec-foundation/noir-noir_js';
 import { BBJsInstance, type BBJsProofResult } from '@aztec-labs/bb-prover';
 import { DebugBBJsInstance } from '@aztec-labs/bb-prover/debug';
 import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
@@ -55,7 +56,7 @@ describe('BB.js Debug Wrapper', () => {
     debugDir = await fs.mkdtemp(path.join(process.env.BB_WORKING_DIRECTORY || '/tmp', 'bb-debug-test-'));
 
     // Generate inbox parity inputs (same approach as base_parity_inputs.test.ts)
-    const l1ToL2Messages = new Array(INBOX_PARITY_SIZE_MEDIUM).fill(null).map(() => Fr.random());
+    const l1ToL2Messages = times(INBOX_PARITY_SIZE_MEDIUM, () => Fr.random());
     const inboxParityInputs = InboxParityPrivateInputs.fromMessages(l1ToL2Messages, Fr.ZERO, Fr.random());
 
     const noirInputs = {

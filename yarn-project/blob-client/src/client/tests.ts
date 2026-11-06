@@ -1,4 +1,5 @@
 import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
+import { times } from '@aztec-labs/foundation/collection';
 import { Buffer } from 'buffer';
 import type { Hex } from 'viem';
 
@@ -39,7 +40,7 @@ export function runBlobClientTests(
   });
 
   it('should handle multiple blobs', async () => {
-    const blobs = await Promise.all(Array.from({ length: 3 }, () => makeRandomBlob(7)));
+    const blobs = await Promise.all(times(3, () => makeRandomBlob(7)));
     const blobHashes = blobs.map(blob => blob.getEthVersionedBlobHash());
 
     await client.sendBlobsToFilestore(blobs);

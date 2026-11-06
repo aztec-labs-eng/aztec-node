@@ -1,6 +1,6 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { type CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { merge, pick } from '@aztec-labs/foundation/collection';
+import { compactArray, merge, pick } from '@aztec-labs/foundation/collection';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { FifoSet } from '@aztec-labs/foundation/fifo-set';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -138,11 +138,11 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       return true;
     }
 
-    const slashArgs = attestations
-      .filter(attestation => invalidHashes.has(attestation.getPayloadHash()))
-      .map(attestation => this.getSlashArgs(slot, attestation))
-      .filter((args): args is WantToSlashArgs => args !== undefined)
-      .filter(args => this.markAsNewOffense(args));
+    const slashArgs = compactArray(
+      attestations
+        .filter(attestation => invalidHashes.has(attestation.getPayloadHash()))
+        .map(attestation => this.getSlashArgs(slot, attestation)),
+    ).filter(args => this.markAsNewOffense(args));
 
     if (slashArgs.length === 0) {
       return true;

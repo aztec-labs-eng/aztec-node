@@ -1,5 +1,5 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { chunk } from '@aztec-labs/foundation/collection';
+import { chunk, times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -90,7 +90,7 @@ describe('BatchTxRequester', () => {
       const txCount = 16;
       const deadline = 10_000;
       const rounds = Math.ceil(txCount / TX_BATCH_SIZE);
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -136,7 +136,7 @@ describe('BatchTxRequester', () => {
       const numberOfRounds = 2; //Number of requests per peer
 
       const deadline = 10_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -192,9 +192,9 @@ describe('BatchTxRequester', () => {
       // Workers share a round-robin index that advances globally across all workers.
       //
       // Round 1: Workers take chunks 0, 1, 2 respectively
-      expect(peer1Requests[0].indices).toEqual(Array.from({ length: TX_BATCH_SIZE }, (_, i) => i));
-      expect(peer2Requests[0].indices).toEqual(Array.from({ length: TX_BATCH_SIZE }, (_, i) => i + TX_BATCH_SIZE));
-      expect(peer3Requests[0].indices).toEqual(Array.from({ length: TX_BATCH_SIZE }, (_, i) => i + 2 * TX_BATCH_SIZE));
+      expect(peer1Requests[0].indices).toEqual(times(TX_BATCH_SIZE, i => i));
+      expect(peer2Requests[0].indices).toEqual(times(TX_BATCH_SIZE, i => i + TX_BATCH_SIZE));
+      expect(peer3Requests[0].indices).toEqual(times(TX_BATCH_SIZE, i => i + 2 * TX_BATCH_SIZE));
 
       // Round 2: The shared round-robin index continues from where it left off (index 3).
       // - Peer1 takes chunk 3: [24, 0-6], then index wraps to 0
@@ -202,18 +202,15 @@ describe('BatchTxRequester', () => {
       // - Peer3 takes chunk 1: [8-15], index advances to 2
       // This cycling is intentional. It re-requests batches from different peers to maximize
       // chances of fetching missing transactions.
-      expect(peer1Requests[1].indices).toEqual([
-        ...Array.from({ length: TX_BATCH_SIZE - 1 }, (_, i) => i),
-        txCount - 1,
-      ]);
-      expect(peer2Requests[1].indices).toEqual(Array.from({ length: TX_BATCH_SIZE }, (_, i) => i));
-      expect(peer3Requests[1].indices).toEqual(Array.from({ length: TX_BATCH_SIZE }, (_, i) => i + TX_BATCH_SIZE));
+      expect(peer1Requests[1].indices).toEqual([...times(TX_BATCH_SIZE - 1, i => i), txCount - 1]);
+      expect(peer2Requests[1].indices).toEqual(times(TX_BATCH_SIZE, i => i));
+      expect(peer3Requests[1].indices).toEqual(times(TX_BATCH_SIZE, i => i + TX_BATCH_SIZE));
     });
 
     it('should make sure dumb peers return transactions they have', async () => {
       const txCount = 20;
       const deadline = 10_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -230,9 +227,9 @@ describe('BatchTxRequester', () => {
 
       // Define which transactions each peer has (same as happy path)
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 10 }, (_, i) => i)], // peer1: txs 0-9
-        [peers[1].toString(), Array.from({ length: 7 }, (_, i) => i + 7)], // peer2: txs 7-13
-        [peers[2].toString(), Array.from({ length: 11 }, (_, i) => i + 9)], // peer3: txs 9-19
+        [peers[0].toString(), times(10, i => i)], // peer1: txs 0-9
+        [peers[1].toString(), times(7, i => i + 7)], // peer2: txs 7-13
+        [peers[2].toString(), times(11, i => i + 9)], // peer3: txs 9-19
       ]);
 
       const peerRequestCounts = new Map<string, number>();
@@ -309,7 +306,7 @@ describe('BatchTxRequester', () => {
     it('If dumb peers returned no transactions there should not be any smart peers', async () => {
       const txCount = 16;
       const deadline = 1_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -356,7 +353,7 @@ describe('BatchTxRequester', () => {
       const deadline = 2_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -370,7 +367,7 @@ describe('BatchTxRequester', () => {
 
       const peerCollection = new PeerCollection(connectionSampler, pinnedPeer, dateProvider);
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 16 }, (_, i) => i)], // peer1 has all transactions, peer2 none
+        [peers[0].toString(), times(16, i => i)], // peer1 has all transactions, peer2 none
       ]);
 
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
@@ -423,7 +420,7 @@ describe('BatchTxRequester', () => {
       const deadline = 3_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -440,9 +437,9 @@ describe('BatchTxRequester', () => {
       // Each peer has txs spanning beyond its assigned batch, so after its batch is
       // processed it still has txs that are missing → gets promoted to smart.
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 15 }, (_, i) => i)], // peer0: txs 0-14
-        [peers[1].toString(), Array.from({ length: 15 }, (_, i) => i + 10)], // peer1: txs 10-24
-        [peers[2].toString(), Array.from({ length: 10 }, (_, i) => i + 20)], // peer2: txs 20-29
+        [peers[0].toString(), times(15, i => i)], // peer0: txs 0-14
+        [peers[1].toString(), times(15, i => i + 10)], // peer1: txs 10-24
+        [peers[2].toString(), times(10, i => i + 20)], // peer2: txs 20-29
       ]);
 
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
@@ -479,7 +476,7 @@ describe('BatchTxRequester', () => {
       const deadline = 5_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -495,9 +492,9 @@ describe('BatchTxRequester', () => {
 
       // Define which transactions each peer has
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 6 }, (_, i) => i)], // peer1: txs 0-5
-        [peers[1].toString(), Array.from({ length: 8 }, (_, i) => i + 6)], // peer2: txs 6-13
-        [peers[2].toString(), Array.from({ length: 6 }, (_, i) => i + 14)], // peer3: txs 14-19
+        [peers[0].toString(), times(6, i => i)], // peer1: txs 0-5
+        [peers[1].toString(), times(8, i => i + 6)], // peer2: txs 6-13
+        [peers[2].toString(), times(6, i => i + 14)], // peer3: txs 14-19
       ]);
 
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
@@ -534,7 +531,7 @@ describe('BatchTxRequester', () => {
       const deadline = 1_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -545,7 +542,7 @@ describe('BatchTxRequester', () => {
 
       const peers = await Promise.all([createSecp256k1PeerId(), createSecp256k1PeerId()]);
       const peerTransactions = new Map([
-        [peers[1].toString(), Array.from({ length: 8 }, (_, i) => i)], // peer1 has only half of txs
+        [peers[1].toString(), times(8, i => i)], // peer1 has only half of txs
       ]);
 
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
@@ -593,7 +590,7 @@ describe('BatchTxRequester', () => {
       const deadline = 1_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -662,7 +659,7 @@ describe('BatchTxRequester', () => {
       const deadline = 5_000;
       const dateProvider = new DateProvider();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -679,9 +676,9 @@ describe('BatchTxRequester', () => {
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
 
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 3 }, (_, i) => i)], // peer1: txs 0-3
-        [peers[1].toString(), Array.from({ length: 10 }, (_, i) => i)], // peer2: txs 0-9
-        [peers[2].toString(), Array.from({ length: 9 }, (_, i) => i + 8)], // peer3: txs 8 - 16
+        [peers[0].toString(), times(3, i => i)], // peer1: txs 0-3
+        [peers[1].toString(), times(10, i => i)], // peer2: txs 0-9
+        [peers[2].toString(), times(9, i => i + 8)], // peer3: txs 8 - 16
       ]);
 
       const semaphore = new TestSemaphore(new Semaphore(0));
@@ -835,7 +832,7 @@ describe('BatchTxRequester', () => {
       const deadline = 2_000;
       const clock = new TestClock();
       const pinnedPeer = undefined;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -851,7 +848,7 @@ describe('BatchTxRequester', () => {
       const peerCollection = new TestPeerCollection(innerPeerCollection);
 
       const peerTransactions = new Map([
-        [peers[1].toString(), Array.from({ length: txCount }, (_, i) => i)], // peer1 has all transactions
+        [peers[1].toString(), times(txCount, i => i)], // peer1 has all transactions
       ]);
 
       let requestCount = 0;
@@ -925,7 +922,7 @@ describe('BatchTxRequester', () => {
     it('should stop requesting when deadline is reached', async () => {
       const shortDeadline = 20;
       const txCount = 20;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -980,7 +977,7 @@ describe('BatchTxRequester', () => {
     it('should abort immediately when signal is triggered before starting', async () => {
       const txCount = 10;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1029,7 +1026,7 @@ describe('BatchTxRequester', () => {
     it('should abort mid-execution during transaction fetching', async () => {
       const txCount = 30;
       const deadline = 2_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1042,9 +1039,9 @@ describe('BatchTxRequester', () => {
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
 
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 10 }, (_, i) => i)],
-        [peers[1].toString(), Array.from({ length: 10 }, (_, i) => i + 10)],
-        [peers[2].toString(), Array.from({ length: 10 }, (_, i) => i + 20)],
+        [peers[0].toString(), times(10, i => i)],
+        [peers[1].toString(), times(10, i => i + 10)],
+        [peers[2].toString(), times(10, i => i + 20)],
       ]);
 
       const tracker = RequestTracker.create(missing, new Date(Date.now() + deadline));
@@ -1105,7 +1102,7 @@ describe('BatchTxRequester', () => {
       const txCount = TX_BATCH_SIZE * 2 + 2;
       const deadline = 10_000;
       const clock = new TestClock();
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1119,7 +1116,7 @@ describe('BatchTxRequester', () => {
 
       const peerCollection = new TestPeerCollection(new PeerCollection(connectionSampler, undefined, clock));
 
-      const peerTransactions = new Map([[peers[0].toString(), Array.from({ length: txCount / 2 }, (_, i) => i)]]);
+      const peerTransactions = new Map([[peers[0].toString(), times(txCount / 2, i => i)]]);
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions, 100);
       reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
 
@@ -1158,7 +1155,7 @@ describe('BatchTxRequester', () => {
     it('should only yield valid transactions and filter out invalid ones', async () => {
       const txCount = 10;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1175,8 +1172,8 @@ describe('BatchTxRequester', () => {
 
       // Define which transactions each peer has
       const peerTransactions = new Map([
-        [peers[0].toString(), Array.from({ length: 5 }, (_, i) => i)], // peer1: txs 0-4
-        [peers[1].toString(), Array.from({ length: 5 }, (_, i) => i + 5)], // peer2: txs 5-9
+        [peers[0].toString(), times(5, i => i)], // peer1: txs 0-4
+        [peers[1].toString(), times(5, i => i + 5)], // peer2: txs 5-9
       ]);
 
       const invalidTxIndices = new Set([2, 3, 7]); // Mark transactions at indices 2, 3, and 7 as invalid
@@ -1222,7 +1219,7 @@ describe('BatchTxRequester', () => {
       });
 
       // Verify that valid transactions ARE in the result
-      const validIndices = Array.from({ length: txCount }, (_, i) => i).filter(i => !invalidTxIndices.has(i));
+      const validIndices = times(txCount, i => i).filter(i => !invalidTxIndices.has(i));
       validIndices.forEach(validIndex => {
         const validTxHash = missing[validIndex].toString();
         expect(resultTxHashes.has(validTxHash)).toBe(true);
@@ -1239,7 +1236,7 @@ describe('BatchTxRequester', () => {
     it('should handle mixed valid and invalid transactions from multiple peers', async () => {
       const txCount = 12;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1304,7 +1301,7 @@ describe('BatchTxRequester', () => {
     it('should handle validator throwing errors gracefully', async () => {
       const txCount = 8;
       const deadline = 3_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1335,7 +1332,7 @@ describe('BatchTxRequester', () => {
         },
       };
 
-      const peerTransactions = new Map([[peer.toString(), Array.from({ length: txCount }, (_, i) => i)]]);
+      const peerTransactions = new Map([[peer.toString(), times(txCount, i => i)]]);
 
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
       reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
@@ -1376,7 +1373,7 @@ describe('BatchTxRequester', () => {
     it('should not request transactions that were marked as fetched externally', async () => {
       const txCount = 16;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1391,7 +1388,7 @@ describe('BatchTxRequester', () => {
       const tracker = RequestTracker.create(missing, new Date(Date.now() + deadline));
 
       // Peer has only first half of transactions
-      const peerTransactions = new Map([[peer.toString(), Array.from({ length: TX_BATCH_SIZE }, (_, i) => i)]]);
+      const peerTransactions = new Map([[peer.toString(), times(TX_BATCH_SIZE, i => i)]]);
       const { requestLog, mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
       reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
 
@@ -1431,7 +1428,7 @@ describe('BatchTxRequester', () => {
     it('Should query pinned peer if available', async () => {
       const txCount = 10;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1447,9 +1444,9 @@ describe('BatchTxRequester', () => {
 
       // Pinned peer has all transactions, regular peers have partial
       const peerTransactions = new Map([
-        [pinnedPeer.toString(), Array.from({ length: txCount }, (_, i) => i)], // All transactions
-        [regularPeer1.toString(), Array.from({ length: 5 }, (_, i) => i)], // First 5
-        [regularPeer2.toString(), Array.from({ length: 5 }, (_, i) => i + 5)], // Last 5
+        [pinnedPeer.toString(), times(txCount, i => i)], // All transactions
+        [regularPeer1.toString(), times(5, i => i)], // First 5
+        [regularPeer2.toString(), times(5, i => i + 5)], // Last 5
       ]);
 
       const { requestLog, mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
@@ -1480,7 +1477,7 @@ describe('BatchTxRequester', () => {
     it('should never mark pinned peer as smart', async () => {
       const txCount = 30;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1499,8 +1496,8 @@ describe('BatchTxRequester', () => {
 
       // Both peers have all transactions
       const peerTransactions = new Map([
-        [pinnedPeer.toString(), Array.from({ length: txCount }, (_, i) => i)],
-        [regularPeer.toString(), Array.from({ length: txCount }, (_, i) => i)],
+        [pinnedPeer.toString(), times(txCount, i => i)],
+        [regularPeer.toString(), times(txCount, i => i)],
       ]);
 
       const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions, 50);
@@ -1533,7 +1530,7 @@ describe('BatchTxRequester', () => {
       const txCount = 6;
       const deadline = 8_000;
       const clock = new TestClock();
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1549,8 +1546,8 @@ describe('BatchTxRequester', () => {
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
 
       const peerTransactions = new Map([
-        [pinnedPeer.toString(), Array.from({ length: txCount }, (_, i) => i)],
-        [regularPeer.toString(), Array.from({ length: txCount }, (_, i) => i)],
+        [pinnedPeer.toString(), times(txCount, i => i)],
+        [regularPeer.toString(), times(txCount, i => i)],
       ]);
 
       let pinnedPeerRequestCount = 0;
@@ -1617,7 +1614,7 @@ describe('BatchTxRequester', () => {
     it('should handle pinned peer being marked as bad and continue with regular peers', async () => {
       const txCount = 8;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1635,7 +1632,7 @@ describe('BatchTxRequester', () => {
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
 
       // Regular peer has all transactions, pinned peer will fail
-      const peerTransactions = new Map([[regularPeer.toString(), Array.from({ length: txCount }, (_, i) => i)]]);
+      const peerTransactions = new Map([[regularPeer.toString(), times(txCount, i => i)]]);
 
       const peersToReturnFailureFor = new Set([pinnedPeer.toString()]);
       const { mockImplementation } = createRequestLogger(blockProposal, peersToReturnFailureFor, peerTransactions);
@@ -1665,7 +1662,7 @@ describe('BatchTxRequester', () => {
     it('should validate transactions from pinned peer same as regular peers', async () => {
       const txCount = 8;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1678,8 +1675,8 @@ describe('BatchTxRequester', () => {
       connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue([regularPeer]);
 
       const peerTransactions = new Map([
-        [pinnedPeer.toString(), Array.from({ length: 4 }, (_, i) => i)], // First 4 txs
-        [regularPeer.toString(), Array.from({ length: 4 }, (_, i) => i + 4)], // Last 4 txs
+        [pinnedPeer.toString(), times(4, i => i)], // First 4 txs
+        [regularPeer.toString(), times(4, i => i + 4)], // Last 4 txs
       ]);
 
       const invalidTxIndices = new Set([1, 6]); // Mark some transactions as invalid
@@ -1725,7 +1722,7 @@ describe('BatchTxRequester', () => {
     it('should demote a smart peer to dumb (without penalising) when it stops advertising the block', async () => {
       const txCount = 2 * TX_BATCH_SIZE;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1741,7 +1738,7 @@ describe('BatchTxRequester', () => {
         new PeerCollection(connectionSampler, undefined, new DateProvider()),
       );
 
-      const allIndices = Array.from({ length: txCount }, (_, i) => i);
+      const allIndices = times(txCount, i => i);
 
       let peer0RequestCount = 0;
       reqResp.sendRequestToPeer.mockImplementation(async (peerId: any, _sub: any, data: any) => {
@@ -1815,7 +1812,7 @@ describe('BatchTxRequester', () => {
     it('marks peer dumb (without penalising) when validateRequestedBlockTxsConsistency rejects the response', async () => {
       const txCount = TX_BATCH_SIZE;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -1892,7 +1889,7 @@ describe('BatchTxRequester', () => {
     it('uses the txs from a peer that lacks the block (empty bitvector) and marks it dumb', async () => {
       const txCount = TX_BATCH_SIZE;
       const deadline = 5_000;
-      const missing = Array.from({ length: txCount }, () => TxHash.random());
+      const missing = times(txCount, () => TxHash.random());
 
       blockProposal = await makeBlockProposal({
         signer: Secp256k1Signer.random(),
@@ -2092,7 +2089,7 @@ describe('PeerCollection - Dynamic peer list', () => {
     const connectionSampler = mock<ConnectionSampler>();
     const dateProvider = new DateProvider();
 
-    const peers = await Promise.all(Array.from({ length: 6 }, () => createSecp256k1PeerId()));
+    const peers = await Promise.all(times(6, () => createSecp256k1PeerId()));
     const [peer1, peer2, peer3, peer4, peer5, peer6] = peers;
 
     // Start with 3 peers

@@ -213,6 +213,9 @@ export class PeerScoring {
    */
   private evictLeastRecentScoreIfOverCap(keep: string): void {
     while (this.scores.size > MAX_RETAINED_SCORED_PEERS) {
+      // LruMap would not fit: reads must not refresh recency, the peer just updated is never evicted, and the scores
+      // and lastUpdateTime maps are trimmed together.
+      // eslint-disable-next-line aztec-custom/prefer-bounded-collection
       const oldest = this.scores.keys().next().value;
       if (oldest === undefined || oldest === keep) {
         break;
@@ -229,6 +232,8 @@ export class PeerScoring {
    */
   private evictEarliestBanIfOverCap(keep: string): void {
     while (this.bannedPeers.size > MAX_RETAINED_BANS) {
+      // Insertion order is expiry order and the ban just added is never evicted, which LruMap cannot express.
+      // eslint-disable-next-line aztec-custom/prefer-bounded-collection
       const earliest = this.bannedPeers.keys().next().value;
       if (earliest === undefined || earliest === keep) {
         break;

@@ -1,6 +1,7 @@
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { OffchainEffectContract, type TestEvent } from '@aztec-labs/noir-test-contracts.js/OffchainEffect';
 import { jest } from '@jest/globals';
 
@@ -38,13 +39,11 @@ describe('automine/effects/offchain_effect', () => {
   // Sends emit_offchain_effects with 2 effects; asserts the returned offchainEffects array has
   // length 2, that effects are reversed (popped from BoundedVec end), and contractAddresses match.
   it('should return offchain effects from send', async () => {
-    const effects = Array(2)
-      .fill(null)
-      .map(() => ({
-        data: [Fr.random(), Fr.random(), Fr.random(), Fr.random(), Fr.random()],
-        // eslint-disable-next-line camelcase
-        next_contract: contract1.address,
-      }));
+    const effects = times(2, () => ({
+      data: [Fr.random(), Fr.random(), Fr.random(), Fr.random(), Fr.random()],
+      // eslint-disable-next-line camelcase
+      next_contract: contract1.address,
+    }));
 
     const { receipt, offchainEffects } = await contract1.methods
       .emit_offchain_effects(effects)
@@ -62,13 +61,11 @@ describe('automine/effects/offchain_effect', () => {
   // Proves emit_offchain_effects with 3 effects via proveInteraction; asserts that
   // provenTx.offchainEffects matches the expected reversed order with correct contractAddresses.
   it('should emit offchain effects', async () => {
-    const effects = Array(3)
-      .fill(null)
-      .map((_, i) => ({
-        data: [Fr.random(), Fr.random(), Fr.random(), Fr.random(), Fr.random()],
-        // eslint-disable-next-line camelcase
-        next_contract: i % 2 === 0 ? contract2.address : contract1.address,
-      }));
+    const effects = times(3, i => ({
+      data: [Fr.random(), Fr.random(), Fr.random(), Fr.random(), Fr.random()],
+      // eslint-disable-next-line camelcase
+      next_contract: i % 2 === 0 ? contract2.address : contract1.address,
+    }));
 
     const provenTx = await proveInteraction(wallet, contract1.methods.emit_offchain_effects(effects), {
       from: defaultAccountAddress,

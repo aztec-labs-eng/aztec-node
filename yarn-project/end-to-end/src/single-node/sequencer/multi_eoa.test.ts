@@ -7,9 +7,10 @@ import { EthCheatCodes } from '@aztec-labs/aztec/testing';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
-import { times } from '@aztec-labs/foundation/collection';
+import { times, unique } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { StatefulTestContract } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
 import type { SequencerClient } from '@aztec-labs/sequencer-client';
 import type { TestSequencerClient } from '@aztec-labs/sequencer-client/test';
@@ -37,7 +38,7 @@ const createPublisherKeysAndAddresses = () => {
     if (publisherPrivKey === null) {
       throw new Error('Failed to create private key');
     }
-    return { key: new SecretValue(`0x${publisherPrivKey!.toString('hex')}` as const), address: account.address as Hex };
+    return { key: new SecretValue(bufferToHex(publisherPrivKey!)), address: account.address as Hex };
   });
 };
 
@@ -150,7 +151,7 @@ describe('single-node/sequencer/multi_eoa', () => {
       logger.warn('Testing account rotation by blocking the first publisher attempted');
 
       // Get unique clients - they may or may not be the same object
-      const uniqueClients = [...new Set(l1Utils.map(u => u.client))];
+      const uniqueClients = unique(l1Utils.map(u => u.client));
       const originalSendRawTransactions = new Map(uniqueClients.map(client => [client, client.sendRawTransaction]));
 
       const mockSendRawTransaction = async function (this: ViemClient, arg: { serializedTransaction: `0x${string}` }) {
@@ -221,5 +222,5 @@ describe('single-node/sequencer/multi_eoa', () => {
 });
 
 function randomEthTxHash(): Hex {
-  return `0x${randomBytes(32).toString('hex')}`;
+  return bufferToHex(randomBytes(32));
 }

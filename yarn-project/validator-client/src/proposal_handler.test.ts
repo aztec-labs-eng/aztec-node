@@ -12,6 +12,7 @@ import {
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -376,7 +377,7 @@ describe('ProposalHandler checkpoint validation', () => {
       const overCap = MAX_BLOCKS_PER_CHECKPOINT + 1;
       mockLocalSlotBlocks(
         blockSource,
-        makeSlotBlocks(Array.from({ length: overCap }, (_, i) => (i === overCap - 1 ? archiveRoot : Fr.random()))),
+        makeSlotBlocks(times(overCap, i => (i === overCap - 1 ? archiveRoot : Fr.random()))),
       );
 
       const proposal = await makeProposal({ archiveRoot });
@@ -3136,9 +3137,9 @@ describe('ProposalHandler checkpoint validation', () => {
         });
         mockLocalView(undefined);
 
-        const startMs = Date.now();
+        const elapsedTimer = new Timer();
         const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
-        const elapsedMs = Date.now() - startMs;
+        const elapsedMs = elapsedTimer.ms();
 
         expect(result).toEqual(rejection('inbox_prefix_unavailable'));
         // The wait runs out the remaining budget and gives up within one retry interval of the deadline.
@@ -3222,9 +3223,9 @@ describe('ProposalHandler checkpoint validation', () => {
         const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { nowMs: BEFORE_DEADLINE_MS });
         mockLocalView(new Fr(0xdead));
 
-        const startMs = Date.now();
+        const elapsedTimer = new Timer();
         const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
-        const elapsedMs = Date.now() - startMs;
+        const elapsedMs = elapsedTimer.ms();
 
         expect(result).toEqual(rejection('inbox_prefix_mismatch'));
         expect(blockSource.syncImmediate).toHaveBeenCalled();

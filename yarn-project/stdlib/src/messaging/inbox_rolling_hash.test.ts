@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { accumulateInboxRollingHash, updateInboxRollingHash } from './inbox_rolling_hash.js';
@@ -5,8 +6,7 @@ import { accumulateInboxRollingHash, updateInboxRollingHash } from './inbox_roll
 describe('inbox rolling hash', () => {
   // Shared test vectors pinned against the noir `accumulate_inbox_rolling_hash` helper (FI-02). Any divergence here
   // means the L1 / noir / TS rolling hashes would disagree.
-  const range = (from: number, to: number) =>
-    Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => new Fr(from + i));
+  const range = (from: number, to: number) => times(Math.max(0, to - from + 1), i => new Fr(from + i));
 
   it('chains a single leaf from zero', () => {
     expect(accumulateInboxRollingHash(Fr.ZERO, [new Fr(11)])).toEqual(

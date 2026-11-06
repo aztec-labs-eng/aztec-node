@@ -1,5 +1,6 @@
 import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
@@ -75,7 +76,7 @@ describe('validateCheckpointStructure', () => {
     const checkpoint = await makeValidCheckpoint(1);
     // Reuse the single block to fill up the slots (the count check happens before archive chaining in loop)
     const block = checkpoint.blocks[0];
-    checkpoint.blocks = Array.from({ length: MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT + 1 }, (_, i) => {
+    checkpoint.blocks = times(MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT + 1, i => {
       const cloned = Object.create(Object.getPrototypeOf(block), Object.getOwnPropertyDescriptors(block));
       cloned.indexWithinCheckpoint = IndexWithinCheckpoint(i);
       return cloned;

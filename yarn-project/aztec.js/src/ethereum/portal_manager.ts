@@ -17,6 +17,7 @@ import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { SiblingPath } from '@aztec-labs/foundation/trees';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec-labs/stdlib/hash';
@@ -489,7 +490,7 @@ export class L1TokenPortalManager extends L1ToL2TokenPortalManager {
       BigInt(epochNumber),
       BigInt(numCheckpointsInEpoch),
       messageIndex,
-      siblingPath.toBufferArray().map((buf: Buffer): Hex => `0x${buf.toString('hex')}`),
+      siblingPath.toBufferArray().map((buf: Buffer): Hex => bufferToHex(buf)),
     ] as const;
     await this.portal.simulate.withdraw(withdrawArgs);
 

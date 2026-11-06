@@ -1,5 +1,6 @@
 import { MAX_CHECKPOINTS_PER_EPOCH, OUT_HASH_TREE_LEAF_COUNT } from '@aztec-labs/constants';
 import { type EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { SiblingPath, UnbalancedMerkleTreeCalculator, computeUnbalancedShaRoot } from '@aztec-labs/foundation/trees';
 import { Buffer } from 'buffer';
@@ -292,7 +293,7 @@ export function computeL2ToL1MembershipWitnessFromMessagesInEpoch(
   });
   // Pad to OUT_HASH_TREE_LEAF_COUNT with zeros.
   checkpointOutHashes = checkpointOutHashes.concat(
-    Array.from({ length: OUT_HASH_TREE_LEAF_COUNT - messagesInEpoch.length }, () => Buffer.alloc(32)),
+    times(OUT_HASH_TREE_LEAF_COUNT - messagesInEpoch.length, () => Buffer.alloc(32)),
   );
 
   // Build the epoch tree with all the checkpoint out hashes, including the padded zeros.

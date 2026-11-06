@@ -1,4 +1,5 @@
 import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { decodeCheckpointBlobDataFromBlobs, getBlobsPerL1Block } from './blob_utils.js';
@@ -32,7 +33,7 @@ describe('blob fields encoding', () => {
   });
 
   it('throws processing random blob data', async () => {
-    const blobFields = Array.from({ length: 10 }, () => Fr.random());
+    const blobFields = times(10, () => Fr.random());
     const blobs = await getBlobsPerL1Block(blobFields);
     expect(blobs.length).toBe(1);
 

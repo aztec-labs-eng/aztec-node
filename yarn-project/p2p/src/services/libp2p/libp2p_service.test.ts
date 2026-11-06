@@ -1633,10 +1633,7 @@ describe('LibP2PService', () => {
 
       // Resolves once the checkpoint attestation callback runs; if it were serialized behind the hung block
       // processing this would never resolve and the test would time out.
-      let signalCheckpoint!: () => void;
-      const checkpointInvoked = new Promise<void>(resolve => {
-        signalCheckpoint = resolve;
-      });
+      const { promise: checkpointInvoked, resolve: signalCheckpoint } = promiseWithResolvers<void>();
       validatorCheckpointReceivedCallback.mockImplementation(() => {
         signalCheckpoint();
         return Promise.resolve([]);
@@ -1660,10 +1657,7 @@ describe('LibP2PService', () => {
       // Block processing hangs until released and signals when it starts; with validation enabled the
       // checkpoint callback must wait for the block to finish.
       let releaseBlock!: () => void;
-      let signalBlockStarted!: () => void;
-      const blockStarted = new Promise<void>(resolve => {
-        signalBlockStarted = resolve;
-      });
+      const { promise: blockStarted, resolve: signalBlockStarted } = promiseWithResolvers<void>();
       blockReceivedCallback.mockImplementation(() => {
         signalBlockStarted();
         return new Promise<boolean>(resolve => {

@@ -145,7 +145,7 @@ describe('SequencerPublisher', () => {
     header = CheckpointHeader.random();
     archive = l2Block.archive.root.toBuffer();
 
-    proposeTxHash = `0x${Buffer.from('txHashPropose').toString('hex')}`; // random tx hash
+    proposeTxHash = bufferToHex(Buffer.from('txHashPropose')); // random tx hash
 
     proposeTxReceipt = {
       blockNumber: 1n,

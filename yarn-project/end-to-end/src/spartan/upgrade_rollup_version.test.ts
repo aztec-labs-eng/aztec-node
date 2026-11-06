@@ -10,6 +10,8 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import fs from 'fs';
@@ -142,7 +144,7 @@ describe('spartan_upgrade_rollup_version', () => {
     if (!hdKey.privateKey) {
       throw new Error('Failed to derive private key from mnemonic');
     }
-    const privateKey: Hex = `0x${Buffer.from(hdKey.privateKey).toString('hex')}`;
+    const privateKey: Hex = bufferToHex(Buffer.from(hdKey.privateKey));
 
     const l1Client = createExtendedL1Client(ETHEREUM_HOSTS, MNEMONIC, chain.chainInfo);
     debugLogger.info(`L1 Client address: ${l1Client.account.address}`);
@@ -474,9 +476,9 @@ describe('spartan_upgrade_rollup_version', () => {
 
     // Use the proposal id returned by submitRoundWinner
     const maxGovernanceWaitMs = 20 * 60 * 1000; // 20 minutes safety window
-    const startWait = Date.now();
+    const waitTimer = new Timer();
     // Loop trying execute; ignore failures until timeout
-    while (Date.now() - startWait < maxGovernanceWaitMs) {
+    while (waitTimer.ms() < maxGovernanceWaitMs) {
       try {
         const data = encodeFunctionData({ abi: GovernanceAbi, functionName: 'execute', args: [proposalId] });
         const { receipt } = await l1TxUtils.sendAndMonitorTransaction({ to: governance.address, data });

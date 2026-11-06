@@ -1,6 +1,6 @@
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import { omit } from '@aztec-labs/foundation/collection';
+import { omit, unique } from '@aztec-labs/foundation/collection';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { BlockTag } from '@aztec-labs/stdlib/block';
 import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
@@ -86,9 +86,7 @@ export class BotRunner implements BotRunnerApi, Traceable {
   public async stop() {
     await this.#stopBot();
     await this.store.close();
-    await Promise.all(
-      [...new Set([this.wallet, this.inboxWallets.public, this.inboxWallets.private])].map(w => w.stop()),
-    );
+    await Promise.all(unique([this.wallet, this.inboxWallets.public, this.inboxWallets.private]).map(w => w.stop()));
     this.log.info(`Stopped bot`);
   }
 

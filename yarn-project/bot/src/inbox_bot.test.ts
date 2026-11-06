@@ -17,6 +17,7 @@ import {
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
+import { times, unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -325,7 +326,7 @@ class FakeChain {
   public async insert(message: InboxMessageRecord): Promise<FakeBlock> {
     this.observe(message);
     const index = BigInt(message.globalLeafIndex!);
-    const path = Array.from({ length: MESSAGE_TREE_HEIGHT }, (_, i) => new Fr(BigInt(i + 1)).toBuffer());
+    const path = times(MESSAGE_TREE_HEIGHT, i => new Fr(BigInt(i + 1)).toBuffer());
     this.witnesses.set(message.msgHash!, { index, path });
     const root = Fr.fromBuffer(
       await computeRootFromSiblingPath(
@@ -1044,7 +1045,7 @@ describe('InboxBot', () => {
       const batchId = (await store.getSchedule())!.inFlightBatchId!;
       const messages = await store.getBatchMessages(batchId);
       // 257 messages fill the bucket they opened and roll it over exactly once.
-      const seqs = [...new Set(messages.map(m => m.bucketSeq))];
+      const seqs = unique(messages.map(m => m.bucketSeq));
       expect(seqs.length).toEqual(2);
       expect((await store.getBatch(batchId))!.bucketProbedAt).toBeDefined();
     });
@@ -1272,7 +1273,7 @@ describe('InboxBot', () => {
       await chain.insert(message);
       chain.witnesses.set(message.msgHash!, {
         index: BigInt(message.globalLeafIndex!),
-        path: Array.from({ length: 36 }, () => Fr.random().toBuffer()),
+        path: times(36, () => Fr.random().toBuffer()),
       });
 
       await consume(bot);

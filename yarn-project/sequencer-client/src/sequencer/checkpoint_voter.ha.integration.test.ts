@@ -16,6 +16,7 @@ import type {
 import { Multicall3 } from '@aztec-labs/ethereum/contracts';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Hex } from '@aztec-labs/foundation/string';
@@ -172,7 +173,7 @@ describe('CheckpointVoter HA Integration', () => {
     await pglite.query(INSERT_SCHEMA_VERSION, [SCHEMA_VERSION]);
 
     // Generate validator keys - using 5 validators
-    validatorPrivateKeys = Array.from({ length: 5 }, () => generatePrivateKey());
+    validatorPrivateKeys = times(5, () => generatePrivateKey());
     validatorAccounts = validatorPrivateKeys.map(privateKey => privateKeyToAccount(privateKey));
 
     // Set up spy for Multicall3.forward to track L1 transaction sending
@@ -392,7 +393,7 @@ describe('CheckpointVoter HA Integration', () => {
 
       // Create 5 checkpoint voters for the same slot
       const voters = await Promise.all(
-        Array.from({ length: 5 }, (_, i) =>
+        times(5, i =>
           createHACheckpointVoter(slot, {
             nodeId: `ha-node-${i + 1}`,
             governanceProposerPayload: governancePayload,
@@ -431,7 +432,7 @@ describe('CheckpointVoter HA Integration', () => {
       const governancePayload = EthAddress.random();
 
       // Create 5 checkpoint voters for different slots
-      const slots = Array.from({ length: 5 }, (_, i) => SlotNumber(100 + i));
+      const slots = times(5, i => SlotNumber(100 + i));
       const voters = await Promise.all(
         slots.map((slot, i) =>
           createHACheckpointVoter(slot, {
@@ -478,9 +479,7 @@ describe('CheckpointVoter HA Integration', () => {
 
       // Create 5 checkpoint voters with slashing actions using the helper
       const voters = await Promise.all(
-        Array.from({ length: 5 }, (_, i) =>
-          createHACheckpointVoterWithSlasher(slot, { nodeId: `ha-node-${i + 1}` }, mockSlashingActions),
-        ),
+        times(5, i => createHACheckpointVoterWithSlasher(slot, { nodeId: `ha-node-${i + 1}` }, mockSlashingActions)),
       );
 
       // All 5 voters try to enqueue slashing votes simultaneously
@@ -517,7 +516,7 @@ describe('CheckpointVoter HA Integration', () => {
       ];
 
       // Create 5 checkpoint voters for different slots with slashing actions
-      const slots = Array.from({ length: 5 }, (_, i) => SlotNumber(200 + i));
+      const slots = times(5, i => SlotNumber(200 + i));
       const voters = await Promise.all(
         slots.map((slot, i) =>
           createHACheckpointVoterWithSlasher(slot, { nodeId: `ha-node-${i + 1}` }, mockSlashingActions),
@@ -559,7 +558,7 @@ describe('CheckpointVoter HA Integration', () => {
 
       // Create 5 checkpoint voters that will vote on both governance and slashing
       const voters = await Promise.all(
-        Array.from({ length: 5 }, (_, i) =>
+        times(5, i =>
           createHACheckpointVoterWithSlasher(
             slot,
             {
@@ -768,7 +767,7 @@ describe('CheckpointVoter HA Integration', () => {
 
       // Create 3 voters
       const voters = await Promise.all(
-        Array.from({ length: 3 }, (_, i) =>
+        times(3, i =>
           createHACheckpointVoter(slot, {
             nodeId: `ha-node-${i + 1}`,
             governanceProposerPayload: governancePayload,

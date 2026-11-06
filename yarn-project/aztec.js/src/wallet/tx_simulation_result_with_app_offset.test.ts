@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import { NestedProcessReturnValues, PrivateExecutionResult } from '@aztec-labs/stdlib/tx';
@@ -14,10 +15,7 @@ import { TxSimulationResultWithAppOffset } from './tx_simulation_result_with_app
  */
 function buildReturnValues(feeCallCount: number, appCallCount: number): NestedProcessReturnValues {
   const makeLeaf = (tag: number) => new NestedProcessReturnValues([new Fr(tag)]);
-  const nested = [
-    ...Array.from({ length: feeCallCount }, (_, i) => makeLeaf(100 + i)),
-    ...Array.from({ length: appCallCount }, (_, i) => makeLeaf(200 + i)),
-  ];
+  const nested = [...times(feeCallCount, i => makeLeaf(100 + i)), ...times(appCallCount, i => makeLeaf(200 + i))];
   return new NestedProcessReturnValues([new Fr(0)], nested);
 }
 

@@ -9,7 +9,7 @@ import {
   randomL1ContractAddresses,
 } from '@aztec-labs/ethereum/l1-contract-addresses';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { times } from '@aztec-labs/foundation/collection';
+import { sum, times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 // import { createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -146,7 +146,7 @@ function getProofCounts(
     throw new Error('Number of blocks per checkpoint must be greater than 0');
   }
 
-  const counts = Array.from({ length: PROOF_TYPES_IN_PRIORITY_ORDER.length }, () => 0);
+  const counts = times(PROOF_TYPES_IN_PRIORITY_ORDER.length, () => 0);
   const priorityIndex = (type: ProvingRequestType) => PROOF_TYPES_IN_PRIORITY_ORDER.indexOf(type);
 
   counts[priorityIndex(ProvingRequestType.ROOT_ROLLUP)] = 1;
@@ -487,7 +487,7 @@ describe('Proving Broker: Benchmarks', () => {
     const percentiles = calculatePercentiles(enqueueLatencies);
 
     return {
-      avgEnqueueLatency: enqueueLatencies.reduce((a, b) => a + b, 0) / enqueueLatencies.length,
+      avgEnqueueLatency: sum(enqueueLatencies) / enqueueLatencies.length,
       medianEnqueueLatency: percentiles.median,
       p90EnqueueLatency: percentiles.p90,
       p95EnqueueLatency: percentiles.p95,
@@ -519,7 +519,7 @@ describe('Proving Broker: Benchmarks', () => {
     const startTime = timer.ms();
 
     // Create concurrent agent simulators
-    const agentPromises = Array.from({ length: agentCount }, async (_, agentId) => {
+    const agentPromises = times(agentCount, async agentId => {
       const agentLatencies: number[] = [];
       let agentJobCount = 0;
 
@@ -553,8 +553,7 @@ describe('Proving Broker: Benchmarks', () => {
     const percentiles = calculatePercentiles(dequeueLatencies);
 
     return {
-      avgDequeueLatency:
-        dequeueLatencies.length > 0 ? dequeueLatencies.reduce((a, b) => a + b, 0) / dequeueLatencies.length : 0,
+      avgDequeueLatency: dequeueLatencies.length > 0 ? sum(dequeueLatencies) / dequeueLatencies.length : 0,
       medianDequeueLatency: percentiles.median,
       p90DequeueLatency: percentiles.p90,
       p95DequeueLatency: percentiles.p95,
@@ -671,7 +670,7 @@ describe('Proving Broker: Benchmarks', () => {
       expect(results.avgEnqueueLatency).toBeGreaterThan(0);
 
       // Verify total jobs enqueued matches expected count
-      const expectedJobs = proofCounts.reduce((sum, count) => sum + count, 0);
+      const expectedJobs = sum(proofCounts);
       expect(results.totalJobs).toBe(expectedJobs);
 
       // Verify that the broker has the correct number of jobs in its queues
@@ -705,7 +704,7 @@ describe('Proving Broker: Benchmarks', () => {
       expect(results.jobsPerSecond).toBeGreaterThan(0);
 
       // Verify total jobs dequeued matches expected count
-      const expectedJobs = proofCounts.reduce((sum, count) => sum + count, 0);
+      const expectedJobs = sum(proofCounts);
       expect(results.totalJobs).toBe(expectedJobs);
     },
   );
@@ -732,7 +731,7 @@ describe('Proving Broker: Benchmarks', () => {
       expect(results.jobsPerSecond).toBeGreaterThan(0);
 
       // Verify total jobs dequeued matches expected count
-      const expectedJobs = proofCounts.reduce((sum, count) => sum + count, 0);
+      const expectedJobs = sum(proofCounts);
       expect(results.jobsRemovedByCleanup).toBe(expectedJobs);
     },
   );
