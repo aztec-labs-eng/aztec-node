@@ -72,7 +72,10 @@ export class TxProvider implements ITxProvider {
   }
 
   /** Gathers txs from the tx pool, remote rpc nodes, and reqresp. */
-  public getTxsForBlock(block: L2Block, opts: { deadline: Date }): Promise<{ txs: Tx[]; missingTxs: TxHash[] }> {
+  public getTxsForBlock(
+    block: L2Block,
+    opts: { deadline: Date; signal?: AbortSignal },
+  ): Promise<{ txs: Tx[]; missingTxs: TxHash[] }> {
     return this.getOrderedTxsFromAllSources(
       { type: 'block', block },
       block.toBlockInfo(),
@@ -85,7 +88,7 @@ export class TxProvider implements ITxProvider {
     request: FastCollectionRequestInput,
     blockInfo: L2BlockInfo,
     txHashes: TxHash[],
-    opts: { pinnedPeer: PeerId | undefined; deadline: Date },
+    opts: { pinnedPeer: PeerId | undefined; deadline: Date; signal?: AbortSignal },
   ) {
     const [durationMs, result] = await elapsed(() => this.getTxsFromAllSources(request, blockInfo, txHashes, opts));
     const { missingTxHashes, txsFromMempool, txsFromNetwork, txsFromProposal } = result;
@@ -93,13 +96,15 @@ export class TxProvider implements ITxProvider {
     const txs = [...(txsFromMempool ?? []), ...(txsFromProposal ?? []), ...(txsFromNetwork ?? [])];
     const missingTxs = missingTxHashes?.length ?? 0;
 
-    const level = missingTxs === 0 ? 'verbose' : 'warn';
+    // A caller that aborts the collection no longer needs the missing txs, so falling short is not a problem.
+    const level = missingTxs === 0 || opts.signal?.aborted ? 'verbose' : 'warn';
     this.log[level](`Retrieved ${txs.length} out of ${blockInfo.txCount} txs for ${request.type}`, {
       ...blockInfo,
       txsFromProposal: txsFromProposal?.length,
       txsFromMempool: txsFromMempool?.length,
       txsFromNetwork: txsFromNetwork?.length,
       missingTxs,
+      aborted: opts.signal?.aborted,
       durationMs,
     });
 
@@ -122,7 +127,7 @@ export class TxProvider implements ITxProvider {
     request: FastCollectionRequestInput,
     blockInfo: L2BlockInfo,
     txHashes: TxHash[],
-    opts: { pinnedPeer: PeerId | undefined; deadline: Date },
+    opts: { pinnedPeer: PeerId | undefined; deadline: Date; signal?: AbortSignal },
   ) {
     const missingTxHashes = new Set(txHashes.map(txHash => txHash.toString()));
     if (missingTxHashes.size === 0) {
@@ -199,7 +204,8 @@ export class TxProvider implements ITxProvider {
       );
     }
 
-    if (missingTxHashes.size > 0) {
+    // Txs left over after the caller aborted were never sought to the end, so they are not retrieval failures.
+    if (missingTxHashes.size > 0 && !opts.signal?.aborted) {
       this.instrumentation.incMissingTxs(missingTxHashes.size);
     }
 
@@ -214,7 +220,7 @@ export class TxProvider implements ITxProvider {
   private async collectFromP2P(
     input: FastCollectionRequestInput,
     txHashes: TxHash[] | string[],
-    opts: { deadline: Date; pinnedPeer?: PeerId },
+    opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
   ): Promise<Tx[]> {
     const requestedAt = Date.now();
     const result = await this.txCollection.collectFastFor(input, txHashes, opts);
