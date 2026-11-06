@@ -153,11 +153,14 @@ describe('TxProvider', () => {
         }),
     );
     const abortController = new AbortController();
+    const incMissingTxsSpy = jest.spyOn(txProvider.instrumentation, 'incMissingTxs');
 
     const resultPromise = txProvider.getTxsForBlock(block, { deadline: opts.deadline, signal: abortController.signal });
     abortController.abort();
 
     await checkResults(await resultPromise, { txs: [], missingTxs: hashes });
+    // The txs were not sought to the end, so they are not retrieval failures.
+    expect(incMissingTxsSpy).not.toHaveBeenCalled();
   });
 
   it('still reports a tx as missing when the final pool re-check does not find it', async () => {

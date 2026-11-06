@@ -38,7 +38,7 @@ A proof that lands while its epoch is still open, such as an early-withdrawal pa
 
 Prover nodes now prove such an epoch in full while L1 holds no full-epoch proof of it from their prover id, and catch-up after a restart no longer skips it. Expect extra proving work and an extra proof submission for each epoch covered this way. A node with `PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` set still proves only the epochs requested through `startProof`.
 
-Stopping a prover node no longer waits for its checkpoints' tx gathering to finish, which could take up to `PROVER_NODE_TX_GATHERING_TIMEOUT_MS`. A gather cut short by a stop or a prune logs `Retrieved N out of M txs for block` at `verbose` with `aborted: true` instead of at `warn`, and its missing txs no longer count toward `aztec.tx_collector.missing_txs_count`.
+Stopping a prover node no longer waits out its checkpoints' tx gathering, which could take up to `PROVER_NODE_TX_GATHERING_TIMEOUT_MS`: a stop cancels the gathering's retries and waits between them. A request already sent to a tx source still has to settle first, so a stalled node RPC can still delay the stop. A gather cut short by a stop or a prune logs `Retrieved N out of M txs for block` at `verbose` with `aborted: true` instead of at `warn`, and its missing txs no longer count toward `aztec.tx_collector.missing_txs_count`.
 
 **Migration**: none.
 
