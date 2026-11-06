@@ -48,6 +48,8 @@ TX_PUBLIC_SETUP_ALLOWLIST=I:0x1234…:0xabcd1234:os+cl=4+l2=40000+da=64
 
 The node RPC method `aztec_getAllowedPublicSetup` returns the new `minGas` field on the entries that set it.
 
+A peer that gossips a tx failing any setup allow list check, old or new, now gets the high-tolerance penalty instead of the mid-tolerance one. The allow list is local configuration, so peers running an older version or a different allow list relay such txs honestly, and are no longer disconnected or banned for it.
+
 Only allow list functions that cannot revert for any calldata their entry allows. A failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.
 
 **Migration**: none for existing allow list strings, which parse as before. A custom entry that targets a `#[view]` function, which only works when called statically, no longer admits any tx: remove it. Older nodes reject the `l2=` and `da=` flags with an `unknown flag` error when they read their config, so do not put them in a network config shared with nodes that have not upgraded.
