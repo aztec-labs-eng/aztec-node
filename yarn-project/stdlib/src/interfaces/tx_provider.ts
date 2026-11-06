@@ -23,8 +23,9 @@ export interface ITxProvider {
   ): Promise<{ txs: Tx[]; missingTxs: TxHash[] }>;
 
   /**
-   * Collects the txs for a mined block from the tx pool and the network until `deadline`. Aborting `signal` stops the
-   * network collection early; txs not found by then are reported as missing.
+   * Collects the txs for a mined block from the tx pool and the network until `deadline`. Aborting `signal` stops new
+   * network attempts early (a request already sent to a source still has to settle); txs not found by then are reported
+   * as missing.
    */
   getTxsForBlock(
     block: L2Block,

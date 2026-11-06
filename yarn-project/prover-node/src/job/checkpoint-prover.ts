@@ -254,7 +254,7 @@ export class CheckpointProver {
 
   /**
    * Fetches every tx in this checkpoint from the tx pool (by hash, via the block tx effects). Aborting `signal` stops
-   * the fetch early; txs not found by then are reported as missing.
+   * the fetch's retries early; txs not found by then are reported as missing.
    */
   private async fetchTxs(signal?: AbortSignal): Promise<{ txs: Map<string, Tx>; missingTxs: TxHash[] }> {
     const deadline = new Date(this.deps.dateProvider.now() + this.deps.txGatheringTimeoutMs);
@@ -266,7 +266,10 @@ export class CheckpointProver {
     return { txs: new Map<string, Tx>(txs.map(tx => [tx.getTxHash().toString(), tx])), missingTxs };
   }
 
-  /** Fetches the txs to prove. Cancelling the prover stops the fetch, so a stop does not wait out the gathering timeout. */
+  /**
+   * Fetches the txs to prove. Cancelling the prover stops the fetch's retries, so a stop does not wait out the gathering
+   * timeout.
+   */
   private async gatherTxs(): Promise<Map<string, Tx>> {
     const { txs, missingTxs } = await this.fetchTxs(this.abortController.signal);
     if (missingTxs.length > 0) {

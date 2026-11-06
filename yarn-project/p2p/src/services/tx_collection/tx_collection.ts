@@ -150,8 +150,8 @@ export class TxCollection {
   }
 
   /**
-   * Collects the set of txs for the given proposal or block as fast as possible, until `deadline` or until `signal`
-   * aborts.
+   * Collects the set of txs for the given proposal or block as fast as possible. Reaching `deadline` or aborting
+   * `signal` stops new attempts; a request already sent to a source still has to settle before this returns.
    */
   public async collectFastFor(
     input: FastCollectionRequestInput,
