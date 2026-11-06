@@ -5,7 +5,7 @@ import { sha512, sha512ToGrumpkinScalar } from '@aztec-labs/foundation/crypto/sh
 import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
-import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem';
+import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem.js';
 import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';

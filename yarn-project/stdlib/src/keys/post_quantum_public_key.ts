@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem';
+import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem.js';
 import { Buffer } from 'buffer';
 
 import { bufferFromFieldChunks, bufferToFieldChunks } from '../abi/buffer.js';
@@ -16,7 +16,7 @@ import { bufferFromFieldChunks, bufferToFieldChunks } from '../abi/buffer.js';
  */
 export class PostQuantumPublicKey {
   /** Byte length of an ML-KEM-768 public key. */
-  static readonly SIZE_IN_BYTES = mlKem768.publicKeyLen;
+  static readonly SIZE_IN_BYTES = mlKem768.lengths.publicKey!;
   /** Length of the {@link PostQuantumPublicKey.toFields} encoding: one field per 31-byte chunk of the key. */
   static readonly SIZE_IN_FIELDS = Math.ceil(PostQuantumPublicKey.SIZE_IN_BYTES / (Fr.SIZE_IN_BYTES - 1));
 

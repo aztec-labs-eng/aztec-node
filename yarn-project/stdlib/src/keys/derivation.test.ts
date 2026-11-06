@@ -2,7 +2,7 @@ import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
-import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem';
+import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem.js';
 import { Buffer } from 'buffer';
 
 import { computeAddress, computePreaddress, derivePostQuantumKeyPair } from './derivation.js';
