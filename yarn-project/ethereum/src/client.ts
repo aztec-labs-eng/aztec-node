@@ -11,6 +11,7 @@ import {
   type LocalAccount,
   type PrivateKeyAccount,
   RpcRequestError,
+  TimeoutError,
   createPublicClient,
   createWalletClient,
   fallback,
@@ -19,6 +20,7 @@ import {
   http,
   isHex,
   publicActions,
+  shouldThrow,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -138,7 +140,7 @@ export type L1HttpTransportOptions = {
  */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOptions): L1HttpTransport {
   const transports = rpcUrls.map(url => makeL1UrlTransport(url, opts?.timeout));
-  const configured = fallback(transports);
+  const configured = makeL1Fallback(transports);
   if (!opts?.grader || transports.length < 2) {
     return wrapL1RpcTransport(configured);
   }
@@ -170,7 +172,7 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
       chainId,
       logger,
       onOrderChange: order =>
-        (current = order.length > 0 ? fallback(order.map(index => transports[index])) : undefined),
+        (current = order.length > 0 ? makeL1Fallback(order.map(index => transports[index])) : undefined),
     },
   );
   grader.start();
@@ -194,6 +196,15 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
   return Object.assign(wrapL1RpcTransport(graded), { grader });
 }
 
+/**
+ * Creates a fallback over the given per-URL transports. Besides the errors viem's fallback stops at, it stops at a node
+ * that already holds a sent tx: that answer is conclusive, and a later URL failing the send for another reason would
+ * otherwise hide it.
+ */
+function makeL1Fallback(transports: HttpTransport[]): FallbackTransport<HttpTransport[]> {
+  return fallback(transports, { shouldThrow: err => shouldThrow(err) || isAlreadyKnownTxError(err) });
+}
+
 /** Creates the transport for a single L1 RPC URL, as used inside the fallback and by the grader's probes. */
 function makeL1UrlTransport(url: string, timeout: number | undefined): HttpTransport {
   // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
@@ -213,6 +224,47 @@ export function isL1RpcHttpStatus(err: unknown, status: number): boolean {
 /** Returns the JSON-RPC error code reported by the L1 node, if the error's cause chain carries one. */
 export function getL1RpcErrorCode(err: unknown): number | undefined {
   return getErrorCause(err, RpcRequestError)?.code;
+}
+
+/** JSON-RPC codes providers answer with when they rate-limit a caller: 429, -32005 (limit exceeded) and -32007. */
+const RATE_LIMIT_RPC_ERROR_CODES = new Set([429, -32005, -32007]);
+
+/**
+ * Returns whether an L1 RPC request failed without a definitive answer from the node, so that sending it again may
+ * succeed: a timeout, a network failure, an HTTP 408, 429 or 5xx, or a JSON-RPC rate limit. This is the subset of what
+ * viem retries that applies to a request whose caller turned viem's retries off.
+ */
+export function isTransientL1RpcError(err: unknown): boolean {
+  if (getErrorCause(err, TimeoutError)) {
+    return true;
+  }
+  const code = getL1RpcErrorCode(err);
+  if (code !== undefined) {
+    return RATE_LIMIT_RPC_ERROR_CODES.has(code);
+  }
+  const httpError = getErrorCause(err, HttpRequestError);
+  if (!httpError) {
+    return false;
+  }
+  const status = httpError.status;
+  return status === undefined || status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Messages L1 execution clients return from `eth_sendRawTransaction` when their pool already holds the exact tx sent:
+ * geth, reth and nethermind say "already known", erigon "ALREADY_EXISTS: already known", besu "Known transaction",
+ * and anvil "transaction already imported". The word boundary keeps "unknown transaction" from matching.
+ */
+const ALREADY_KNOWN_TX_PATTERN = /already known|\bknown transaction\b|already imported/i;
+
+/**
+ * Returns whether a send failed because the node already holds this exact tx, which happens when a tx is sent again
+ * after a node accepted it but its reply was lost. A "nonce too low" error does not match: it can mean that a different
+ * tx took the nonce.
+ */
+export function isAlreadyKnownTxError(err: unknown): boolean {
+  const message = getErrorCause(err, RpcRequestError)?.details;
+  return message !== undefined && ALREADY_KNOWN_TX_PATTERN.test(message);
 }
 
 function wrapL1RpcTransport(transport: FallbackTransport<HttpTransport[]>): FallbackTransport<HttpTransport[]> {

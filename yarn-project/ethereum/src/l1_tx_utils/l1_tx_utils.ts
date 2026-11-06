@@ -7,7 +7,7 @@ import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Semaphore } from '@aztec-labs/foundation/queue';
-import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
+import { NoRetryError, makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
@@ -24,7 +24,8 @@ import {
   formatGwei,
 } from 'viem';
 
-import { serializeSignedTransaction } from '../blob_tx.js';
+import { computeSignedTransactionHash, serializeSignedTransaction } from '../blob_tx.js';
+import { isAlreadyKnownTxError, isTransientL1RpcError } from '../client.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
@@ -47,6 +48,9 @@ import {
 import { summarizeTransactionReceipt } from './utils.js';
 
 const MAX_L1_TX_STATES = 32;
+
+/** Delays in seconds before each retry of a raw tx send that failed without a definitive answer from the L1 node. */
+const SEND_RETRY_BACKOFF_S = [0.15, 0.3, 0.6];
 
 // Backoff (in seconds) for retrying the read-only RPC calls that prepare a tx cancellation. A
 // cancellation is fired in the background after a tx times out and is important (it frees the stuck
@@ -277,6 +281,55 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     return await this.signTransaction(txRequest as TransactionSerializable);
   }
 
+  /**
+   * Broadcasts a signed tx and returns its hash, computed from the signed tx since a node that already holds the tx
+   * answers with an error instead of the hash. That answer counts as a successful send. A node that answers with a hash
+   * other than the computed one fails the send.
+   */
+  private async sendSignedTransaction(serializedTransaction: Hex, nonce: number): Promise<Hex> {
+    const txHash = computeSignedTransactionHash(serializedTransaction);
+    const account = this.getSenderAddress().toString();
+    let rpcHash: Hex;
+    try {
+      rpcHash = await this.sendRawTransaction(serializedTransaction, txHash);
+    } catch (err) {
+      if (isAlreadyKnownTxError(err)) {
+        this.logger.info(`L1 node already knows tx ${txHash}, treating it as sent`, { txHash, nonce, account });
+        return txHash;
+      }
+      throw err;
+    }
+    if (rpcHash.toLowerCase() !== txHash.toLowerCase()) {
+      throw new Error(`L1 node returned hash ${rpcHash} for tx ${txHash} with nonce ${nonce} from ${account}`);
+    }
+    return txHash;
+  }
+
+  /**
+   * Sends a raw tx, and sends it again a few times if a failure leaves no definitive answer from the node, such as a
+   * timeout or a rate limit. viem does not retry sends, and sending the same signed tx again is safe: a node that got
+   * the first attempt answers "already known".
+   */
+  private async sendRawTransaction(serializedTransaction: Hex, txHash: Hex): Promise<Hex> {
+    try {
+      return await retry(
+        async () => {
+          try {
+            return await this.client.sendRawTransaction({ serializedTransaction });
+          } catch (err) {
+            throw isTransientL1RpcError(err) ? err : new NoRetryError('L1 tx send failed', { cause: err });
+          }
+        },
+        `Sending L1 tx ${txHash}`,
+        makeBackoff(SEND_RETRY_BACKOFF_S),
+        this.logger,
+        true,
+      );
+    } catch (err) {
+      throw err instanceof NoRetryError ? err.cause : err;
+    }
+  }
+
   private async checkInterruptedOrTimedOut(gasConfig: Pick<L1TxConfig, 'txTimeoutAt'>): Promise<Date> {
     if (this.interrupted) {
       throw new InterruptError(`Transaction sending is interrupted`);
@@ -341,7 +394,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
         const txData = this.makeTxData(baseState, { isCancelTx: false });
 
         const signedRequest = await this.prepareSignedTransaction(txData);
-        txHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+        txHash = await this.sendSignedTransaction(signedRequest, nonce);
         this.lastSentNonce = nonce;
       } finally {
         this.sendMutex.release();
@@ -602,7 +655,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
           const txData = this.makeTxData(state, { isCancelTx });
 
           const signedRequest = await this.prepareSignedTransaction(txData);
-          const newHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+          const newHash = await this.sendSignedTransaction(signedRequest, nonce);
 
           this.logger.verbose(
             `Sent L1 speed-up tx ${newHash} replacing ${currentTxHash} for nonce ${nonce} from ${account}`,
@@ -874,7 +927,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
     const txData = this.makeTxData(state, { isCancelTx: true });
     const signedRequest = await this.prepareSignedTransaction(txData);
-    const cancelTxHash = await this.client.sendRawTransaction({ serializedTransaction: signedRequest });
+    const cancelTxHash = await this.sendSignedTransaction(signedRequest, nonce);
 
     state.cancelTxHashes.push(cancelTxHash);
     await this.updateState(state, TxUtilsState.CANCELLED);
