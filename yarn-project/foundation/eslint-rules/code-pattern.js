@@ -95,7 +95,7 @@ function parseExpression(code) {
  * Parses a pattern and preferred expression once, recording bindings and replacement holes.
  * `$name` captures a node; `$_` ignores one node and `...$_` ignores trailing call arguments.
  * @param {string} invalid
- * @param {string} preferred
+ * @param {string} [preferred]
  * @param {boolean} ignoreReturnValues
  */
 export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
@@ -115,7 +115,7 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
       }
     }
   }
-  const replacement = parseExpression(preferred);
+  const replacement = preferred === undefined ? undefined : parseExpression(preferred);
   /** @type {{ name: string, start: number, end: number }[]} */
   const holes = [];
   function visit(node) {
@@ -125,7 +125,7 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
     if (node.type === 'Identifier' && isPlaceholder(node)) {
       holes.push({ name: node.name, start: node.range[0] - 1, end: node.range[1] - 1 });
     }
-    for (const key of replacement.visitorKeys[node.type] ?? []) {
+    for (const key of replacement?.visitorKeys[node.type] ?? []) {
       const child = node[key];
       if (Array.isArray(child)) {
         child.forEach(visit);
@@ -134,9 +134,18 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
       }
     }
   }
-  visit(replacement.expression);
+  if (replacement) {
+    visit(replacement.expression);
+  }
   holes.sort((a, b) => b.start - a.start);
-  return { root: parsed.expression, symbols, references, preferred, holes, ignoreReturnValues };
+  return {
+    root: parsed.expression,
+    symbols,
+    references,
+    preferred: preferred ?? '',
+    holes,
+    ignoreReturnValues,
+  };
 }
 
 /**
