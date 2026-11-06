@@ -11,8 +11,8 @@ let defaultAllowedSetupFunctions: AllowedElement[] | undefined;
 /**
  * Returns the default list of functions allowed to run in the setup phase of a transaction.
  *
- * Each entry's `minGas` is the gas the call consumes in setup, which does not depend on its arguments or on storage
- * state. `allowed_public_setup.test.ts` measures it by running each call through the public processor.
+ * Each entry's `minGas` is the gas the call consumes in setup, which does not depend on its arguments.
+ * `allowed_public_setup.test.ts` measures it by running each call through the public processor.
  */
 export async function getDefaultAllowedSetupFunctions(): Promise<AllowedElement[]> {
   if (defaultAllowedSetupFunctions === undefined) {
