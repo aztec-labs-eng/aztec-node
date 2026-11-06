@@ -59,6 +59,7 @@ import { getCoordinationSignatureTypedData, orderAttestations, trimAttestations 
 import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import type { L2BlockBuiltStats } from '@aztec-labs/stdlib/stats';
 import type { ProposerTimetable, SubslotSelection } from '@aztec-labs/stdlib/timetable';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type FailedTx, Tx } from '@aztec-labs/stdlib/tx';
 import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
 import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
@@ -1248,6 +1249,17 @@ export class CheckpointProposalJob implements Traceable {
         return undefined;
       }
 
+      if (this.config.claimParentArchiveRoot) {
+        this.log.warn(`Claiming the parent's archive root for checkpoint ${this.checkpointNumber} (testing only)`, {
+          checkpointNumber: this.checkpointNumber,
+          slot: this.targetSlot,
+        });
+        checkpoint.archive = new AppendOnlyTreeSnapshot(
+          checkpoint.header.lastArchiveRoot,
+          checkpoint.archive.nextAvailableLeafIndex,
+        );
+      }
+
       // Create the checkpoint proposal and broadcast it
       const proposal = await this.validatorClient.createCheckpointProposal(
         checkpoint.header,
@@ -1263,6 +1275,7 @@ export class CheckpointProposalJob implements Traceable {
       // doesn't echo our own messages back, so this is how the proposer makes its own proposed
       // checkpoint visible for pipelining the next slot. Built from local checkpoint data — never
       // from the broadcast proposal archive, which may be deliberately corrupted under test flags.
+      // claimParentArchiveRoot corrupts the local archive too, so it is paired with skipPushProposedBlocksToArchiver.
       // Fail closed: if this throws, the outer catch aborts the slot before gossiping.
       await this.syncProposedCheckpointToArchiver(
         checkpoint,

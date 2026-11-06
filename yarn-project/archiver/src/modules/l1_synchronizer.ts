@@ -675,7 +675,11 @@ export class ArchiverL1Synchronizer implements Traceable {
       }
 
       const localPendingArchiveRoot = localPendingCheckpoint.archive.root.toString();
-      const noCheckpointSinceLast = pendingArchive.toString() === localPendingArchiveRoot;
+      // Compare numbers as well: the proposer picks the archive root freely, so a new checkpoint can claim the root of
+      // the local tip, and skipping the fetch would leave it unvalidated.
+      const noCheckpointSinceLast =
+        pendingCheckpointNumber === localPendingCheckpointNumber &&
+        pendingArchive.toString() === localPendingArchiveRoot;
       const localPendingRootOnL1 = archiveForLocalPendingCheckpointNumber.equals(localPendingCheckpoint.archive.root);
       // An L1 reorg may have republished the same checkpoint with different attestations, which the root misses. This
       // is checked even when L1 has moved past the local tip, since storing the next checkpoint would bury the stale
@@ -699,10 +703,11 @@ export class ArchiverL1Synchronizer implements Traceable {
         // TODO(#8621): Tackle this properly when we handle L1 Re-orgs.
         // await this.stores.blocks.setSynchedL1BlockNumber(currentL1BlockNumber);
         //
-        // Known limitation: this short-circuit only compares the pending archive root, so a reconciliation that
-        // replaced the checkpoint at the same height leaves work outstanding that this pass skips, and the refetch
-        // waits for L1 to produce a block that moves the root again. A "checkpoint refetch still pending" flag
-        // carried out of reconciliation past this optimization would let the next pass fetch at the same head.
+        // Known limitation: this short-circuit only compares the pending tip's number and archive root, so a
+        // reconciliation that replaced the checkpoint at the same height leaves work outstanding that this pass skips,
+        // and the refetch waits for L1 to produce a block that moves the tip again. A "checkpoint refetch still
+        // pending" flag carried out of reconciliation past this optimization would let the next pass fetch at the same
+        // head.
         this.log.debug(`No checkpoints to retrieve from ${blocksSynchedTo + 1n} to ${currentL1BlockNumber}`);
         return { rollupStatus, fetchCheckpoints: false };
       }
@@ -931,14 +936,17 @@ export class ArchiverL1Synchronizer implements Traceable {
    * the sync point: the rollup's pending tip if we recorded it as rejected, otherwise the latest accepted checkpoint.
    * A rejected checkpoint moves the sync point past its L1 block, so it only counts as seen while it is still the
    * pending tip. If an L1 reorg replaced it with a different same-numbered checkpoint at an earlier L1 block, its
-   * stale marker must not hide that gap. Rejected entries are looked up by archive root rather than by number, since
-   * a reorg may leave a stale higher-numbered marker (e.g. a dropped descendant) while the pending tip is still one
-   * we rejected.
+   * stale marker must not hide that gap. The entry is matched on the pending tip's number and archive root, so neither
+   * a stale higher-numbered marker (e.g. a dropped descendant) nor a same-numbered replacement with a different root
+   * counts.
    */
   private async getLocalProgressCheckpoint(
-    status: Pick<RollupStatus, 'pendingArchive'>,
+    status: Pick<RollupStatus, 'pendingArchive' | 'pendingCheckpointNumber'>,
   ): Promise<CheckpointData | RejectedCheckpoint | undefined> {
-    const rejectedPendingTip = await this.stores.blocks.getRejectedCheckpointByArchiveRoot(status.pendingArchive);
+    const rejectedPendingTip = await this.stores.blocks.getRejectedCheckpoint(
+      status.pendingCheckpointNumber,
+      status.pendingArchive,
+    );
     return (
       rejectedPendingTip ??
       (await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber()))

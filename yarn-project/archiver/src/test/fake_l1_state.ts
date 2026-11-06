@@ -94,6 +94,11 @@ type AddCheckpointOptions = {
    * hashes just as the real call does, since those hashes cover neither the signers nor the bundle signature.
    */
   decoyBundleSigner?: Secp256k1Signer;
+  /**
+   * Overrides the archive root the proposer claims for this checkpoint. L1 stores it as given, so later checkpoints
+   * chain on it, while the checkpoint's blocks keep their real archive.
+   */
+  claimedArchive?: AppendOnlyTreeSnapshot;
 };
 
 /** Result from adding a checkpoint. */
@@ -166,6 +171,7 @@ export class FakeL1State {
   private targetCommitteeSize: number = 0;
   private version: bigint = 1n;
   private canPruneResult: boolean = false;
+  private rollupTxCount: number = 0;
 
   // Computed from checkpoints based on L1 block visibility
   private pendingCheckpointNumber: CheckpointNumber = CheckpointNumber(0);
@@ -274,6 +280,9 @@ export class FakeL1State {
           { ...options, numL1ToL2Messages },
           BigInt(this.messages.length + numL1ToL2Messages),
         );
+    if (options.claimedArchive) {
+      checkpoint.archive = options.claimedArchive;
+    }
 
     // Store the messages internally so they match the checkpoint's inHash
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
@@ -305,7 +314,7 @@ export class FakeL1State {
     });
 
     // Update last archive for auto-chaining
-    this.lastArchive = lastArchive ?? checkpoint.blocks.at(-1)!.archive;
+    this.lastArchive = options.claimedArchive ?? lastArchive ?? checkpoint.blocks.at(-1)!.archive;
 
     // Auto-update pending checkpoint number
     this.updatePendingCheckpointNumber();
@@ -547,8 +556,7 @@ export class FakeL1State {
       ...previous,
       pruned: false,
       l1BlockNumber: opts.l1BlockNumber,
-      // The tx hash defaults to the archive root, which both entries share, so give the repost its own.
-      tx: { ...tx, hash: `0x${opts.l1BlockNumber.toString(16).padStart(64, '0')}` },
+      tx,
       signers: opts.signers,
       attestationsHash,
       payloadDigest,
@@ -968,9 +976,11 @@ export class FakeL1State {
     // Compute payloadDigest (same logic as CalldataRetriever)
     const payloadDigest = getHashedSignaturePayloadTypedData(consensusPayload);
 
+    // Not derived from the archive root: several checkpoints can claim the same root, and getTransaction looks txs up by
+    // hash.
     const tx = {
       input: multiCallInput,
-      hash: archive,
+      hash: `0x${(++this.rollupTxCount).toString(16).padStart(64, '0')}`,
       blockHash: archive,
       to: MULTI_CALL_3_ADDRESS as `0x${string}`,
     } as Transaction<bigint, number>;
