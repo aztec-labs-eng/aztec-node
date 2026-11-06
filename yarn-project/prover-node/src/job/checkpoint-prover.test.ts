@@ -170,11 +170,14 @@ describe('CheckpointProver', () => {
       txProvider.getTxsForBlock.mockReset();
       txProvider.getTxsForBlock.mockImplementation(
         (block, opts) =>
-          new Promise(resolve =>
-            opts.signal?.addEventListener('abort', () =>
-              resolve({ txs: [], missingTxs: block.body.txEffects.map(txEffect => txEffect.txHash) }),
-            ),
-          ),
+          new Promise(resolve => {
+            const resolveMissing = () =>
+              resolve({ txs: [], missingTxs: block.body.txEffects.map(txEffect => txEffect.txHash) });
+            if (opts.signal?.aborted) {
+              resolveMissing();
+            }
+            opts.signal?.addEventListener('abort', resolveMissing);
+          }),
       );
 
       const prover = makeProver();
@@ -721,6 +724,26 @@ describe('CheckpointProver', () => {
       expect(uploaded.get('0xbb')).toBeDefined();
 
       await cleanup(prover);
+    });
+
+    it('re-fetches every tx for the upload even after the prover is cancelled', async () => {
+      // A provider that honours the abort signal like the real one: an aborted fetch reports every tx as missing.
+      // Cancelling the prover stops its own gather, but must not truncate a later failure-upload re-fetch.
+      const prover = makeProver();
+      prover.cancel();
+      await prover.whenDone();
+
+      txProvider.getTxsForBlock.mockReset();
+      txProvider.getTxsForBlock.mockImplementation((block, opts) =>
+        Promise.resolve(
+          opts.signal?.aborted
+            ? { txs: [], missingTxs: block.body.txEffects.map(txEffect => txEffect.txHash) }
+            : { txs: [fakeTx('0xaa')], missingTxs: [] },
+        ),
+      );
+
+      const uploaded = await prover.getTxsForUpload();
+      expect(uploaded.get('0xaa')).toBeDefined();
     });
 
     it('failure-upload re-fetches from the pool and builds complete EpochProvingJobData', async () => {

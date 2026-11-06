@@ -96,13 +96,15 @@ export class TxProvider implements ITxProvider {
     const txs = [...(txsFromMempool ?? []), ...(txsFromProposal ?? []), ...(txsFromNetwork ?? [])];
     const missingTxs = missingTxHashes?.length ?? 0;
 
-    const level = missingTxs === 0 ? 'verbose' : 'warn';
+    // A caller that aborts the collection no longer needs the missing txs, so falling short is not a problem.
+    const level = missingTxs === 0 || opts.signal?.aborted ? 'verbose' : 'warn';
     this.log[level](`Retrieved ${txs.length} out of ${blockInfo.txCount} txs for ${request.type}`, {
       ...blockInfo,
       txsFromProposal: txsFromProposal?.length,
       txsFromMempool: txsFromMempool?.length,
       txsFromNetwork: txsFromNetwork?.length,
       missingTxs,
+      aborted: opts.signal?.aborted,
       durationMs,
     });
 
