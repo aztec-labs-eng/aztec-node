@@ -46,8 +46,8 @@ describe('sqlite3InitModule', () => {
     Promise.race([
       promise,
       // This package does not depend on foundation, so it cannot use its timeout helpers.
+      // eslint-disable-next-line aztec-custom/prefer-execute-timeout
       new Promise<never>((_, reject) =>
-        // eslint-disable-next-line no-restricted-syntax
         setTimeout(
           () =>
             reject(

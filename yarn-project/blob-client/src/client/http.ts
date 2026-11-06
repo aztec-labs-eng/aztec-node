@@ -789,7 +789,7 @@ export class HttpBlobClient implements BlobClientInterface {
     const intervalMs =
       (this.config.blobHealthcheckUploadIntervalMinutes ?? DEFAULT_HEALTHCHECK_UPLOAD_INTERVAL_MINUTES) * 60 * 1000;
 
-    // eslint-disable-next-line no-restricted-syntax
+    // eslint-disable-next-line aztec-custom/prefer-running-promise
     this.healthcheckUploadIntervalId = setInterval(() => {
       void this.fileStoreUploadClient!.uploadHealthcheck().catch(err => {
         this.log.warn('Failed to upload periodic healthcheck file', err);

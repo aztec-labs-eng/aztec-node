@@ -81,7 +81,6 @@ export class InterruptibleSleep {
  * @returns A Promise that resolves after the specified duration, allowing the use of 'await' to pause execution.
  */
 export function sleep<T>(ms: number, returnValue?: T): Promise<T> {
-  // eslint-disable-next-line no-restricted-syntax
   return new Promise(resolve => setTimeout(() => resolve(returnValue as T), ms));
 }
 
