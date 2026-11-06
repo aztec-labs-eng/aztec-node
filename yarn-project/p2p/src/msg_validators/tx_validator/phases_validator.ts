@@ -74,6 +74,8 @@ export class PhasesTxValidator implements TxValidator<Tx> {
           return { result: 'invalid', reason: [check.reason] };
         }
         if (check.minGas) {
+          // Summing is conservative: the AVM charges a slot's DA once per tx, and no wallet or fee flow writes one
+          // slot twice in setup.
           requiredSetupGas = requiredSetupGas.add(check.minGas);
         }
       }
