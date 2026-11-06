@@ -11,7 +11,10 @@ type AllowedCallConstraints = {
   onlySelf?: boolean;
   rejectNullMsgSender?: boolean;
   calldataLength?: number;
-  /** Gas the call needs to complete in setup. The tx's gas limits must leave at least this much for setup. */
+  /**
+   * The most gas the call can use in setup, for any calldata the entry allows. The tx's gas limits must leave at least
+   * this much for setup.
+   */
   minGas?: Gas;
 };
 
