@@ -18,6 +18,15 @@ const IGNORED_FIELDS = new Set([
   'typeParameters',
 ]);
 
+const EXPRESSION_WRAPPERS = new Set([
+  'ParenthesizedExpression',
+  'TSAsExpression',
+  'TSTypeAssertion',
+  'TSNonNullExpression',
+  'TSSatisfiesExpression',
+  'ChainExpression',
+]);
+
 /**
  * Identifies AST nodes among the primitive values and arrays stored in AST fields.
  * @param {unknown} value
@@ -25,6 +34,13 @@ const IGNORED_FIELDS = new Set([
  */
 function isNode(value) {
   return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string';
+}
+
+function unwrap(value) {
+  while (isNode(value) && EXPRESSION_WRAPPERS.has(value.type)) {
+    value = value['expression'];
+  }
+  return value;
 }
 
 /** @param {import('estree').Node} node */
@@ -95,7 +111,7 @@ function parseExpression(code) {
  * Parses a pattern and preferred expression once, recording bindings and replacement holes.
  * `$name` captures a node; `$_` ignores one node and `...$_` ignores trailing call arguments.
  * @param {string} invalid
- * @param {string} preferred
+ * @param {string} [preferred]
  * @param {boolean} ignoreReturnValues
  */
 export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
@@ -115,7 +131,7 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
       }
     }
   }
-  const replacement = parseExpression(preferred);
+  const replacement = preferred === undefined ? undefined : parseExpression(preferred);
   /** @type {{ name: string, start: number, end: number }[]} */
   const holes = [];
   function visit(node) {
@@ -125,7 +141,7 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
     if (node.type === 'Identifier' && isPlaceholder(node)) {
       holes.push({ name: node.name, start: node.range[0] - 1, end: node.range[1] - 1 });
     }
-    for (const key of replacement.visitorKeys[node.type] ?? []) {
+    for (const key of replacement?.visitorKeys[node.type] ?? []) {
       const child = node[key];
       if (Array.isArray(child)) {
         child.forEach(visit);
@@ -134,9 +150,9 @@ export function compilePattern(invalid, preferred, ignoreReturnValues = false) {
       }
     }
   }
-  visit(replacement.expression);
+  if (replacement) visit(replacement.expression);
   holes.sort((a, b) => b.start - a.start);
-  return { root: parsed.expression, symbols, references, preferred, holes, ignoreReturnValues };
+  return { root: parsed.expression, symbols, references, preferred: preferred ?? '', holes, ignoreReturnValues };
 }
 
 /**
@@ -151,6 +167,10 @@ export function matchPattern(pattern, node, sourceCode) {
   const bindings = new Map();
 
   function match(expected, actual, key = '', capture = true) {
+    if (isNode(expected) && (!capture || !isPlaceholder(expected))) {
+      expected = unwrap(expected);
+      actual = unwrap(actual);
+    }
     if (Array.isArray(expected)) {
       if (!Array.isArray(actual)) {
         return false;

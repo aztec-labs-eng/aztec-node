@@ -11,6 +11,7 @@ import tseslint from 'typescript-eslint';
 import noAsyncDispose from './eslint-rules/no-async-dispose.js';
 import noGlobalBuffer from './eslint-rules/no-global-buffer.js';
 import noNonPrimitiveInCollections from './eslint-rules/no-non-primitive-in-collections.js';
+import noNumberStringToDecimalParser from './eslint-rules/no-number-string-to-decimal-parser.js';
 import noUnsafeBrandedTypeConversion from './eslint-rules/no-unsafe-branded-type-conversion.js';
 import preferBufferToHex from './eslint-rules/prefer-buffer-to-hex.js';
 import preferCompactArray from './eslint-rules/prefer-compact-array.js';
@@ -63,6 +64,7 @@ export default [
           'no-async-dispose': noAsyncDispose,
           'no-global-buffer': noGlobalBuffer,
           'no-non-primitive-in-collections': noNonPrimitiveInCollections,
+          'no-number-string-to-decimal-parser': noNumberStringToDecimalParser,
           'no-unsafe-branded-type-conversion': noUnsafeBrandedTypeConversion,
           'prefer-buffer-to-hex': preferBufferToHex,
           'prefer-compact-array': preferCompactArray,
@@ -158,6 +160,7 @@ export default [
       'aztec-custom/no-async-dispose': 'error',
       'aztec-custom/no-global-buffer': 'error',
       'aztec-custom/no-non-primitive-in-collections': 'error',
+      'aztec-custom/no-number-string-to-decimal-parser': 'error',
       'aztec-custom/no-unsafe-branded-type-conversion': 'error',
       'aztec-custom/prefer-buffer-to-hex': 'warn',
       'aztec-custom/prefer-compact-array': 'warn',

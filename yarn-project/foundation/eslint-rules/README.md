@@ -58,6 +58,18 @@ Async and generator flags, optional calls, operators, extra statements, and extr
 Guards retain the checks syntax cannot establish: array and Buffer types, primitive numeric types, resolver reference
 counts, and assignments to outer state. The preferred expression is rendered into the warning; it is not an autofix.
 
+`createCodePatternRule` is the shared factory underneath `createPreferUtilityRule`. It also supports diagnostics with
+no preferred expression. Supply ESLint `meta`, a `messageId` on each pattern, and a `report(captures, helpers)` callback
+that returns `{ node, data }` or `false`. A `guard` may still reject a match before reporting. Type-only expression
+wrappers do not affect matching; optional call and member flags remain significant.
+
+`aztec-custom/no-number-string-to-decimal-parser` uses this factory to report number stringification passed to viem's
+`parseGwei`, `parseEther`, and `parseUnits`. Its conversion patterns include `String($value)`, `$value.toString(...$_)`,
+and a template containing only `$value`. TypeScript analysis resolves named and namespace imports and follows same-file
+`const` initializers, conditional branches, and interpolations within longer templates. Decimal strings, bigint
+stringification, and explicit formatting remain allowed. Mutable variables and function returns are not traced.
+This rule is an error and has no automatic fix: choosing range and rounding behavior requires the caller's intent.
+
 For example:
 
 ```ts
