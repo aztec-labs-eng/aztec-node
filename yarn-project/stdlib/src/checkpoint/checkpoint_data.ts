@@ -14,6 +14,7 @@ import { optional, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';
+import { MAX_COMMITTEE_SIZE } from '../deserialization/index.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 import { L1PublishedData } from './published_checkpoint.js';
@@ -102,7 +103,7 @@ export const CheckpointDataSchema = z
     startBlock: BlockNumberSchema,
     blockCount: schemas.Integer,
     feeAssetPriceModifier: schemas.BigInt,
-    attestations: z.array(CommitteeAttestation.schema),
+    attestations: z.array(CommitteeAttestation.schema).max(MAX_COMMITTEE_SIZE),
     verbatimAttestations: ViemCommitteeAttestationsSchema,
     l1: L1PublishedData.schema,
   })

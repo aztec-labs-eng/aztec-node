@@ -6,23 +6,87 @@ import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 
-import type { CallInfo } from './types.js';
+import { type CallInfo, MAX_L1_TRACE_LEN } from './types.js';
 
-/** Zod schema for validating call trace from debug_traceTransaction */
-export const callTraceSchema: ZodFor<DebugCallTrace> = z.lazy(() =>
-  z.object({
-    from: schemas.HexStringWith0x,
-    to: schemas.HexStringWith0x.optional(),
-    type: z.string(),
-    input: schemas.HexStringWith0x.optional(),
-    output: schemas.HexStringWith0x.optional(),
-    gas: schemas.HexStringWith0x.optional(),
-    gasUsed: schemas.HexStringWith0x.optional(),
-    value: schemas.HexStringWith0x.optional(),
-    error: z.string().optional(),
-    calls: z.array(callTraceSchema).optional(),
-  }),
-);
+/** The EVM stops nesting calls 1024 frames below the top-level call. */
+const EVM_MAX_CALL_DEPTH = 1024;
+
+/** A single frame of a call trace. Its `calls` are left unparsed, and {@link callTraceSchema} parses each of them. */
+export const callFrameSchema = z.object({
+  from: schemas.HexStringWith0x,
+  to: schemas.HexStringWith0x.optional(),
+  type: z.string(),
+  input: schemas.HexStringWith0x.optional(),
+  output: schemas.HexStringWith0x.optional(),
+  gas: schemas.HexStringWith0x.optional(),
+  gasUsed: schemas.HexStringWith0x.optional(),
+  value: schemas.HexStringWith0x.optional(),
+  error: z.string().optional(),
+  calls: z.array(z.unknown()).max(MAX_L1_TRACE_LEN).optional(),
+});
+
+/** A frame waiting to be parsed, with what is needed to attach it to its parent and to locate it in an error. */
+type PendingFrame = {
+  input: unknown;
+  depth: number;
+  parent?: { frame: PendingFrame; index: number };
+  attach: (frame: DebugCallTrace) => void;
+};
+
+/**
+ * Zod schema for validating call trace from debug_traceTransaction.
+ *
+ * A trace nests one frame per EVM call, and the EVM allows 1024 calls below the top-level one. A recursive schema
+ * (`z.lazy`) would use several JS stack frames per call: in Node with its default stack size, zod overflows the stack
+ * after a few hundred calls, well short of the EVM limit. So this schema parses one frame at a time from an explicit
+ * stack, and rejects a trace that nests deeper than the EVM can.
+ */
+export const callTraceSchema: ZodFor<DebugCallTrace> = z.unknown().transform((input, ctx) => {
+  let root: DebugCallTrace | undefined;
+  const pending: PendingFrame[] = [{ input, depth: 0, attach: frame => (root = frame) }];
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (next.depth > EVM_MAX_CALL_DEPTH) {
+      ctx.addIssue({ code: 'custom', message: `Calls nested deeper than ${EVM_MAX_CALL_DEPTH}`, path: pathOf(next) });
+      return z.NEVER;
+    }
+    const parsed = callFrameSchema.safeParse(next.input);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        ctx.addIssue({ code: 'custom', message: issue.message, path: [...pathOf(next), ...issue.path] });
+      }
+      return z.NEVER;
+    }
+
+    const { calls, ...fields } = parsed.data;
+    const frame: DebugCallTrace = fields;
+    if (calls !== undefined) {
+      const children: DebugCallTrace[] = new Array(calls.length);
+      frame.calls = children;
+      const current = next;
+      calls.forEach((child, index) =>
+        pending.push({
+          input: child,
+          depth: current.depth + 1,
+          parent: { frame: current, index },
+          attach: parsedChild => (children[index] = parsedChild),
+        }),
+      );
+    }
+    next.attach(frame);
+  }
+
+  return root!;
+});
+
+/** Path of a frame from the root of the trace, built only when reporting an issue. */
+function pathOf(frame: PendingFrame): PropertyKey[] {
+  const path: PropertyKey[] = [];
+  for (let current = frame; current.parent; current = current.parent.frame) {
+    path.unshift('calls', current.parent.index);
+  }
+  return path;
+}
 
 /**
  * Traces a transaction and extracts all CALL operations to a specific contract and function selector.
