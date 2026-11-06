@@ -1,14 +1,15 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
-import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { poseidon2Hash, poseidon2HashBytes, poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { type Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
-import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { CompleteAddress } from '../contract/complete_address.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
-import { deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
+import { computeAppTaggingSecretKey, deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
 import { makeInvalidAztecAddress, randomAppTaggingSecret } from '../tests/factories.js';
 import { AppTaggingSecret, AppTaggingSecretSchema, computeSharedTaggingSecret } from './app_tagging_secret.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
@@ -109,6 +110,30 @@ describe('AppTaggingSecret', () => {
       );
     });
 
+    it('keeps the recipient tsk secret for each recipient of a shared key', async () => {
+      const tsk = new GrumpkinScalar(5n);
+      const alice = AztecAddress.fromNumberUnsafe(43);
+      const bob = AztecAddress.fromNumberUnsafe(44);
+
+      const toAlice = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, alice);
+      const toBob = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, bob);
+
+      expect(toAlice).toEqual(
+        new AppTaggingSecret(
+          Fr.fromString('0x1fb21a244a36cc14cfcf44a11fe2d0f3965309ad678715aebf405cabad862848'),
+          app,
+          OnchainDeliveryMode.UNCONSTRAINED,
+        ),
+      );
+      expect(toBob).toEqual(
+        new AppTaggingSecret(
+          Fr.fromString('0x252eb528c954d640dd1e1039f1e8de12f56b08fe3cdfd1742e2c56c5fdbb202b'),
+          app,
+          OnchainDeliveryMode.UNCONSTRAINED,
+        ),
+      );
+    });
+
     it('keeps the arbitrary secret in both directions', async () => {
       const alice = AztecAddress.fromNumberUnsafe(43);
       const bob = AztecAddress.fromNumberUnsafe(44);
@@ -163,6 +188,32 @@ describe('AppTaggingSecret', () => {
 
       const otherRecipient = await AppTaggingSecret.computeFromArbitrarySecret(point, app, await AztecAddress.random());
       expect(otherRecipient.secret).not.toEqual(a.secret);
+    });
+  });
+
+  describe('computeFromRecipientTsk', () => {
+    it('separates the secret with the separator derived from its name', async () => {
+      const tsk = GrumpkinScalar.random();
+      const app = await AztecAddress.random();
+      const recipient = await AztecAddress.random();
+      // A domain separator is the low 32 bits of the hash of its prefixed name.
+      const nameHash = await poseidon2HashBytes(Buffer.from('az_dom_sep__recipient_tsk_secret'));
+      const separator = Number(nameHash.toBigInt() & 0xffffffffn);
+
+      const { secret } = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, recipient);
+
+      const tskApp = await computeAppTaggingSecretKey(tsk, app);
+      expect(secret).toEqual(await poseidon2HashWithSeparator([tskApp, recipient], separator));
+    });
+
+    it('derives a different secret for each account sharing a tagging key', async () => {
+      const tsk = GrumpkinScalar.random();
+      const app = await AztecAddress.random();
+
+      const a = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
+      const b = await AppTaggingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
+
+      expect(b.secret).not.toEqual(a.secret);
     });
   });
 

@@ -53,6 +53,9 @@ describe('KeyStore', () => {
     const masterIncomingViewingSecretKey = await keyStore.getMasterIncomingViewingSecretKey(accountAddress);
     expect(masterIncomingViewingSecretKey.equals(keys.masterIncomingViewingSecretKey)).toBe(true);
 
+    const masterTaggingSecretKey = await keyStore.getMasterTaggingSecretKey(accountAddress);
+    expect(masterTaggingSecretKey.equals(keys.masterTaggingSecretKey)).toBe(true);
+
     // Arbitrary app contract address
     const appAddress = AztecAddress.fromBigIntUnsafe(624n);
 

@@ -55,6 +55,24 @@ describe('onchain delivery', () => {
     },
   });
 
+  // The sender tags with the recipient's key and the recipient PXE discovers the delivery with no knowledge of the
+  // sender.
+  buildMessageDeliveryTest({
+    strategy: 'recipient tsk',
+    mode: 'unconstrained',
+    senderHook: () => Promise.resolve({ type: 'recipient-tsk' }),
+    // The recipient must be registered in the sender's PXE to use this strategy.
+    recipientSetup: 'recipient-and-sender-pxes',
+  });
+
+  // An account tags a message to itself with its own key and discovers it on its own PXE.
+  buildMessageDeliveryTest({
+    strategy: 'recipient tsk to self',
+    mode: 'unconstrained',
+    senderHook: () => Promise.resolve({ type: 'recipient-tsk' }),
+    recipientSetup: 'sender',
+  });
+
   buildMessageDeliveryTest({
     strategy: 'interactive handshake',
     mode: 'constrained',

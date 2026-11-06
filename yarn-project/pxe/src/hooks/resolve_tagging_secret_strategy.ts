@@ -30,6 +30,19 @@ export type TaggingSecretStrategy =
     }
   | {
       /**
+       * Derive the secret from the recipient's tagging secret key, regardless of the sender. PXE computes and silos
+       * it. Only usable when {@link TaggingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
+       * account such as the sender itself - the send fails otherwise. Only sound for unconstrained delivery, since
+       * nothing proves that the secret comes from that key.
+       *
+       * Unlike an address-derived tag, this tag cannot be computed by an attacker able to break the recipient's address
+       * key, for example with a quantum computer. The tagging key `tsk` is independent of the address key, and its
+       * public counterpart `tpk` is never shared with untrusted contracts, only its hash.
+       */
+      type: 'recipient-tsk';
+    }
+  | {
+      /**
        * A raw shared secret point the two parties already share offchain (e.g. coordinated out-of-band), supplied by
        * the wallet. PXE app-silos it before use. Only sound for unconstrained delivery, since nothing onchain proves
        * the recipient knows it.
@@ -43,12 +56,11 @@ export type TaggingSecretStrategy =
  * The strategy PXE applies when no {@link ResolveTaggingSecretStrategy} hook is configured, for a hook to fall back to.
  */
 export function defaultTaggingSecretStrategy({
-  sender,
-  recipient,
   deliveryMode,
-}: Pick<TaggingSecretStrategyRequest, 'sender' | 'recipient' | 'deliveryMode'>): TaggingSecretStrategy {
-  return deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && recipient.equals(sender)
-    ? { type: 'address-derived' }
+  recipientTskAvailable,
+}: Pick<TaggingSecretStrategyRequest, 'deliveryMode' | 'recipientTskAvailable'>): TaggingSecretStrategy {
+  return deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && recipientTskAvailable
+    ? { type: 'recipient-tsk' }
     : { type: 'non-interactive-handshake' };
 }
 
@@ -62,6 +74,11 @@ export type TaggingSecretStrategyRequest = {
   sender: AztecAddress;
   recipient: AztecAddress;
   deliveryMode: OnchainDeliveryMode;
+  /**
+   * Whether PXE holds the recipient's keys and the recipient is in the execution's scopes, which dictates whether the
+   * `recipient-tsk` strategy can be used.
+   */
+  recipientTskAvailable: boolean;
 };
 
 /**

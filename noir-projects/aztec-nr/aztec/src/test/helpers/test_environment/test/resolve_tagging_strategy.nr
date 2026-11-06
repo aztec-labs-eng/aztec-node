@@ -1,7 +1,15 @@
 use crate::{
-    messages::delivery::{MessageDelivery, OnchainDeliveryMode, ResolvedTaggingStrategy},
-    oracle::resolve_tagging_strategy::resolve_tagging_strategy,
-    protocol::{address::AztecAddress, point::EmbeddedCurvePoint, traits::FromField},
+    keys::{constants::TAGGING_INDEX, getters::try_get_public_keys},
+    messages::delivery::{
+        MessageDelivery, OnchainDeliveryMode, ResolvedTaggingStrategy, tag_derivation::DOM_SEP__RECIPIENT_TSK_SECRET,
+    },
+    oracle::{key_validation_request::get_key_validation_request, resolve_tagging_strategy::resolve_tagging_strategy},
+    protocol::{
+        address::AztecAddress,
+        hash::poseidon2_hash_with_separator,
+        point::EmbeddedCurvePoint,
+        traits::{FromField, ToField},
+    },
     test::helpers::{
         tagging_secret_strategy::{compute_directional_app_secret, TaggingSecretStrategy},
         test_environment::{TestEnvironment, TestEnvironmentOptions},
@@ -52,7 +60,7 @@ unconstrained fn an_unset_unconstrained_mode_falls_back_to_the_default_strategy(
 }
 
 #[test]
-unconstrained fn defaults_an_unconstrained_self_send_to_the_address_derived_shared_secret() {
+unconstrained fn defaults_an_unconstrained_self_send_to_the_recipient_tsk() {
     let mut env = TestEnvironment::new();
     let app = env.create_contract_account();
     let sender = env.create_light_account();
@@ -60,13 +68,12 @@ unconstrained fn defaults_an_unconstrained_self_send_to_the_address_derived_shar
     env.private_context_at(app, |_| {
         let resolved = resolve_tagging_strategy(sender, sender, OnchainDeliveryMode::onchain_unconstrained());
 
-        // An unconstrained self-send resolves to an address-derived secret rather than a non-interactive handshake.
-        assert(resolved.is_unconstrained_secret());
+        assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(recipient_tsk_secret(sender)));
     });
 }
 
 #[test]
-unconstrained fn defaults_an_unconstrained_send_to_another_own_account_to_a_non_interactive_handshake() {
+unconstrained fn defaults_an_unconstrained_send_to_another_own_account_to_the_recipient_tsk() {
     let mut env = TestEnvironment::new();
     let app = env.create_contract_account();
     let sender = env.create_light_account();
@@ -79,8 +86,8 @@ unconstrained fn defaults_an_unconstrained_send_to_another_own_account_to_a_non_
             OnchainDeliveryMode::onchain_unconstrained(),
         );
 
-        // The environment holds both accounts, but the recipient is not the sender, so this is not a self-send.
-        assert_eq(resolved, ResolvedTaggingStrategy::non_interactive_handshake());
+        // The recipient's tsk is known and that account is in scope in this call - the sender is irrelevant.
+        assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(recipient_tsk_secret(recipient)));
     });
 }
 
@@ -160,6 +167,26 @@ unconstrained fn applies_a_configured_interactive_handshake_strategy() {
 }
 
 #[test]
+unconstrained fn applies_a_configured_recipient_tsk_strategy() {
+    let mut env = TestEnvironment::new_opts(TestEnvironmentOptions::new().with_default_tag_secret_strategy(
+        MessageDelivery::onchain_unconstrained(),
+        TaggingSecretStrategy::recipient_tsk(),
+    ));
+    let app = env.create_contract_account();
+    let recipient = env.create_light_account();
+
+    env.private_context_at(app, |_| {
+        let resolved = resolve_tagging_strategy(
+            AztecAddress::from_field(1),
+            recipient,
+            OnchainDeliveryMode::onchain_unconstrained(),
+        );
+
+        assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(recipient_tsk_secret(recipient)));
+    });
+}
+
+#[test]
 unconstrained fn applies_the_strategy_set_in_the_options() {
     let mut env = TestEnvironment::new_opts(TestEnvironmentOptions::new().with_default_tag_secret_strategy(
         MessageDelivery::onchain_unconstrained(),
@@ -225,4 +252,12 @@ unconstrained fn applies_a_configured_arbitrary_secret_to_an_unconstrained_self_
         let arbitrary_secret = compute_directional_app_secret(point, app, sender);
         assert_eq(resolved, ResolvedTaggingStrategy::unconstrained_secret(arbitrary_secret));
     });
+}
+
+/// The tagging secret of `account` for the executing contract, built from the app-siloed key the kernel validates.
+// TODO(F-948): use aztec-nr's own derivation of this secret once it has one, e.g. once delivery can constrain it.
+unconstrained fn recipient_tsk_secret(account: AztecAddress) -> Field {
+    let tpk_m_hash = try_get_public_keys(account).unwrap().tpk_m_hash;
+    let tsk_app = get_key_validation_request(tpk_m_hash, TAGGING_INDEX).sk_app;
+    poseidon2_hash_with_separator([tsk_app, account.to_field()], DOM_SEP__RECIPIENT_TSK_SECRET)
 }

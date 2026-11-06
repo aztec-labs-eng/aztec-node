@@ -1,12 +1,12 @@
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
-import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { type Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import type { CompleteAddress } from '../contract/complete_address.js';
-import { computeAddressSecret, computePreaddress } from '../keys/derivation.js';
+import { computeAddressSecret, computeAppTaggingSecretKey, computePreaddress } from '../keys/derivation.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
 import { computeAppSiloedSharedSecretFromPoint } from './shared_secret_derivation.js';
 
@@ -15,15 +15,53 @@ const OnchainDeliveryModeSchema = z.union([
   z.literal(OnchainDeliveryMode.CONSTRAINED),
 ]);
 
+/** Domain separator for the recipient tsk secret. Mirrors the separator of the same name in aztec-nr. */
+const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
+
 /**
  * Application tagging secret used for log tagging.
  *
  * It bundles a secret siloed to an app contract with the delivery mode whose tag stream it backs. Each way of deriving
  * the secret has one constructor, so that the sending and the receiving side agree on it:
- * {@link computeAddressDerived}, {@link computeFromArbitrarySecret} and {@link computeFromHandshakeSecret}. Only the
- * receiving side derives a handshake secret, as the sender gets the app-siloed secret from the handshake registry.
+ * {@link computeAddressDerived}, {@link computeFromRecipientTsk}, {@link computeFromArbitrarySecret} and
+ * {@link computeFromHandshakeSecret}. Only the receiving side derives a handshake secret, as the sender gets the
+ * app-siloed secret from the handshake registry.
  *
  * Secrets that arrive already derived, such as those supplied by a contract, are wrapped with the class constructor.
+ *
+ * ## From raw secret to app tagging secret
+ *
+ * Every mechanism starts from a raw secret that apps never see, and silos it to an app so that an app can only compute
+ * its own tags. Shared secret points are siloed with {@link computeAppSiloedSharedSecretFromPoint}, and the recipient's
+ * tagging secret key with {@link computeAppTaggingSecretKey}.
+ *
+ * - **Address-derived** ({@link computeAddressDerived}): the raw secret is the ECDH exchange between the sender's and
+ *   the recipient's addresses, which either of them can compute. It is app-siloed and directed to `recipient`. It only
+ *   backs unconstrained delivery.
+ * - **Arbitrary secret** ({@link computeFromArbitrarySecret}): the raw secret is a point the two parties agreed on
+ *   themselves. It is app-siloed and directed to `recipient`. It only backs unconstrained delivery.
+ * - **Handshake** ({@link computeFromHandshakeSecret}): the raw secret is the point the handshake registry stores for
+ *   the pair. It is app-siloed, and backs both delivery modes. The registry validates it, by recomputing the app-siloed
+ *   secret from the point for the calling contract.
+ * - **Recipient tsk** ({@link computeFromRecipientTsk}): the raw secret is the recipient's master tagging secret key
+ *   `tsk_m`. It is app-siloed into `tsk_app` and directed to `recipient`. It only backs unconstrained delivery. The
+ *   kernel can validate `tsk_app`, by recomputing it from `tsk_m` for the calling contract.
+ *
+ * ## From app tagging secret to tag
+ *
+ * Each log uses the next `index` of the stream of its secret, app and delivery mode. In the formulas below `h` is
+ * poseidon2, and a leading `DOM_SEP__` input is its domain separator:
+ *
+ * ```
+ * rawTag    = h(secret, index)
+ * logTag    = h(DOM_SEP__UNCONSTRAINED_MSG_LOG_TAG, rawTag)   // or DOM_SEP__CONSTRAINED_MSG_LOG_TAG
+ * siloedTag = h(DOM_SEP__PRIVATE_LOG_FIRST_FIELD, app, logTag)
+ * ```
+ *
+ * The first two are computed by the contract and the last one by the kernel, and `siloedTag` is what appears onchain.
+ *
+ * The separator depends on the delivery mode because a handshake secret backs both, each with its own index sequence.
+ * Mechanisms need no separators of their own at this step, as different derivations already yield different secrets.
  */
 export class AppTaggingSecret {
   constructor(
@@ -101,6 +139,25 @@ export class AppTaggingSecret {
     }
 
     return AppTaggingSecret.#computeDirectional(taggingSecretPoint, app, recipient);
+  }
+
+  /**
+   * Derives the tagging secret from the recipient's tagging secret key.
+   *
+   * The secret is the recipient's app-siloed tagging key hashed with their address, for unconstrained delivery. Hashing
+   * in the address gives accounts that share a tagging key separate tag streams. The secret is a property of the
+   * recipient alone, so whoever sends the log has to know `recipientTsk`, and the recipient finds the log without
+   * knowing who sent it.
+   */
+  static async computeFromRecipientTsk(
+    recipientTsk: Fq,
+    app: AztecAddress,
+    recipient: AztecAddress,
+  ): Promise<AppTaggingSecret> {
+    const tskApp = await computeAppTaggingSecretKey(recipientTsk, app);
+    const secret = await poseidon2HashWithSeparator([tskApp, recipient], DOM_SEP__RECIPIENT_TSK_SECRET);
+
+    return new AppTaggingSecret(secret, app, OnchainDeliveryMode.UNCONSTRAINED);
   }
 
   toString(): string {

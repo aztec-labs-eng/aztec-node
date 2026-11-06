@@ -1,8 +1,9 @@
 import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
-import type { KeyStore } from '@aztec-labs/key-store';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { KeyStore } from '@aztec-labs/key-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { WASMSimulator } from '@aztec-labs/simulator/client';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
@@ -12,6 +13,7 @@ import { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { makeInvalidAztecAddress } from '@aztec-labs/stdlib/testing';
 import { BlockHeader, CallContext, type Capsule, TxContext } from '@aztec-labs/stdlib/tx';
@@ -20,9 +22,11 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import type { ResolveCustomRequest } from '../../hooks/resolve_custom_request.js';
-import type {
-  ResolveTaggingSecretStrategy,
-  TaggingSecretStrategy,
+import {
+  type ResolveTaggingSecretStrategy,
+  type TaggingSecretStrategy,
+  type TaggingSecretStrategyRequest,
+  defaultTaggingSecretStrategy,
 } from '../../hooks/resolve_tagging_secret_strategy.js';
 import type { TxResolverService } from '../../messages/tx_resolver_service.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
@@ -128,16 +132,45 @@ describe('PrivateExecutionOracle', () => {
       recipient = await AztecAddress.random();
     });
 
-    it('defaults an unconstrained self-send to an address-derived shared secret', async () => {
+    it('defaults an unconstrained self-send to the recipient tsk', async () => {
       const account = await makeAccount();
       const oracle = makeOracle(account.oracleArgs);
 
       await expect(
         oracle.resolveTaggingStrategy(account.address, account.address, OnchainDeliveryMode.UNCONSTRAINED),
-      ).resolves.toEqual({
-        type: 'unconstrained-secret',
-        secret: await addressDerivedSecret(account, account.address),
-      });
+      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
+    });
+
+    it('defaults to a non-interactive handshake for a held recipient outside the execution scopes', async () => {
+      const account = await makeAccount();
+      const oracle = makeOracle({ ...account.oracleArgs, scopes: [sender] });
+
+      await expect(
+        oracle.resolveTaggingStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'non-interactive-handshake' });
+    });
+
+    it('defaults to a non-interactive handshake for a recipient in scope whose keys are not held', async () => {
+      const oracle = makeOracle({ scopes: [recipient], keyStore: await makeEmptyKeyStore() });
+
+      await expect(
+        oracle.resolveTaggingStrategy(recipient, recipient, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'non-interactive-handshake' });
+    });
+
+    it('lets a hook fall back to the default strategy', async () => {
+      const account = await makeAccount();
+      const anchoredContractData = mock<AnchoredContractData>();
+      anchoredContractData.getCurrentClassId.mockResolvedValue(Fr.random());
+      const hooks = {
+        resolveTaggingSecretStrategy: (request: TaggingSecretStrategyRequest) =>
+          Promise.resolve(defaultTaggingSecretStrategy(request)),
+      };
+      const oracle = makeOracle({ hooks, anchoredContractData, ...account.oracleArgs });
+
+      await expect(
+        oracle.resolveTaggingStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
     });
 
     it('keeps a hooked interactive handshake on an unconstrained self-send', async () => {
@@ -174,6 +207,40 @@ describe('PrivateExecutionOracle', () => {
       ).rejects.toThrow(`invalid recipient ${INVALID_ADDRESS}`);
     });
 
+    it('resolves a recipient-tsk strategy to the unconstrained secret whoever the sender is', async () => {
+      const account = await makeAccount();
+      const { oracle } = makeHookedOracle({ strategy: { type: 'recipient-tsk' }, ...account.oracleArgs });
+
+      await expect(
+        oracle.resolveTaggingStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
+      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
+    });
+
+    it('rejects a recipient-tsk strategy for a recipient outside the execution scopes', async () => {
+      const account = await makeAccount();
+      const { oracle } = makeHookedOracle({
+        strategy: { type: 'recipient-tsk' },
+        ...account.oracleArgs,
+        scopes: [sender],
+      });
+
+      await expect(
+        oracle.resolveTaggingStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
+      ).rejects.toThrow('is not in the allowed scopes list');
+    });
+
+    it('rejects a recipient-tsk strategy for a recipient whose keys are not held', async () => {
+      const { oracle } = makeHookedOracle({
+        strategy: { type: 'recipient-tsk' },
+        scopes: [recipient],
+        keyStore: await makeEmptyKeyStore(),
+      });
+
+      await expect(oracle.resolveTaggingStrategy(sender, recipient, OnchainDeliveryMode.UNCONSTRAINED)).rejects.toThrow(
+        `Account ${recipient} does not exist`,
+      );
+    });
+
     it('app-silos a raw arbitrary-secret point before handing it to the contract', async () => {
       const point = await Point.random();
       const { oracle } = makeHookedOracle({ strategy: { type: 'arbitrary-secret', secret: point } });
@@ -207,6 +274,7 @@ describe('PrivateExecutionOracle', () => {
         sender,
         recipient,
         deliveryMode: OnchainDeliveryMode.CONSTRAINED,
+        recipientTskAvailable: false,
       });
     });
 
@@ -235,6 +303,9 @@ describe('PrivateExecutionOracle', () => {
       });
       return secret!.secret;
     };
+
+    const recipientTskSecret = async (account: Account) =>
+      (await AppTaggingSecret.computeFromRecipientTsk(account.tsk, contractAddress, account.address)).secret;
   });
 
   describe('getNullifierStatuses', () => {
@@ -313,17 +384,23 @@ describe('PrivateExecutionOracle', () => {
 
   /** An account with its keys in the stores of `oracleArgs`, which also put it in the execution scopes. */
   const makeAccount = async () => {
-    const completeAddress = await CompleteAddress.random();
-    const ivsk = GrumpkinScalar.random();
+    const keys = await deriveKeys(Fr.random());
+    const keyStore = await makeEmptyKeyStore();
+    const completeAddress = await keyStore.addAccount(keys, Fr.random());
 
     const addressStore = mock<AddressStore>();
     addressStore.getCompleteAddress.mockResolvedValue(completeAddress);
-    const keyStore = mock<KeyStore>();
-    keyStore.getMasterIncomingViewingSecretKey.mockResolvedValue(ivsk);
 
-    const address = completeAddress.address;
-    return { address, completeAddress, ivsk, oracleArgs: { scopes: [address], addressStore, keyStore } };
+    return {
+      address: completeAddress.address,
+      completeAddress,
+      ivsk: keys.masterIncomingViewingSecretKey,
+      tsk: keys.masterTaggingSecretKey,
+      oracleArgs: { scopes: [completeAddress.address], addressStore, keyStore },
+    };
   };
+
+  const makeEmptyKeyStore = async () => new KeyStore(await openTmpStore('test'));
 
   const makeOracle = (overrides: Partial<PrivateExecutionOracleArgs> = {}): PrivateExecutionOracle => {
     return new PrivateExecutionOracle({

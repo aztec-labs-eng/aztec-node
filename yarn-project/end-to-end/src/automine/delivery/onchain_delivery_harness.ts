@@ -57,12 +57,26 @@ export function buildMessageDeliveryTest(opts: {
   // Serves the custom requests issued during the sender's simulations (e.g. the registry's interactive-handshake
   // signature request).
   customRequestResponder?: CustomRequestResponder;
+  // Who receives the deliveries:
+  // - 'recipient-pxe' (the default): an account only the recipient PXE holds.
+  // - 'recipient-and-sender-pxes': that account, also registered on the sender PXE and added to the scopes of each
+  //   send. The recipient PXE still holds no sender state.
+  // - 'sender': the recipient is the sender itself, and so the sender PXE acts as the recipient PXE.
+  recipientSetup?: 'recipient-pxe' | 'recipient-and-sender-pxes' | 'sender';
   // Extra `it()`s to register in this cell's suite, e.g. assertions against state a custom `senderHook` recorded.
   // Called inside the same `describe`, after the two baseline assertions below, so it shares their `beforeAll`
   // instead of depending on Jest's cross-`describe` execution order.
   additionalTests?: () => void;
 }) {
-  const { strategy, mode, senderHook, recipientRegistration, customRequestResponder, additionalTests } = opts;
+  const {
+    strategy,
+    mode,
+    senderHook,
+    recipientRegistration,
+    customRequestResponder,
+    recipientSetup = 'recipient-pxe',
+    additionalTests,
+  } = opts;
   const description = `${strategy} x ${formatMode(mode)}`;
 
   describe(description, () => {
@@ -133,20 +147,26 @@ export function buildMessageDeliveryTest(opts: {
         },
       }));
 
-      ({ wallet: walletRecipient, teardown: teardownRecipient } = await setupPXEAndGetWallet(
-        aztecNode,
-        aztecNode,
-        {},
-        undefined,
-        'pxe-recipient',
-      ));
-      recipientAccount = await walletRecipient.createSchnorrAccount(
-        additionallyFundedAccounts[0].secret,
-        additionallyFundedAccounts[0].salt,
-        additionallyFundedAccounts[0].signingKey,
-      );
-      await (await recipientAccount.getDeployMethod()).send({ from: NO_FROM });
-      recipient = recipientAccount.address;
+      if (recipientSetup === 'sender') {
+        walletRecipient = walletSender;
+        teardownRecipient = () => Promise.resolve();
+        recipient = sender;
+      } else {
+        ({ wallet: walletRecipient, teardown: teardownRecipient } = await setupPXEAndGetWallet(
+          aztecNode,
+          aztecNode,
+          {},
+          undefined,
+          'pxe-recipient',
+        ));
+        recipientAccount = await walletRecipient.createSchnorrAccount(
+          additionallyFundedAccounts[0].secret,
+          additionallyFundedAccounts[0].salt,
+          additionallyFundedAccounts[0].signingKey,
+        );
+        await (await recipientAccount.getDeployMethod()).send({ from: NO_FROM });
+        recipient = recipientAccount.address;
+      }
 
       await ensureHandshakeRegistryPublished(walletSender, sender);
       const { contract: deployed, instance } = await OnchainDeliveryTestContract.deploy(walletSender).send({
@@ -159,15 +179,27 @@ export function buildMessageDeliveryTest(opts: {
 
       await recipientRegistration?.(walletRecipient, recipient, sender);
 
+      if (recipientSetup === 'recipient-and-sender-pxes') {
+        await walletSender.createSchnorrAccount(
+          additionallyFundedAccounts[0].secret,
+          additionallyFundedAccounts[0].salt,
+          additionallyFundedAccounts[0].signingKey,
+        );
+      }
+      const sendOpts = {
+        from: sender,
+        additionalScopes: recipientSetup === 'recipient-and-sender-pxes' ? [recipient] : [],
+      };
+
       // Constrained sends to one pair are strictly ordered, so deliver one tx at a time. The first send bootstraps the
       // handshake (when the source is a handshake); the rest reuse it.
       const blockNumbers: number[] = [];
       for (const value of eventValues) {
-        const { receipt } = await sendEvent(value).send({ from: sender });
+        const { receipt } = await sendEvent(value).send(sendOpts);
         blockNumbers.push(receipt.blockNumber!);
       }
       for (const value of noteValues) {
-        await sendNote(value).send({ from: sender });
+        await sendNote(value).send(sendOpts);
       }
 
       await walletRecipient.sync();

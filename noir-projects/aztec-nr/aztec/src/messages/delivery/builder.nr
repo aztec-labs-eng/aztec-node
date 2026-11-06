@@ -138,7 +138,7 @@ impl MessageDelivery {
     /// ([`OnchainUnconstrainedDelivery::via_interactive_handshake`]) does not leak this, but it requires the
     /// recipient's cooperation.
     ///
-    /// Delivering to the sender itself uses an address-derived secret and reveals nothing.
+    /// Delivering to the sender itself reveals nothing.
     ///
     /// Delivering the message does produce on-chain information in the form of private logs, so transactions that
     /// deliver many messages this way might be identifiable by the large number of logs.
