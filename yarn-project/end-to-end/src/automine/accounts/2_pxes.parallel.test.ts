@@ -64,7 +64,7 @@ describe('automine/accounts/2_pxes', () => {
         numberOfAccounts: 1,
         additionallyFundedAccounts: await generateSchnorrAccounts(3, 'schnorr'),
         pxeCreationOptions: {
-          hooks: { resolveTaggingSecretStrategy: () => Promise.resolve({ type: 'address-derived' }) },
+          hooks: { resolveMessagingSecretStrategy: () => Promise.resolve({ type: 'address-derived' }) },
         },
       })
     ).context);

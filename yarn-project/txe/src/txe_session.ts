@@ -13,13 +13,13 @@ import {
   ContractStore,
   FactService,
   FactStore,
+  MessagingSecretSourcesStore,
   NoteService,
   NoteStore,
   PrivateEventStore,
   RecipientTaggingStore,
   SenderTaggingStore,
   StagedWriteCoordinator,
-  TaggingSecretSourcesStore,
   composeHooks,
   runOperation,
 } from '@aztec-labs/pxe/server';
@@ -58,11 +58,11 @@ import { z } from 'zod';
 
 import { DEFAULT_ADDRESS } from './constants.js';
 import type { IAvmExecutionOracle, ITxeExecutionOracle } from './oracle/interfaces.js';
-import type { GasSettingsData } from './oracle/noir-structs/gas_settings_data.js';
 import {
-  type TXETaggingSecretStrategies,
-  makeResolveTaggingSecretStrategyHook,
-} from './oracle/tagging_secret_strategy.js';
+  type TXEMessagingSecretStrategies,
+  makeResolveMessagingSecretStrategyHook,
+} from './oracle/messaging_secret_strategy.js';
+import type { GasSettingsData } from './oracle/noir-structs/gas_settings_data.js';
 import { TXEOraclePublicContext } from './oracle/txe_oracle_public_context.js';
 import { callTxeLegacyHandler } from './oracle/txe_oracle_registry.js';
 import { TXEOracleTopLevelContext, authorizeAllUtilityCallsHook } from './oracle/txe_oracle_top_level_context.js';
@@ -242,7 +242,7 @@ function emptyLastCallState(): LastCallState {
 export class TXESession implements TXESessionStateHandler {
   private state: SessionState = { name: 'TOP_LEVEL' };
   private authwits: Map<string, AuthWitness> = new Map();
-  private taggingSecretStrategies: TXETaggingSecretStrategies = new Map();
+  private messagingSecretStrategies: TXEMessagingSecretStrategies = new Map();
   private authorizeAllUtilityCallTargets = false;
   private lastCallInfo: LastCallState = emptyLastCallState();
   private txeOracleVersion: { major: number; minor: number } | undefined;
@@ -265,7 +265,7 @@ export class TXESession implements TXESessionStateHandler {
   private accountStore: TXEAccountStore;
   private senderTaggingStore: SenderTaggingStore;
   private recipientTaggingStore: RecipientTaggingStore;
-  private taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  private messagingSecretSourcesStore: MessagingSecretSourcesStore;
   private capsuleStore: CapsuleStore;
   private factStore: FactStore;
   private privateEventStore: PrivateEventStore;
@@ -291,7 +291,7 @@ export class TXESession implements TXESessionStateHandler {
     this.accountStore = args.accountStore;
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
-    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -352,7 +352,7 @@ export class TXESession implements TXESessionStateHandler {
     const noteStore = new NoteStore(store);
     const senderTaggingStore = new SenderTaggingStore(store);
     const recipientTaggingStore = new RecipientTaggingStore(store);
-    const taggingSecretSourcesStore = new TaggingSecretSourcesStore(store);
+    const messagingSecretSourcesStore = new MessagingSecretSourcesStore(store);
     const capsuleStore = new CapsuleStore(store);
     const factStore = new FactStore(store);
     const keyStore = new KeyStore(store);
@@ -384,7 +384,7 @@ export class TXESession implements TXESessionStateHandler {
       accountStore,
       senderTaggingStore,
       recipientTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       capsuleStore,
       factStore,
       privateEventStore,
@@ -392,7 +392,7 @@ export class TXESession implements TXESessionStateHandler {
       chainId,
       version,
       authwits: new Map(),
-      taggingSecretStrategies: new Map(),
+      messagingSecretStrategies: new Map(),
       authorizeAllUtilityCallTargets: false,
       artifactResolver,
       rootPath,
@@ -413,7 +413,7 @@ export class TXESession implements TXESessionStateHandler {
       accountStore,
       senderTaggingStore,
       recipientTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       capsuleStore,
       factStore,
       privateEventStore,
@@ -719,7 +719,7 @@ export class TXESession implements TXESessionStateHandler {
       accountStore: this.accountStore,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleStore: this.capsuleStore,
       factStore: this.factStore,
       privateEventStore: this.privateEventStore,
@@ -727,7 +727,7 @@ export class TXESession implements TXESessionStateHandler {
       chainId: this.chainId,
       version: this.version,
       authwits: this.authwits,
-      taggingSecretStrategies: this.taggingSecretStrategies,
+      messagingSecretStrategies: this.messagingSecretStrategies,
       authorizeAllUtilityCallTargets: this.authorizeAllUtilityCallTargets,
       artifactResolver: this.artifactResolver,
       rootPath: this.rootPath,
@@ -799,7 +799,7 @@ export class TXESession implements TXESessionStateHandler {
       aztecNode: this.stateMachine.node,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: new CapsuleService(this.capsuleStore, await this.keyStore.getAccounts()),
       factService: new FactService(this.factStore, await this.keyStore.getAccounts()),
       privateEventStore: this.privateEventStore,
@@ -898,7 +898,7 @@ export class TXESession implements TXESessionStateHandler {
       addressStore: this.addressStore,
       aztecNode: this.stateMachine.node,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: new CapsuleService(this.capsuleStore, await this.keyStore.getAccounts()),
       factService: new FactService(this.factStore, await this.keyStore.getAccounts()),
       privateEventStore: this.privateEventStore,
@@ -932,7 +932,7 @@ export class TXESession implements TXESessionStateHandler {
     // accounts to PXE (via `addAccount`), etc. This is a slight inconsistency in the working model of this class, but
     // is not too bad. The `close` call below therefore only hands back the session-scoped values that a test
     // sets directly at the top level, outside any contract execution (e.g. via `advanceTimestampBy`,
-    // `addAuthWitness`, `setTaggingSecretStrategies`). The oracle handler is discarded on every state transition,
+    // `addAuthWitness`, `setMessagingSecretStrategies`). The oracle handler is discarded on every state transition,
     // so the session must seed these values into the contexts it creates later.
 
     // TODO: persisting authwits this way is quite unfortunate: they create a temporary utility context that would
@@ -941,7 +941,7 @@ export class TXESession implements TXESessionStateHandler {
     ({
       nextBlockTimestamp: this.nextBlockTimestamp,
       authwits: this.authwits,
-      taggingSecretStrategies: this.taggingSecretStrategies,
+      messagingSecretStrategies: this.messagingSecretStrategies,
       authorizeAllUtilityCallTargets: this.authorizeAllUtilityCallTargets,
     } = (this.oracleHandler as TXEOracleTopLevelContext).close());
   }
@@ -1026,7 +1026,7 @@ export class TXESession implements TXESessionStateHandler {
           addressStore: this.addressStore,
           aztecNode: this.stateMachine.node,
           recipientTaggingStore: this.recipientTaggingStore,
-          taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+          messagingSecretSourcesStore: this.messagingSecretSourcesStore,
           capsuleService: new CapsuleService(this.capsuleStore, scopes),
           factService: new FactService(this.factStore, scopes),
           privateEventStore: this.privateEventStore,
@@ -1066,7 +1066,7 @@ export class TXESession implements TXESessionStateHandler {
   /** Execution hooks for the oracles this session builds. Every oracle construction site must use this. */
   private buildExecutionHooks() {
     return composeHooks({
-      resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies),
+      resolveMessagingSecretStrategy: makeResolveMessagingSecretStrategyHook(this.messagingSecretStrategies),
       authorizeUtilityCall: this.authorizeAllUtilityCallTargets ? authorizeAllUtilityCallsHook : undefined,
     });
   }
@@ -1093,7 +1093,7 @@ type TXESessionCtorArgs = {
   accountStore: TXEAccountStore;
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
-  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  messagingSecretSourcesStore: MessagingSecretSourcesStore;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;

@@ -1,6 +1,6 @@
 use crate::protocol::address::AztecAddress;
+use super::messaging_secret_derivation::MessagingSecretDerivation;
 use super::mode::{DeliveryMode, OnchainDeliveryMode};
-use super::tag_derivation::TagDerivation;
 
 /// Specifies how to deliver a message to a recipient.
 ///
@@ -23,7 +23,7 @@ use super::tag_derivation::TagDerivation;
 pub struct MessageDelivery {
     mode: DeliveryMode,
     sender_override: Option<AztecAddress>,
-    tag_derivation: Option<TagDerivation>,
+    messaging_secret_derivation: Option<MessagingSecretDerivation>,
 }
 
 impl MessageDelivery {
@@ -35,8 +35,8 @@ impl MessageDelivery {
         self.sender_override
     }
 
-    pub(crate) fn tag_derivation(self) -> Option<TagDerivation> {
-        self.tag_derivation
+    pub(crate) fn messaging_secret_derivation(self) -> Option<MessagingSecretDerivation> {
+        self.messaging_secret_derivation
     }
 
     /// Delivers the message fully off-chain, with no guarantees whatsoever.
@@ -130,7 +130,7 @@ impl MessageDelivery {
     ///
     /// The message itself reveals no information on-chain about sender, recipient, or contents: obtaining the plaintext
     /// requires the recipient's private address keys, and recognizing that a log was sent between a given sender and
-    /// recipient requires their shared tagging secret, which no third party can compute.
+    /// recipient requires their shared messaging secret, which no third party can compute.
     ///
     /// The exception is the discovery tag. Reaching a recipient the sender has not handshaked with before establishes,
     /// by default, a non-interactive handshake. This reveals to anyone who knows the recipient's address that a
@@ -184,7 +184,7 @@ impl MessageDelivery {
     ///
     /// The message itself reveals no information on-chain about sender, recipient, or contents: obtaining the plaintext
     /// requires the recipient's private address keys, and recognizing that a log was sent between a given sender and
-    /// recipient requires their shared tagging secret, which no third party can compute.
+    /// recipient requires their shared messaging secret, which no third party can compute.
     ///
     /// The exception is the discovery tag. Constrained delivery is always backed by a handshake, established by
     /// default as a non-interactive one the first time the sender reaches the recipient. A non-interactive handshake
@@ -213,7 +213,7 @@ impl MessageDeliveryBuilder for OffchainDelivery {
         MessageDelivery {
             mode: DeliveryMode::offchain(),
             sender_override: Option::none(),
-            tag_derivation: Option::none(),
+            messaging_secret_derivation: Option::none(),
         }
     }
 }
@@ -221,17 +221,17 @@ impl MessageDeliveryBuilder for OffchainDelivery {
 /// On-chain unconstrained delivery. Returned by [`MessageDelivery::onchain_unconstrained`].
 ///
 /// By default the tag reuses a handshake already registered for the pair, and
-/// otherwise falls back to the wallet-resolved [tagging secret
-/// strategy][`crate::messages::delivery::ResolvedTaggingStrategy`]. The contract can also fix the
+/// otherwise falls back to the wallet-resolved [messaging secret
+/// strategy][`crate::messages::delivery::ResolvedMessagingSecretStrategy`]. The contract can also fix the
 /// derivation, and its choice is honored over this default.
 pub struct OnchainUnconstrainedDelivery {
     sender_override: Option<AztecAddress>,
-    tag_derivation: Option<TagDerivation>,
+    messaging_secret_derivation: Option<MessagingSecretDerivation>,
 }
 
 impl OnchainUnconstrainedDelivery {
     fn new() -> Self {
-        Self { sender_override: Option::none(), tag_derivation: Option::none() }
+        Self { sender_override: Option::none(), messaging_secret_derivation: Option::none() }
     }
 
     /// Overrides the sender address used for discovery tag derivation.
@@ -256,7 +256,7 @@ impl OnchainUnconstrainedDelivery {
     /// Derives the discovery tag from a non-interactive handshake for the pair, reusing an existing one and creating a
     /// fresh one only when none exists.
     pub fn via_non_interactive_handshake(&mut self) -> Self {
-        self.tag_derivation = Option::some(TagDerivation::non_interactive_handshake());
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::non_interactive_handshake());
         *self
     }
 
@@ -268,7 +268,7 @@ impl OnchainUnconstrainedDelivery {
     /// the recipient's cooperation: they must answer the registry's signed-authorization request, so the send fails
     /// if they cannot be reached.
     pub fn via_interactive_handshake(&mut self) -> Self {
-        self.tag_derivation = Option::some(TagDerivation::interactive_handshake());
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::interactive_handshake());
         *self
     }
 
@@ -281,7 +281,7 @@ impl OnchainUnconstrainedDelivery {
     /// MessageDelivery::onchain_unconstrained().via_address_derived_secret()
     /// ```
     pub fn via_address_derived_secret(&mut self) -> Self {
-        self.tag_derivation = Option::some(TagDerivation::address_derived());
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::address_derived());
         *self
     }
 }
@@ -291,7 +291,7 @@ impl MessageDeliveryBuilder for OnchainUnconstrainedDelivery {
         MessageDelivery {
             mode: DeliveryMode::onchain_unconstrained(),
             sender_override: self.sender_override,
-            tag_derivation: self.tag_derivation,
+            messaging_secret_derivation: self.messaging_secret_derivation,
         }
     }
 }
@@ -305,16 +305,16 @@ impl From<OnchainUnconstrainedDelivery> for OnchainDeliveryMode {
 /// On-chain constrained delivery. Returned by [`MessageDelivery::onchain_constrained`].
 ///
 /// By default the tag reuses a handshake already registered for the pair, and otherwise falls back to the
-/// wallet-resolved [tagging secret strategy][`crate::messages::delivery::ResolvedTaggingStrategy`]. Constrained
-/// delivery only supports handshake-backed derivations.
+/// wallet-resolved [messaging secret strategy][`crate::messages::delivery::ResolvedMessagingSecretStrategy`].
+/// Constrained delivery only supports handshake-backed derivations.
 pub struct OnchainConstrainedDelivery {
     sender_override: Option<AztecAddress>,
-    tag_derivation: Option<TagDerivation>,
+    messaging_secret_derivation: Option<MessagingSecretDerivation>,
 }
 
 impl OnchainConstrainedDelivery {
     fn new() -> Self {
-        Self { sender_override: Option::none(), tag_derivation: Option::none() }
+        Self { sender_override: Option::none(), messaging_secret_derivation: Option::none() }
     }
 
     /// Overrides the sender address used for discovery tag derivation.
@@ -336,7 +336,7 @@ impl OnchainConstrainedDelivery {
     ///
     /// Constrained delivery only supports constrained secrets (e.g., handshake-registry backed derivations)
     pub fn via_non_interactive_handshake(&mut self) -> Self {
-        self.tag_derivation = Option::some(TagDerivation::non_interactive_handshake());
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::non_interactive_handshake());
         *self
     }
 
@@ -349,7 +349,7 @@ impl OnchainConstrainedDelivery {
     /// the recipient's cooperation: they must answer the registry's signed-authorization request, so the send fails
     /// if they cannot be reached.
     pub fn via_interactive_handshake(&mut self) -> Self {
-        self.tag_derivation = Option::some(TagDerivation::interactive_handshake());
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::interactive_handshake());
         *self
     }
 }
@@ -359,7 +359,7 @@ impl MessageDeliveryBuilder for OnchainConstrainedDelivery {
         MessageDelivery {
             mode: DeliveryMode::onchain_constrained(),
             sender_override: self.sender_override,
-            tag_derivation: self.tag_derivation,
+            messaging_secret_derivation: self.messaging_secret_derivation,
         }
     }
 }
@@ -373,7 +373,7 @@ impl From<OnchainConstrainedDelivery> for OnchainDeliveryMode {
 mod test {
     use crate::protocol::address::AztecAddress;
     use crate::protocol::traits::FromField;
-    use super::{DeliveryMode, MessageDelivery, MessageDeliveryBuilder, OnchainDeliveryMode, TagDerivation};
+    use super::{DeliveryMode, MessageDelivery, MessageDeliveryBuilder, MessagingSecretDerivation, OnchainDeliveryMode};
 
     #[test]
     fn onchain_deliveries_default_to_no_sender() {
@@ -419,24 +419,38 @@ mod test {
     }
 
     #[test]
-    fn tag_derivation_defaults_to_none_and_via_methods_populate_it() {
-        assert(MessageDelivery::onchain_unconstrained().build_message_delivery().tag_derivation().is_none());
-        assert(MessageDelivery::onchain_constrained().build_message_delivery().tag_derivation().is_none());
+    fn messaging_secret_derivation_defaults_to_none_and_via_methods_populate_it() {
+        let default_unconstrained = MessageDelivery::onchain_unconstrained().build_message_delivery();
+        let default_constrained = MessageDelivery::onchain_constrained().build_message_delivery();
+        assert(default_unconstrained.messaging_secret_derivation().is_none());
+        assert(default_constrained.messaging_secret_derivation().is_none());
 
         let unconstrained_delivery =
             MessageDelivery::onchain_unconstrained().via_address_derived_secret().build_message_delivery();
-        assert_eq(unconstrained_delivery.tag_derivation(), Option::some(TagDerivation::address_derived()));
+        assert_eq(
+            unconstrained_delivery.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::address_derived()),
+        );
 
         let constrained_delivery =
             MessageDelivery::onchain_constrained().via_non_interactive_handshake().build_message_delivery();
-        assert_eq(constrained_delivery.tag_derivation(), Option::some(TagDerivation::non_interactive_handshake()));
+        assert_eq(
+            constrained_delivery.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::non_interactive_handshake()),
+        );
 
         let unconstrained_interactive =
             MessageDelivery::onchain_unconstrained().via_interactive_handshake().build_message_delivery();
-        assert_eq(unconstrained_interactive.tag_derivation(), Option::some(TagDerivation::interactive_handshake()));
+        assert_eq(
+            unconstrained_interactive.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::interactive_handshake()),
+        );
 
         let constrained_interactive =
             MessageDelivery::onchain_constrained().via_interactive_handshake().build_message_delivery();
-        assert_eq(constrained_interactive.tag_derivation(), Option::some(TagDerivation::interactive_handshake()));
+        assert_eq(
+            constrained_interactive.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::interactive_handshake()),
+        );
     }
 }

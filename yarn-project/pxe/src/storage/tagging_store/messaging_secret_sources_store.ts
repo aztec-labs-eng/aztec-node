@@ -12,19 +12,19 @@ export type SharedSecretKind = 'arbitrary-secret' | 'handshake';
 export type SharedSecret = { kind: SharedSecretKind; secret: Point };
 
 /**
- * Stores the sources from which directional app tagging secrets are derived during recipient log synchronization.
+ * Stores the sources from which directional messaging secrets are derived during recipient log synchronization.
  *
  * Two kinds of source are held:
- * - Sender addresses: combined with a recipient to derive a shared tagging secret via ECDH. These are global (not
+ * - Sender addresses: combined with a recipient to derive a shared secret point via ECDH. These are global (not
  *   scoped to a recipient) because the per-recipient binding comes from re-mixing the recipient's keys during
  *   derivation, so each account only ever derives secrets meant for it.
- * - Pre-shared tagging secrets: shared secret points registered directly, bypassing ECDH. These are scoped to a
- *   specific recipient, since the derivation of the directional app tagging secret does not require any secret
- *   recipient data: given the original secret anyone can derive a recipient's app-siloed directional tagging secret,
+ * - Pre-shared secret points: shared secret points registered directly, bypassing ECDH. These are scoped to a
+ *   specific recipient, since the derivation of the directional messaging secret does not require any secret
+ *   recipient data: given the original secret anyone can derive a recipient's app-siloed directional messaging secret,
  *   and so these must not be reused across recipients to preserve privacy. Each carries the {@link SharedSecretKind}
  *   it was registered through, which determines the tag streams it is scanned under.
  */
-export class TaggingSecretSourcesStore {
+export class MessagingSecretSourcesStore {
   #store: AztecAsyncKVStore;
   #senders: AztecAsyncMap<string, true>;
   #sharedSecretsByRecipient: AztecAsyncMultiMap<string, StoredSharedSecret>;
@@ -67,7 +67,7 @@ export class TaggingSecretSourcesStore {
   }
 
   /**
-   * Registers a pre-shared tagging secret scoped to a recipient.
+   * Registers a pre-shared secret point scoped to a recipient.
    * @returns true if the secret was newly added, false if it was already registered for that recipient.
    */
   addSharedSecret(recipient: AztecAddress, kind: SharedSecretKind, secret: Point): Promise<boolean> {
@@ -91,7 +91,7 @@ export class TaggingSecretSourcesStore {
     });
   }
 
-  /** Returns the pre-shared tagging secrets registered for a given recipient. */
+  /** Returns the pre-shared secret points registered for a given recipient. */
   getSharedSecretsForRecipient(recipient: AztecAddress): Promise<SharedSecret[]> {
     return this.#store.transactionAsync(async () => {
       return (await toArray(this.#sharedSecretsByRecipient.getValuesAsync(recipient.toString()))).map(
@@ -100,7 +100,7 @@ export class TaggingSecretSourcesStore {
     });
   }
 
-  /** Returns every registered pre-shared tagging secret, each paired with the recipient it is scoped to. */
+  /** Returns every registered pre-shared secret point, each paired with the recipient it is scoped to. */
   getAllSharedSecrets(): Promise<{ recipient: AztecAddress; kind: SharedSecretKind; secret: Point }[]> {
     return this.#store.transactionAsync(async () => {
       const entries = await toArray(this.#sharedSecretsByRecipient.entriesAsync());
@@ -112,7 +112,7 @@ export class TaggingSecretSourcesStore {
   }
 
   /**
-   * Removes a pre-shared tagging secret scoped to a recipient. Both the secret and its kind must match.
+   * Removes a pre-shared secret point scoped to a recipient. Both the secret and its kind must match.
    * @returns true if the secret was registered and removed, false if it was not registered for that recipient.
    */
   removeSharedSecret(recipient: AztecAddress, kind: SharedSecretKind, secret: Point): Promise<boolean> {

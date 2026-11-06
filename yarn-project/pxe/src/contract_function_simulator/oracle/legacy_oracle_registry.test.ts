@@ -9,6 +9,10 @@ import { buildACIRCallback } from './acir_callback.js';
 import { LEGACY_ORACLE_REGISTRY, type LegacyOracleEntry } from './legacy_oracle_registry.js';
 import { FIELD, U32 } from './oracle_registry.js';
 
+// How aztec-nr serializes `OnchainDeliveryMode::onchain_unconstrained()`. stdlib does not export its own constant for
+// this value, to keep its public API small.
+const ONCHAIN_UNCONSTRAINED_DELIVERY_MODE = 2;
+
 type Handler = Parameters<typeof buildACIRCallback>[0];
 
 describe('legacy oracle dispatch', () => {
@@ -107,18 +111,39 @@ describe('legacy oracle dispatch', () => {
     );
   });
 
-  it('serves the retired getAppTaggingSecret name from the address-derived handler over the same wire', async () => {
+  it.each(['aztec_prv_getAppTaggingSecret', 'aztec_prv_getAppAddressDerivedTaggingSecret'])(
+    'serves the retired %s name from the address-derived handler over the same wire',
+    async retiredName => {
+      const secret = Fr.random();
+      const handler = {
+        isPrivate: true,
+        getAddressDerivedMessagingSecret: () => Promise.resolve(Option.some(secret)),
+      } as unknown as Handler;
+      const inputs = [[toACVMField(await AztecAddress.random())], [toACVMField(await AztecAddress.random())]];
+
+      const callback = buildACIRCallback(handler);
+
+      const legacyWire = await callback[retiredName](...inputs);
+      expect(legacyWire).toEqual(await callback['aztec_prv_getAddressDerivedMessagingSecret'](...inputs));
+    },
+  );
+
+  it('serves the retired resolveTaggingStrategy name from the messaging secret strategy handler over the same wire', async () => {
     const secret = Fr.random();
     const handler = {
       isPrivate: true,
-      getAppAddressDerivedTaggingSecret: () => Promise.resolve(Option.some(secret)),
+      resolveMessagingSecretStrategy: () => Promise.resolve({ type: 'unconstrained-secret', secret }),
     } as unknown as Handler;
-    const inputs = [[toACVMField(await AztecAddress.random())], [toACVMField(await AztecAddress.random())]];
+    const inputs = [
+      [toACVMField(await AztecAddress.random())],
+      [toACVMField(await AztecAddress.random())],
+      [toACVMField(new Fr(ONCHAIN_UNCONSTRAINED_DELIVERY_MODE))],
+    ];
 
     const callback = buildACIRCallback(handler);
 
-    const legacyWire = await callback['aztec_prv_getAppTaggingSecret'](...inputs);
-    expect(legacyWire).toEqual(await callback['aztec_prv_getAppAddressDerivedTaggingSecret'](...inputs));
+    const legacyWire = await callback['aztec_prv_resolveTaggingStrategy'](...inputs);
+    expect(legacyWire).toEqual(await callback['aztec_prv_resolveMessagingSecretStrategy'](...inputs));
   });
 
   it('rejects a legacy name that collides with a live oracle', () => {

@@ -2,13 +2,13 @@ import { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
-import { TaggingSecretSourcesStore } from './tagging_secret_sources_store.js';
+import { MessagingSecretSourcesStore } from './messaging_secret_sources_store.js';
 
-describe('TaggingSecretSourcesStore', () => {
-  let store: TaggingSecretSourcesStore;
+describe('MessagingSecretSourcesStore', () => {
+  let store: MessagingSecretSourcesStore;
 
   beforeEach(async () => {
-    store = new TaggingSecretSourcesStore(await openTmpStore('test'));
+    store = new MessagingSecretSourcesStore(await openTmpStore('test'));
   });
 
   describe('senders', () => {

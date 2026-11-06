@@ -270,7 +270,7 @@ mod test {
 
         env.utility_context_at(contract_address, |_| {
             // get_handshake_secrets calls the HandshakeRegistry during sync; return an empty page so
-            // no tagging secrets are produced.
+            // no messaging secrets are produced.
             let empty_page = HandshakePage { items: BoundedVec::new(), total_count: 0 };
             let _ = OracleMock::mock("aztec_utl_callUtilityFunction").returns(empty_page.serialize());
 

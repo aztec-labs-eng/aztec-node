@@ -15,9 +15,9 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
 import {
-  AppTaggingSecret,
   ContractClassLog,
   ContractClassLogFields,
+  MessagingSecret,
   type OnchainDeliveryMode,
   type TaggingIndexRange,
 } from '@aztec-labs/stdlib/logs';
@@ -32,10 +32,10 @@ import {
 
 import type { ResolveCustomRequest } from '../../hooks/resolve_custom_request.js';
 import {
-  type ResolveTaggingSecretStrategy,
-  type TaggingSecretStrategy,
-  defaultTaggingSecretStrategy,
-} from '../../hooks/resolve_tagging_secret_strategy.js';
+  type MessagingSecretStrategy,
+  type ResolveMessagingSecretStrategy,
+  defaultMessagingSecretStrategy,
+} from '../../hooks/resolve_messaging_secret_strategy.js';
 import { NoteService } from '../../notes/note_service.js';
 import { assertAllowedScope, isAllowedScope } from '../../storage/allowed_scopes.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
@@ -47,7 +47,7 @@ import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { NoteData } from '../noir-structs/note_data.js';
 import type { NullifierStatus } from '../noir-structs/nullifier_status.js';
 import { Option } from '../noir-structs/option.js';
-import type { ResolvedTaggingStrategy } from '../noir-structs/resolved_tagging_strategy.js';
+import type { ResolvedMessagingSecretStrategy } from '../noir-structs/resolved_messaging_secret_strategy.js';
 import { pickNotes } from '../pick_notes.js';
 import type { IPrivateExecutionOracle } from './interfaces.js';
 import { executePrivateFunction } from './private_execution.js';
@@ -209,29 +209,29 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   }
 
   /**
-   * Resolves the tagging strategy for a message via the wallet's {@link ResolveTaggingSecretStrategy} hook, or
-   * {@link defaultTaggingSecretStrategy} when no hook is configured. The contract receives a ready-to-use
-   * {@link ResolvedTaggingStrategy}.
+   * Resolves the messaging secret strategy for a message via the wallet's {@link ResolveMessagingSecretStrategy} hook,
+   * or {@link defaultMessagingSecretStrategy} when no hook is configured. The contract receives a ready-to-use
+   * {@link ResolvedMessagingSecretStrategy}.
    */
-  public async resolveTaggingStrategy(
+  public async resolveMessagingSecretStrategy(
     sender: AztecAddress,
     recipient: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
-  ): Promise<ResolvedTaggingStrategy> {
-    const strategy = await this.#chooseTaggingSecretStrategy(sender, recipient, deliveryMode);
-    return this.#resolveTaggingSecretStrategy(strategy, sender, recipient);
+  ): Promise<ResolvedMessagingSecretStrategy> {
+    const strategy = await this.#chooseMessagingSecretStrategy(sender, recipient, deliveryMode);
+    return this.#toResolvedMessagingSecretStrategy(strategy, sender, recipient);
   }
 
-  async #chooseTaggingSecretStrategy(
+  async #chooseMessagingSecretStrategy(
     sender: AztecAddress,
     recipient: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
-  ): Promise<TaggingSecretStrategy> {
+  ): Promise<MessagingSecretStrategy> {
     const recipientTskAvailable = isAllowedScope(recipient, this.scopes) && (await this.keyStore.hasAccount(recipient));
 
-    const hook: ResolveTaggingSecretStrategy | undefined = this.hooks?.resolveTaggingSecretStrategy;
+    const hook: ResolveMessagingSecretStrategy | undefined = this.hooks?.resolveMessagingSecretStrategy;
     if (!hook) {
-      return defaultTaggingSecretStrategy({ deliveryMode, recipientTskAvailable });
+      return defaultMessagingSecretStrategy({ deliveryMode, recipientTskAvailable });
     }
 
     const contractClassId = await this.#getCurrentContractClassId(this.contractAddress);
@@ -257,12 +257,12 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     return classId;
   }
 
-  /** Resolves a wallet-provided {@link TaggingSecretStrategy} into the app-siloed secret handed to the contract. */
-  async #resolveTaggingSecretStrategy(
-    strategy: TaggingSecretStrategy,
+  /** Resolves a wallet-provided {@link MessagingSecretStrategy} into the app-siloed secret handed to the contract. */
+  async #toResolvedMessagingSecretStrategy(
+    strategy: MessagingSecretStrategy,
     sender: AztecAddress,
     recipient: AztecAddress,
-  ): Promise<ResolvedTaggingStrategy> {
+  ): Promise<ResolvedMessagingSecretStrategy> {
     // PXE only performs the derivation; it does not reject a strategy that is unsound for the delivery mode (e.g. an
     // address-derived or arbitrary-secret strategy for constrained delivery). That soundness check belongs in the
     // Noir circuit, which constrains the resolved strategy against the delivery mode.
@@ -275,47 +275,47 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
         const secret = await this.#computeAddressDerivedSecret(sender, recipient);
         if (secret === undefined) {
           // Callers must validate the recipient before reaching here, so an invalid one is unexpected.
-          throw new Error(`Cannot derive an address-derived tagging secret for invalid recipient ${recipient}`);
+          throw new Error(`Cannot derive an address-derived messaging secret for invalid recipient ${recipient}`);
         }
         return { type: 'unconstrained-secret', secret };
       }
       case 'recipient-tsk': {
         assertAllowedScope(recipient, this.scopes);
         const recipientTsk = await this.keyStore.getMasterTaggingSecretKey(recipient);
-        const appTaggingSecret = await AppTaggingSecret.computeFromRecipientTsk(
+        const messagingSecret = await MessagingSecret.computeFromRecipientTsk(
           recipientTsk,
           this.contractAddress,
           recipient,
         );
-        return { type: 'unconstrained-secret', secret: appTaggingSecret.secret };
+        return { type: 'unconstrained-secret', secret: messagingSecret.secret };
       }
       case 'arbitrary-secret': {
         // App-silo the raw arbitrary secret point here so wallets never replicate the derivation.
-        const appTaggingSecret = await AppTaggingSecret.computeFromArbitrarySecret(
+        const messagingSecret = await MessagingSecret.computeFromArbitrarySecret(
           strategy.secret,
           this.contractAddress,
           recipient,
         );
-        return { type: 'unconstrained-secret', secret: appTaggingSecret.secret };
+        return { type: 'unconstrained-secret', secret: messagingSecret.secret };
       }
     }
   }
 
   /**
-   * Returns the sender-side address-derived app tagging secret for `(sender, recipient)`.
+   * Returns the sender-side address-derived messaging secret for `(sender, recipient)`.
    *
    * The caller obtains an index via {@link getNextTaggingIndex} and computes the final tag itself.
    * The only expected `None` case is an invalid recipient address; missing sender data fails while deriving.
    *
    * @param sender - The address sending the log
    * @param recipient - The address receiving the log
-   * @returns The address-derived app tagging secret, or `None` if the recipient is invalid.
+   * @returns The address-derived messaging secret, or `None` if the recipient is invalid.
    */
-  public async getAppAddressDerivedTaggingSecret(sender: AztecAddress, recipient: AztecAddress): Promise<Option<Fr>> {
+  public async getAddressDerivedMessagingSecret(sender: AztecAddress, recipient: AztecAddress): Promise<Option<Fr>> {
     const secret = await this.#computeAddressDerivedSecret(sender, recipient);
 
     if (secret === undefined) {
-      this.logger.warn(`Computing a tagging secret for invalid recipient ${recipient} - returning no secret`, {
+      this.logger.warn(`Computing a messaging secret for invalid recipient ${recipient} - returning no secret`, {
         contractAddress: this.contractAddress,
       });
       return Option.none();
@@ -333,7 +333,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
 
     const senderCompleteAddress = await this.getCompleteAddressOrFail(sender);
     const senderIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(sender);
-    const appTaggingSecret = await AppTaggingSecret.computeAddressDerived({
+    const messagingSecret = await MessagingSecret.computeAddressDerived({
       localAddress: senderCompleteAddress,
       localIvsk: senderIvsk,
       externalAddress: recipient,
@@ -341,42 +341,42 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       recipient,
     });
 
-    return appTaggingSecret?.secret;
+    return messagingSecret?.secret;
   }
 
   /**
    * Returns the next sender-side tagging index for a given secret and delivery mode.
    *
-   * @param secret - The tagging secret to allocate an index for.
+   * @param secret - The messaging secret to allocate an index for.
    * @param deliveryMode - The sender-side index namespace.
    * @returns The next index to use for this secret.
    */
   public async getNextTaggingIndex(secret: Fr, deliveryMode: OnchainDeliveryMode): Promise<number> {
-    const appTaggingSecret = new AppTaggingSecret(secret, this.contractAddress, deliveryMode);
-    const index = await this.#reserveNextIndexForSecret(appTaggingSecret);
+    const messagingSecret = new MessagingSecret(secret, this.contractAddress, deliveryMode);
+    const index = await this.#reserveNextIndexForSecret(messagingSecret);
     this.logger.debug(
       `Incrementing ${deliveryMode} tagging index for secret in contract ${this.contractAddress} to ${index}`,
     );
     return index;
   }
 
-  /** Resolves the next index for a given tagging secret, syncing from chain if it is missing from the in-tx cache. */
-  async #reserveNextIndexForSecret(secret: AppTaggingSecret): Promise<number> {
+  /** Resolves the next index for a given messaging secret, syncing from chain if it is missing from the in-tx cache. */
+  async #reserveNextIndexForSecret(secret: MessagingSecret): Promise<number> {
     const index = await this.#getIndexToUseForSecret(secret);
     this.taggingIndexCache.setLastUsedIndex(secret, index);
     return index;
   }
 
-  async #getIndexToUseForSecret(secret: AppTaggingSecret): Promise<number> {
+  async #getIndexToUseForSecret(secret: MessagingSecret): Promise<number> {
     // If we have the tagging index in the cache, we use it. If not we obtain it from the execution data provider.
     const lastUsedIndexInTx = this.taggingIndexCache.getLastUsedIndex(secret);
 
     if (lastUsedIndexInTx !== undefined) {
       return lastUsedIndexInTx + 1;
     } else {
-      // This is a tagging secret we've not yet used in this tx, so first sync our store to make sure its indices
+      // This is a messaging secret we've not yet used in this tx, so first sync our store to make sure its indices
       // are up to date. We do this here because this store is not synced as part of the global sync because
-      // that'd be wasteful as most tagging secrets are not used in each tx.
+      // that'd be wasteful as most messaging secrets are not used in each tx.
       const [{ finalized }, anchor] = await allToCompletion([
         this.l2TipsStore.getL2Tips(),
         this.anchorBlockHeader.toBlockParameter(),
@@ -710,7 +710,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       aztecNode: this.aztecNode,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: this.capsuleService,
       factService: this.factService,
       privateEventStore: this.privateEventStore,

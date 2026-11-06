@@ -171,7 +171,7 @@ describe('delivery/constrained', () => {
 });
 
 // This test builds its own PXE via setup() rather than reusing the wallet from the describe block above, because
-// it needs a resolveTaggingSecretStrategy hook that only exists as a PXE-creation-time option.
+// it needs a resolveMessagingSecretStrategy hook that only exists as a PXE-creation-time option.
 describe('delivery/constrained: rejects unsound sources', () => {
   jest.setTimeout(300_000);
 
@@ -184,7 +184,7 @@ describe('delivery/constrained: rejects unsound sources', () => {
       ...AUTOMINE_E2E_OPTS,
       pxeCreationOptions: {
         hooks: {
-          resolveTaggingSecretStrategy: async () => ({ type: 'arbitrary-secret', secret: await Point.random() }),
+          resolveMessagingSecretStrategy: async () => ({ type: 'arbitrary-secret', secret: await Point.random() }),
         },
       },
     });
@@ -192,7 +192,7 @@ describe('delivery/constrained: rejects unsound sources', () => {
       await ensureHandshakeRegistryPublished(wallet, sender);
       const { contract } = await OnchainDeliveryTestContract.deploy(wallet).send({ from: sender });
       await expect(contract.methods.emit_event(recipient, 1).send({ from: sender })).rejects.toThrow(
-        'an unconstrained tagging secret cannot back constrained delivery',
+        'an unconstrained messaging secret cannot back constrained delivery',
       );
     } finally {
       await teardown();

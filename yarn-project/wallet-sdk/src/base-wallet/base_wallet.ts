@@ -131,7 +131,7 @@ export abstract class BaseWallet implements Wallet {
     additionalScopes: AztecAddress[],
     sendMessagesAs: AztecAddress | undefined,
   ): AztecAddress[] {
-    // The sendMessagesAs account must be in scope so that its tagging secrets can be accessed.
+    // The sendMessagesAs account must be in scope so that its messaging secrets can be accessed.
     const tagSenderScopes = sendMessagesAs ? [sendMessagesAs] : [];
     const baseScopes = from === NO_FROM ? [] : [from];
     const allScopes = [...baseScopes, ...additionalScopes, ...tagSenderScopes];
@@ -162,7 +162,7 @@ export abstract class BaseWallet implements Wallet {
    * @returns The aliased collection of AztecAddresses that form this wallet's address book
    */
   async getAddressBook(): Promise<Aliased<AztecAddress>[]> {
-    const sources = await this.pxe.getTaggingSecretSources({ kind: 'address-derived' });
+    const sources = await this.pxe.getMessagingSecretSources({ kind: 'address-derived' });
     return sources.map(source => ({ item: source.sender, alias: '' }));
   }
 
@@ -354,7 +354,7 @@ export abstract class BaseWallet implements Wallet {
   }
 
   async registerSender(address: AztecAddress, _alias: string = ''): Promise<AztecAddress> {
-    await this.pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: address });
+    await this.pxe.registerMessagingSecretSource({ kind: 'address-derived', sender: address });
     return address;
   }
 

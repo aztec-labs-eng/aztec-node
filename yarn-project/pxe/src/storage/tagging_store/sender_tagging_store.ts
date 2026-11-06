@@ -1,6 +1,6 @@
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
-import { AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import { MessagingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
@@ -83,8 +83,8 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
    * expected to happen because whenever we start sync we start from the last finalized index and we can have pending
    * ranges already stored from previous syncs. If the ranges differ, it throws an error as that indicates a bug in
    * callers that record indexes at prove time. Discovery from onchain logs must use `mergePendingIndexes` instead.
-   * @param ranges - The tagging index ranges containing the directional app tagging secrets and the index ranges that are
-   * to be stored in the db.
+   * @param ranges - The tagging index ranges containing the directional messaging secrets and the index ranges
+   * that are to be stored in the db.
    * @param txHash - The tx in which the tagging indexes were used in private logs.
    * @param changeSetId - change set to stage this store's writes under. See {@link StagedWriteCoordinator} for more
    * details.
@@ -103,8 +103,8 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
    * finalized receipt step of the sync resolves that difference), or indexes beyond a partially discovered entry
    * when a tx from another PXE straddles a sync window boundary. Callers that record indexes at prove time must use
    * `storePendingIndexes` instead, so that a range disagreement surfaces as a bug rather than being absorbed.
-   * @param ranges - The tagging index ranges containing the directional app tagging secrets and the index ranges that are
-   * to be stored in the db.
+   * @param ranges - The tagging index ranges containing the directional messaging secrets and the index ranges
+   * that are to be stored in the db.
    * @param txHash - The tx in which the tagging indexes were used in private logs.
    * @param changeSetId - change set to stage this store's writes under. See {@link StagedWriteCoordinator} for more
    * details.
@@ -204,15 +204,15 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
 
   /**
    * Returns the pending txs whose highest index falls within [startIndex, endIndex) for a given directional app
-   * tagging secret. The highest index is what decides whether a tx belongs to the window, so it alone is matched
+   * messaging secret. The highest index is what decides whether a tx belongs to the window, so it alone is matched
    * against the bounds, and it is also the only index a caller needs: a tx whose highest index is onchain has every
    * lower one onchain too. A secret holds at most one entry per tx hash, so no tx hash appears twice in the result.
-   * @param secret - The directional app tagging secret to query pending indexes for.
+   * @param secret - The directional messaging secret to query pending indexes for.
    * @param startIndex - The lower bound of the index range (inclusive).
    * @param endIndex - The upper bound of the index range (exclusive).
    */
   getPendingTxs(
-    secret: AppTaggingSecret,
+    secret: MessagingSecret,
     startIndex: number,
     endIndex: number,
     changeSetId: ChangeSetId,
@@ -230,19 +230,19 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
    * @param secret - The secret to get the last finalized index for.
    * @returns The last (highest) finalized index for the given secret.
    */
-  getLastFinalizedIndex(secret: AppTaggingSecret, changeSetId: ChangeSetId): Promise<number | undefined> {
+  getLastFinalizedIndex(secret: MessagingSecret, changeSetId: ChangeSetId): Promise<number | undefined> {
     return this.withChangeSetAndDb(changeSetId, (changeSet, db) =>
       this.#readLastFinalizedIndex(changeSet, db, secret.toString()),
     );
   }
 
   /**
-   * Returns the last used index for a given directional app tagging secret, considering both finalized and pending
+   * Returns the last used index for a given directional messaging secret, considering both finalized and pending
    * indexes.
-   * @param secret - The directional app tagging secret to query the last used index for.
+   * @param secret - The directional messaging secret to query the last used index for.
    * @returns The last used index.
    */
-  getLastUsedIndex(secret: AppTaggingSecret, changeSetId: ChangeSetId): Promise<number | undefined> {
+  getLastUsedIndex(secret: MessagingSecret, changeSetId: ChangeSetId): Promise<number | undefined> {
     const secretStr = secret.toString();
 
     return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
@@ -366,11 +366,7 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
    * have all of one secret's tags onchain and none of another's, and the second secret's indexes must not be recorded
    * as finalized when they never reached the chain.
    */
-  finalizePendingIndexesOfSecret(
-    secret: AppTaggingSecret,
-    txHashes: TxHash[],
-    changeSetId: ChangeSetId,
-  ): Promise<void> {
+  finalizePendingIndexesOfSecret(secret: MessagingSecret, txHashes: TxHash[], changeSetId: ChangeSetId): Promise<void> {
     return this.#finalizePendingIndexes(txHashes, changeSetId, secret.toString());
   }
 
@@ -470,11 +466,11 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
         const pendingEntry = matchingEntries[0];
 
         // Expand each matching entry's range and recompute siloed tags for each index.
-        const appTaggingSecret = AppTaggingSecret.fromString(secret);
+        const messagingSecret = MessagingSecret.fromString(secret);
         let highestSurvivingIndex: number | undefined;
 
         for (let index = pendingEntry.lowestIndex; index <= pendingEntry.highestIndex; index++) {
-          const siloedTag = await SiloedTag.compute({ extendedSecret: appTaggingSecret, index });
+          const siloedTag = await SiloedTag.compute({ extendedSecret: messagingSecret, index });
           if (onChainTags.has(siloedTag.value.toString())) {
             highestSurvivingIndex =
               highestSurvivingIndex !== undefined ? Math.max(highestSurvivingIndex, index) : index;
@@ -515,7 +511,7 @@ export function windowExceededError(
 
 /**
  * A change set's staged data, created and discarded as a unit: the pending index ranges and the last finalized index,
- * both keyed by directional app tagging secret.
+ * both keyed by directional messaging secret.
  */
 type SenderTaggingChangeSet = {
   pendingIndexes: Map<string, PendingIndexesEntry[]>;
@@ -523,7 +519,7 @@ type SenderTaggingChangeSet = {
 };
 
 type SenderTaggingDb = {
-  // Stores the pending index ranges for each directional app tagging secret. Pending here means that the tx that
+  // Stores the pending index ranges for each directional messaging secret. Pending here means that the tx that
   // contained the private logs with tags corresponding to these indexes has not been finalized yet.
   //
   // We store the full range (lowestIndex, highestIndex) for each secret-tx pair because transactions can partially
@@ -531,13 +527,13 @@ type SenderTaggingDb = {
   // we can expand it and check each individual siloed tag against the TxEffect to determine which indexes made it
   // onchain.
   //
-  // directional app tagging secret => { lowestIndex, highestIndex, txHash }[]
+  // directional messaging secret => { lowestIndex, highestIndex, txHash }[]
   pendingIndexes: AztecAsyncMap<string, PendingIndexesEntry[]>;
 
-  // Stores the last (highest) finalized index for each directional app tagging secret. We care only about the last
+  // Stores the last (highest) finalized index for each directional messaging secret. We care only about the last
   // index because unlike the pending indexes, it will never happen that a finalized index would be removed and hence
   // we don't need to store the history.
   //
-  // directional app tagging secret => highest finalized index
+  // directional messaging secret => highest finalized index
   lastFinalizedIndexes: AztecAsyncMap<string, number>;
 };

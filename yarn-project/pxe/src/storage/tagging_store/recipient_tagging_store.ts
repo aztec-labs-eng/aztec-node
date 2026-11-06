@@ -1,5 +1,5 @@
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
-import type { AppTaggingSecret } from '@aztec-labs/stdlib/logs';
+import type { MessagingSecret } from '@aztec-labs/stdlib/logs';
 
 import { BaseStagingStore, type ReadonlyDb } from '../base_staging_store.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';
@@ -62,13 +62,13 @@ export class RecipientTaggingStore extends BaseStagingStore<RecipientTaggingChan
     return Promise.resolve();
   }
 
-  getHighestAgedIndex(secret: AppTaggingSecret, changeSetId: ChangeSetId): Promise<Index | undefined> {
+  getHighestAgedIndex(secret: MessagingSecret, changeSetId: ChangeSetId): Promise<Index | undefined> {
     return this.withChangeSetAndDb(changeSetId, (changeSet, db) =>
       this.#readHighestAgedIndex(changeSet, db, secret.toString()),
     );
   }
 
-  updateHighestAgedIndex(secret: AppTaggingSecret, index: Index, changeSetId: ChangeSetId): Promise<void> {
+  updateHighestAgedIndex(secret: MessagingSecret, index: Index, changeSetId: ChangeSetId): Promise<void> {
     return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       const currentIndex = await this.#readHighestAgedIndex(changeSet, db, secret.toString());
       if (currentIndex !== undefined && index <= currentIndex) {
@@ -79,13 +79,13 @@ export class RecipientTaggingStore extends BaseStagingStore<RecipientTaggingChan
     });
   }
 
-  getHighestFinalizedIndex(secret: AppTaggingSecret, changeSetId: ChangeSetId): Promise<Index | undefined> {
+  getHighestFinalizedIndex(secret: MessagingSecret, changeSetId: ChangeSetId): Promise<Index | undefined> {
     return this.withChangeSetAndDb(changeSetId, (changeSet, db) =>
       this.#readHighestFinalizedIndex(changeSet, db, secret.toString()),
     );
   }
 
-  updateHighestFinalizedIndex(secret: AppTaggingSecret, index: Index, changeSetId: ChangeSetId): Promise<void> {
+  updateHighestFinalizedIndex(secret: MessagingSecret, index: Index, changeSetId: ChangeSetId): Promise<void> {
     return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       const currentIndex = await this.#readHighestFinalizedIndex(changeSet, db, secret.toString());
       if (currentIndex !== undefined && index < currentIndex) {
@@ -102,7 +102,7 @@ export class RecipientTaggingStore extends BaseStagingStore<RecipientTaggingChan
 type SecretStr = string;
 type Index = number;
 
-/** A change set's staged data, created and discarded as a unit: both indexes, each keyed by tagging secret. */
+/** A change set's staged data, created and discarded as a unit: both indexes, each keyed by messaging secret. */
 type RecipientTaggingChangeSet = {
   highestAgedIndexes: Map<SecretStr, Index>;
   highestFinalizedIndexes: Map<SecretStr, Index>;

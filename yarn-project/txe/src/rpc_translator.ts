@@ -221,12 +221,22 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
+  aztec_txe_setMessagingSecretStrategies(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_txe_setMessagingSecretStrategies',
+      inputs,
+      handler: ([unconstrainedStrategy, constrainedStrategy]) =>
+        this.handlerAsTxe().setMessagingSecretStrategies(unconstrainedStrategy, constrainedStrategy),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
   aztec_txe_setTaggingSecretStrategies(...inputs: ForeignCallArgs) {
     return callTxeHandler({
       oracle: 'aztec_txe_setTaggingSecretStrategies',
       inputs,
       handler: ([unconstrainedStrategy, constrainedStrategy]) =>
-        this.handlerAsTxe().setTaggingSecretStrategies(unconstrainedStrategy, constrainedStrategy),
+        this.handlerAsTxe().setMessagingSecretStrategies(unconstrainedStrategy, constrainedStrategy),
     });
   }
 
@@ -1229,12 +1239,12 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_prv_resolveTaggingStrategy(...inputs: ForeignCallArgs) {
+  aztec_prv_resolveMessagingSecretStrategy(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_prv_resolveTaggingStrategy',
+      oracle: 'aztec_prv_resolveMessagingSecretStrategy',
       inputs,
       handler: ([sender, recipient, deliveryMode]) =>
-        this.handlerAsPrivate().resolveTaggingStrategy(sender, recipient, deliveryMode),
+        this.handlerAsPrivate().resolveMessagingSecretStrategy(sender, recipient, deliveryMode),
     });
   }
 
@@ -1248,11 +1258,11 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_prv_getAppAddressDerivedTaggingSecret(...inputs: ForeignCallArgs) {
+  aztec_prv_getAddressDerivedMessagingSecret(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_prv_getAppAddressDerivedTaggingSecret',
+      oracle: 'aztec_prv_getAddressDerivedMessagingSecret',
       inputs,
-      handler: ([sender, recipient]) => this.handlerAsPrivate().getAppAddressDerivedTaggingSecret(sender, recipient),
+      handler: ([sender, recipient]) => this.handlerAsPrivate().getAddressDerivedMessagingSecret(sender, recipient),
     });
   }
 

@@ -8,7 +8,7 @@ import {
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { withHexPrefix, withoutHexPrefix } from '@aztec-labs/foundation/string';
-import type { TaggingSecretStrategy } from '@aztec-labs/pxe/server';
+import type { MessagingSecretStrategy } from '@aztec-labs/pxe/server';
 import {
   ARRAY,
   AZTEC_ADDRESS,
@@ -82,17 +82,18 @@ const GAS_SETTINGS: TypeMapping<GasSettingsData> = STRUCT([
   { name: 'maxPriorityFeesPerGas', type: GAS_FEES },
 ]);
 
-// Tagging secret strategy discriminants. Must match the Noir test helper `TaggingSecretStrategy` in
-// aztec-nr `test/helpers/tagging_secret_strategy.nr`. This is a test-only oracle (only `set_tagging_secret_strategies`
-// reads it), so the mapping lives here on the TXE side rather than in the production oracle type mappings.
+// Messaging secret strategy discriminants. Must match the Noir test helper `MessagingSecretStrategy` in
+// aztec-nr `test/helpers/messaging_secret_strategy.nr`. This is a test-only oracle (only
+// `set_messaging_secret_strategies` reads it), so the mapping lives here on the TXE side rather than in the production
+// oracle type mappings.
 const STRATEGY_NON_INTERACTIVE_HANDSHAKE = 1;
 const STRATEGY_ARBITRARY_SECRET = 2;
 const STRATEGY_ADDRESS_DERIVED = 3;
 const STRATEGY_INTERACTIVE_HANDSHAKE = 4;
 const STRATEGY_RECIPIENT_TSK = 5;
 
-const TAGGING_SECRET_STRATEGY: TypeMapping<TaggingSecretStrategy> = LEAF({
-  kind: 'tagging-secret-strategy',
+const MESSAGING_SECRET_STRATEGY: TypeMapping<MessagingSecretStrategy> = LEAF({
+  kind: 'messaging-secret-strategy',
   serialization: {
     fn: strategy => {
       switch (strategy.type) {
@@ -125,7 +126,7 @@ const TAGGING_SECRET_STRATEGY: TypeMapping<TaggingSecretStrategy> = LEAF({
         case STRATEGY_ARBITRARY_SECRET:
           return { type: 'arbitrary-secret', secret: Point.fromFields([x, y]) };
         default:
-          throw new Error(`Unrecognized tagging secret strategy kind: ${kind}`);
+          throw new Error(`Unrecognized messaging secret strategy kind: ${kind}`);
       }
     },
   },
@@ -284,10 +285,19 @@ export const TXE_ORACLE_REGISTRY = {
     returnType: FIELD,
   }),
 
+  aztec_txe_setMessagingSecretStrategies: makeEntry({
+    params: [
+      { name: 'unconstrainedStrategy', type: OPTION(MESSAGING_SECRET_STRATEGY) },
+      { name: 'constrainedStrategy', type: OPTION(MESSAGING_SECRET_STRATEGY) },
+    ],
+  }),
+
+  // The retired name of `aztec_txe_setMessagingSecretStrategies`, which tests compiled against an earlier Aztec.nr
+  // still call.
   aztec_txe_setTaggingSecretStrategies: makeEntry({
     params: [
-      { name: 'unconstrainedStrategy', type: OPTION(TAGGING_SECRET_STRATEGY) },
-      { name: 'constrainedStrategy', type: OPTION(TAGGING_SECRET_STRATEGY) },
+      { name: 'unconstrainedStrategy', type: OPTION(MESSAGING_SECRET_STRATEGY) },
+      { name: 'constrainedStrategy', type: OPTION(MESSAGING_SECRET_STRATEGY) },
     ],
   }),
 

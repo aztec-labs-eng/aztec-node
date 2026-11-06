@@ -6,7 +6,7 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { OnchainDeliveryMode, type PrivateLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { mkdir, writeFile } from 'fs/promises';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -164,7 +164,7 @@ describeBench('syncTaggedPrivateLogs constrained-sync bench', () => {
     aztecNode.getPrivateLogsByTags.mockReset();
     const taggingStore = new RecipientTaggingStore(await openTmpStore('bench'));
     taggingStore.beginChangeSet(CHANGE_SET_ID);
-    const secrets = await Promise.all(Array.from({ length: secretCount }, () => randomAppTaggingSecret(deliveryMode)));
+    const secrets = await Promise.all(Array.from({ length: secretCount }, () => randomMessagingSecret(deliveryMode)));
 
     // Seed the persisted finalized indexes to simulate a recipient that already synced prior finalized messages. The
     // per-secret writes are independent, so run them concurrently.

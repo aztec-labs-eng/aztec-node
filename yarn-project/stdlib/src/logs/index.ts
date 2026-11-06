@@ -1,5 +1,5 @@
 export * from './onchain_delivery_mode.js';
-export * from './app_tagging_secret.js';
+export * from './messaging_secret.js';
 export * from './pre_tag.js';
 export * from './tagging_index_range.js';
 export * from './contract_class_log.js';

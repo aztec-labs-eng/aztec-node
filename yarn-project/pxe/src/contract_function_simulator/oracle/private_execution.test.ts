@@ -63,9 +63,9 @@ import type { ContractStore } from '../../storage/contract_store/contract_store.
 import type { FactStore } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
+import type { MessagingSecretSourcesStore } from '../../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../../storage/tagging_store/tagging_secret_sources_store.js';
 import { ContractFunctionSimulator } from '../contract_function_simulator.js';
 
 jest.setTimeout(60_000);
@@ -111,7 +111,7 @@ describe('Private Execution test suite', () => {
   let keyStore: MockProxy<KeyStore>;
   let senderTaggingStore: MockProxy<SenderTaggingStore>;
   let recipientTaggingStore: MockProxy<RecipientTaggingStore>;
-  let taggingSecretSourcesStore: MockProxy<TaggingSecretSourcesStore>;
+  let messagingSecretSourcesStore: MockProxy<MessagingSecretSourcesStore>;
   let aztecNode: MockProxy<AztecNode>;
   let capsuleStore: MockProxy<CapsuleStore>;
   let factStore: MockProxy<FactStore>;
@@ -303,7 +303,7 @@ describe('Private Execution test suite', () => {
     factStore.getFactCollectionsByType.mockResolvedValue([]);
     l2TipsStore = mock<L2TipsProvider>();
     privateEventStore = mock<PrivateEventStore>();
-    taggingSecretSourcesStore = mock<TaggingSecretSourcesStore>();
+    messagingSecretSourcesStore = mock<MessagingSecretSourcesStore>();
     contractSyncService = mock<ContractSyncService>();
     txResolver = mock<TxResolverService>();
     txResolver.resolveTxs.mockResolvedValue([]);
@@ -334,8 +334,8 @@ describe('Private Execution test suite', () => {
     senderTaggingStore.getPendingTxs.mockResolvedValue([]);
     senderTaggingStore.storePendingIndexes.mockResolvedValue();
 
-    taggingSecretSourcesStore.getSenders.mockResolvedValue([]);
-    taggingSecretSourcesStore.getSharedSecretsForRecipient.mockResolvedValue([]);
+    messagingSecretSourcesStore.getSenders.mockResolvedValue([]);
+    messagingSecretSourcesStore.getSharedSecretsForRecipient.mockResolvedValue([]);
 
     // Mock aztec node methods - the return array needs to have the same length as the number of tags
     // on the input.
@@ -486,7 +486,7 @@ describe('Private Execution test suite', () => {
       l2TipsStore,
       senderTaggingStore,
       recipientTaggingStore,
-      taggingSecretSourcesStore,
+      messagingSecretSourcesStore,
       capsuleStore,
       factStore,
       privateEventStore,

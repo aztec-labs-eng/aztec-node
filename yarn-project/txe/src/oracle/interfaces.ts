@@ -1,7 +1,7 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
-import type { ChangeSetId, TaggingSecretStrategy } from '@aztec-labs/pxe/server';
+import type { ChangeSetId, MessagingSecretStrategy } from '@aztec-labs/pxe/server';
 import type { Option } from '@aztec-labs/pxe/simulator';
 import type { EventSelector, FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -75,12 +75,12 @@ export interface ITxeExecutionOracle {
   addAuthWitness(address: AztecAddress, messageHash: Fr): Promise<void>;
   sendL1ToL2Message(content: Fr, secretHash: Fr, sender: EthAddress, recipient: AztecAddress): Promise<Fr>;
   /**
-   * Configures the tagging secret strategy the test's simulated wallet resolves for each delivery mode. A `none`
+   * Configures the messaging secret strategy the test's simulated wallet resolves for each delivery mode. A `none`
    * clears that mode, so it falls back to the default strategy (or, when both modes end up unset, to no hook at all).
    */
-  setTaggingSecretStrategies(
-    unconstrainedStrategy: Option<TaggingSecretStrategy>,
-    constrainedStrategy: Option<TaggingSecretStrategy>,
+  setMessagingSecretStrategies(
+    unconstrainedStrategy: Option<MessagingSecretStrategy>,
+    constrainedStrategy: Option<MessagingSecretStrategy>,
   ): void;
   /**
    * Configures whether the test's simulated wallet authorizes every cross-contract utility call target.

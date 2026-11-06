@@ -133,7 +133,7 @@ describe('PXE', () => {
 
   it('refuses to register an invalid address as a sender', async () => {
     await expect(
-      pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: makeInvalidAztecAddress() }),
+      pxe.registerMessagingSecretSource({ kind: 'address-derived', sender: makeInvalidAztecAddress() }),
     ).rejects.toThrow(/not valid/);
   });
 
@@ -147,8 +147,8 @@ describe('PXE', () => {
 
   it('does not add a keystore account to the sender address book when registered as a sender', async () => {
     const { address } = await pxe.registerAccount(await deriveKeys(Fr.random()), Fr.random());
-    await pxe.registerTaggingSecretSource({ kind: 'address-derived', sender: address });
-    const senders = await pxe.getTaggingSecretSources({ kind: 'address-derived' });
+    await pxe.registerMessagingSecretSource({ kind: 'address-derived', sender: address });
+    const senders = await pxe.getMessagingSecretSources({ kind: 'address-derived' });
     const senderAddresses = senders.map(s => s.sender.toString());
     expect(senderAddresses).not.toContain(address.toString());
   });
@@ -158,10 +158,10 @@ describe('PXE', () => {
     const recipient = (await CompleteAddress.random()).address;
     const secret = await Point.random();
 
-    await pxe.registerTaggingSecretSource({ kind: 'address-derived', sender });
-    await pxe.registerTaggingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
+    await pxe.registerMessagingSecretSource({ kind: 'address-derived', sender });
+    await pxe.registerMessagingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
 
-    expect(await pxe.getTaggingSecretSources()).toEqual(
+    expect(await pxe.getMessagingSecretSources()).toEqual(
       expect.arrayContaining([
         { kind: 'address-derived', sender },
         { kind: 'arbitrary-secret', recipient, secret },
@@ -169,19 +169,19 @@ describe('PXE', () => {
     );
   });
 
-  it('filters tagging secret sources by kind', async () => {
+  it('filters messaging secret sources by kind', async () => {
     const sender = (await CompleteAddress.random()).address;
     const recipient = (await CompleteAddress.random()).address;
     const secret = await Point.random();
 
-    await pxe.registerTaggingSecretSource({ kind: 'address-derived', sender });
-    await pxe.registerTaggingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
+    await pxe.registerMessagingSecretSource({ kind: 'address-derived', sender });
+    await pxe.registerMessagingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
 
-    const senders = await pxe.getTaggingSecretSources({ kind: 'address-derived' });
+    const senders = await pxe.getMessagingSecretSources({ kind: 'address-derived' });
     expect(senders).toContainEqual({ kind: 'address-derived', sender });
     expect(senders).not.toContainEqual({ kind: 'arbitrary-secret', recipient, secret });
 
-    const secrets = await pxe.getTaggingSecretSources({ kind: 'arbitrary-secret' });
+    const secrets = await pxe.getMessagingSecretSources({ kind: 'arbitrary-secret' });
     expect(secrets).toContainEqual({ kind: 'arbitrary-secret', recipient, secret });
     expect(secrets).not.toContainEqual({ kind: 'address-derived', sender });
   });
@@ -191,13 +191,13 @@ describe('PXE', () => {
     const recipient = (await CompleteAddress.random()).address;
     const secret = await Point.random();
 
-    await pxe.registerTaggingSecretSource({ kind: 'address-derived', sender });
-    await pxe.registerTaggingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
+    await pxe.registerMessagingSecretSource({ kind: 'address-derived', sender });
+    await pxe.registerMessagingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
 
-    await pxe.removeTaggingSecretSource({ kind: 'address-derived', sender });
-    await pxe.removeTaggingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
+    await pxe.removeMessagingSecretSource({ kind: 'address-derived', sender });
+    await pxe.removeMessagingSecretSource({ kind: 'arbitrary-secret', recipient, secret });
 
-    const remaining = await pxe.getTaggingSecretSources();
+    const remaining = await pxe.getMessagingSecretSources();
     expect(remaining).not.toContainEqual({ kind: 'address-derived', sender });
     expect(remaining).not.toContainEqual({ kind: 'arbitrary-secret', recipient, secret });
   });
@@ -208,7 +208,7 @@ describe('PXE', () => {
     const recipient = completeAddress.address;
     const ephPk = (await Point.random()).x;
 
-    await pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk });
+    await pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk });
 
     const addressSecret = await computeAddressSecret(
       await completeAddress.getPreaddress(),
@@ -220,7 +220,7 @@ describe('PXE', () => {
       ephPkPoint,
       await recipient.toAddressPoint(),
     );
-    expect(await pxe.getTaggingSecretSources({ kind: 'handshake' })).toContainEqual({
+    expect(await pxe.getMessagingSecretSources({ kind: 'handshake' })).toContainEqual({
       kind: 'handshake',
       recipient,
       secret: expectedSecret,
@@ -231,17 +231,17 @@ describe('PXE', () => {
     const { address: recipient } = await pxe.registerAccount(await deriveKeys(Fr.random()), Fr.random());
     const ephPk = (await Point.random()).x;
 
-    await pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk });
-    await pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk });
+    await pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk });
+    await pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk });
 
-    const secrets = await pxe.getTaggingSecretSources({ kind: 'handshake' });
+    const secrets = await pxe.getMessagingSecretSources({ kind: 'handshake' });
     expect(secrets.filter(s => s.recipient.equals(recipient))).toHaveLength(1);
   });
 
   it('refuses to register a handshake for a recipient that is not an account', async () => {
     const recipient = (await CompleteAddress.random()).address;
     await expect(
-      pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk: (await Point.random()).x }),
+      pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk: (await Point.random()).x }),
     ).rejects.toThrow(/not an account/);
   });
 
@@ -249,7 +249,7 @@ describe('PXE', () => {
     const { address: recipient } = await pxe.registerAccount(await deriveKeys(Fr.random()), Fr.random());
     // x = 3 is not a valid x-coordinate on the Grumpkin curve
     const ephPk = new Fr(3);
-    await expect(pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk })).rejects.toThrow(
+    await expect(pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk })).rejects.toThrow(
       `Ephemeral public key x-coordinate ${ephPk} does not correspond to a Grumpkin curve point.`,
     );
   });
@@ -258,14 +258,14 @@ describe('PXE', () => {
     const { address: recipient } = await pxe.registerAccount(await deriveKeys(Fr.random()), Fr.random());
     const ephPk = (await Point.random()).x;
 
-    await pxe.registerTaggingSecretSource({ kind: 'handshake', recipient, ephPk });
+    await pxe.registerMessagingSecretSource({ kind: 'handshake', recipient, ephPk });
 
-    const [listed] = (await pxe.getTaggingSecretSources({ kind: 'handshake' })).filter(s =>
+    const [listed] = (await pxe.getMessagingSecretSources({ kind: 'handshake' })).filter(s =>
       s.recipient.equals(recipient),
     );
-    await pxe.removeTaggingSecretSource(listed);
+    await pxe.removeMessagingSecretSource(listed);
 
-    const secrets = await pxe.getTaggingSecretSources({ kind: 'handshake' });
+    const secrets = await pxe.getMessagingSecretSources({ kind: 'handshake' });
     expect(secrets.filter(s => s.recipient.equals(recipient))).toHaveLength(0);
   });
 

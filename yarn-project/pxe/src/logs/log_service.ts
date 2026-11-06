@@ -8,7 +8,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { AppTaggingSecret, type LogResult, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { type LogResult, MessagingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
@@ -20,8 +20,8 @@ import type { TxOnchainContext } from '../messages/tx_resolver_service.js';
 import { AddressStore } from '../storage/address_store/address_store.js';
 import { assertAllowedScope } from '../storage/allowed_scopes.js';
 import type { ChangeSetId } from '../storage/staged_write_coordinator.js';
+import type { MessagingSecretSourcesStore } from '../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../storage/tagging_store/tagging_secret_sources_store.js';
 import {
   type LogQueryAnchor,
   getAllPrivateLogsByTags,
@@ -33,7 +33,7 @@ import {
 type RangeKey = string;
 const rangeKey = (fromBlock?: BlockNumber, toBlock?: BlockNumber): RangeKey => `${fromBlock ?? ''}-${toBlock ?? ''}`;
 
-/** The recipient key material that tagging secret derivation needs. */
+/** The recipient key material that messaging secret derivation needs. */
 type RecipientKeys = { completeAddress: CompleteAddress; ivsk: GrumpkinScalar; tsk: GrumpkinScalar };
 
 export class LogService {
@@ -45,7 +45,7 @@ export class LogService {
     private readonly l2TipsStore: L2TipsProvider,
     private readonly keyStore: KeyStore,
     private readonly recipientTaggingStore: RecipientTaggingStore,
-    private readonly taggingSecretSourcesStore: TaggingSecretSourcesStore,
+    private readonly messagingSecretSourcesStore: MessagingSecretSourcesStore,
     private readonly addressStore: AddressStore,
     private readonly scopes: AztecAddress[],
     private readonly changeSetId: ChangeSetId,
@@ -185,7 +185,7 @@ export class LogService {
   }
 
   /**
-   * Fetches the pending tagged logs for a recipient across all its tagging secrets for the contract.
+   * Fetches the pending tagged logs for a recipient across all its messaging secrets for the contract.
    *
    * @param providedSecrets - App-siloed secrets that PXE cannot enumerate itself, passed in by the contract as it
    * syncs, such as those of the handshakes it discovers onchain. PXE searches them alongside the secrets derived from
@@ -194,7 +194,7 @@ export class LogService {
   public async fetchTaggedLogs(
     contractAddress: AztecAddress,
     recipient: AztecAddress,
-    providedSecrets: AppTaggingSecret[],
+    providedSecrets: MessagingSecret[],
   ): Promise<RetrievedTaggedLog[]> {
     assertAllowedScope(recipient, this.scopes);
 
@@ -208,7 +208,7 @@ export class LogService {
     // `providedSecrets`.
     const recipientKeys = await this.#getRecipientKeys(recipient);
     if (!recipientKeys) {
-      this.log.warn(`Searching only provided tagging secrets for ${recipient}, whose keys are not held`, {
+      this.log.warn(`Searching only provided messaging secrets for ${recipient}, whose keys are not held`, {
         recipient,
         contractAddress,
       });
@@ -254,18 +254,21 @@ export class LogService {
   async #getSecretsDerivedFromRecipientKeys(
     recipientKeys: RecipientKeys,
     contractAddress: AztecAddress,
-  ): Promise<AppTaggingSecret[]> {
+  ): Promise<MessagingSecret[]> {
     // We implicitly add all PXE accounts as senders, so that we find address-derived messages between them, including
     // those an account sends to itself (recipient = us, sender = us).
-    const allSenders = [...(await this.taggingSecretSourcesStore.getSenders()), ...(await this.keyStore.getAccounts())];
+    const allSenders = [
+      ...(await this.messagingSecretSourcesStore.getSenders()),
+      ...(await this.keyStore.getAccounts()),
+    ];
 
-    const recipientTskSecret = AppTaggingSecret.computeFromRecipientTsk(
+    const recipientTskSecret = MessagingSecret.computeFromRecipientTsk(
       recipientKeys.tsk,
       contractAddress,
       recipientKeys.completeAddress.address,
     );
     const addressDerivedSecrets = allSenders.map(async sender => {
-      const secret = await AppTaggingSecret.computeAddressDerived({
+      const secret = await MessagingSecret.computeAddressDerived({
         localAddress: recipientKeys.completeAddress,
         localIvsk: recipientKeys.ivsk,
         externalAddress: sender,
@@ -274,9 +277,9 @@ export class LogService {
       });
 
       if (!secret) {
-        // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
+        // Note that all senders originate from either the MessagingSecretSourcesStore or the KeyStore.
         throw new Error(
-          `Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
+          `Failed to compute a messaging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`,
         );
       }
 
@@ -287,27 +290,27 @@ export class LogService {
   }
 
   /**
-   * Computes the tagging secrets registered for a recipient. An arbitrary secret is only used for unconstrained
-   * delivery, so it yields one app tagging secret, while a handshake can be used for either delivery mode and yields
+   * Computes the messaging secrets registered for a recipient. An arbitrary secret is only used for unconstrained
+   * delivery, so it yields one messaging secret, while a handshake can be used for either delivery mode and yields
    * one for each.
    */
   async #getSecretsRegisteredForRecipient(
     recipient: AztecAddress,
     contractAddress: AztecAddress,
-  ): Promise<AppTaggingSecret[]> {
-    const registeredSecrets = await this.taggingSecretSourcesStore.getSharedSecretsForRecipient(recipient);
+  ): Promise<MessagingSecret[]> {
+    const registeredSecrets = await this.messagingSecretSourcesStore.getSharedSecretsForRecipient(recipient);
 
     return allToCompletion(
       registeredSecrets.flatMap(({ kind, secret }) => {
         switch (kind) {
           case 'arbitrary-secret':
-            return [AppTaggingSecret.computeFromArbitrarySecret(secret, contractAddress, recipient)];
+            return [MessagingSecret.computeFromArbitrarySecret(secret, contractAddress, recipient)];
           case 'handshake':
             // A handshake-backed sender tags messages with the bare app-siloed secret, one tag domain per delivery
             // mode.
             return [
-              AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
-              AppTaggingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
+              MessagingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.UNCONSTRAINED),
+              MessagingSecret.computeFromHandshakeSecret(secret, contractAddress, OnchainDeliveryMode.CONSTRAINED),
             ];
           default: {
             const _exhaustive: never = kind;

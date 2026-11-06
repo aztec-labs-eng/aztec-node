@@ -12,7 +12,7 @@ use aztec::{
     protocol::{address::AztecAddress, point::EmbeddedCurvePoint, traits::FromField},
     standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS,
     test::helpers::{
-        tagging_secret_strategy::{compute_directional_app_secret, TaggingSecretStrategy},
+        messaging_secret_strategy::{compute_directional_app_secret, MessagingSecretStrategy},
         test_environment::{
             CallPrivateOptions, DeployOptions, ExecuteUtilityOptions, TestEnvironment, TestEnvironmentOptions,
         },
@@ -60,9 +60,9 @@ unconstrained fn unconstrained_delivery_works_alongside_constrained_delivery() {
     };
     // Only the unconstrained mode is configured: the constrained mode falls back to the default non-interactive
     // handshake strategy, so the constrained delivery below still bootstraps a registry handshake.
-    let options = TestEnvironmentOptions::new().with_default_tag_secret_strategy(
+    let options = TestEnvironmentOptions::new().with_default_messaging_secret_strategy(
         MessageDelivery::onchain_unconstrained(),
-        TaggingSecretStrategy::arbitrary_secret(point),
+        MessagingSecretStrategy::arbitrary_secret(point),
     );
     let (env, registry_address, test_address, sender, _) = setup_opts(options);
     let recipient = external_recipient();

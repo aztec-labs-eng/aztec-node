@@ -23,8 +23,8 @@ import { FactService } from '../../storage/fact_store/index.js';
 import type { FactStore } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
+import type { MessagingSecretSourcesStore } from '../../storage/tagging_store/messaging_secret_sources_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
-import type { TaggingSecretSourcesStore } from '../../storage/tagging_store/tagging_secret_sources_store.js';
 import { AnchoredContractData } from '../anchored_contract_data.js';
 import { TransientArrayService } from '../transient_array_service.js';
 import { buildACIRCallback } from './acir_callback.js';
@@ -40,7 +40,7 @@ describe('Oracle Version Check test suite', () => {
   let addressStore: ReturnType<typeof mock<AddressStore>>;
   let aztecNode: ReturnType<typeof mock<AztecNode>>;
   let recipientTaggingStore: ReturnType<typeof mock<RecipientTaggingStore>>;
-  let taggingSecretSourcesStore: ReturnType<typeof mock<TaggingSecretSourcesStore>>;
+  let messagingSecretSourcesStore: ReturnType<typeof mock<MessagingSecretSourcesStore>>;
   let capsuleStore: ReturnType<typeof mock<CapsuleStore>>;
   let factStore: ReturnType<typeof mock<FactStore>>;
   let privateEventStore: ReturnType<typeof mock<PrivateEventStore>>;
@@ -57,7 +57,7 @@ describe('Oracle Version Check test suite', () => {
     addressStore = mock<AddressStore>();
     aztecNode = mock<AztecNode>();
     recipientTaggingStore = mock<RecipientTaggingStore>();
-    taggingSecretSourcesStore = mock<TaggingSecretSourcesStore>();
+    messagingSecretSourcesStore = mock<MessagingSecretSourcesStore>();
     capsuleStore = mock<CapsuleStore>();
     factStore = mock<FactStore>();
     privateEventStore = mock<PrivateEventStore>();
@@ -123,7 +123,7 @@ describe('Oracle Version Check test suite', () => {
         addressStore,
         aztecNode,
         recipientTaggingStore,
-        taggingSecretSourcesStore,
+        messagingSecretSourcesStore,
         capsuleService: new CapsuleService(capsuleStore, []),
         factService: new FactService(factStore, []),
         privateEventStore,

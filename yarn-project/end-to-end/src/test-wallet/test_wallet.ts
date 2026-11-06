@@ -24,10 +24,10 @@ import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import type { NotesFilter } from '@aztec-labs/pxe/client/lazy';
 import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
 import {
+  type MessagingSecretSource,
   PXE,
   type PXECreationOptions,
   type PackedPrivateEvent,
-  type TaggingSecretSource,
   createPXE,
 } from '@aztec-labs/pxe/server';
 import type { EventSelector } from '@aztec-labs/stdlib/abi';
@@ -423,12 +423,12 @@ export class TestWallet extends BaseWallet {
   }
 
   /**
-   * Registers a non-sender tagging-secret source (e.g. a raw out-of-band shared secret) so this PXE discovers messages
-   * tagged with it. Test-only surface over {@link PXE.registerTaggingSecretSource}, which the base `Wallet` does not
-   * expose. The `address-derived` (sender) variant is excluded: use {@link Wallet.registerSender} for that.
+   * Registers a non-sender messaging-secret source (e.g. a raw out-of-band shared secret) so this PXE discovers
+   * messages tagged with it. Test-only surface over {@link PXE.registerMessagingSecretSource}, which the base `Wallet`
+   * does not expose. The `address-derived` (sender) variant is excluded: use {@link Wallet.registerSender} for that.
    */
-  registerTaggingSecretSource(source: Exclude<TaggingSecretSource, { kind: 'address-derived' }>): Promise<void> {
-    return this.pxe.registerTaggingSecretSource(source);
+  registerMessagingSecretSource(source: Exclude<MessagingSecretSource, { kind: 'address-derived' }>): Promise<void> {
+    return this.pxe.registerMessagingSecretSource(source);
   }
 
   stop(): Promise<void> {

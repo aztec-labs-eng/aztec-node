@@ -24,7 +24,7 @@ use crate::{
     },
     note::{note_interface::{NoteHash, NoteType}, NoteMessage},
     oracle::version::assert_compatible_oracle_version,
-    test::helpers::{tagging_secret_strategy::TaggingSecretStrategy, txe_oracles, utils::ContractDeployment},
+    test::helpers::{messaging_secret_strategy::MessagingSecretStrategy, txe_oracles, utils::ContractDeployment},
     utils::array::subarray,
 };
 
@@ -92,15 +92,15 @@ pub struct TestEnvironment {
 /// methods setting each value, e.g.:
 /// ```noir
 /// let env = TestEnvironment::new_opts(
-///     TestEnvironmentOptions::new().with_default_tag_secret_strategy(
+///     TestEnvironmentOptions::new().with_default_messaging_secret_strategy(
 ///         MessageDelivery::onchain_unconstrained(),
-///         TaggingSecretStrategy::non_interactive_handshake(),
+///         MessagingSecretStrategy::non_interactive_handshake(),
 ///     ),
 /// );
 /// ```
 pub struct TestEnvironmentOptions {
-    default_unconstrained_tagging_secret_strategy: Option<TaggingSecretStrategy>,
-    default_constrained_tagging_secret_strategy: Option<TaggingSecretStrategy>,
+    default_unconstrained_messaging_secret_strategy: Option<MessagingSecretStrategy>,
+    default_constrained_messaging_secret_strategy: Option<MessagingSecretStrategy>,
     authorize_all_utility_call_targets: bool,
 }
 
@@ -108,38 +108,52 @@ impl TestEnvironmentOptions {
     /// Creates a new `TestEnvironmentOptions` with default values.
     pub fn new() -> Self {
         Self {
-            default_unconstrained_tagging_secret_strategy: Option::none(),
-            default_constrained_tagging_secret_strategy: Option::none(),
+            default_unconstrained_messaging_secret_strategy: Option::none(),
+            default_constrained_messaging_secret_strategy: Option::none(),
             authorize_all_utility_call_targets: false,
         }
     }
 
-    /// Sets the default [`TaggingSecretStrategy`] the wallet reports for `mode` through the
-    /// [`resolve_tagging_strategy`](crate::oracle::resolve_tagging_strategy) oracle, affecting message delivery in
-    /// private executions that do not fix their own delivery derivation.
+    /// Sets the default [`MessagingSecretStrategy`] the wallet reports for `mode` through the
+    /// [`resolve_messaging_secret_strategy`](crate::oracle::resolve_messaging_secret_strategy) oracle, affecting
+    /// message delivery in private executions that do not fix their own delivery derivation.
     ///
     /// If no strategy is set for either mode, the wallet hook is left unconfigured and the private execution
     /// environment applies its own default. A mode left unset while the other is configured falls back to the default
-    /// [`TaggingSecretStrategy::non_interactive_handshake`], the strategy a PXE `resolveTaggingSecretStrategy` hook
+    /// [`MessagingSecretStrategy::non_interactive_handshake`], the strategy a PXE `resolveMessagingSecretStrategy` hook
     /// typically hardcodes for modes it does not customize.
-    pub fn with_default_tag_secret_strategy<M>(&mut self, mode: M, strategy: TaggingSecretStrategy) -> Self
+    pub fn with_default_messaging_secret_strategy<M>(&mut self, mode: M, strategy: MessagingSecretStrategy) -> Self
     where
         M: Into<OnchainDeliveryMode>,
     {
         if mode.into() == OnchainDeliveryMode::onchain_unconstrained() {
-            self.default_unconstrained_tagging_secret_strategy = Option::some(strategy);
+            self.default_unconstrained_messaging_secret_strategy = Option::some(strategy);
         } else {
-            self.default_constrained_tagging_secret_strategy = Option::some(strategy);
+            self.default_constrained_messaging_secret_strategy = Option::some(strategy);
         }
         *self
     }
 
-    /// Sets `strategy` for both delivery modes: the equivalent of a PXE `resolveTaggingSecretStrategy` hook that
+    /// Sets `strategy` for both delivery modes: the equivalent of a PXE `resolveMessagingSecretStrategy` hook that
     /// ignores the request's mode. See
-    /// [`with_default_tag_secret_strategy`](Self::with_default_tag_secret_strategy) to configure a single mode.
-    pub fn with_default_tag_secret_strategy_all_modes(&mut self, strategy: TaggingSecretStrategy) -> Self {
-        let _ = self.with_default_tag_secret_strategy(OnchainDeliveryMode::onchain_unconstrained(), strategy);
-        self.with_default_tag_secret_strategy(OnchainDeliveryMode::onchain_constrained(), strategy)
+    /// [`with_default_messaging_secret_strategy`](Self::with_default_messaging_secret_strategy) to configure a
+    /// single mode.
+    pub fn with_default_messaging_secret_strategy_all_modes(&mut self, strategy: MessagingSecretStrategy) -> Self {
+        let _ = self.with_default_messaging_secret_strategy(OnchainDeliveryMode::onchain_unconstrained(), strategy);
+        self.with_default_messaging_secret_strategy(OnchainDeliveryMode::onchain_constrained(), strategy)
+    }
+
+    #[deprecated("use with_default_messaging_secret_strategy")]
+    pub fn with_default_tag_secret_strategy<M>(&mut self, mode: M, strategy: MessagingSecretStrategy) -> Self
+    where
+        M: Into<OnchainDeliveryMode>,
+    {
+        self.with_default_messaging_secret_strategy(mode, strategy)
+    }
+
+    #[deprecated("use with_default_messaging_secret_strategy_all_modes")]
+    pub fn with_default_tag_secret_strategy_all_modes(&mut self, strategy: MessagingSecretStrategy) -> Self {
+        self.with_default_messaging_secret_strategy_all_modes(strategy)
     }
 
     /// Authorizes all cross-contract utility call targets for the entire test.
@@ -698,18 +712,18 @@ impl TestEnvironment {
     ///
     /// ### Sample usage
     /// ```noir
-    /// let strategy = TaggingSecretStrategy::non_interactive_handshake();
+    /// let strategy = MessagingSecretStrategy::non_interactive_handshake();
     /// let env = TestEnvironment::new_opts(
-    ///     TestEnvironmentOptions::new().with_default_tag_secret_strategy_all_modes(strategy),
+    ///     TestEnvironmentOptions::new().with_default_messaging_secret_strategy_all_modes(strategy),
     /// );
     /// ```
     pub unconstrained fn new_opts(options: TestEnvironmentOptions) -> Self {
         assert_compatible_oracle_version();
         txe_oracles::assert_compatible_txe_oracle_version();
 
-        txe_oracles::set_tagging_secret_strategies(
-            options.default_unconstrained_tagging_secret_strategy,
-            options.default_constrained_tagging_secret_strategy,
+        txe_oracles::set_messaging_secret_strategies(
+            options.default_unconstrained_messaging_secret_strategy,
+            options.default_constrained_messaging_secret_strategy,
         );
 
         txe_oracles::set_authorize_all_utility_call_targets(options.authorize_all_utility_call_targets);

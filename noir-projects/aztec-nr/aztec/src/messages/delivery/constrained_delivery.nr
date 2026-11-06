@@ -70,8 +70,8 @@ pub(crate) fn emit_sequence_nullifier(
 ///
 /// Every constrained send emits this nullifier so the next send under the same sequence can prove its predecessor
 /// exists. The nullifier folds in both the app-siloed shared secret and sender-only secret: the shared secret binds
-/// the sequence to the discovery tag secret, and the sender-only secret prevents a recipient who can reconstruct the
-/// shared secret from forging a sender's nullifier and griefing the sequence.
+/// the sequence to the discovery messaging secret, and the sender-only secret prevents a recipient who can
+/// reconstruct the shared secret from forging a sender's nullifier and griefing the sequence.
 pub(crate) fn compute_constrained_msg_nullifier(
     sender: AztecAddress,
     recipient: AztecAddress,

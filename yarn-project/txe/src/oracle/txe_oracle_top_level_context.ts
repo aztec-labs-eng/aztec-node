@@ -16,13 +16,13 @@ import {
   type ExecutionHooks,
   FactService,
   FactStore,
+  MessagingSecretSourcesStore,
+  type MessagingSecretStrategy,
   NoteStore,
   ORACLE_VERSION_MAJOR,
   PrivateEventStore,
   RecipientTaggingStore,
   SenderTaggingStore,
-  TaggingSecretSourcesStore,
-  type TaggingSecretStrategy,
   composeHooks,
   enrichPublicSimulationError,
 } from '@aztec-labs/pxe/server';
@@ -103,8 +103,11 @@ import type { TXEAccountStore } from '../utils/txe_account_store.js';
 import type { TXEArtifactResolver } from '../utils/txe_artifact_resolver.js';
 import { TXEPublicContractDataSource } from '../utils/txe_public_contract_data_source.js';
 import type { ITxeExecutionOracle } from './interfaces.js';
+import {
+  type TXEMessagingSecretStrategies,
+  makeResolveMessagingSecretStrategyHook,
+} from './messaging_secret_strategy.js';
 import type { TxEffectsData } from './noir-structs/tx_effects_data.js';
-import { type TXETaggingSecretStrategies, makeResolveTaggingSecretStrategyHook } from './tagging_secret_strategy.js';
 
 export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracle {
   isMisc = true as const;
@@ -120,7 +123,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
   private accountStore: TXEAccountStore;
   private senderTaggingStore: SenderTaggingStore;
   private recipientTaggingStore: RecipientTaggingStore;
-  private taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  private messagingSecretSourcesStore: MessagingSecretSourcesStore;
   private capsuleStore: CapsuleStore;
   private factStore: FactStore;
   private privateEventStore: PrivateEventStore;
@@ -128,7 +131,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
   private chainId: Fr;
   private version: Fr;
   private authwits: Map<string, AuthWitness>;
-  private taggingSecretStrategies: TXETaggingSecretStrategies;
+  private messagingSecretStrategies: TXEMessagingSecretStrategies;
   private authorizeAllUtilityCallTargets: boolean;
   private readonly artifactResolver: TXEArtifactResolver;
   private readonly rootPath: string;
@@ -143,7 +146,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.accountStore = args.accountStore;
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
-    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -151,7 +154,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.chainId = args.chainId;
     this.version = args.version;
     this.authwits = args.authwits;
-    this.taggingSecretStrategies = args.taggingSecretStrategies;
+    this.messagingSecretStrategies = args.messagingSecretStrategies;
     this.authorizeAllUtilityCallTargets = args.authorizeAllUtilityCallTargets;
     this.artifactResolver = args.artifactResolver;
     this.rootPath = args.rootPath;
@@ -391,15 +394,15 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.authwits.set(authWitness.requestHash.toString(), authWitness);
   }
 
-  setTaggingSecretStrategies(
-    unconstrainedStrategy: Option<TaggingSecretStrategy>,
-    constrainedStrategy: Option<TaggingSecretStrategy>,
+  setMessagingSecretStrategies(
+    unconstrainedStrategy: Option<MessagingSecretStrategy>,
+    constrainedStrategy: Option<MessagingSecretStrategy>,
   ): void {
-    const apply = (mode: OnchainDeliveryMode, strategy: Option<TaggingSecretStrategy>) => {
+    const apply = (mode: OnchainDeliveryMode, strategy: Option<MessagingSecretStrategy>) => {
       if (strategy.isSome()) {
-        this.taggingSecretStrategies.set(mode, strategy.value);
+        this.messagingSecretStrategies.set(mode, strategy.value);
       } else {
-        this.taggingSecretStrategies.delete(mode);
+        this.messagingSecretStrategies.delete(mode);
       }
     };
     apply(OnchainDeliveryMode.UNCONSTRAINED, unconstrainedStrategy);
@@ -541,7 +544,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
       aztecNode: this.stateMachine.node,
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
-      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      messagingSecretSourcesStore: this.messagingSecretSourcesStore,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,
@@ -561,7 +564,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
           isStaticCall ? 'private view' : 'private',
           authorizedUtilityCallTargets,
         ),
-        resolveTaggingSecretStrategy: makeResolveTaggingSecretStrategyHook(this.taggingSecretStrategies),
+        resolveMessagingSecretStrategy: makeResolveMessagingSecretStrategyHook(this.messagingSecretStrategies),
       }),
       transientArrayService,
     });
@@ -986,7 +989,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
         addressStore: this.addressStore,
         aztecNode: this.stateMachine.node,
         recipientTaggingStore: this.recipientTaggingStore,
-        taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+        messagingSecretSourcesStore: this.messagingSecretSourcesStore,
         capsuleService: new CapsuleService(this.capsuleStore, scopes),
         factService: new FactService(this.factStore, scopes),
         privateEventStore: this.privateEventStore,
@@ -1030,14 +1033,14 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
   close(): {
     nextBlockTimestamp: bigint;
     authwits: Map<string, AuthWitness>;
-    taggingSecretStrategies: TXETaggingSecretStrategies;
+    messagingSecretStrategies: TXEMessagingSecretStrategies;
     authorizeAllUtilityCallTargets: boolean;
   } {
     this.logger.debug('Exiting Top Level Context');
     return {
       nextBlockTimestamp: this.nextBlockTimestamp,
       authwits: this.authwits,
-      taggingSecretStrategies: this.taggingSecretStrategies,
+      messagingSecretStrategies: this.messagingSecretStrategies,
       authorizeAllUtilityCallTargets: this.authorizeAllUtilityCallTargets,
     };
   }
@@ -1085,7 +1088,7 @@ type TXEOracleTopLevelContextCtorArgs = {
   accountStore: TXEAccountStore;
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
-  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  messagingSecretSourcesStore: MessagingSecretSourcesStore;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;
@@ -1093,7 +1096,7 @@ type TXEOracleTopLevelContextCtorArgs = {
   chainId: Fr;
   version: Fr;
   authwits: Map<string, AuthWitness>;
-  taggingSecretStrategies: TXETaggingSecretStrategies;
+  messagingSecretStrategies: TXEMessagingSecretStrategies;
   authorizeAllUtilityCallTargets: boolean;
   artifactResolver: TXEArtifactResolver;
   rootPath: string;

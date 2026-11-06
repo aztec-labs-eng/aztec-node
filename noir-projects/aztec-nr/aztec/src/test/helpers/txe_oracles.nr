@@ -2,7 +2,7 @@ use crate::{
     context::inputs::PrivateContextInputs,
     event::EventSelector,
     messages::encoding::MESSAGE_CIPHERTEXT_LEN,
-    test::helpers::{tagging_secret_strategy::TaggingSecretStrategy, utils::TestAccount},
+    test::helpers::{messaging_secret_strategy::MessagingSecretStrategy, utils::TestAccount},
 };
 
 use crate::protocol::{
@@ -22,7 +22,7 @@ use crate::protocol::{
 ///
 /// The TypeScript counterparts are in `yarn-project/txe/src/oracle/txe_oracle_version.ts`.
 pub global TXE_ORACLE_VERSION_MAJOR: Field = 10;
-pub global TXE_ORACLE_VERSION_MINOR: Field = 0;
+pub global TXE_ORACLE_VERSION_MINOR: Field = 1;
 
 /// Asserts that the TXE oracle interface version is compatible.
 pub unconstrained fn assert_compatible_txe_oracle_version() {
@@ -234,11 +234,19 @@ pub unconstrained fn send_l1_to_l2_message(
     recipient: AztecAddress,
 ) -> Field {}
 
-#[oracle(aztec_txe_setTaggingSecretStrategies)]
-pub unconstrained fn set_tagging_secret_strategies(
-    unconstrained_strategy: Option<TaggingSecretStrategy>,
-    constrained_strategy: Option<TaggingSecretStrategy>,
+#[oracle(aztec_txe_setMessagingSecretStrategies)]
+pub unconstrained fn set_messaging_secret_strategies(
+    unconstrained_strategy: Option<MessagingSecretStrategy>,
+    constrained_strategy: Option<MessagingSecretStrategy>,
 ) {}
+
+#[deprecated("use set_messaging_secret_strategies")]
+pub unconstrained fn set_tagging_secret_strategies(
+    unconstrained_strategy: Option<MessagingSecretStrategy>,
+    constrained_strategy: Option<MessagingSecretStrategy>,
+) {
+    set_messaging_secret_strategies(unconstrained_strategy, constrained_strategy)
+}
 
 #[oracle(aztec_txe_setAuthorizeAllUtilityCallTargets)]
 pub unconstrained fn set_authorize_all_utility_call_targets(authorize_all: bool) {}

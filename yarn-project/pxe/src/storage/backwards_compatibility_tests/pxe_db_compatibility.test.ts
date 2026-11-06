@@ -26,7 +26,7 @@ expect.extend({ toMatchFile });
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // The last schema in which the key store still persisted the message-signing and fallback secret keys.
 const PRE_MESSAGE_AND_FALLBACK_SECRET_KEY_REMOVAL_PXE_SCHEMA_VERSION = 10;
-// The last schema in which the tagging stores keyed unconstrained entries by the legacy two-part AppTaggingSecret
+// The last schema in which the tagging stores keyed unconstrained entries by the legacy two-part MessagingSecret
 // format (`<secret>:<app>`), before every key moved to the self-describing `<deliveryMode>:<secret>:<app>` form.
 const PRE_DELIVERY_MODE_PREFIXED_TAGGING_KEY_PXE_SCHEMA_VERSION = 12;
 
@@ -226,7 +226,7 @@ describe('PXE storage compatibility test suite', () => {
     );
   });
 
-  it('never reads tagging-store rows written under the legacy two-part AppTaggingSecret key format, and leaves them intact', async () => {
+  it('never reads tagging-store rows written under the legacy two-part MessagingSecret key format, and leaves them intact', async () => {
     // The current toString() only emits the three-part `<deliveryMode>:<secret>:<app>` form, so build the legacy
     // two-part `<secret>:<app>` key by hand.
     const legacyKey = `${new Fr(2n).toString()}:${AztecAddress.fromBigIntUnsafe(3n).toString()}`;

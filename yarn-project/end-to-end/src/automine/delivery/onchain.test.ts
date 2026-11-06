@@ -36,7 +36,7 @@ describe('onchain delivery', () => {
     mode: 'unconstrained',
     senderHook: () => Promise.resolve({ type: 'arbitrary-secret', secret: arbitrarySecret }),
     recipientRegistration: async (recipientWallet, recipientAddress) => {
-      await recipientWallet.registerTaggingSecretSource({
+      await recipientWallet.registerMessagingSecretSource({
         kind: 'arbitrary-secret',
         recipient: recipientAddress,
         secret: arbitrarySecret,
@@ -98,7 +98,7 @@ describe('onchain delivery', () => {
       const parsed = parseInteractiveHandshakeRequest(request);
 
       // Register before signing.
-      await recipientWallet.registerTaggingSecretSource({
+      await recipientWallet.registerMessagingSecretSource({
         kind: 'handshake',
         recipient: parsed.recipient,
         ephPk: parsed.ephPkX,

@@ -1,7 +1,7 @@
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
-import { type AppTaggingSecret, AppTaggingSecretSchema } from './app_tagging_secret.js';
+import { type MessagingSecret, MessagingSecretSchema } from './messaging_secret.js';
 
 /**
  * Represents a preimage of a private log tag (see `Tag` in `pxe/src/tagging`).
@@ -11,11 +11,11 @@ import { type AppTaggingSecret, AppTaggingSecretSchema } from './app_tagging_sec
  * around this.
  */
 export type PreTag = {
-  extendedSecret: AppTaggingSecret;
+  extendedSecret: MessagingSecret;
   index: number;
 };
 
 export const PreTagSchema = z.object({
-  extendedSecret: AppTaggingSecretSchema,
+  extendedSecret: MessagingSecretSchema,
   index: schemas.Integer,
 });
