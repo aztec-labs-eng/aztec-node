@@ -1,6 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas } from '@aztec-labs/stdlib/gas';
 
 import { getP2PDefaultConfig, parseAllowList } from './config.js';
 
@@ -53,6 +54,45 @@ describe('config', () => {
     const address = await AztecAddress.random();
     const selector = FunctionSelector.random();
     expect(() => parseAllowList(`I:${address}:${selector}:cl=abc`)).toThrow('invalid calldataLength');
+  });
+
+  it('parses minimum setup gas flags', async () => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    const classId = Fr.random();
+
+    const allowList = parseAllowList(
+      `I:${address}:${selector}:l2=1000+da=64,C:${classId}:${selector}:l2=500,I:${address}:${selector}:da=32+os`,
+    );
+
+    expect(allowList).toEqual([
+      { address, selector, minGas: new Gas(64, 1000) },
+      { classId, selector, minGas: new Gas(0, 500) },
+      { address, selector, minGas: new Gas(32, 0), onlySelf: true },
+    ]);
+  });
+
+  it.each(['l2=abc', 'da=-1', 'l2=', 'l2=1e6', 'l2=40k', 'da=64gas', 'l2=40_000', 'da=4294967296'])(
+    'rejects entry with invalid minimum gas flag %s',
+    async flag => {
+      const address = await AztecAddress.random();
+      const selector = FunctionSelector.random();
+      expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid minimum');
+    },
+  );
+
+  it.each(['cl=4x', 'cl=', 'cl=4294967296'])('rejects entry with invalid calldataLength flag %s', async flag => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid calldataLength');
+  });
+
+  it('accepts the largest UInt32 in numeric flags', async () => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    expect(parseAllowList(`I:${address}:${selector}:l2=4294967295+cl=4294967295`)).toEqual([
+      { address, selector, minGas: new Gas(0, 4294967295), calldataLength: 4294967295 },
+    ]);
   });
 
   it('rejects instance entry without selector', async () => {

@@ -32,6 +32,28 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas ([#701](https://github.com/aztec-labs-eng/aztec-node/pull/701))
+
+Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
+
+- **Static calls.** A static call cannot write state, so in setup it can only consume gas or fail. Every static setup call is now rejected with `Static setup calls are not allowed`, whatever function it targets. Before, the static flag was not checked.
+- **Too little gas for setup.** An entry can declare the most gas its function can use in setup, for any calldata the entry allows. A tx is rejected, with `Gas limits leave setup less gas than its allowed functions need`, when its gas limits leave setup less than the sum over its setup calls. The three default entries (AuthRegistry `_set_authorized` and `set_authorized`, FeeJuice `_increase_public_balance`) now carry the gas they consume. Custom entries declare it with the new `l2=N` and `da=N` flags; a dimension left out is zero, and an entry with neither has no gas requirement. The node logs a warning at startup, and when the allow list is changed at runtime, for each custom entry without them.
+
+```
+# before: only address, selector and the os/rn/cl flags were checked
+TX_PUBLIC_SETUP_ALLOWLIST=I:0x1234…:0xabcd1234:os+cl=4
+# after: also require txs to leave setup at least this much gas for the call
+TX_PUBLIC_SETUP_ALLOWLIST=I:0x1234…:0xabcd1234:os+cl=4+l2=40000+da=64
+```
+
+The node RPC method `aztec_getAllowedPublicSetup` returns the new `minGas` field on the entries that set it.
+
+A peer that gossips a tx failing any setup allow list check, old or new, now gets the high-tolerance penalty instead of the mid-tolerance one. The allow list is local configuration, so peers running an older version or a different allow list relay such txs honestly. It now takes several times as many such rejections before a relayer is disconnected or banned, and each still counts briefly against its gossipsub score.
+
+Only allow list functions that cannot revert for any calldata their entry allows. A failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.
+
+**Migration**: existing allow list strings parse as before. For each custom entry, measure the most gas its function can use in setup, for any calldata the entry allows, and declare it with `l2=N` and `da=N`; without them, txs whose gas limits leave too little for that call are still admitted. A custom entry that targets a `#[view]` function, which only works when called statically, no longer admits any tx: remove it. Older nodes reject the `l2=` and `da=` flags with an `unknown flag` error when they read their config, so do not put them in a network config shared with nodes that have not upgraded.
+
 ### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 
 A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
