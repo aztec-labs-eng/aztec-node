@@ -3,15 +3,18 @@ import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foun
 import { PublicContractsDB, getCallRequestsWithCalldataByPhase } from '@aztec-labs/simulator/server';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type PublicCallRequestWithCalldata,
   TX_ERROR_DURING_VALIDATION,
   TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED,
   TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT,
+  TX_ERROR_SETUP_INSUFFICIENT_GAS,
   TX_ERROR_SETUP_NULL_MSG_SENDER,
   TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER,
   TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH,
+  TX_ERROR_SETUP_WRONG_STATIC_FLAG,
   Tx,
   TxExecutionPhase,
   type TxValidationResult,
@@ -19,6 +22,13 @@ import {
 } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
+/** Outcome of checking one setup call against the allow list: the gas it needs if allowed, or why it is rejected. */
+type AllowListCheck = { allowed: true; minGas?: Gas } | { allowed: false; reason: string };
+
+/**
+ * Validates that every setup call targets a function on the allow list, satisfies the matched entry's constraints, and
+ * that the tx's gas limits leave setup at least the gas its allowed calls need.
+ */
 export class PhasesTxValidator implements TxValidator<Tx> {
   #log: Logger;
   private contractsDB: PublicContractsDB;
@@ -50,18 +60,36 @@ export class PhasesTxValidator implements TxValidator<Tx> {
       }
 
       const setupFns = getCallRequestsWithCalldataByPhase(tx, TxExecutionPhase.SETUP);
+      let requiredSetupGas = Gas.empty();
       for (const setupFn of setupFns) {
-        const rejectionReason = await this.checkAllowList(setupFn, this.setupAllowList);
-        if (rejectionReason) {
+        const check = await this.checkAllowList(setupFn, this.setupAllowList);
+        if (!check.allowed) {
           this.#log.verbose(
-            `Rejecting tx ${tx.getTxHash().toString()} because it calls setup function not on allow list: ${
+            `Rejecting tx ${tx.getTxHash().toString()} because of setup function ${
               setupFn.request.contractAddress
-            }:${setupFn.functionSelector}`,
+            }:${setupFn.functionSelector}: ${check.reason}`,
             { allowList: this.setupAllowList },
           );
 
-          return { result: 'invalid', reason: [rejectionReason] };
+          return { result: 'invalid', reason: [check.reason] };
         }
+        if (check.minGas) {
+          requiredSetupGas = requiredSetupGas.add(check.minGas);
+        }
+      }
+
+      // Adding to gasUsed rather than subtracting from the limits keeps this correct even if gasUsed exceeds them.
+      const gasLimits = tx.data.constants.txContext.gasSettings.gasLimits;
+      if (tx.data.gasUsed.add(requiredSetupGas).gtAny(gasLimits)) {
+        this.#log.verbose(
+          `Rejecting tx ${tx.getTxHash().toString()} because its gas limits leave too little for setup`,
+          {
+            gasLimits,
+            gasUsed: tx.data.gasUsed,
+            requiredSetupGas,
+          },
+        );
+        return { result: 'invalid', reason: [TX_ERROR_SETUP_INSUFFICIENT_GAS] };
       }
 
       return { result: 'valid' };
@@ -73,13 +101,13 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     }
   }
 
-  /** Returns a rejection reason if the call is not on the allow list, or undefined if it is allowed. */
+  /** Finds the allow list entry for the call and checks the call against it. */
   private async checkAllowList(
     publicCall: PublicCallRequestWithCalldata,
     allowList: AllowedElement[],
-  ): Promise<string | undefined> {
+  ): Promise<AllowListCheck> {
     if (publicCall.isEmpty()) {
-      return undefined;
+      return { allowed: true };
     }
 
     const contractAddress = publicCall.request.contractAddress;
@@ -89,19 +117,7 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     for (const entry of allowList) {
       if ('address' in entry) {
         if (contractAddress.equals(entry.address) && entry.selector.equals(functionSelector)) {
-          if (entry.calldataLength !== undefined && publicCall.calldata.length !== entry.calldataLength) {
-            return TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH;
-          }
-          if (entry.onlySelf && !publicCall.request.msgSender.equals(contractAddress)) {
-            return TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER;
-          }
-          if (
-            entry.rejectNullMsgSender &&
-            publicCall.request.msgSender.equals(AztecAddress.fromBigIntUnsafe(NULL_MSG_SENDER_CONTRACT_ADDRESS))
-          ) {
-            return TX_ERROR_SETUP_NULL_MSG_SENDER;
-          }
-          return undefined;
+          return this.checkEntryConstraints(publicCall, entry);
         }
       }
     }
@@ -117,28 +133,37 @@ export class PhasesTxValidator implements TxValidator<Tx> {
         const instance = await this.contractsDB.getContractInstance(contractAddress, this.timestamp);
         contractClassId = { value: instance?.currentContractClassId.toString() };
         if (!contractClassId.value) {
-          return TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT;
+          return { allowed: false, reason: TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT };
         }
       }
 
       if (contractClassId.value === entry.classId.toString() && entry.selector.equals(functionSelector)) {
-        if (entry.calldataLength !== undefined && publicCall.calldata.length !== entry.calldataLength) {
-          return TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH;
-        }
-        if (entry.onlySelf && !publicCall.request.msgSender.equals(contractAddress)) {
-          return TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER;
-        }
-        if (
-          entry.rejectNullMsgSender &&
-          publicCall.request.msgSender.equals(AztecAddress.fromBigIntUnsafe(NULL_MSG_SENDER_CONTRACT_ADDRESS))
-        ) {
-          return TX_ERROR_SETUP_NULL_MSG_SENDER;
-        }
-        return undefined;
+        return this.checkEntryConstraints(publicCall, entry);
       }
     }
 
-    return TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED;
+    return { allowed: false, reason: TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED };
+  }
+
+  /** Checks a call against the constraints of the allow list entry it matched. */
+  private checkEntryConstraints(publicCall: PublicCallRequestWithCalldata, entry: AllowedElement): AllowListCheck {
+    const { request } = publicCall;
+    if (entry.calldataLength !== undefined && publicCall.calldata.length !== entry.calldataLength) {
+      return { allowed: false, reason: TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH };
+    }
+    if (entry.onlySelf && !request.msgSender.equals(request.contractAddress)) {
+      return { allowed: false, reason: TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER };
+    }
+    if (
+      entry.rejectNullMsgSender &&
+      request.msgSender.equals(AztecAddress.fromBigIntUnsafe(NULL_MSG_SENDER_CONTRACT_ADDRESS))
+    ) {
+      return { allowed: false, reason: TX_ERROR_SETUP_NULL_MSG_SENDER };
+    }
+    if (request.isStaticCall !== (entry.isStaticCall ?? false)) {
+      return { allowed: false, reason: TX_ERROR_SETUP_WRONG_STATIC_FLAG };
+    }
+    return { allowed: true, minGas: entry.minGas };
   }
 }
 

@@ -1,6 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas } from '@aztec-labs/stdlib/gas';
 
 import { getP2PDefaultConfig, parseAllowList } from './config.js';
 
@@ -53,6 +54,28 @@ describe('config', () => {
     const address = await AztecAddress.random();
     const selector = FunctionSelector.random();
     expect(() => parseAllowList(`I:${address}:${selector}:cl=abc`)).toThrow('invalid calldataLength');
+  });
+
+  it('parses the static flag and minimum setup gas', async () => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    const classId = Fr.random();
+
+    const allowList = parseAllowList(
+      `I:${address}:${selector}:st+l2=1000+da=64,C:${classId}:${selector}:l2=500,I:${address}:${selector}:da=32+os`,
+    );
+
+    expect(allowList).toEqual([
+      { address, selector, isStaticCall: true, minGas: new Gas(64, 1000) },
+      { classId, selector, minGas: new Gas(0, 500) },
+      { address, selector, minGas: new Gas(32, 0), onlySelf: true },
+    ]);
+  });
+
+  it.each(['l2=abc', 'da=-1', 'l2='])('rejects entry with invalid minimum gas flag %s', async flag => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid minimum');
   });
 
   it('rejects instance entry without selector', async () => {
