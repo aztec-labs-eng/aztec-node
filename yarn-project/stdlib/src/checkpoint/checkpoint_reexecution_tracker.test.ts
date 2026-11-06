@@ -211,7 +211,10 @@ describe('CheckpointReexecutionTracker', () => {
 
     it('does not vouch for txs it never recorded as collected', () => {
       expect(tracker.hasCollectedTxs(SlotNumber(11), txs(2))).toBe(false);
-      expect(tracker.hasCollectedTxs(SlotNumber(11), [])).toBe(false);
+    });
+
+    it('vouches for an empty tx list, even for a slot with no record', () => {
+      expect(tracker.hasCollectedTxs(SlotNumber(11), [])).toBe(true);
     });
 
     it('keeps the txs of every proposal recorded for the same slot', () => {

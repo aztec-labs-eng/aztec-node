@@ -221,12 +221,13 @@ export class CheckpointReexecutionTracker {
 
   /**
    * Whether every given tx was recorded by {@link recordTxsCollected} for this slot, in any order and from any
-   * proposals. `false` means some tx was not (we never saw a proposal carrying it, or failed to collect that
-   * proposal's txs), so callers should fall back to a current-state check such as a mempool probe.
+   * proposals. An empty list is always vouched for. `false` means some tx was not (we never saw a proposal carrying
+   * it, or failed to collect that proposal's txs), so callers should fall back to a current-state check such as a
+   * mempool probe.
    */
   public hasCollectedTxs(slot: SlotNumber, txHashes: readonly TxHash[]): boolean {
     const collected = this.bySlot.get(slot)?.collectedTxs;
-    return collected !== undefined && txHashes.every(txHash => collected.has(txHash.toString()));
+    return txHashes.every(txHash => collected?.has(txHash.toString()) ?? false);
   }
 
   /** Drops entries for checkpoints with `number < checkpointNumber`. */
