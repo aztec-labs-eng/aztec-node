@@ -18,6 +18,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider, ManualDateProvider } from '@aztec-labs/foundation/timer';
 import type { AztecAsyncMap } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
@@ -28,10 +29,15 @@ import {
   type L2BlockSource,
 } from '@aztec-labs/stdlib/block';
 import { type CheckpointData, L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
+import { type ContractDataSource, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
-import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type {
+  AllowedElement,
+  MerkleTreeReadOperations,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
-import { mockTx } from '@aztec-labs/stdlib/testing';
+import { makeAztecAddress, makeSelector, mockTx } from '@aztec-labs/stdlib/testing';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
@@ -43,12 +49,14 @@ import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AggregateTxValidator } from '../../msg_validators/tx_validator/aggregate_tx_validator.js';
+import { createCheckAllowedSetupCalls } from '../../msg_validators/tx_validator/factory.js';
 import {
   MaxGasLimitsValidator,
   MinGasLimitsValidator,
 } from '../../msg_validators/tx_validator/gas_limits_validator.js';
 import { MaxFeePerGasValidator } from '../../msg_validators/tx_validator/gas_validator.js';
 import { AllowedSetupCallsMetaValidator } from '../../msg_validators/tx_validator/phases_validator.js';
+import { patchNonRevertibleFn } from '../../msg_validators/tx_validator/test_utils.js';
 import { TxPoolRejectionCode } from './eviction/interfaces.js';
 import { DEFAULT_TX_POOL_V2_CONFIG } from './interfaces.js';
 import { type TxMetaData, getMinimumPriceBumpFee } from './tx_metadata.js';
@@ -2814,6 +2822,86 @@ describe('TxPoolV2', () => {
       expect(pending).toHaveLength(1);
       expect(pending).toContain(hashOf(txPending));
       expect(await poolWithValidator.getTxStatus(txProtected.getTxHash())).toBe('deleted');
+    });
+  });
+
+  describe('setup allow list changes at runtime', () => {
+    const timestamp = 27n;
+    let entryAddress: AztecAddress;
+    let entrySelector: FunctionSelector;
+    let entry: AllowedElement;
+    let setupPool: AztecKVTxPoolV2;
+    let setupStore: Awaited<ReturnType<typeof openTmpStore>>;
+    let setupArchiveStore: Awaited<ReturnType<typeof openTmpStore>>;
+
+    const makeTxCallingEntry = async (seed: number) => {
+      const tx = await mockTx(seed, { numberOfNonRevertiblePublicCallRequests: 1 });
+      await patchNonRevertibleFn(tx, 0, { address: entryAddress, selector: entrySelector });
+      return tx;
+    };
+
+    /** Adds the tx as protected and unprotects it, which keeps it only if its setup-call flag allows it. */
+    const addAndUnprotect = async (tx: Tx) => {
+      await setupPool.addProtectedTxs([tx], slot1Header);
+      await setupPool.prepareForSlot(SlotNumber(2));
+      return setupPool.getTxStatus(tx.getTxHash());
+    };
+
+    const startPool = async (txPublicSetupAllowListExtend: AllowedElement[]) => {
+      const contractDataSource = mock<ContractDataSource>();
+      contractDataSource.getContract.mockImplementation(async address =>
+        (await SerializableContractInstance.random()).withAddress(address),
+      );
+      const validator = new AggregateTxValidator(
+        mock<TxValidator<TxMetaData>>({ validateTx: () => Promise.resolve({ result: 'valid' }) }),
+        new AllowedSetupCallsMetaValidator<TxMetaData>(),
+      );
+      setupStore = await openTmpStore('p2p-setup-allowlist');
+      setupArchiveStore = await openTmpStore('archive-setup-allowlist');
+      setupPool = new AztecKVTxPoolV2(
+        setupStore,
+        setupArchiveStore,
+        {
+          l2BlockSource: mockL2BlockSource,
+          worldStateSynchronizer: mockWorldState,
+          createTxValidator: () => Promise.resolve(validator),
+          checkAllowedSetupCalls: createCheckAllowedSetupCalls(contractDataSource, () => timestamp),
+          nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
+        },
+        getTelemetryClient(),
+        { txPublicSetupAllowListExtend },
+      );
+      await setupPool.start();
+    };
+
+    beforeEach(() => {
+      entryAddress = makeAztecAddress();
+      entrySelector = makeSelector(7);
+      entry = { address: entryAddress, selector: entrySelector };
+    });
+
+    afterEach(async () => {
+      await setupPool.stop();
+      await setupStore.delete();
+      await setupArchiveStore.delete();
+    });
+
+    it('flags txs entering the pool after an entry is removed against the new list', async () => {
+      await startPool([entry]);
+      expect(await addAndUnprotect(await makeTxCallingEntry(1))).toBe('pending');
+
+      await setupPool.updateConfig({ txPublicSetupAllowListExtend: [] });
+
+      expect(await addAndUnprotect(await makeTxCallingEntry(2))).toBe('deleted');
+    });
+
+    it('flags txs entering the pool after an entry is added against the new list', async () => {
+      await startPool([]);
+      expect(await addAndUnprotect(await makeTxCallingEntry(1))).toBe('deleted');
+
+      await setupPool.updateConfig({ txPublicSetupAllowListExtend: [entry] });
+
+      expect(await addAndUnprotect(await makeTxCallingEntry(2))).toBe('pending');
     });
   });
 
