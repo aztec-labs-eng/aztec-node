@@ -22,10 +22,12 @@
 // - 2026-08-27: total now counts runtime JS only, excluding external `.map` sourcemaps (~67% of the old
 //   number). Reset to 6 MiB against ~4.65 MiB of JS today; reverts the 14.5 stopgap. Sourcemap total gets
 //   its own loose cap (`sourcemapLimitMiB`, 12 MiB against ~9.3 MiB today) so map growth is still watched.
+// - 2026-10-28: split chunk cap 2200 -> 2300 KB. zod 4.4.3 -> 4.6.7 (GHSA-mrhx-c7xc-m3w5) grows zod's share of
+//   the main chunk from 199 KB to 302 KB (new core/compile.js plus schema growth); chunk went 2121 -> 2224 KB.
 export const sizeLimits = [
   // Shared chunks emitted by code-splitting; carry the simulator + PXE + world-state graph.
   // Spikes here usually mean a heavy dep crept into the eager import path.
-  { pattern: /^dest\/chunk-.*\.js$/, maxKB: 2200, description: 'split chunk' },
+  { pattern: /^dest\/chunk-.*\.js$/, maxKB: 2300, description: 'split chunk' },
   // Per-protocol-contract artifact chunks (loaded lazily via LazyProtocolContractsProvider).
   { pattern: /^dest\/[A-Z][A-Za-z]+-[A-Z0-9]+\.js$/, maxKB: 800, description: 'contract artifact chunk' },
   // Tiny entry stubs that just re-export from the shared chunks.
