@@ -219,7 +219,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     deliveryMode: OnchainDeliveryMode,
   ): Promise<ResolvedMessagingSecretStrategy> {
     const strategy = await this.#chooseMessagingSecretStrategy(sender, recipient, deliveryMode);
-    return this.#toResolvedMessagingSecretStrategy(strategy, sender, recipient);
+    return this.#toResolvedMessagingSecretStrategy(strategy, sender, recipient, deliveryMode);
   }
 
   async #chooseMessagingSecretStrategy(
@@ -231,7 +231,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
 
     const hook: ResolveMessagingSecretStrategy | undefined = this.hooks?.resolveMessagingSecretStrategy;
     if (!hook) {
-      return defaultMessagingSecretStrategy({ deliveryMode, recipientTskAvailable });
+      return defaultMessagingSecretStrategy({ recipientTskAvailable });
     }
 
     const contractClassId = await this.#getCurrentContractClassId(this.contractAddress);
@@ -262,6 +262,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     strategy: MessagingSecretStrategy,
     sender: AztecAddress,
     recipient: AztecAddress,
+    deliveryMode: OnchainDeliveryMode,
   ): Promise<ResolvedMessagingSecretStrategy> {
     // PXE only performs the derivation; it does not reject a strategy that is unsound for the delivery mode (e.g. an
     // address-derived or arbitrary-secret strategy for constrained delivery). That soundness check belongs in the
@@ -286,8 +287,9 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
           recipientTsk,
           this.contractAddress,
           recipient,
+          deliveryMode,
         );
-        return { type: 'unconstrained-secret', secret: messagingSecret.secret };
+        return { type: 'recipient-tsk', secret: messagingSecret.secret };
       }
       case 'arbitrary-secret': {
         // App-silo the raw arbitrary secret point here so wallets never replicate the derivation.

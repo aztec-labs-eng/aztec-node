@@ -12,7 +12,9 @@ use crate::authwit::account::DOM_SEP__TX_NULLIFIER;
 use crate::authwit::auth::DOM_SEP__AUTHWIT_NULLIFIER;
 use crate::keys::ecdh_shared_secret::{DOM_SEP__ECDH_FIELD_MASK, DOM_SEP__ECDH_SUBKEY};
 use crate::macros::functions::initialization_utils::DOM_SEP__INITIALIZATION_NULLIFIER;
-use crate::messages::delivery::constrained_delivery::DOM_SEP__CONSTRAINED_MSG_NULLIFIER;
+use crate::messages::delivery::constrained_delivery::{
+    DOM_SEP__CONSTRAINED_MSG_NULLIFIER, DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER,
+};
 use crate::messages::delivery::messaging_secret_derivation::DOM_SEP__RECIPIENT_TSK_SECRET;
 use crate::messages::encryption::aes128::DOM_SEP__SALTED_MESSAGING_SECRET;
 use crate::note::lifecycle::DOM_SEP__NOTE_RANDOMNESS;
@@ -144,6 +146,13 @@ unconstrained fn domain_separators_are_valid() {
             ),
         );
     all = all.push_back(derived(DOM_SEP__RECIPIENT_TSK_SECRET, "recipient_tsk_secret"));
+    all = all
+        .push_back(
+            derived(
+                DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER,
+                "recipient_tsk_sequence_nullifier",
+            ),
+        );
     all = all.push_back(derived(DOM_SEP__SALTED_MESSAGING_SECRET, "salted_messaging_secret"));
 
     assert_all_unique(all);
