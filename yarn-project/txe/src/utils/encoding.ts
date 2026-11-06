@@ -161,12 +161,25 @@ export function toForeignCallResult(obj: (ForeignCallSingle | ForeignCallArray)[
 
 export const ForeignCallSingleSchema = z.string();
 
-export const ForeignCallArraySchema = z.array(z.string());
+/**
+ * Bound for the arrays in a foreign call from the Noir test runner. Noir puts no limit on them; this is far above any
+ * real call and only makes an oversized array fail on its length before its entries are parsed.
+ */
+const MAX_FOREIGN_CALL_ARRAY_LEN = 2 ** 20;
 
-export const ForeignCallArgsSchema = z.array(
-  z.union([ForeignCallSingleSchema, ForeignCallArraySchema, ContractArtifactSchema, ContractInstanceWithAddressSchema]),
-);
+export const ForeignCallArraySchema = z.array(z.string()).max(MAX_FOREIGN_CALL_ARRAY_LEN);
+
+export const ForeignCallArgsSchema = z
+  .array(
+    z.union([
+      ForeignCallSingleSchema,
+      ForeignCallArraySchema,
+      ContractArtifactSchema,
+      ContractInstanceWithAddressSchema,
+    ]),
+  )
+  .max(MAX_FOREIGN_CALL_ARRAY_LEN);
 
 export const ForeignCallResultSchema = z.object({
-  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])),
+  values: z.array(z.union([ForeignCallSingleSchema, ForeignCallArraySchema])).max(MAX_FOREIGN_CALL_ARRAY_LEN),
 });

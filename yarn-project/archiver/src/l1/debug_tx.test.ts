@@ -1,11 +1,12 @@
 import type { DebugCallTrace, ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { findUnboundedContainers } from '@aztec-labs/foundation/testing';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import type { Hex } from 'viem';
 
 import debugTraceMultipleProposeFixture from '../test/fixtures/debug_traceTransaction-multiplePropose.json' with { type: 'json' };
 import debugTraceFixture from '../test/fixtures/debug_traceTransaction-proxied.json' with { type: 'json' };
-import { callTraceSchema, getSuccessfulCallsFromDebug } from './debug_tx.js';
+import { callFrameSchema, callTraceSchema, getSuccessfulCallsFromDebug } from './debug_tx.js';
 
 describe('getSuccessfulCallsFromDebug', () => {
   let mockClient: MockProxy<ViemPublicClient>;
@@ -308,6 +309,10 @@ describe('getSuccessfulCallsFromDebug', () => {
 
     it('rejects a trace nested deeper than the EVM allows', () => {
       expect(callTraceSchema.safeParse(nestedTrace(1026)).success).toBe(false);
+    });
+
+    it('bounds every array in a frame before parsing its entries', () => {
+      expect(findUnboundedContainers(callFrameSchema)).toEqual([]);
     });
 
     it('rejects a very deeply nested trace without overflowing the stack', () => {

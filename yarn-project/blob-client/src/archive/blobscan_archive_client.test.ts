@@ -1,10 +1,15 @@
 import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { findUnboundedContainers } from '@aztec-labs/foundation/testing';
 import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { jest } from '@jest/globals';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-import { BlobscanArchiveClient } from './blobscan_archive_client.js';
+import {
+  BlobscanArchiveClient,
+  BlobscanBlockResponseSchema,
+  BlobscanBlocksResponseSchema,
+} from './blobscan_archive_client.js';
 
 describe('blobscan_archive_client', () => {
   let client: BlobscanArchiveClient;
@@ -80,5 +85,12 @@ describe('blobscan_archive_client', () => {
       expect(blobJsons).toBeUndefined();
       expect(spy).toHaveBeenCalledWith(expectedUrl, { headers });
     });
+  });
+});
+
+describe('Blobscan response schemas', () => {
+  it('bound every array before parsing its entries', () => {
+    expect(findUnboundedContainers(BlobscanBlockResponseSchema)).toEqual([]);
+    expect(findUnboundedContainers(BlobscanBlocksResponseSchema)).toEqual([]);
   });
 });
