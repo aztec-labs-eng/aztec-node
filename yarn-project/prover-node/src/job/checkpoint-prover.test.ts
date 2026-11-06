@@ -43,11 +43,10 @@ describe('CheckpointProver', () => {
     onFailed = jest.fn<(prover: CheckpointProver) => void>();
     log = createLogger('test:checkpoint-prover');
 
-    // Default: gather rejects fast so the eager pipeline unwinds without hanging. The
-    // production prover doesn't propagate abort into the txProvider call (only a deadline)
-    // — a never-resolving mock would leave runPromise pending forever even after cancel,
-    // which would in turn hang whenDone(). Per-test overrides reconfigure the mock when a
-    // specific failure mode is under test.
+    // Default: gather rejects fast so the eager pipeline unwinds without hanging. A mock that
+    // ignores the abort signal and never resolves would leave runPromise pending forever even
+    // after cancel, which would in turn hang whenDone(). Per-test overrides reconfigure the mock
+    // when a specific failure mode is under test.
     txProvider.getTxsForBlock.mockRejectedValue(new Error('test default: gather not configured'));
 
     deps = {
@@ -162,6 +161,27 @@ describe('CheckpointProver', () => {
       const prover = makeProver();
       prover.cancel();
       gate.reject(new Error('gather aborted by test'));
+      await expect(prover.whenDone()).resolves.toBeUndefined();
+    });
+
+    it('cancel interrupts a gather that would otherwise wait for its deadline', async () => {
+      // The gather settles only when its signal aborts, standing in for a tx collection that would otherwise wait for
+      // the full gathering timeout. Cancelling must abort it so whenDone resolves instead of waiting for the deadline.
+      txProvider.getTxsForBlock.mockReset();
+      txProvider.getTxsForBlock.mockImplementation(
+        (block, opts) =>
+          new Promise(resolve => {
+            const resolveMissing = () =>
+              resolve({ txs: [], missingTxs: block.body.txEffects.map(txEffect => txEffect.txHash) });
+            if (opts.signal?.aborted) {
+              resolveMissing();
+            }
+            opts.signal?.addEventListener('abort', resolveMissing);
+          }),
+      );
+
+      const prover = makeProver();
+      prover.cancel();
       await expect(prover.whenDone()).resolves.toBeUndefined();
     });
 
@@ -704,6 +724,32 @@ describe('CheckpointProver', () => {
       expect(uploaded.get('0xbb')).toBeDefined();
 
       await cleanup(prover);
+    });
+
+    it('re-fetches every tx for the upload even after the prover is cancelled', async () => {
+      // A provider that honours the abort signal like the real one: an aborted fetch reports every tx as missing.
+      // Cancelling the prover stops its own gather, but must not truncate a later failure-upload re-fetch.
+      const prover = makeProver();
+      prover.cancel();
+      await prover.whenDone();
+
+      txProvider.getTxsForBlock.mockReset();
+      txProvider.getTxsForBlock.mockImplementation((block, opts) => {
+        const hashes = block.body.txEffects.map(txEffect => txEffect.txHash);
+        return Promise.resolve(
+          opts.signal?.aborted
+            ? { txs: [], missingTxs: hashes }
+            : { txs: hashes.map(hash => fakeTx(hash.toString())), missingTxs: [] },
+        );
+      });
+
+      const uploaded = await prover.getTxsForUpload();
+      const expectedHashes = checkpoint.blocks.flatMap(block =>
+        block.body.txEffects.map(txEffect => txEffect.txHash.toString()),
+      );
+      expect(checkpoint.blocks.length).toBeGreaterThan(1);
+      expect(expectedHashes.length).toBeGreaterThan(checkpoint.blocks[0].body.txEffects.length);
+      expect([...uploaded.keys()].sort()).toEqual(expectedHashes.sort());
     });
 
     it('failure-upload re-fetches from the pool and builds complete EpochProvingJobData', async () => {

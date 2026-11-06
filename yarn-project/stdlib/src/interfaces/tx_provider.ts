@@ -22,5 +22,13 @@ export interface ITxProvider {
     opts: { pinnedPeer: PeerId | undefined; deadline: Date },
   ): Promise<{ txs: Tx[]; missingTxs: TxHash[] }>;
 
-  getTxsForBlock(block: L2Block, opts: { deadline: Date }): Promise<{ txs: Tx[]; missingTxs: TxHash[] }>;
+  /**
+   * Collects the txs for a mined block from the tx pool and the network until `deadline`. Aborting `signal` stops new
+   * network attempts early (a request already sent to a source still has to settle); txs not found by then are reported
+   * as missing.
+   */
+  getTxsForBlock(
+    block: L2Block,
+    opts: { deadline: Date; signal?: AbortSignal },
+  ): Promise<{ txs: Tx[]; missingTxs: TxHash[] }>;
 }
