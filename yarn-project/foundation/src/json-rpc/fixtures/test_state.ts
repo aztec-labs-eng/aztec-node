@@ -135,7 +135,7 @@ export const TestStateSchema: ApiSchemaFor<TestStateApi> = {
   getNotes2: z.function({ input: z.tuple([optional(schemas.BigInt)]), output: z.array(TestNote.schema) }),
   getNotes3: z.function({ input: z.tuple([optional(schemas.Integer)]), output: z.array(TestNote.schema) }),
   clear: z.function({ input: z.tuple([]), output: z.void() }),
-  addNotes: z.function({ input: z.tuple([z.array(TestNote.schema)]), output: z.array(TestNote.schema) }),
+  addNotes: z.function({ input: z.tuple([z.array(TestNote.schema).max(100)]), output: z.array(TestNote.schema) }),
   fail: z.function({ input: z.tuple([]), output: z.void() }),
   count: z.function({ input: z.tuple([]), output: z.number() }),
   getStatus: z.function({ input: z.tuple([]), output: z.object({ status: z.string(), count: schemas.BigInt }) }),

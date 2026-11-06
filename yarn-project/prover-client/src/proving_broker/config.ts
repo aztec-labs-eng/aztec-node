@@ -88,11 +88,13 @@ export const proverBrokerConfigMappings: ConfigMappingsType<ProverBrokerConfig> 
 
 export const defaultProverBrokerConfig: ProverBrokerConfig = getDefaultConfig(proverBrokerConfigMappings);
 
+export const provingRequestTypeCount = Object.values(ProvingRequestType).filter(v => typeof v === 'number').length;
+
 export const ProverAgentConfig = z.object({
   /** The number of prover agents to start */
   proverAgentCount: z.number(),
   /** The types of proofs the prover agent can generate */
-  proverAgentProofTypes: z.array(z.nativeEnum(ProvingRequestType)),
+  proverAgentProofTypes: z.array(z.nativeEnum(ProvingRequestType)).max(provingRequestTypeCount),
   /** How often the prover agents poll for jobs */
   proverAgentPollIntervalMs: z.number(),
   /** The URL where this agent takes jobs from */

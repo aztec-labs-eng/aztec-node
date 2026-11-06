@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { Buffer32 } from '../buffer/buffer32.js';
 import { schemas } from './schemas.js';
-import { optional } from './utils.js';
+import { boundedRecord, optional } from './utils.js';
 
 describe('schemas', () => {
   describe('optional', () => {
@@ -21,6 +21,31 @@ describe('schemas', () => {
       expect(schema.parse('x')).toEqual('x');
     });
   });
+
+  describe('boundedRecord', () => {
+    const schema = boundedRecord(z.string(), z.number(), 2);
+
+    it('parses a record within the bound', () => {
+      expect(schema.parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+    });
+
+    it('rejects an oversized record of invalid entries with a single issue', () => {
+      const input = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`k${i}`, 'not a number']));
+      expect(schema.safeParse(input).error?.issues).toHaveLength(1);
+    });
+
+    it('rejects an array as a type mismatch without enumerating its elements', () => {
+      const array = new Proxy(new Array(1_000_000).fill(0), {
+        ownKeys: () => {
+          throw new Error('enumerated the array');
+        },
+      });
+      expect(schema.safeParse(array).error?.issues).toEqual([
+        expect.objectContaining({ code: 'invalid_type', expected: 'record' }),
+      ]);
+    });
+  });
+
   describe('Buffer32', () => {
     it('parses a valid hex string into a Buffer32', () => {
       const buffer32 = Buffer32.random();

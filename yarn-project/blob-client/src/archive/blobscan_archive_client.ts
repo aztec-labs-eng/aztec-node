@@ -8,27 +8,38 @@ import { z } from 'zod';
 import { BlobArchiveClientInstrumentation } from './instrumentation.js';
 import type { BlobArchiveClient } from './interface.js';
 
+/**
+ * Bound for the lists in a Blobscan response: blob-carrying txs per L1 block, blobs per tx and blocks per page. It is
+ * well above any blob schedule Ethereum has adopted and only rejects malformed responses before their entries are
+ * parsed.
+ */
+const MAX_BLOBSCAN_LIST_LEN = 1024;
+
 export const BlobscanBlockResponseSchema = zodFor<BlobJson[]>()(
   z
     .object({
       hash: z.string(),
       slot: z.number().int(),
       number: z.number().int(),
-      transactions: z.array(
-        z.object({
-          hash: z.string(),
-          blobs: z.array(
-            z.object({
-              versionedHash: z.string(),
-              data: z.string(),
-              commitment: z.string(),
-              proof: z.string(),
-              size: z.number().int(),
-              index: z.number().int().optional(), // Unused, kept for schema compatibility with blobscan API
-            }),
-          ),
-        }),
-      ),
+      transactions: z
+        .array(
+          z.object({
+            hash: z.string(),
+            blobs: z
+              .array(
+                z.object({
+                  versionedHash: z.string(),
+                  data: z.string(),
+                  commitment: z.string(),
+                  proof: z.string(),
+                  size: z.number().int(),
+                  index: z.number().int().optional(), // Unused, kept for schema compatibility with blobscan API
+                }),
+              )
+              .max(MAX_BLOBSCAN_LIST_LEN),
+          }),
+        )
+        .max(MAX_BLOBSCAN_LIST_LEN),
     })
     .transform(data =>
       data.transactions.flatMap(tx =>
@@ -43,13 +54,15 @@ export const BlobscanBlockResponseSchema = zodFor<BlobJson[]>()(
 
 // Response from https://api.blobscan.com/blocks?sort=desc&type=canonical
 export const BlobscanBlocksResponseSchema = z.object({
-  blocks: z.array(
-    z.object({
-      hash: z.string(),
-      slot: z.number().int(),
-      number: z.number().int(),
-    }),
-  ),
+  blocks: z
+    .array(
+      z.object({
+        hash: z.string(),
+        slot: z.number().int(),
+        number: z.number().int(),
+      }),
+    )
+    .max(MAX_BLOBSCAN_LIST_LEN),
 });
 
 export class BlobscanArchiveClient implements BlobArchiveClient {

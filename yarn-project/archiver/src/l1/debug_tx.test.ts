@@ -5,7 +5,7 @@ import type { Hex } from 'viem';
 
 import debugTraceMultipleProposeFixture from '../test/fixtures/debug_traceTransaction-multiplePropose.json' with { type: 'json' };
 import debugTraceFixture from '../test/fixtures/debug_traceTransaction-proxied.json' with { type: 'json' };
-import { getSuccessfulCallsFromDebug } from './debug_tx.js';
+import { callTraceSchema, getSuccessfulCallsFromDebug } from './debug_tx.js';
 
 describe('getSuccessfulCallsFromDebug', () => {
   let mockClient: MockProxy<ViemPublicClient>;
@@ -289,5 +289,37 @@ describe('getSuccessfulCallsFromDebug', () => {
     expect(results).toHaveLength(1);
     expect(results[0].from).toEqual(EthAddress.fromString('0xca11bde05977b3631167028862be2a173976ca11'));
     expect(results[0].gasUsed).toBe(BigInt('0x3eb5a'));
+  });
+
+  describe('callTraceSchema', () => {
+    const nestedTrace = (frames: number) => {
+      let trace: DebugCallTrace = { from: '0x01', type: 'CALL', calls: [] };
+      for (let i = 1; i < frames; i++) {
+        trace = { from: '0x01', type: 'CALL', calls: [trace] };
+      }
+      return trace;
+    };
+
+    it('accepts a trace nested as deep as the EVM allows', () => {
+      // The top-level call plus 1024 nested calls.
+      const trace = nestedTrace(1025);
+      expect(callTraceSchema.parse(trace)).toEqual(trace);
+    });
+
+    it('rejects a trace nested deeper than the EVM allows', () => {
+      expect(callTraceSchema.safeParse(nestedTrace(1026)).success).toBe(false);
+    });
+
+    it('rejects a very deeply nested trace without overflowing the stack', () => {
+      expect(callTraceSchema.safeParse(nestedTrace(50_000)).success).toBe(false);
+    });
+
+    it('reports the path of an invalid nested frame', () => {
+      const trace = nestedTrace(3);
+      trace.calls![0].calls![0].from = 'not-hex' as Hex;
+      const result = callTraceSchema.safeParse(trace);
+      expect(result.success).toBe(false);
+      expect(result.error!.issues[0].path).toEqual(['calls', 0, 'calls', 0, 'from']);
+    });
   });
 });

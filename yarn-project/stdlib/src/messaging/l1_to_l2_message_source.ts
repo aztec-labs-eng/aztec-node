@@ -1,3 +1,4 @@
+import { MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
@@ -36,7 +37,7 @@ export type InboxMessageRange = {
 };
 
 export const InboxMessageRangeSchema = z.object({
-  messages: z.array(schemas.Fr),
+  messages: z.array(schemas.Fr).max(MAX_L1_TO_L2_MSGS_PER_CHECKPOINT),
   start: InboxMessagePositionSchema,
   end: InboxMessagePositionSchema,
 }) satisfies z.ZodType<InboxMessageRange>;
