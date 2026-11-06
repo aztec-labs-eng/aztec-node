@@ -1,6 +1,7 @@
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { CheckpointProposalJobTestEvent } from '@aztec-labs/sequencer-client';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
@@ -204,7 +205,7 @@ describe('CheckpointProposalJobTestGate', () => {
     await armed.completed;
 
     // Past the watchdog deadline the released arming still reports no failure.
-    await new Promise(resolve => setTimeout(resolve, 80));
+    await sleep(80);
     expect(await isSettled(armed.failed)).toBe(false);
   });
 

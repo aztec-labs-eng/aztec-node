@@ -1,3 +1,4 @@
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 
@@ -5,10 +6,10 @@ export class TestCircuitVerifier implements ClientProtocolCircuitVerifier {
   constructor(private verificationDelayMs?: number) {}
   verifyProof(_tx: Tx): Promise<IVCProofVerificationResult> {
     if (this.verificationDelayMs !== undefined && this.verificationDelayMs > 0) {
-      return new Promise(resolve => {
-        setTimeout(() => {
-          resolve({ valid: true, durationMs: this.verificationDelayMs!, totalDurationMs: this.verificationDelayMs! });
-        }, this.verificationDelayMs);
+      return sleep(this.verificationDelayMs, {
+        valid: true,
+        durationMs: this.verificationDelayMs,
+        totalDurationMs: this.verificationDelayMs,
       });
     }
     return Promise.resolve({ valid: true, durationMs: 0, totalDurationMs: 0 });

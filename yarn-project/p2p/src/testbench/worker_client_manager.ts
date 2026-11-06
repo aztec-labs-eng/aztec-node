@@ -375,26 +375,22 @@ class WorkerClientManager {
 
     // Create array of promises for each process termination
     const terminationPromises = this.processes.map((process, index) => this.terminateProcess(process, index));
+    const forceKillAfterTimeout = async () => {
+      await sleep(BENCHMARK_CONSTANTS.CLEANUP_TIMEOUT_MS);
+      this.logger.warn('Some processes did not terminate in time, force killing all remaining...');
+      this.processes.forEach(p => {
+        try {
+          if (!p.killed) {
+            p.kill('SIGKILL');
+          }
+        } catch {
+          // Ignore errors when force killing
+        }
+      });
+    };
 
     try {
-      await Promise.race([
-        Promise.all(terminationPromises),
-        new Promise<void>(resolve => {
-          setTimeout(() => {
-            this.logger.warn('Some processes did not terminate in time, force killing all remaining...');
-            this.processes.forEach(p => {
-              try {
-                if (!p.killed) {
-                  p.kill('SIGKILL');
-                }
-              } catch {
-                // Ignore errors when force killing
-              }
-            });
-            resolve();
-          }, BENCHMARK_CONSTANTS.CLEANUP_TIMEOUT_MS);
-        }),
-      ]);
+      await Promise.race([Promise.all(terminationPromises), forceKillAfterTimeout()]);
     } catch (error) {
       this.logger.error('Error during cleanup:', error);
     }

@@ -1,7 +1,19 @@
-The shared foundation ESLint config enables these rules as warnings:
+The shared foundation ESLint config enables these rules. `prefer-sleep` and `prefer-running-promise` are errors, since
+the code base has no remaining violations; the rest are warnings:
 
 - `aztec-custom/prefer-sleep` reports promises whose executor only schedules their resolver with `setTimeout`, including
   callbacks that only call `resolve()`. Use `sleep(ms)` from `@aztec-labs/foundation/sleep`.
+- `aztec-custom/prefer-running-promise` reports `setInterval` with a callback that is async or fires a promise with
+  `void`. Use `new RunningPromise(fn, log, intervalMs)` from `@aztec-labs/foundation/running-promise`: `setInterval`
+  starts a run while the previous one may still be going, and nothing waits for the run in flight on stop. Synchronous
+  ticks are allowed.
+- `aztec-custom/prefer-execute-timeout` reports promises whose executor only rejects from a `setTimeout`, optionally
+  keeping the timer handle. Use `executeTimeout(signal => work(signal), ms)` from `@aztec-labs/foundation/timer`.
+- `aztec-custom/prefer-timer` reports `Date.now() - start` and `performance.now() - start` when `start` is a `const`
+  holding a reading of the same clock. Use `Timer` or `elapsed` from `@aztec-labs/foundation/timer`.
+- `aztec-custom/prefer-bounded-collection` reports `collection.keys().next().value`, the usual way to evict the oldest
+  entry of a size-capped `Map` or `Set` by hand. Use `LruMap` or `LruSet` from `@aztec-labs/foundation/collection`, or
+  `FifoSet.withLimit(n)` from `@aztec-labs/foundation/fifo-set`.
 - `aztec-custom/prefer-times` reports `Array.from({ length: n }, mapper)`, `Array.from({ length: n })`, and
   `Array(n).fill(value).map(mapper)` (also with `new Array`). Use `times(n, i => value)` from
   `@aztec-labs/foundation/collection`.

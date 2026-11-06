@@ -1,18 +1,8 @@
 import { jest } from '@jest/globals';
 
+import { sleep } from '../sleep/index.js';
 import { Mutex } from './index.js';
 import type { MutexDatabase } from './mutex_database.js';
-
-/**
- * Sleep function for introducing a delay in the execution of code.
- * Returns a Promise that resolves after the specified number of milliseconds.
- *
- * @param ms - The number of milliseconds to pause the execution.
- * @returns A Promise that resolves after the specified delay.
- */
-export function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 /**
  * Type that transforms the properties of an object into jest.Mock instances,

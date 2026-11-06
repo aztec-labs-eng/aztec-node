@@ -22,6 +22,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
@@ -612,7 +613,7 @@ describe('sequencer', () => {
 
       sequencer.start();
       const pausePromise = sequencer.pause();
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await sleep(0);
 
       // While the iteration is parked, nothing may be interrupted and STOPPING may not be entered: entering
       // it would make the iteration's own setState calls throw SequencerInterruptedError. pause also leaves

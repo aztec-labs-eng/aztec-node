@@ -1,6 +1,7 @@
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { Abi, Narrow } from 'abitype';
 import type { Hex } from 'viem';
 
@@ -38,5 +39,5 @@ export async function deployL1Contract(
  * @param ms - the number of milliseconds to sleep for
  */
 export function delay(ms: number): Promise<void> {
-  return new Promise<void>(resolve => setTimeout(resolve, ms));
+  return sleep(ms);
 }

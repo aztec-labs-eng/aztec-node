@@ -1,6 +1,7 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
@@ -85,7 +86,7 @@ describe('FileStoreTxCollection', () => {
       if (total >= totalCalls) {
         return;
       }
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await sleep(5);
     }
     const total = sources.reduce((sum, s) => sum + s.getTxsByHash.mock.calls.length, 0);
     throw new Error(`Timed out waiting for ${totalCalls} source calls (got ${total})`);

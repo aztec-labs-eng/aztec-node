@@ -1,4 +1,5 @@
 import { toArray } from '@aztec-labs/foundation/iterable';
+import { sleep } from '@aztec-labs/foundation/sleep';
 
 import { mockLogger } from '../interfaces/utils.js';
 import { AztecSQLiteOPFSStore, SqlitePoolBusyError, SqliteWebLocksUnavailableError } from './index.js';
@@ -167,7 +168,7 @@ describe('sqlite-opfs store management', () => {
         if (attempt >= 40) {
           throw err;
         }
-        return new Promise<undefined>(resolve => setTimeout(resolve, 250));
+        return sleep(250);
       });
     }
     const values = await toArray(reopened.openMap<number, string>('m').valuesAsync());

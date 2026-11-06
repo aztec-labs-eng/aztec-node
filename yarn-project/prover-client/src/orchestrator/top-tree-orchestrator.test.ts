@@ -235,7 +235,7 @@ describe('prover/orchestrator/top-tree', () => {
       const provePromise = topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, ckpt1]);
 
       // Give the orchestrator a chance to enqueue ckpt0's root rollup.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await sleep(50);
 
       // Now resolve ckpt1 — the orchestrator should pick it up and continue.
       deferred.resolve((await b.topTreeData.subTreeProofs) as any);
@@ -259,7 +259,7 @@ describe('prover/orchestrator/top-tree', () => {
     const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [stuckData]);
 
     // Yield then cancel.
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await sleep(10);
     topTree.cancel({ abortJobs: true });
 
     let actual: unknown;

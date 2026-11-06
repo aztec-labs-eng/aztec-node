@@ -1,5 +1,6 @@
 import type { Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { ViemPublicClient } from '../types.js';
@@ -168,10 +169,10 @@ describe('watchContractEvent', () => {
 
     unwatch!();
     unwatch = undefined;
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await sleep(20);
 
     const callsAfterStop = client.getBlockNumber.mock.calls.length;
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await sleep(20);
     expect(client.getBlockNumber.mock.calls.length).toEqual(callsAfterStop);
   });
 });
