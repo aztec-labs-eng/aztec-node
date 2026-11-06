@@ -6,13 +6,13 @@ import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../abi/function_selector.js';
-import { AuthWitness } from '../auth_witness/auth_witness.js';
+import { AuthWitness, MAX_AUTH_WITNESSES_PER_TX } from '../auth_witness/auth_witness.js';
 import { AztecAddress } from '../aztec-address/index.js';
 import { type ZodFor, schemas } from '../schemas/index.js';
 import { Vector } from '../types/shared.js';
-import { Capsule } from './capsule.js';
+import { Capsule, MAX_CAPSULES_PER_TX } from './capsule.js';
 import { FunctionData } from './function_data.js';
-import { HashedValues } from './hashed_values.js';
+import { HashedValues, MAX_HASHED_ARGS_PER_TX } from './hashed_values.js';
 import { TxContext } from './tx_context.js';
 import { TxRequest } from './tx_request.js';
 
@@ -69,9 +69,9 @@ export class TxExecutionRequest {
         functionSelector: schemas.FunctionSelector,
         firstCallArgsHash: schemas.Fr,
         txContext: TxContext.schema,
-        argsOfCalls: z.array(HashedValues.schema),
-        authWitnesses: z.array(AuthWitness.schema),
-        capsules: z.array(Capsule.schema),
+        argsOfCalls: z.array(HashedValues.schema).max(MAX_HASHED_ARGS_PER_TX),
+        authWitnesses: z.array(AuthWitness.schema).max(MAX_AUTH_WITNESSES_PER_TX),
+        capsules: z.array(Capsule.schema).max(MAX_CAPSULES_PER_TX),
         salt: schemas.Fr,
       })
       .transform(TxExecutionRequest.from);
