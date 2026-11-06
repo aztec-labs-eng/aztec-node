@@ -1,4 +1,5 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { Packr } from 'msgpackr';
@@ -108,7 +109,7 @@ function failVerifier(verifier: BatchChonkVerifier) {
 }
 
 /** Lets queued sends and woken waiters run. */
-const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+const settle = () => sleep(10);
 
 const proofFields = [new Uint8Array(32)];
 

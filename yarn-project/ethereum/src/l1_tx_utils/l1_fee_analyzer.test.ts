@@ -2,6 +2,7 @@ import { Blob } from '@aztec-labs/blob-lib';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { Buffer } from 'buffer';
 import { type Hex, parseGwei } from 'viem';
@@ -228,7 +229,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       // Wait for the next block to mine (should complete the analysis)
       // The analyzer's watchForNextBlock waits up to 13 seconds
       // Anvil mines blocks automatically every 1 second
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       // Analysis should now be completed
       const completedAnalysis = analyzer.getAnalysis(analysisId);
@@ -272,7 +273,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       expect(pendingAnalysis?.txInfo.hasBlobData).toBe(true);
 
       // Wait for block to mine and analysis to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       const completedAnalysis = analyzer.getAnalysis(analysisId);
       expect(completedAnalysis).toBeDefined();
@@ -302,7 +303,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       const analysisId = await analyzer.startAnalysis(l2SlotNumber, gasLimit, requests, undefined, onComplete);
 
       // Wait for block to mine and callback to be invoked
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       expect(callbackCalled).toBe(true);
       expect(callbackAnalysisId).toBe(analysisId);
@@ -324,7 +325,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       }
 
       // Wait for all analyses to complete
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await sleep(3000);
 
       const completedAnalyses = analyzer.getCompletedAnalyses();
       expect(completedAnalyses.length).toBe(3);
@@ -349,11 +350,11 @@ describeWithAnvil('L1FeeAnalyzer', () => {
             value: 0n,
           },
         ]);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await sleep(500);
       }
 
       // Wait for all to complete
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await sleep(3000);
 
       const completedAnalyses = smallAnalyzer.getCompletedAnalyses();
       // Should only keep the last 2
@@ -372,7 +373,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       });
 
       // Wait for it to mine
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await sleep(2000);
 
       // Start an analysis
       const analysisId = await analyzer.startAnalysis(SlotNumber(1), 21000n, [
@@ -384,7 +385,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       ]);
 
       // Wait for analysis to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       const analysis = analyzer.getAnalysis(analysisId);
       expect(analysis?.computedPrices.strategyResults).toBeDefined();
@@ -439,7 +440,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       ]);
 
       // Wait for analysis to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       const analysis = customAnalyzer.getAnalysis(analysisId);
       expect(analysis).toBeDefined();
@@ -492,7 +493,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       await cheatCodes.evmMine();
 
       // Wait longer for analysis to complete - retryUntil polls every 0.5s
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       const completedAnalysis = analyzer.getAnalysis(analysisId);
       expect(completedAnalysis).toBeDefined();
@@ -536,7 +537,7 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       await cheatCodes.evmMine();
 
       // Wait longer for analysis to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
 
       const completedAnalysis = analyzer.getAnalysis(analysisId);
       expect(completedAnalysis).toBeDefined();

@@ -1,5 +1,6 @@
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 import { type Hex, encodeFunctionData } from 'viem';
 
@@ -585,7 +586,7 @@ describe('PublisherManager', () => {
     const triggerFunding = async (manager: PublisherManager<L1TxUtils>) => {
       await manager.start();
       // RunningPromise calls the fn immediately on start, so we just need to wait for it to settle
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await sleep(10);
       await manager.stop();
     };
 
@@ -851,13 +852,13 @@ describe('PublisherManager', () => {
       );
 
       await publisherManager.start();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await sleep(10);
       await publisherManager.stop();
       expect(funder.sendAndMonitorTransaction).toHaveBeenCalledTimes(1);
 
       // The funding loop must be re-armed by the restart, triggering another immediate check.
       await publisherManager.start();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await sleep(10);
       await publisherManager.stop();
       expect(funder.sendAndMonitorTransaction).toHaveBeenCalledTimes(2);
     });
@@ -869,7 +870,7 @@ describe('PublisherManager', () => {
       if (value !== undefined) {
         return value;
       }
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await sleep(10);
     }
     throw new Error('Timed out waiting for value');
   }

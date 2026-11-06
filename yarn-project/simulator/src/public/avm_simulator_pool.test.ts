@@ -1,4 +1,5 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { mock } from 'jest-mock-extended';
 
 import { type AvmContractsDBContext, AvmProcessDiedError } from './avm_simulator.js';
@@ -77,11 +78,11 @@ describe('AvmSimulatorPool', () => {
     });
     const controller = new AbortController();
     const simulation = pool.simulate(INPUT, context, controller.signal);
-    await new Promise(resolve => setTimeout(resolve, 30));
+    await sleep(30);
     controller.abort();
     await expect(simulation).rejects.toThrow(/aborted/);
     const attemptsAtAbort = attempts;
-    await new Promise(resolve => setTimeout(resolve, 30));
+    await sleep(30);
     expect(attempts).toBe(attemptsAtAbort);
   });
 
@@ -171,7 +172,7 @@ describe('AvmSimulatorPool', () => {
     ]);
     const spawned = [p0, p1];
     const pool = makePool(() => Promise.resolve(spawned.shift()!), { maxSize: 2 });
-    const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+    const tick = () => sleep(5);
 
     const victim = pool.simulate(VICTIM, context).then(
       () => undefined,
@@ -216,11 +217,11 @@ describe('AvmSimulatorPool', () => {
     const pool = makePool(() => Promise.resolve(new FakeAvmService(() => blockedSim.promise)), { maxSize: 1 });
 
     const sim1 = pool.simulate(INPUT, context);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await sleep(10);
 
     const controller = new AbortController();
     const sim2 = pool.simulate(INPUT, context, controller.signal);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await sleep(10);
     controller.abort();
     await expect(sim2).rejects.toThrow(/aborted/);
 
@@ -233,9 +234,9 @@ describe('AvmSimulatorPool', () => {
     const pool = makePool(() => Promise.resolve(new FakeAvmService(() => blockedSim.promise)), { maxSize: 1 });
 
     const sim1 = pool.simulate(INPUT, context);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await sleep(10);
     const sim2 = pool.simulate(INPUT, context);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await sleep(10);
 
     const destroyPromise = pool.destroy();
     await expect(sim2).rejects.toThrow(/destroyed/);

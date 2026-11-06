@@ -12,11 +12,15 @@ import noAsyncDispose from './eslint-rules/no-async-dispose.js';
 import noGlobalBuffer from './eslint-rules/no-global-buffer.js';
 import noNonPrimitiveInCollections from './eslint-rules/no-non-primitive-in-collections.js';
 import noUnsafeBrandedTypeConversion from './eslint-rules/no-unsafe-branded-type-conversion.js';
+import preferBoundedCollection from './eslint-rules/prefer-bounded-collection.js';
 import preferBufferToHex from './eslint-rules/prefer-buffer-to-hex.js';
 import preferCompactArray from './eslint-rules/prefer-compact-array.js';
+import preferExecuteTimeout from './eslint-rules/prefer-execute-timeout.js';
 import preferPromiseWithResolvers from './eslint-rules/prefer-promise-with-resolvers.js';
+import preferRunningPromise from './eslint-rules/prefer-running-promise.js';
 import preferSleep from './eslint-rules/prefer-sleep.js';
 import preferSum from './eslint-rules/prefer-sum.js';
+import preferTimer from './eslint-rules/prefer-timer.js';
 import preferTimes from './eslint-rules/prefer-times.js';
 import preferUnique from './eslint-rules/prefer-unique.js';
 
@@ -64,11 +68,15 @@ export default [
           'no-global-buffer': noGlobalBuffer,
           'no-non-primitive-in-collections': noNonPrimitiveInCollections,
           'no-unsafe-branded-type-conversion': noUnsafeBrandedTypeConversion,
+          'prefer-bounded-collection': preferBoundedCollection,
           'prefer-buffer-to-hex': preferBufferToHex,
           'prefer-compact-array': preferCompactArray,
+          'prefer-execute-timeout': preferExecuteTimeout,
           'prefer-promise-with-resolvers': preferPromiseWithResolvers,
+          'prefer-running-promise': preferRunningPromise,
           'prefer-sleep': preferSleep,
           'prefer-sum': preferSum,
+          'prefer-timer': preferTimer,
           'prefer-times': preferTimes,
           'prefer-unique': preferUnique,
         },
@@ -159,11 +167,15 @@ export default [
       'aztec-custom/no-global-buffer': 'error',
       'aztec-custom/no-non-primitive-in-collections': 'error',
       'aztec-custom/no-unsafe-branded-type-conversion': 'error',
+      'aztec-custom/prefer-bounded-collection': 'warn',
       'aztec-custom/prefer-buffer-to-hex': 'warn',
       'aztec-custom/prefer-compact-array': 'warn',
+      'aztec-custom/prefer-execute-timeout': 'warn',
       'aztec-custom/prefer-promise-with-resolvers': 'warn',
-      'aztec-custom/prefer-sleep': 'warn',
+      'aztec-custom/prefer-running-promise': 'error',
+      'aztec-custom/prefer-sleep': 'error',
       'aztec-custom/prefer-sum': 'warn',
+      'aztec-custom/prefer-timer': 'warn',
       'aztec-custom/prefer-times': 'warn',
       'aztec-custom/prefer-unique': 'warn',
     },

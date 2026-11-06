@@ -6,6 +6,7 @@ import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { getNonNullifiedL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
 
@@ -63,29 +64,23 @@ export async function bridgeL1FeeJuice(
   }
 
   if (wait) {
-    const delayedCheck = (delay: number) => {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          void getNonNullifiedL1ToL2MessageWitness(
-            node,
-            ProtocolContractAddress.FeeJuice,
-            Fr.fromHexString(messageHash),
-            claimSecret,
-          )
-            .then(witness => resolve(witness))
-            .catch(err => reject(err));
-        }, delay);
-      });
-    };
-
-    let witness;
-
-    while (!witness) {
-      witness = await delayedCheck(interval);
-      if (!witness) {
-        log(`No L1 to L2 message found yet, checking again in ${interval / 1000}s`);
-      }
-    }
+    await retryUntil(
+      async () => {
+        const witness = await getNonNullifiedL1ToL2MessageWitness(
+          node,
+          ProtocolContractAddress.FeeJuice,
+          Fr.fromHexString(messageHash),
+          claimSecret,
+        );
+        if (!witness) {
+          log(`No L1 to L2 message found yet, checking again in ${interval / 1000}s`);
+        }
+        return witness;
+      },
+      'L1 to L2 message',
+      0,
+      interval / 1000,
+    );
   }
 
   return [claimSecret, messageLeafIndex] as const;

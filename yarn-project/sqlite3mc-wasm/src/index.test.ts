@@ -45,6 +45,8 @@ describe('sqlite3InitModule', () => {
   const settleWithin = <T>(promise: Promise<T>, ms = 20_000): Promise<T> =>
     Promise.race([
       promise,
+      // This package does not depend on foundation, so it cannot use its timeout helpers.
+      // eslint-disable-next-line aztec-custom/prefer-execute-timeout
       new Promise<never>((_, reject) =>
         setTimeout(
           () =>
