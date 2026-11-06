@@ -145,7 +145,7 @@ export class TxCollection {
     block: L2Block,
     txHashes: TxHash[] | string[],
     opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
-  ) {
+  ): Promise<Tx[]> {
     return this.collectFastFor({ type: 'block', block }, txHashes, opts);
   }
 
@@ -157,7 +157,7 @@ export class TxCollection {
     input: FastCollectionRequestInput,
     txHashes: TxHash[] | string[],
     opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
-  ) {
+  ): Promise<Tx[]> {
     if (opts.signal?.aborted) {
       return [];
     }
