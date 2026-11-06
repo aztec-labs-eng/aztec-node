@@ -22,12 +22,11 @@ concurrency:
   group: deploy-next-net-${{ inputs.image_tag || 'nightly' }}
   cancel-in-progress: true
 
-# contents: read for wait_for_release's tag/commit lookups; actions: write both for its
-# workflow-run queries and to cap the called deploy-network.yml high enough that its
-# failure handler can dispatch claudebox.yml.
+# contents: read for wait_for_release's tag/commit lookups; actions: read for its
+# workflow-run queries.
 permissions:
   contents: read
-  actions: write
+  actions: read
 
 env:
   GITHUB_TOKEN: ${{ github.token }}
@@ -146,9 +145,8 @@ jobs:
           CI: "1"
         run: |
           set -euo pipefail
-          # The ClaudeBox deploy investigation dispatched by deploy-network.yml reads pod
-          # state from this namespace, and runs after teardown has deleted it. Cloud
-          # Logging keeps whatever the pods emitted; pod status, events and helm release
+          # A deploy failure investigation runs after teardown has deleted this namespace.
+          # Cloud Logging keeps whatever the pods emitted; pod status, events and helm release
           # state only survive if they are dumped here. Best effort — the deploy may have
           # failed before the cluster was ever reachable.
           set +x

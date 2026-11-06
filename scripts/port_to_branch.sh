@@ -152,7 +152,7 @@ if ! git cherry-pick "${CHERRY_PICK_ARGS[@]}" "$MERGE_COMMIT" --no-edit; then
     exit 0
   fi
   # Commit the conflicted cherry-pick WITH its markers so the pushed branch is
-  # the resolution target — the resolver (human or ClaudeBox) fixes the markers
+  # the resolution target — a human resolver fixes the markers
   # in a follow-up commit instead of replaying the cherry-pick.
   mapfile -t CONFLICT_FILES < <(git diff --name-only --diff-filter=U)
   echo "Conflicts (committing with markers for manual resolution):"
