@@ -54,14 +54,18 @@ const client = createBlobClient({
   archiveApiUrl: 'https://api.blobscan.com',
 });
 
-// Client with file store support
-const clientWithFileStore = await createBlobClientWithFileStores({
-  l1ChainId: 1,
-  rollupVersion: 1,
-  l1Contracts: { rollupAddress: { toString: () => '0x...' } },
-  blobFileStoreUrls: ['s3://bucket/blobs', 'file:///local/blobs'],
-  blobFileStoreUploadUrl: 's3://bucket/blobs',
-});
+// Client with file store support. The L1 public client resolves a block's beacon slot when the caller
+// does not supply its parent beacon root or timestamp.
+const clientWithFileStore = await createBlobClientWithFileStores(
+  {
+    l1ChainId: 1,
+    rollupVersion: 1,
+    rollupAddress: { toString: () => '0x...' },
+    blobFileStoreUrls: ['s3://bucket/blobs', 'file:///local/blobs'],
+    blobFileStoreUploadUrl: 's3://bucket/blobs',
+  },
+  { l1Client },
+);
 
 // Fetch blobs
 const blobs = await client.getBlobSidecar(blockHash, blobHashes);

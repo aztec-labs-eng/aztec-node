@@ -1,9 +1,5 @@
-import { EpochCache } from '@aztec-labs/epoch-cache';
-import { createEthereumChain } from '@aztec-labs/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { merge } from '@aztec-labs/foundation/collection';
@@ -25,7 +21,6 @@ import {
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { EventEmitter } from 'events';
-import { createPublicClient } from 'viem';
 
 import { Archiver, type ArchiverDeps } from './archiver.js';
 import { type ArchiverConfig, mapArchiverConfig } from './config.js';
@@ -52,7 +47,7 @@ export async function createArchiverStore(
 /**
  * Creates a local archiver.
  * @param config - The archiver configuration.
- * @param deps - The archiver dependencies (blobClient, epochCache, dateProvider, telemetry).
+ * @param deps - The archiver dependencies (l1Client, blobClient, epochCache, dateProvider, telemetry).
  * @param opts - The options.
  * @param initialHeader - The genesis block header from world-state, used to answer block-0 queries.
  * @param initialBlockHash - Precomputed hash of `initialHeader`. Hoisted to the caller so the archiver
@@ -72,22 +67,7 @@ export async function createArchiver(
     await registerStandardContracts(archiverStore);
   }
 
-  // Create Ethereum clients
-  const chain = createEthereumChain(config.l1RpcUrls, config.l1ChainId);
-  const httpTimeout = config.l1HttpTimeoutMS;
-  const publicClient = createPublicClient({
-    chain: chain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: httpTimeout }),
-    pollingInterval: config.viemPollingIntervalMS,
-  });
-
-  // Create debug client using debug RPC URLs if available, otherwise fall back to regular RPC URLs
-  const debugRpcUrls = config.l1DebugRpcUrls.length > 0 ? config.l1DebugRpcUrls : config.l1RpcUrls;
-  const debugClient = createPublicClient({
-    chain: chain.chainInfo,
-    transport: makeL1HttpTransport(debugRpcUrls, { timeout: httpTimeout }),
-    pollingInterval: config.viemPollingIntervalMS,
-  }) as ViemPublicDebugClient;
+  const publicClient = deps.l1Client;
 
   // Create L1 contract instances
   const rollup = new RollupContract(publicClient, config.rollupAddress);
@@ -146,7 +126,7 @@ export async function createArchiver(
     mapArchiverConfig(config),
   );
 
-  const epochCache = deps.epochCache ?? (await EpochCache.create(config.rollupAddress, config, deps));
+  const { epochCache } = deps;
   const telemetry = deps.telemetry ?? getTelemetryClient();
   const instrumentation = await ArchiverInstrumentation.new(telemetry, () => archiverStore.db.estimateSize());
 
@@ -161,7 +141,7 @@ export async function createArchiver(
   // Create the L1 synchronizer
   const synchronizer = new ArchiverL1Synchronizer(
     publicClient,
-    debugClient,
+    deps.l1DebugClient,
     rollup,
     inbox,
     archiverStore,
@@ -180,7 +160,7 @@ export async function createArchiver(
 
   const archiver = new Archiver(
     publicClient,
-    debugClient,
+    deps.l1DebugClient,
     rollup,
     outbox,
     { ...pickL1ContractAddresses(config), slashingProposerAddress },

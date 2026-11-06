@@ -5,10 +5,11 @@ import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 import { Blob, getKzg } from '@aztec-labs/blob-lib';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
-import { getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -168,11 +169,24 @@ export async function createAztecNodeService(
     );
   }
 
+  // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through it,
+  // rather than building its own from the L1 RPC URLs.
   const publicClient = createPublicClient({
     chain: ethereumChain.chainInfo,
     transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
     pollingInterval: config.viemPollingIntervalMS,
   });
+
+  // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
+  // or trace calls.
+  const debugClient =
+    config.l1DebugRpcUrls.length > 0
+      ? (createPublicClient({
+          chain: ethereumChain.chainInfo,
+          transport: makeL1HttpTransport(config.l1DebugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
+          pollingInterval: config.viemPollingIntervalMS,
+        }) as ViemPublicDebugClient)
+      : undefined;
 
   const l1ContractsAddresses = await RegistryContract.collectAddresses(
     publicClient,
@@ -201,12 +215,15 @@ export async function createAztecNodeService(
     );
   }
 
-  const blobClient = await createBlobClientWithFileStores(config, log.createChild('blob-client'));
+  const blobClient = await createBlobClientWithFileStores(config, {
+    l1Client: publicClient,
+    logger: log.createChild('blob-client'),
+  });
 
   // attempt snapshot sync if possible
-  await trySnapshotSync(config, log, options.genesis);
+  await trySnapshotSync(config, publicClient, log, options.genesis);
 
-  const epochCache = await EpochCache.create(config.rollupAddress, config, { dateProvider });
+  const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
 
   // Track started resources so we can clean up on partial failure during node creation.
   const started: { stop?(): Promise<void> | void }[] = [];
@@ -242,7 +259,15 @@ export async function createAztecNodeService(
     started.push({ stop: () => avmSimulator[Symbol.asyncDispose]() });
     const archiver = await createArchiver(
       config,
-      { blobClient, epochCache, telemetry, dateProvider, feeConfigProvider: feeConfigTracker },
+      {
+        l1Client: publicClient,
+        l1DebugClient: debugClient ?? (publicClient as ViemPublicDebugClient),
+        blobClient,
+        epochCache,
+        telemetry,
+        dateProvider,
+        feeConfigProvider: feeConfigTracker,
+      },
       { blockUntilSync: !config.skipArchiverInitialSync },
       initialHeader,
       initialBlockHash,
@@ -541,7 +566,7 @@ export async function createAztecNodeService(
       slasherClient = await createSlasher(
         config,
         pickL1ContractAddresses(config),
-        getPublicClient(config),
+        publicClient,
         watchers,
         dateProvider,
         epochCache,
@@ -624,6 +649,7 @@ export async function createAztecNodeService(
       } else {
         sequencer = await SequencerClient.new(config, {
           ...deps,
+          l1Client: publicClient,
           epochCache,
           l1TxUtils,
           funderL1TxUtils,
@@ -665,6 +691,7 @@ export async function createAztecNodeService(
     if (config.enableProverNode) {
       proverNode = await createProverNode(config, {
         ...deps.proverNodeDeps,
+        l1Client: publicClient,
         telemetry,
         dateProvider,
         archiver,
