@@ -34,6 +34,7 @@ export class ConnectionSampler {
     private readonly logger = createLogger('p2p:reqresp:connection-sampler'),
     private readonly opts: { cleanupIntervalMs?: number; p2pOptimisticNegotiation?: boolean } = {},
   ) {
+    // eslint-disable-next-line aztec-custom/prefer-running-promise
     this.cleanupInterval = setInterval(
       () => void this.cleanupStaleConnections(),
       this.opts.cleanupIntervalMs ?? 60_000,

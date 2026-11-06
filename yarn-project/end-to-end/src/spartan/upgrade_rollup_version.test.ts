@@ -9,6 +9,7 @@ import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import fs from 'fs';
@@ -252,7 +253,7 @@ describe('spartan_upgrade_rollup_version', () => {
       if (leaderVotes >= quorumSize) {
         break;
       }
-      await new Promise(r => setTimeout(r, 12_000));
+      await sleep(12_000);
     }
 
     // Wait for next round so the proposal becomes executable by proposer
@@ -260,7 +261,7 @@ describe('spartan_upgrade_rollup_version', () => {
     const executableRound = round;
     debugLogger.info(`Our payload has quorum in round ${executableRound}. Waiting for next round...`);
     while (round === executableRound) {
-      await new Promise(r => setTimeout(r, 12_500));
+      await sleep(12_500);
       ({ round } = await govInfo());
     }
 
@@ -327,7 +328,7 @@ describe('spartan_upgrade_rollup_version', () => {
     while ((await nowTs()) < timeToActive) {
       const remaining = Number(timeToActive - (await nowTs()));
       debugLogger.info(`Waiting for proposal Active phase. Seconds remaining: ${remaining}`);
-      await new Promise(r => setTimeout(r, 5_000));
+      await sleep(5_000);
     }
     debugLogger.info('Proposal is Active (voting started)');
 
@@ -376,7 +377,7 @@ describe('spartan_upgrade_rollup_version', () => {
         try {
           await l1TxUtils.sendAndMonitorTransaction({ to: l1Client.account.address, value: 1n });
         } catch {
-          await new Promise(r => setTimeout(r, 12_000));
+          await sleep(12_000);
         }
         tries++;
       }
@@ -427,7 +428,7 @@ describe('spartan_upgrade_rollup_version', () => {
         await tallyVotes();
         const remaining = Number(timeToQueued - (await nowTs()));
         debugLogger.info(`Voting in progress. Seconds until voting ends: ${remaining}`);
-        await new Promise(r => setTimeout(r, 15_000));
+        await sleep(15_000);
       }
     } catch {
       // ignore read failures while polling
@@ -439,7 +440,7 @@ describe('spartan_upgrade_rollup_version', () => {
       const remaining = Number(startOfExecutable - (await nowTs()));
       debugLogger.info(`Waiting to become Executable. Seconds remaining: ${remaining}`);
       await tallyVotes();
-      await new Promise(r => setTimeout(r, 10_000));
+      await sleep(10_000);
     }
 
     // Confirm state is Executable (ProposalState.Executable == 3)
@@ -462,7 +463,7 @@ describe('spartan_upgrade_rollup_version', () => {
       let state = normalizeState(stateRaw);
       while (state !== 3n) {
         debugLogger.info(`Current proposal state: ${state}`);
-        await new Promise(r => setTimeout(r, 5_000));
+        await sleep(5_000);
         stateRaw = await governance.read.getProposalState([proposalId]);
         state = normalizeState(stateRaw);
       }
@@ -487,7 +488,7 @@ describe('spartan_upgrade_rollup_version', () => {
         debugLogger.warn(`Governance execute attempt failed: ${String(err)}`);
         // Not executable yet or reverted; wait and retry
       }
-      await new Promise(r => setTimeout(r, 15_000));
+      await sleep(15_000);
     }
 
     // Verify GSE correctly registered the new rollup as "latest"

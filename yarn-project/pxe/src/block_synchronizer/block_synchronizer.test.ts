@@ -1,5 +1,6 @@
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
@@ -199,7 +200,7 @@ describe('BlockSynchronizer', () => {
       });
 
       // Give the event loop a tick
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await sleep(10);
       expect(stopped).toBe(false);
 
       // Release the sync

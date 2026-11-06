@@ -3,7 +3,7 @@ import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-typ
 import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
 import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
-import { Timer } from '@aztec-labs/foundation/timer';
+import { Timer, executeTimeout } from '@aztec-labs/foundation/timer';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -2182,11 +2182,12 @@ export class LibP2PService extends WithTracer implements P2PService {
   // Libp2p seems to hang sometimes if new peers are initiating connections.
   private async stopLibP2P() {
     const TIMEOUT_MS = 5000; // 5 seconds timeout
-    const timeout = new Promise((_resolve, reject) => {
-      setTimeout(() => reject(new Error('Timeout during libp2p.stop()')), TIMEOUT_MS);
-    });
     try {
-      await Promise.race([this.node.stop(), timeout]);
+      await executeTimeout(
+        async () => await this.node.stop(),
+        TIMEOUT_MS,
+        () => new Error('Timeout during libp2p.stop()'),
+      );
       this.logger.debug('LibP2P stopped');
     } catch (error) {
       this.logger.error('Error during stop or timeout:', error);

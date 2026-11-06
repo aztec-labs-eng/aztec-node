@@ -3,6 +3,7 @@ import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { TestProverNode } from '@aztec-labs/prover-node/test';
 import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
@@ -119,7 +120,7 @@ describe('single-node/proving/optimistic', () => {
             lowestProvenSlotByEpoch.set(prover.epochNumber, prover.slotNumber);
           }
         }
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await sleep(100);
       }
     })();
     return async () => {
