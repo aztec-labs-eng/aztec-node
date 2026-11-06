@@ -1,0 +1,33 @@
+---
+paths:
+  - "**/*.{ts,tsx,mts,cts}"
+---
+
+<foundation_helpers>
+Before hand-writing any code in the left column, use the helper on the right. Paths are subpaths of
+`@aztec-labs/foundation` (e.g. `/retry` is `@aztec-labs/foundation/retry`). Units differ between helpers: read the
+Gotchas column. Lint flags several of these patterns (`aztec-custom/prefer-*`, defined in `foundation/eslint-rules/`):
+switch to the helper rather than disabling the rule, unless its Gotchas rule it out.
+
+| If you're about to write… | Use instead | Gotchas |
+|---|---|---|
+| A loop that catches an error, sleeps, and tries again | `retry(fn, name, makeBackoff([1, 2, 4]), log)` — `/retry` | Backoff values are **seconds**. The default backoff never ends: it retries forever, capped at 64s. Logs every failure at `error` unless `failSilently`. Throw `NoRetryError` from `fn` to stop early. |
+| A loop that polls a condition until it holds or a deadline passes | `retryUntil(fn, name, timeoutS, intervalS)` — `/retry`; in tests `retryFastUntil(fn, name)` (10s, 100ms) | Timeout and interval are **seconds**; timeout `0` (the default) waits forever. Stops only on a truthy result, so `0`, `''` and `false` keep polling. A throw from `fn` ends it at once; it does not retry errors. `{ deadline, dateProvider }` reads the provider once, then counts wall-clock time. |
+| `new Promise(r => setTimeout(r, ms))`, or a fixed sleep in a test to let async work settle | `sleep(ms)` — `/sleep`; in tests poll the condition with `retryFastUntil` instead | `sleep` takes **ms**. |
+| `setInterval(…)` around async work, or `while (this.running) { await work(); await sleep(ms); }` | `new RunningPromise(fn, log, intervalMs)` — `/running-promise`, then `.start()` | Interval is **ms** (default 10s). Nothing runs until `start()`; the first run is immediate. The wait starts when a run ends, so runs never overlap. Errors are logged and the loop goes on; return `RunningPromise.EXIT` from a custom error handler to stop. `stop()` waits for the current run. `trigger()` forces a run; awaiting it from inside `fn` deadlocks. |
+| A sleep that an event cuts short: `Promise.race([sleep(ms), wakeUp])` | `InterruptibleSleep` — `/sleep`; for a loop, `RunningPromise.trigger()` | `interrupt()` wakes only sleeps already in progress: one sent before `sleep()` starts is lost. `interrupt(true)` makes the sleep throw `InterruptError`. |
+| `Promise.race([work, new Promise((_, reject) => setTimeout(reject, ms))])` | `executeTimeout(signal => work(signal), ms, 'name')` — `/timer`; `execWithSignal(fn, signal)` for an external `AbortSignal` | **ms**. Throws `TimeoutError` but does not stop `work`: pass `signal` down or the work keeps running. The signal aborts `ms` after the start even if `work` succeeded. Avoid `timeoutPromise` outside tests: its timer outlives a won race. |
+| A `busy` flag, a promise chain, or a lock so that one call runs at a time | `SerialQueue` — `/queue`: `start()` once, then `await queue.put(fn)`; `ReadWriteLock` for shared vs exclusive | Without `start()`, `put` waits forever. Awaiting `put` from inside a queued `fn` deadlocks. `end()` drains, then rejects new puts; `cancel()` drops pending fns and their `put` promises never settle. `Mutex` from `/mutex` is a DB-backed lock, not an in-process one. |
+| `Promise.all(bigList.map(…))` that needs a concurrency limit, or a hand-made worker pool | `asyncPool(limit, items, fn)` — `/async-pool`; `new Semaphore(n)` — `/queue` for a long-lived limit | `asyncPool` keeps input order and rejects on the first failure; in-flight tasks keep running and the rest never start. `Semaphore` never releases on its own: `release()` in `finally`. After `cancel()` every `acquire()` succeeds. |
+| `let resolve; const p = new Promise(r => { resolve = r; });` (resolved or rejected from outside the executor) | `promiseWithResolvers<T>()` — `/promise` | Returns `{ promise, resolve, reject }`. |
+| `Promise.all` over tasks with side effects, or `Promise.allSettled` plus a manual rethrow | `allToCompletion(promises)` — `/promise` | Waits for every task to settle. Rethrows a single failure as is; several become an `AggregateError`. |
+| `const start = Date.now(); …; Date.now() - start` | `const timer = new Timer(); …; timer.ms()`, or `const [ms, result] = await elapsed(fn)` — `/timer` | Uses `performance.now()`, not `DateProvider`: right for metrics and logs, wrong for protocol time. |
+| `Date.now()` or `new Date()` in logic that a test must control | Inject a `DateProvider` — `/timer`; tests pass `TestDateProvider` or `ManualDateProvider` | `now()` is ms. `advanceTime()` takes **seconds**. `TestDateProvider` keeps moving with real time; `ManualDateProvider` is frozen. `sleep`, `RunningPromise` and `retryUntil` use real timers and ignore the provider. |
+| A `Map` or `Set` trimmed by deleting `keys().next().value` | `LruMap` / `LruSet` — `/collection`; `FifoSet.withLimit(n)` — `/fifo-set` | `LruMap.has()` does not refresh recency (`get()` does); `LruSet.has()` does. Keys compare by identity: use primitive keys. |
+| `private x?: Promise<T>; getX() { return (this.x ??= this.load()); }` | `@memoize` on the method — `/decorators` | Zero-argument methods only. Caches per instance forever, including a rejected promise. |
+| `for (…) out.push(await f(x))`, a summing `reduce`, `[...new Set(a)]`, a slice loop for batches, `filter(x => x !== undefined)` | `asyncMap` — `/async-map`; `timesAsync`, `timesParallel`, `filterAsync`, `sum`, `unique`, `uniqueBy`, `chunk`, `compactArray`, `partition`, `maxBy` — `/collection` | `asyncMap` and `timesAsync` run in sequence; `filterAsync` and `timesParallel` run in parallel. `unique` compares by identity. `chunkBy` groups only adjacent items; it is not `groupBy`. `compactArray` keeps `null`. |
+| `Array.from({ length: n }, (_, i) => …)` or `Array(n).fill(x).map(…)` | `times(n, i => …)` — `/collection` | The callback gets only the index, not an element. `n` must be a valid array length. |
+| A summing `reduce` over bigints, starting from `0n` | `sumBigint(values)` — `/bigint` | Takes a mutable `bigint[]`. |
+| `` `0x${buffer.toString('hex')}` `` | `bufferToHex(buffer)` — `/string` | Takes a `Buffer` and returns the `` `0x${string}` `` type. |
+| An item array plus an array of waiting resolvers (a producer/consumer queue) | `FifoMemoryQueue` — `/queue` (`put`, `await get()`); `BatchQueue` to group items into batches | `get(timeoutSec)` takes **seconds** and returns `null` after `end()` or `cancel()`. `process(handler)` stops consuming at the first handler throw: catch inside the handler. `BatchQueue` rejects `put` until `start()`. |
+</foundation_helpers>
