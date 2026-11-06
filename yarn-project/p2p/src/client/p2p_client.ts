@@ -53,6 +53,7 @@ import { TxPoolError } from '../errors/tx-pool.error.js';
 import type { AttestationPoolApi, ProposalsForSlot } from '../mem_pools/attestation_pool/attestation_pool.js';
 import type { MemPools } from '../mem_pools/interface.js';
 import type { TxPoolV2 } from '../mem_pools/tx_pool_v2/interfaces.js';
+import { warnOnSetupEntriesWithoutMinGas } from '../msg_validators/tx_validator/allowed_setup_helpers.js';
 import type { AuthRequest, StatusMessage } from '../services/index.js';
 import { ReqRespSubProtocol, type ReqRespSubProtocolHandler } from '../services/reqresp/interface.js';
 import type {
@@ -165,6 +166,9 @@ export class P2PClient extends WithTracer implements P2P {
   }
 
   public async updateP2PConfig(config: Partial<P2PConfig>): Promise<void> {
+    if (config.txPublicSetupAllowListExtend) {
+      warnOnSetupEntriesWithoutMinGas(config.txPublicSetupAllowListExtend, this.log);
+    }
     await this.txPool.updateConfig(config);
     await this.p2pService.updateConfig(config);
   }
