@@ -39,15 +39,45 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
+- **`MessagingSecretStrategy::recipient_tsk()` selects the `recipient-tsk` strategy in Noir tests** ([#642](https://github.com/aztec-labs-eng/aztec-node/pull/642)), set with `with_default_messaging_secret_strategy`. It is also the default strategy PXE uses if the recipient keys are in scope, so unconstrained sends to any `TestEnvironment` account, self-sends included, also use it.
 - **`get_tx_effects_with_block` returns each settled transaction's effects with the block that included it** ([#550](https://github.com/aztec-labs-eng/aztec-node/pull/550)). A contract that calls it needs a PXE on oracle interface 33.1 or later.
 - **`NoteValidationRequest` is public** ([#535](https://github.com/aztec-labs-eng/aztec-node/pull/535)), exported from `aztec::messages::processing` with `owner()`, `storage_slot()`, `packed_note()` and `tx_hash()` accessors.
 
 #### Breaking changes
 
-- **In Noir tests, unconstrained messages between `TestEnvironment` accounts follow the PXE's new default tagging** ([#608](https://github.com/aztec-labs-eng/aztec-node/pull/608)). A message from one account to another now establishes a non-interactive handshake instead of using an address-derived secret, unless a strategy is set with `with_default_tag_secret_strategy`. A strategy set that way now also applies to a send from an account to itself.
+- **The `MessageEncryption` trait and the `AES128` type are removed** ([#662](https://github.com/aztec-labs-eng/aztec-node/pull/662)). Their operations are free functions in `aztec::messages::encryption::aes128`, so code that imports the trait no longer compiles.
+
+  ```diff
+  - use aztec::messages::encryption::{aes128::AES128, message_encryption::MessageEncryption};
+  + use aztec::messages::encryption::aes128;
+
+  - let ciphertext = AES128::encrypt(plaintext, recipient, contract_address);
+  + let ciphertext = aes128::encrypt_with_ecdh_secret(plaintext, recipient, contract_address);
+
+  - let plaintext = AES128::decrypt(ciphertext, recipient, contract_address);
+  + let plaintext = aes128::decrypt_with_ecdh_secret(ciphertext, recipient, contract_address);
+  ```
+
+- **Onchain messages are encrypted with the messaging secret that tags them** ([#651](https://github.com/aztec-labs-eng/aztec-node/pull/651)), instead of with a Diffie-Hellman exchange against the recipient's address keys. Offchain messages still use the address keys, and messages sent by earlier versions still decrypt. Contracts compiled with this version need a PXE on oracle interface 33.4 or later. `process_message_ciphertext` takes the message's messaging secret after the ciphertext: for a message found by a tag, pass the secret that produced the tag; `Option::none()` decrypts with the recipient's address keys only, which is right for offchain messages but misses onchain messages sent by this version. `EPH_PK_X_SIZE_IN_FIELDS` is renamed `SALT_OR_EPH_PK_X_SIZE_IN_FIELDS`.
+
+  ```diff
+   process_message_ciphertext(
+       contract_address,
+       compute_note_hash,
+       compute_note_nullifier,
+       process_custom_message,
+       message_ciphertext,
+  +    Option::some(messaging_secret),
+       resolved_tx,
+       recipient,
+   );
+  ```
+
+- **In Noir tests, unconstrained messages between `TestEnvironment` accounts follow the PXE's default messaging secret strategy** ([#608](https://github.com/aztec-labs-eng/aztec-node/pull/608)) instead of using an address-derived secret, unless a strategy is set with `with_default_messaging_secret_strategy`. A strategy set that way now also applies to a send from an account to itself.
 
 #### Deprecations
 
+- **Tagging secrets are renamed messaging secrets** ([#646](https://github.com/aztec-labs-eng/aztec-node/pull/646)). The old names still work and are deprecated. In `aztec::oracle::notes`, `get_address_derived_messaging_secret` replaces `get_app_address_derived_tagging_secret` and `get_app_tagging_secret`. In `aztec::messages::delivery`, `ResolvedMessagingSecretStrategy` replaces `ResolvedTaggingStrategy`. On `TestEnvironmentOptions`, `with_default_messaging_secret_strategy` and `with_default_messaging_secret_strategy_all_modes` replace `with_default_tag_secret_strategy` and `with_default_tag_secret_strategy_all_modes`. The `test::helpers::messaging_secret_strategy` module and its `MessagingSecretStrategy` replace `test::helpers::tagging_secret_strategy` and its `TaggingSecretStrategy`. Noir warns on the old function names only, not on the old type and module names.
 - **`get_app_address_derived_tagging_secret` replaces `get_app_tagging_secret`, and `compute_app_siloed_shared_secret_from_point` replaces `compute_app_siloed_shared_secret`** ([#620](https://github.com/aztec-labs-eng/aztec-node/pull/620), [#621](https://github.com/aztec-labs-eng/aztec-node/pull/621)). The old names still work and are deprecated.
 
 #### Fixes
@@ -56,19 +86,36 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
+- **The `recipient-tsk` messaging secret strategy derives a message's secret from the recipient's tagging secret key** ([#642](https://github.com/aztec-labs-eng/aztec-node/pull/642)). Unlike with an address-derived secret, an attacker who breaks the recipient's address key, for example with a quantum computer, cannot compute its tags. It can only be used for unconstrained delivery to a recipient whose keys the PXE holds and who is in the execution's scopes, which `MessagingSecretStrategyRequest.recipientTskAvailable` reports. The send fails otherwise.
 - **`getPrivateEvents` returns each event's commitment randomness**, in `PackedPrivateEvent.randomness` ([#618](https://github.com/aztec-labs-eng/aztec-node/pull/618)). Together with the event's selector and packed content it is the preimage of the event's commitment, so a user can disclose a single private event: anyone can recompute the commitment, silo it with the contract address and find it in the nullifier tree. `BaseWallet.getPrivateEvents` is unchanged, so apps behind a wallet do not receive it.
 - **The `resolveExpirationAndPadding` hook lets a wallet choose a transaction's expiration timestamp and side-effect padding** ([#601](https://github.com/aztec-labs-eng/aztec-node/pull/601)). The PXE calls it before the final reset and tail kernels, and in kernelless simulation, with the anchor block's timestamp, the latest expiration the kernels allow, and how many side effects of each kind the transaction creates. The hook returns the expiration timestamp to publish and the length to pad each side-effect array to. The PXE fills the padding with random values shaped like real side effects, and rejects answers the kernels cannot publish. Simulation pads the same way, so its gas estimate includes the padding. `roundDownTxExpirationTimestamp` is exported so a hook can keep the default expiration. Without the hook, proving behaves as before.
 
 #### Breaking changes
 
-- **The `resolveTaggingSecretStrategy` hook also decides self-sends** ([#608](https://github.com/aztec-labs-eng/aztec-node/pull/608)). The PXE used to replace the hook's answer with an address-derived secret for unconstrained delivery to one of the wallet's own accounts. It now applies the hook's answer to every message without a registered handshake. `DEFAULT_TAGGING_SECRET_STRATEGY` is replaced by `defaultTaggingSecretStrategy`, which returns the strategy the PXE applies when no hook is configured. To keep an address-derived secret for a send from an account to itself, return `defaultTaggingSecretStrategy` for the messages your hook has no policy for:
+- **The `resolveTaggingSecretStrategy` hook is renamed `resolveMessagingSecretStrategy`** ([#646](https://github.com/aztec-labs-eng/aztec-node/pull/646)). The PXE no longer reads the old key. TypeScript rejects it in an object literal passed as `PXECreationOptions.hooks`, and in a hooks object that sets no other hook. A hooks object built elsewhere that also sets another hook still type-checks: the hook under the old key is ignored, and the PXE applies `defaultMessagingSecretStrategy` to every message instead.
 
   ```diff
-   resolveTaggingSecretStrategy: async (request) =>
+   hooks: {
+  -  resolveTaggingSecretStrategy: async (request) => policy(request),
+  +  resolveMessagingSecretStrategy: async (request) => policy(request),
+   },
+  ```
+
+- **Unconstrained sends to local accounts in scope default to the `recipient-tsk` strategy, self-sends included** ([#642](https://github.com/aztec-labs-eng/aztec-node/pull/642)). A local account is one whose keys the PXE holds. Self-sends used an address-derived secret, and sends to other local accounts a non-interactive handshake. A PXE on an earlier version does not find messages tagged this way. `MessagingSecretStrategyRequest` has a new required `recipientTskAvailable` field, which `defaultMessagingSecretStrategy` takes in place of `sender` and `recipient`. A hook that passes it the whole request needs no change, and code that builds its argument must pass `recipientTskAvailable`. An exhaustive switch over `MessagingSecretStrategy` must handle the new variant.
+
+  ```diff
+  - defaultMessagingSecretStrategy({ sender, recipient, deliveryMode });
+  + defaultMessagingSecretStrategy({ deliveryMode, recipientTskAvailable });
+  ```
+
+- **The `resolveMessagingSecretStrategy` hook also decides self-sends** ([#608](https://github.com/aztec-labs-eng/aztec-node/pull/608)). The PXE used to replace the hook's answer with an address-derived secret for unconstrained delivery to one of the wallet's own accounts. It now applies the hook's answer to every message without a registered handshake. `DEFAULT_TAGGING_SECRET_STRATEGY` is replaced by `defaultMessagingSecretStrategy`, which returns the strategy the PXE applies when no hook is configured. To leave self-sends and the other messages your hook has no policy for to the PXE's default, return `defaultMessagingSecretStrategy` for them:
+
+  ```diff
+   resolveMessagingSecretStrategy: async (request) =>
      knownContacts.has(request.recipient.toString())
        ? { type: 'address-derived' }
   -    : { type: 'non-interactive-handshake' },
-  +    : defaultTaggingSecretStrategy(request),
+  +    : defaultMessagingSecretStrategy(request),
   ```
 
 - **`generateSimulatedProvingResult` takes the transaction's max expiration timestamp and an options object** ([#600](https://github.com/aztec-labs-eng/aztec-node/pull/600), [#601](https://github.com/aztec-labs-eng/aztec-node/pull/601)). Its fourth argument, in `@aztec-labs/pxe/simulator`, is the latest expiration timestamp the transaction may publish. For a transaction that may be sent, compute it with `computeSimulatedMaxExpirationTimestamp`, so the simulated expiration matches the proven one. The optional settings follow in an options object, which also accepts the wallet's `resolveExpirationAndPadding` hook.
@@ -86,6 +133,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Deprecations
 
+- **Tagging secrets are renamed messaging secrets** ([#646](https://github.com/aztec-labs-eng/aztec-node/pull/646)). The old names still work and are deprecated. On the PXE, `registerMessagingSecretSource`, `getMessagingSecretSources` and `removeMessagingSecretSource` replace `registerTaggingSecretSource`, `getTaggingSecretSources` and `removeTaggingSecretSource`, and the `MessagingSecretSource` and `RegisteredMessagingSecretSource` types replace `TaggingSecretSource` and `RegisteredTaggingSecretSource`. In `@aztec-labs/pxe/config`, `MessagingSecretStrategy`, `MessagingSecretStrategyRequest`, `ResolveMessagingSecretStrategy` and `defaultMessagingSecretStrategy` replace `TaggingSecretStrategy`, `TaggingSecretStrategyRequest`, `ResolveTaggingSecretStrategy` and `defaultTaggingSecretStrategy`. In `@aztec-labs/stdlib/logs`, `MessagingSecret`, `MessagingSecretSchema` and `messagingSecretFromString` replace `AppTaggingSecret`, `AppTaggingSecretSchema` and `appTaggingSecretFromString`, and `computeAddressDerivedSharedSecretPoint` replaces `computeSharedTaggingSecret`.
 - **`computeAppSiloedSharedSecretFromPoint` replaces `appSiloEcdhSharedSecretPoint`** in `@aztec-labs/stdlib/logs` ([#620](https://github.com/aztec-labs-eng/aztec-node/pull/620)). The old name still works and is deprecated.
 
 #### Fixes
@@ -99,6 +147,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
+- **`getAllPublicEvents` returns every public event that matches a filter, oldest first** ([#624](https://github.com/aztec-labs-eng/aztec-node/pull/624)), from `@aztec-labs/aztec.js/events`. The filter is either a block range, whose `fromBlock` is required, or a `txHash`. Every page the read fetches comes from the fork of its `referenceBlock`, which defaults to the node's latest block when the read starts: the read throws if that block leaves the chain, and returns no events after it. One call can make many requests to the node and holds every event in memory, so split long ranges.
+
 #### Breaking changes
 
 - **The packages require Node.js 24** ([#673](https://github.com/aztec-labs-eng/aztec-node/pull/673)). Every package's `engines.node` is now `>=24`, up from `>=20.16`.
@@ -106,6 +156,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 - **`L1RollupConstants` no longer has `rollupManaLimit`** ([#546](https://github.com/aztec-labs-eng/aztec-node/pull/546)). Governance can raise the limit on L1 at any time, so read it with `RollupContract.getManaLimit()`. The node's `getL1Constants` still returns the field, filled with the live value, but it is deprecated and no longer part of the response type.
 
 #### Deprecations
+
+- **`getPublicEvents` is deprecated in favour of `getAllPublicEvents`** ([#624](https://github.com/aztec-labs-eng/aztec-node/pull/624)). It returns a single page of events, so a caller that reads only `events` misses the rest. `GetPublicEventsResult`, `PublicEventFilter`, `PublicEventFilterSchema` and `EventCursor` are deprecated with it. All of them keep working.
 
 #### Fixes
 
