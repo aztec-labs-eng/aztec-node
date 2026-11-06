@@ -69,7 +69,11 @@ export class TimeoutTask<T> {
 }
 
 /**
- * Executes a function with a timeout.
+ * Executes a function with a timeout. Use this instead of `Promise.race` against a `setTimeout` promise.
+ *
+ * On timeout the returned promise rejects, but `fn` keeps running unless it honours the `AbortSignal` it receives, so
+ * pass the signal on to anything that accepts one (e.g. `fetch`).
+ *
  * @param fn - The function to execute, accepts AbortSignal and returns a Promise.
  * @param timeout - The maximum time in milliseconds to allow the function to run.
  * @param errorOrFnName - Optional function name or a function that returns an Error to throw if the timeout is reached.

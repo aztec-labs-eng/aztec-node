@@ -2,6 +2,21 @@ import { FifoMemoryQueue } from './fifo_memory_queue.js';
 
 /**
  * A more specialized fifo queue that enqueues functions to execute. Enqueued functions are executed in serial.
+ *
+ * Use this to keep async operations from interleaving (e.g. a read-modify-write on shared state) instead of a hand-rolled
+ * `isRunning` flag or promise chain. `put(fn)` resolves or rejects with `fn`'s own result. Functions put before `start()`
+ * wait in the queue until it is called. `end()` drains the queue, while `cancel()` drops whatever has not started (and
+ * leaves those callers' `put` promises pending); both wait for the function in flight. For a bounded queue that applies backpressure, see `BoundedSerialQueue`; to cap
+ * concurrency at more than one, see `Semaphore`.
+ *
+ * @example
+ * private readonly queue = new SerialQueue();
+ * // in start()
+ * this.queue.start();
+ * // anywhere
+ * const result = await this.queue.put(() => this.updateState());
+ * // in stop()
+ * await this.queue.end();
  */
 export class SerialQueue {
   private readonly queue = new FifoMemoryQueue<() => Promise<void>>();
@@ -34,8 +49,8 @@ export class SerialQueue {
 
   /**
    * Cancels the processing of the remaining functions in the serial queue and resolves the running promise.
-   * Any enqueued functions that have not yet been executed will be discarded. The queue can still accept new
-   * functions after cancellation, but the previously enqueued functions will not be re-processed.
+   * Any enqueued functions that have not yet been executed will be discarded, and the promises returned by their `put`
+   * calls never settle. The queue cannot be reused: later `put` calls reject.
    *
    * @returns The running promise which resolves when the current executing function (if any) completes.
    */
