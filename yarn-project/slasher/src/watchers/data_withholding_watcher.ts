@@ -154,36 +154,26 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
 
     const checkpointNumber = published.checkpoint.number;
 
-    // Per published block: whether every one of its txs was held locally at proposal time, i.e. recorded for the
-    // block's slot by the validator's proposal handler from a proposal whose txs were all collected by the
-    // *re-execution* deadline. The lookup is per slot and per tx hash: it does not depend on the block's index within
-    // the checkpoint or on the order of its txs, and a tx the record does not hold leaves the block unvouched. Used as
-    // a positive short-circuit only: every block vouched for means the data was available locally, so this checkpoint
-    // cannot be a data-withholding offense. An unvouched block does *not* trigger a slash on its own — the
-    // re-execution deadline is much earlier than the data-withholding tolerance window, so txs missing at that earlier
-    // deadline may still arrive in time. Anything short of every block vouched for falls through to the mempool probe,
-    // which respects the tolerance window.
-    const collectionRecords = published.checkpoint.blocks.map(block =>
-      this.reexecutionTracker.hasCollectedTxs(
-        block.header.getSlot(),
-        block.body.txEffects.map(txEffect => txEffect.txHash),
-      ),
-    );
-
-    if (collectionRecords.every(collected => collected)) {
-      this.log.trace(`All blocks for checkpoint at slot ${slot} were collected locally; skipping`, {
-        slot,
-        checkpointNumber,
-      });
-      return;
-    }
-
     const txHashes: TxHash[] = published.checkpoint.blocks.flatMap(block =>
       block.body.txEffects.map(txEffect => txEffect.txHash),
     );
 
     if (txHashes.length === 0) {
       this.log.trace(`Checkpoint at slot ${slot} has no txs`, { slot });
+      return;
+    }
+
+    // Positive short-circuit only: if the validator's proposal handler recorded every one of these txs for this slot
+    // (from proposals whose txs were all collected by the *re-execution* deadline), the data was available locally, so
+    // this checkpoint cannot be a data-withholding offense. The lookup is per slot and per tx hash, independent of
+    // block index or tx order. A miss does *not* trigger a slash on its own — the re-execution deadline is much earlier
+    // than the data-withholding tolerance window, so txs missing then may still arrive in time — and falls through to
+    // the mempool probe, which respects the tolerance window.
+    if (this.reexecutionTracker.hasCollectedTxs(slot, txHashes)) {
+      this.log.trace(`All txs for checkpoint at slot ${slot} were collected locally; skipping`, {
+        slot,
+        checkpointNumber,
+      });
       return;
     }
 
@@ -201,7 +191,6 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
         slot,
         checkpointNumber,
         missingTxs: missingTxs.map(h => h.toString()),
-        records: collectionRecords,
       });
       return;
     }
@@ -212,7 +201,6 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
       amount: this.config.slashDataWithholdingPenalty,
       offenseType: getOffenseTypeName(OffenseType.DATA_WITHHOLDING),
       missingTxs: missingTxs.map(h => h.toString()),
-      records: collectionRecords,
       attesters: attesters.map(a => a.toString()),
     });
 
