@@ -18,8 +18,8 @@ import { checkBlockTag, getRevertedErrorName } from './utils.js';
 export type MessageSentMessage = {
   sender: { actor: `0x${string}`; chainId: bigint };
   recipient: { actor: Fr; version: bigint };
-  content: Fr;
-  secretHash: Fr;
+  publicContentHash: Fr;
+  privateContentHash: Fr;
   index: bigint;
 };
 
@@ -201,8 +201,8 @@ export class InboxContract {
       message?: {
         sender: { actor: `0x${string}`; chainId: bigint };
         recipient: { actor: `0x${string}`; version: bigint };
-        content: `0x${string}`;
-        secretHash: `0x${string}`;
+        publicContentHash: `0x${string}`;
+        privateContentHash: `0x${string}`;
         index: bigint;
       };
     };
@@ -222,8 +222,8 @@ export class InboxContract {
         message: {
           sender: message.sender,
           recipient: { actor: Fr.fromString(message.recipient.actor), version: message.recipient.version },
-          content: Fr.fromString(message.content),
-          secretHash: Fr.fromString(message.secretHash),
+          publicContentHash: Fr.fromString(message.publicContentHash),
+          privateContentHash: Fr.fromString(message.privateContentHash),
           index: message.index,
         },
       },

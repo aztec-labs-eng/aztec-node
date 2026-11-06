@@ -1,6 +1,6 @@
 import { InboxAbi } from '@aztec-foundation/l1-artifacts';
 
-import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { MULTI_CALL_3_ADDRESS } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -30,8 +30,10 @@ export async function seedL1ToL2Message(
   log: Logger,
 ): Promise<PendingL1ToL2Message> {
   log.info('Seeding L1→L2 message');
-  const [secret, secretHash] = await generateClaimSecret(log);
-  const content = Fr.random();
+  const secret = Fr.random();
+  const privateContent = [secret];
+  const privateContentHash = await computePrivateContentHash(privateContent);
+  const publicContentHash = Fr.random();
 
   const inbox = getContract({
     address: inboxAddress.toString(),
@@ -40,7 +42,11 @@ export async function seedL1ToL2Message(
   });
 
   const txHash = await inbox.write.sendL2Message(
-    [{ actor: l2Recipient.toString(), version: rollupVersion }, content.toString(), secretHash.toString()],
+    [
+      { actor: l2Recipient.toString(), version: rollupVersion },
+      publicContentHash.toString(),
+      privateContentHash.toString(),
+    ],
     { gas: 1_000_000n },
   );
   log.info(`L1→L2 message sent in tx ${txHash}`);
@@ -73,9 +79,9 @@ export async function seedL1ToL2Message(
   const globalLeafIndex = event.args.message.index;
 
   const msg: PendingL1ToL2Message = {
-    content: content.toString(),
+    publicContentHash: publicContentHash.toString(),
     secret: secret.toString(),
-    secretHash: secretHash.toString(),
+    privateContentHash: privateContentHash.toString(),
     msgHash,
     sender: l1Client.account!.address,
     globalLeafIndex: globalLeafIndex.toString(),
@@ -87,11 +93,11 @@ export async function seedL1ToL2Message(
   return msg;
 }
 
-/** Content and claim secret of a message the bot is about to send. */
+/** Public content hash and claim secret (the private content) of a message the bot is about to send. */
 export interface L1ToL2MessageIntent {
-  content: Fr;
+  publicContentHash: Fr;
   secret: Fr;
-  secretHash: Fr;
+  privateContentHash: Fr;
 }
 
 /** One `MessageSent` event decoded from a batched Inbox send. */
@@ -101,8 +107,8 @@ export interface SentInboxMessage {
   globalLeafIndex: bigint;
   /** Inbox bucket the message was absorbed into. */
   bucketSeq: bigint;
-  content: string;
-  secretHash: string;
+  publicContentHash: string;
+  privateContentHash: string;
   /** L1 address the Inbox recorded as the sender. For a batched send this is the Multicall3 contract. */
   sender: string;
   recipient: string;
@@ -123,7 +129,15 @@ export interface L1ToL2MessageBatchReceipt {
 
 /** A way in which a mined batch failed to match the intent that was persisted before broadcasting it. */
 export interface L1ToL2MessageBatchMismatch {
-  kind: 'count' | 'indices' | 'recipient' | 'version' | 'sender' | 'content' | 'secret_hash' | 'buckets';
+  kind:
+    | 'count'
+    | 'indices'
+    | 'recipient'
+    | 'version'
+    | 'sender'
+    | 'public_content_hash'
+    | 'private_content_hash'
+    | 'buckets';
   detail: string;
 }
 
@@ -243,13 +257,13 @@ const BATCH_GAS_MARGIN_FLOOR = 200_000n;
 
 /**
  * Generates `count` message intents with real claim secrets, so the messages can actually be consumed later.
- * `generateClaimSecret` logs the secret when handed a logger, so it is deliberately called without one.
  */
 export async function generateL1ToL2MessageIntents(count: number): Promise<L1ToL2MessageIntent[]> {
   const intents: L1ToL2MessageIntent[] = [];
   for (let i = 0; i < count; i++) {
-    const [secret, secretHash] = await generateClaimSecret();
-    intents.push({ content: Fr.random(), secret, secretHash });
+    const secret = Fr.random();
+    const privateContentHash = await computePrivateContentHash([secret]);
+    intents.push({ publicContentHash: Fr.random(), secret, privateContentHash });
   }
   return intents;
 }
@@ -280,8 +294,8 @@ export function encodeL1ToL2MessageBatch(args: {
       functionName: 'sendL2Message',
       args: [
         { actor: args.recipient.toString(), version: args.rollupVersion },
-        intent.content.toString(),
-        intent.secretHash.toString(),
+        intent.publicContentHash.toString(),
+        intent.privateContentHash.toString(),
       ],
     }),
   }));
@@ -325,8 +339,8 @@ export async function awaitL1ToL2MessageBatch(args: {
     msgHash: entry.args.hash,
     globalLeafIndex: entry.args.message.index,
     bucketSeq: entry.args.bucketSeq,
-    content: entry.args.message.content,
-    secretHash: entry.args.message.secretHash,
+    publicContentHash: entry.args.message.publicContentHash,
+    privateContentHash: entry.args.message.privateContentHash,
     sender: entry.args.message.sender.actor,
     recipient: entry.args.message.recipient.actor,
     version: entry.args.message.recipient.version,
@@ -441,11 +455,17 @@ export function validateL1ToL2MessageBatch(args: {
     if (message.sender.toLowerCase() !== expectedSender.toLowerCase()) {
       mismatches.push({ kind: 'sender', detail: `position ${i} was sent by ${message.sender}` });
     }
-    if (message.content.toLowerCase() !== intents[i].content.toString().toLowerCase()) {
-      mismatches.push({ kind: 'content', detail: `position ${i} carries unexpected content` });
+    if (message.publicContentHash.toLowerCase() !== intents[i].publicContentHash.toString().toLowerCase()) {
+      mismatches.push({
+        kind: 'public_content_hash',
+        detail: `position ${i} carries an unexpected public content hash`,
+      });
     }
-    if (message.secretHash.toLowerCase() !== intents[i].secretHash.toString().toLowerCase()) {
-      mismatches.push({ kind: 'secret_hash', detail: `position ${i} carries an unexpected secret hash` });
+    if (message.privateContentHash.toLowerCase() !== intents[i].privateContentHash.toString().toLowerCase()) {
+      mismatches.push({
+        kind: 'private_content_hash',
+        detail: `position ${i} carries an unexpected private content hash`,
+      });
     }
   }
 

@@ -126,7 +126,7 @@ export const PROTOCOL_ORACLE_REGISTRY = protocolOracleRegistry({
     serve: async (handler, [contractAddress, messageHash, secret]) =>
       handler.getL1ToL2MembershipWitnessV2(
         messageHash,
-        Option.some({ contractAddress, nullifier: await computeFeeJuiceMessageNullifier(messageHash, secret) }),
+        Option.some({ contractAddress, nullifier: await computeFeeJuiceMessageNullifier(messageHash, [secret]) }),
       ),
   }),
 

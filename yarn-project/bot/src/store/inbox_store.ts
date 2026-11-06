@@ -78,9 +78,9 @@ export const InboxMessageRecordSchema = z.object({
   scenario: z.enum(InboxBotScenarios),
   /** L2 domain this message is assigned to be consumed through. */
   mode: z.enum(InboxBotModes),
-  content: hexString,
+  publicContentHash: hexString,
   secret: hexString,
-  secretHash: hexString,
+  privateContentHash: hexString,
   state: z.enum(InboxMessageStates),
   createdAt: timestampMs,
   /** L1 sender the receipt reported, which is the Multicall3 contract rather than the signing account. */
@@ -184,9 +184,9 @@ export type InboxScheduleRecord = z.infer<typeof InboxScheduleRecordSchema>;
 
 /** The message intent a batch reservation carries, before the Inbox assigns it a hash and an index. */
 export interface InboxMessageIntentInput {
-  content: string;
+  publicContentHash: string;
   secret: string;
-  secretHash: string;
+  privateContentHash: string;
   mode: InboxBotMode;
 }
 
@@ -211,7 +211,10 @@ export interface InboxBatchReceiptInput {
 
 /** Fields a message transition may set alongside its new state. */
 export type InboxMessagePatch = Partial<
-  Omit<InboxMessageRecord, 'messageId' | 'batchId' | 'state' | 'content' | 'secret' | 'secretHash' | 'createdAt'>
+  Omit<
+    InboxMessageRecord,
+    'messageId' | 'batchId' | 'state' | 'publicContentHash' | 'secret' | 'privateContentHash' | 'createdAt'
+  >
 >;
 
 /**
@@ -299,9 +302,9 @@ export class InboxStore {
         batchId,
         scenario,
         mode: intent.mode,
-        content: intent.content,
+        publicContentHash: intent.publicContentHash,
         secret: intent.secret,
-        secretHash: intent.secretHash,
+        privateContentHash: intent.privateContentHash,
         state: 'awaiting_l1',
         createdAt: now,
       }),

@@ -3,7 +3,7 @@ import { InboxAbi, UniswapPortalAbi, UniswapPortalBytecode } from '@aztec-founda
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { computeAuthWitMessageHash } from '@aztec-labs/aztec.js/authorization';
 import { waitForProven } from '@aztec-labs/aztec.js/contracts';
-import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
@@ -194,7 +194,11 @@ export const uniswapL1L2TestSuite = (
 
       // 4. Swap on L1 - sends L2 to L1 message to withdraw WETH to L1 and another message to swap assets.
       logger.info('Withdrawing weth to L1 and sending message to swap to dai');
-      const [secretForDepositingSwappedDai, secretHashForDepositingSwappedDai] = await generateClaimSecret();
+      const secretForDepositingSwappedDai = Fr.random();
+      const privateContentForDepositingSwappedDai = [secretForDepositingSwappedDai];
+      const privateContentHashForDepositingSwappedDai = await computePrivateContentHash(
+        privateContentForDepositingSwappedDai,
+      );
 
       const { receipt: l2UniswapInteractionReceipt } = await uniswapL2Contract.methods
         .swap_private(
@@ -205,7 +209,7 @@ export const uniswapL1L2TestSuite = (
           nonceForWETHTransferToPublicApproval,
           uniswapFeeTier,
           minimumOutputAmount,
-          secretHashForDepositingSwappedDai,
+          privateContentHashForDepositingSwappedDai,
           ownerEthAddress,
         )
         .send({ from: ownerAddress, authWitnesses: [transferToPublicAuhtwit] });
@@ -218,7 +222,7 @@ export const uniswapL1L2TestSuite = (
         new Fr(uniswapFeeTier),
         daiCrossChainHarness.tokenPortalAddress.toBuffer32(),
         new Fr(minimumOutputAmount),
-        secretHashForDepositingSwappedDai,
+        privateContentHashForDepositingSwappedDai,
         ownerEthAddress.toBuffer32(),
       ]);
 
@@ -308,7 +312,7 @@ export const uniswapL1L2TestSuite = (
         Number(uniswapFeeTier),
         daiCrossChainHarness.tokenPortalAddress.toString(),
         minimumOutputAmount,
-        secretHashForDepositingSwappedDai.toString(),
+        privateContentHashForDepositingSwappedDai.toString(),
         true,
         [withdrawMessageMetadata, swapPrivateMessageMetadata],
       ] as const;
@@ -420,7 +424,7 @@ export const uniswapL1L2TestSuite = (
     //     .wait();
 
     //   // 4. Swap on L1 - sends L2 to L1 message to withdraw WETH to L1 and another message to swap assets.
-    //   const [secretForDepositingSwappedDai, secretHashForDepositingSwappedDai] =
+    //   const [secretForDepositingSwappedDai, privateContentHashForDepositingSwappedDai] =
     //     daiCrossChainHarness.generateClaimSecret();
 
     //   // 4.1 Owner approves user to swap on their behalf:
@@ -436,7 +440,7 @@ export const uniswapL1L2TestSuite = (
     //       uniswapFeeTier,
     //       minimumOutputAmount,
     //       ownerAddress,
-    //       secretHashForDepositingSwappedDai,
+    //       privateContentHashForDepositingSwappedDai,
     //       ownerEthAddress,
     //       nonceForSwap,
     //     );
@@ -458,7 +462,7 @@ export const uniswapL1L2TestSuite = (
     //     daiCrossChainHarness.tokenPortalAddress.toBuffer32(),
     //     new Fr(minimumOutputAmount),
     //     ownerAddress,
-    //     secretHashForDepositingSwappedDai,
+    //     privateContentHashForDepositingSwappedDai,
     //     ownerEthAddress.toBuffer32(),
     //   ]);
 
@@ -526,7 +530,7 @@ export const uniswapL1L2TestSuite = (
     //     daiCrossChainHarness.tokenPortalAddress.toString(),
     //     minimumOutputAmount,
     //     ownerAddress.toString(),
-    //     secretHashForDepositingSwappedDai.toString(),
+    //     privateContentHashForDepositingSwappedDai.toString(),
     //     true,
     //     [withdrawMessageMetadata, swapPrivateMessageMetadata],
     //   ] as const;
@@ -688,7 +692,10 @@ export const uniswapL1L2TestSuite = (
       await validateActionInteraction.send();
 
       // No approval to call `swap` but should work even without it:
-      const [_, secretHashForDepositingSwappedDai] = await generateClaimSecret();
+      const privateContentForDepositingSwappedDai = [Fr.random()];
+      const privateContentHashForDepositingSwappedDai = await computePrivateContentHash(
+        privateContentForDepositingSwappedDai,
+      );
 
       await uniswapL2Contract.methods
         .swap_public(
@@ -700,7 +707,7 @@ export const uniswapL1L2TestSuite = (
           uniswapFeeTier,
           minimumOutputAmount,
           ownerAddress,
-          secretHashForDepositingSwappedDai,
+          privateContentHashForDepositingSwappedDai,
           ownerEthAddress,
           Fr.ZERO, // nonce for swap -> doesn't matter
         )
@@ -715,7 +722,7 @@ export const uniswapL1L2TestSuite = (
 
       const nonceForWETHTransferApproval = new Fr(3n);
       const nonceForSwap = new Fr(3n);
-      const secretHashForDepositingSwappedDai = new Fr(4n);
+      const privateContentHashForDepositingSwappedDai = new Fr(4n);
       const action = uniswapL2Contract.methods.swap_public(
         ownerAddress,
         wethCrossChainHarness.l2Bridge.address,
@@ -725,7 +732,7 @@ export const uniswapL1L2TestSuite = (
         uniswapFeeTier,
         minimumOutputAmount,
         ownerAddress,
-        secretHashForDepositingSwappedDai,
+        privateContentHashForDepositingSwappedDai,
         ownerEthAddress,
         nonceForSwap,
       );
@@ -800,7 +807,10 @@ export const uniswapL1L2TestSuite = (
       // Swap
       logger.info('Withdrawing weth to L1 and sending message to swap to dai');
 
-      const [, secretHashForDepositingSwappedDai] = await generateClaimSecret();
+      const privateContentForDepositingSwappedDai = [Fr.random()];
+      const privateContentHashForDepositingSwappedDai = await computePrivateContentHash(
+        privateContentForDepositingSwappedDai,
+      );
       const { receipt: withdrawReceipt } = await uniswapL2Contract.methods
         .swap_private(
           wethCrossChainHarness.l2Token.address,
@@ -810,7 +820,7 @@ export const uniswapL1L2TestSuite = (
           nonceForWETHTransferToPublicApproval,
           uniswapFeeTier,
           minimumOutputAmount,
-          secretHashForDepositingSwappedDai,
+          privateContentHashForDepositingSwappedDai,
           ownerEthAddress,
         )
         .send({ from: ownerAddress, authWitnesses: [transferToPublicAuhtwit] });
@@ -825,7 +835,7 @@ export const uniswapL1L2TestSuite = (
         new Fr(uniswapFeeTier),
         daiCrossChainHarness.tokenPortalAddress.toBuffer32(),
         new Fr(minimumOutputAmount),
-        secretHashForDepositingSwappedDai,
+        privateContentHashForDepositingSwappedDai,
         ownerEthAddress.toBuffer32(),
       ]);
 
@@ -911,7 +921,7 @@ export const uniswapL1L2TestSuite = (
         daiCrossChainHarness.tokenPortalAddress.toString(),
         minimumOutputAmount,
         ownerAddress.toString(),
-        secretHashForDepositingSwappedDai.toString(),
+        privateContentHashForDepositingSwappedDai.toString(),
         true,
         [withdrawMessageMetadata, swapPrivateMessageMetadata],
       ] as const;
@@ -944,7 +954,7 @@ export const uniswapL1L2TestSuite = (
       await validateActionInteraction.send();
 
       // Call swap_public on L2
-      const secretHashForDepositingSwappedDai = Fr.random();
+      const privateContentHashForDepositingSwappedDai = Fr.random();
       const { receipt: withdrawReceipt } = await uniswapL2Contract.methods
         .swap_public(
           ownerAddress,
@@ -955,7 +965,7 @@ export const uniswapL1L2TestSuite = (
           uniswapFeeTier,
           minimumOutputAmount,
           ownerAddress,
-          secretHashForDepositingSwappedDai,
+          privateContentHashForDepositingSwappedDai,
           ownerEthAddress,
           Fr.ZERO,
         )
@@ -974,7 +984,7 @@ export const uniswapL1L2TestSuite = (
         daiCrossChainHarness.tokenPortalAddress.toBuffer32(),
         new Fr(minimumOutputAmount),
         ownerAddress,
-        secretHashForDepositingSwappedDai,
+        privateContentHashForDepositingSwappedDai,
         ownerEthAddress.toBuffer32(),
       ]);
 
@@ -1060,7 +1070,7 @@ export const uniswapL1L2TestSuite = (
         Number(uniswapFeeTier),
         daiCrossChainHarness.tokenPortalAddress.toString(),
         minimumOutputAmount,
-        secretHashForDepositingSwappedDai.toString(),
+        privateContentHashForDepositingSwappedDai.toString(),
         true,
         [withdrawMessageMetadata, swapPublicMessageMetadata],
       ] as const;
