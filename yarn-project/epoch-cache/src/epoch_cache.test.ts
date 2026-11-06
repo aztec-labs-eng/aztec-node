@@ -650,6 +650,39 @@ describe('EpochCache', () => {
       expect(info).toMatchObject({ state: 'members', committee: finalCommittee, seed: 2n, epoch: targetEpoch });
     });
 
+    it('does not serve the pre-setup committee when the seed check sees the next L1 block', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+
+      // Anvil answers a read pinned at the latest block with the next block's state when that block is mined during the
+      // read. The seed check then sees the setupEpoch of the next block, while the reads after it get the pinned block.
+      rollupContract.isEpochSetUp.mockImplementationOnce(() => {
+        mineL1Block(startOfEpoch(3) + 72n, { committee: finalCommittee, seed: 2n, setUp: true });
+        return Promise.resolve(true);
+      });
+
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toMatchObject({ state: 'members', committee: finalCommittee, seed: 2n, epoch: targetEpoch });
+    });
+
+    it('reports an unstable committee when the seed check sees a later L1 block twice in a row', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      const seesNextBlock = (state: { committee: EthAddress[]; seed: bigint; setUp: boolean }) => () => {
+        mineL1Block(blockAt(undefined).timestamp + 12n, state);
+        return Promise.resolve(true);
+      };
+      rollupContract.isEpochSetUp
+        .mockImplementationOnce(seesNextBlock({ committee: provisionalCommittee, seed: 1n, setUp: false }))
+        .mockImplementationOnce((_epoch, opts) => Promise.resolve(blockAt(opts?.blockNumber).state.setUp))
+        .mockImplementationOnce(seesNextBlock({ committee: finalCommittee, seed: 2n, setUp: true }));
+
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
+
+      // One Ethereum slot later the cache reads L1 again and finds the fixed seed.
+      mineL1Block(blockAt(undefined).timestamp + 12n, { committee: finalCommittee, seed: 2n, setUp: true });
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toMatchObject({ state: 'members', committee: finalCommittee, seed: 2n, epoch: targetEpoch });
+    });
+
     it('serves the committee without reading storage once the latest L1 block is in the last L1 slot of the sampled epoch', async () => {
       // No later L1 block can land in the sampled epoch, so its randao can no longer be written.
       mineL1Block(startOfEpoch(4) - BigInt(SLOT_DURATION), { committee: finalCommittee, seed: 2n, setUp: false });

@@ -187,7 +187,11 @@ entry is marked as **finalized**.
   v6 rollup views return a provisional seed until that randao is written. The
   cache serves E's committee only once `setupEpoch` has stored S's commitment, or
   once the latest L1 block is in S's last L1 slot. A marker per epoch limits the
-  re-checks to one per Ethereum slot.
+  re-checks to one per Ethereum slot. The seed check runs again after the
+  committee reads: an RPC that answers a read pinned at the latest block with the
+  next block's state (anvil does this while mining) could otherwise pair a
+  "fixed" check with the superseded seed. On a mismatch the cache retries once at
+  the new latest block before falling back to the marker.
 
 This approach preserves **safety** (stale data from L1 reorgs gets refreshed
 within one Ethereum slot) while maintaining **liveness** (the cache serves any
