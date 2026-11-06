@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas
+### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas ([#701](https://github.com/aztec-labs-eng/aztec-node/pull/701))
 
 Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
 
