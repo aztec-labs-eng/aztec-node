@@ -1,6 +1,8 @@
 import { CheckpointNumber, CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
+import { TxHash } from '../tx/tx_hash.js';
 import { CheckpointReexecutionTracker } from './checkpoint_reexecution_tracker.js';
 
 describe('CheckpointReexecutionTracker', () => {
@@ -97,7 +99,7 @@ describe('CheckpointReexecutionTracker', () => {
   });
 
   it('returns no record for a slot that only has tx-collection or equivocation data', () => {
-    tracker.recordTxsCollected(SlotNumber(1), 0, true);
+    tracker.recordTxsCollected(SlotNumber(1), [TxHash.random()]);
     tracker.recordEquivocation(SlotNumber(2));
 
     expect(tracker.getRecordForSlot(SlotNumber(1))).toBeUndefined();
@@ -183,61 +185,73 @@ describe('CheckpointReexecutionTracker', () => {
   });
 
   describe('recordTxsCollected', () => {
-    it('records and queries by (slot, indexWithinCheckpoint) with three-valued result', () => {
-      tracker.recordTxsCollected(SlotNumber(11), 0, true);
-      tracker.recordTxsCollected(SlotNumber(11), 1, false);
+    const txs = (n: number) => times(n, () => TxHash.random());
 
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 0)).toBe(true);
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 1)).toBe(false);
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 2)).toBeUndefined();
-      expect(tracker.getTxsCollectedRecord(SlotNumber(99), 0)).toBeUndefined();
+    it('vouches only for the exact tx list collected at that slot', () => {
+      const collected = txs(2);
+      tracker.recordTxsCollected(SlotNumber(11), collected);
+
+      expect(tracker.hasCollectedTxs(SlotNumber(11), collected)).toBe(true);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), [...collected].reverse())).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), collected.slice(0, 1))).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), txs(2))).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(12), collected)).toBe(false);
     });
 
-    it('preserves prior txsCollected entries when recordOutcome fires for the same slot', () => {
-      tracker.recordTxsCollected(SlotNumber(11), 0, true);
-      tracker.recordTxsCollected(SlotNumber(11), 1, false);
+    it('does not vouch for txs it never recorded as collected', () => {
+      expect(tracker.hasCollectedTxs(SlotNumber(11), txs(2))).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), [])).toBe(false);
+    });
+
+    it('keeps every tx list collected for the same slot', () => {
+      const first = txs(2);
+      const second = txs(3);
+      tracker.recordTxsCollected(SlotNumber(11), first);
+      tracker.recordTxsCollected(SlotNumber(11), second);
+
+      expect(tracker.hasCollectedTxs(SlotNumber(11), first)).toBe(true);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), second)).toBe(true);
+    });
+
+    it('preserves collected tx lists when recordOutcome fires for the same slot', () => {
+      const collected = txs(2);
+      tracker.recordTxsCollected(SlotNumber(11), collected);
 
       tracker.recordOutcome(SlotNumber(11), Fr.random(), 'valid', CheckpointNumber(7));
 
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 0)).toBe(true);
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 1)).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(11), collected)).toBe(true);
       expect(tracker.getOutcomeForSlot(SlotNumber(11))).toBe('valid');
     });
 
-    it('overwrites a prior collected value at the same (slot, index)', () => {
-      tracker.recordTxsCollected(SlotNumber(11), 0, false);
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 0)).toBe(false);
-
-      tracker.recordTxsCollected(SlotNumber(11), 0, true);
-      expect(tracker.getTxsCollectedRecord(SlotNumber(11), 0)).toBe(true);
-    });
-
-    it('removeBefore drops txsCollected entries together with their slot', () => {
-      tracker.recordTxsCollected(SlotNumber(10), 0, true);
+    it('removeBefore drops collected tx lists together with their slot', () => {
+      const atSlot10 = txs(1);
+      const atSlot20 = txs(1);
+      tracker.recordTxsCollected(SlotNumber(10), atSlot10);
       tracker.recordOutcome(SlotNumber(10), Fr.random(), 'valid', CheckpointNumber(1));
-      tracker.recordTxsCollected(SlotNumber(20), 0, false);
+      tracker.recordTxsCollected(SlotNumber(20), atSlot20);
       tracker.recordOutcome(SlotNumber(20), Fr.random(), 'valid', CheckpointNumber(2));
 
       tracker.removeBefore(CheckpointNumber(2));
 
-      expect(tracker.getTxsCollectedRecord(SlotNumber(10), 0)).toBeUndefined();
-      expect(tracker.getTxsCollectedRecord(SlotNumber(20), 0)).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(10), atSlot10)).toBe(false);
+      expect(tracker.hasCollectedTxs(SlotNumber(20), atSlot20)).toBe(true);
     });
 
-    it('removeBefore drops standalone txsCollected entries via the slot watermark', () => {
+    it('removeBefore drops standalone collected tx lists via the slot watermark', () => {
       // recordTxsCollected without a subsequent recordOutcome creates a slot-only entry with
       // no checkpoint number; it must still be reachable by the slot-watermark cleanup.
-      tracker.recordTxsCollected(SlotNumber(5), 0, true);
+      const atSlot5 = txs(1);
+      const atSlot12 = txs(1);
+      tracker.recordTxsCollected(SlotNumber(5), atSlot5);
       tracker.recordOutcome(SlotNumber(10), Fr.random(), 'valid', CheckpointNumber(1));
-      tracker.recordTxsCollected(SlotNumber(12), 0, true);
+      tracker.recordTxsCollected(SlotNumber(12), atSlot12);
       tracker.recordOutcome(SlotNumber(20), Fr.random(), 'valid', CheckpointNumber(2));
 
       tracker.removeBefore(CheckpointNumber(2));
 
-      expect(tracker.getTxsCollectedRecord(SlotNumber(5), 0)).toBeUndefined();
-      expect(tracker.getTxsCollectedRecord(SlotNumber(10), 0)).toBeUndefined();
+      expect(tracker.hasCollectedTxs(SlotNumber(5), atSlot5)).toBe(false);
       // Slot 12 is above the highest removed slot (10), so it survives.
-      expect(tracker.getTxsCollectedRecord(SlotNumber(12), 0)).toBe(true);
+      expect(tracker.hasCollectedTxs(SlotNumber(12), atSlot12)).toBe(true);
       expect(tracker.getOutcomeForSlot(SlotNumber(20))).toBe('valid');
     });
   });

@@ -50,7 +50,7 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
     private readonly l2BlockSource: Pick<L2BlockSource, 'getCheckpoint' | 'getSyncedL2SlotNumber'>,
     private readonly txProvider: Pick<ITxProvider, 'hasTxs'>,
     private readonly p2p: Pick<P2PApi, 'getCheckpointAttestationsForSlot' | 'getP2PConnectivity'>,
-    private readonly reexecutionTracker: Pick<CheckpointReexecutionTracker, 'getTxsCollectedRecord'>,
+    private readonly reexecutionTracker: Pick<CheckpointReexecutionTracker, 'hasCollectedTxs'>,
     private readonly signatureContext: CoordinationSignatureContext,
     config: DataWithholdingWatcherConfig,
     private readonly log: Logger = createLogger('data-withholding-watcher'),
@@ -154,20 +154,21 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
 
     const checkpointNumber = published.checkpoint.number;
 
-    // Per-block tx-collection records (true | false | undefined) for every block in this
-    // published checkpoint. Captured by the validator's proposal handler at the moment of
-    // tx collection (i.e. by the *re-execution* deadline). Used as a positive short-circuit
-    // only: a `true` for every block means we know the data was available locally, so this
-    // checkpoint cannot be a data-withholding offense. A `false` does *not* trigger a slash
-    // on its own — the re-execution deadline is much earlier than the data-withholding
-    // tolerance window, so missing txs at that earlier deadline may still arrive in time.
-    // Anything other than all-true falls through to the mempool probe, which respects the
-    // tolerance window.
-    const collectionRecords = published.checkpoint.blocks.map((block, idx) =>
-      this.reexecutionTracker.getTxsCollectedRecord(block.header.getSlot(), idx),
+    // Whether the validator's proposal handler collected, by the *re-execution* deadline, every tx of a block proposal
+    // with exactly the txs of each published block. Used as a positive short-circuit only: a match for every block
+    // means the data was available locally, so this checkpoint cannot be a data-withholding offense. The match is on
+    // the block's tx hashes, not its slot and index, so a collected proposal vouches only for a block with the same
+    // txs. A miss does *not* trigger a slash on its own — the re-execution deadline is much earlier than the
+    // data-withholding tolerance window, so txs missing at that earlier deadline may still arrive in time. Anything
+    // short of a match for every block falls through to the mempool probe, which respects the tolerance window.
+    const collectionRecords = published.checkpoint.blocks.map(block =>
+      this.reexecutionTracker.hasCollectedTxs(
+        block.header.getSlot(),
+        block.body.txEffects.map(txEffect => txEffect.txHash),
+      ),
     );
 
-    if (collectionRecords.every(r => r === true)) {
+    if (collectionRecords.every(collected => collected)) {
       this.log.trace(`All blocks for checkpoint at slot ${slot} were collected locally; skipping`, {
         slot,
         checkpointNumber,

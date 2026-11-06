@@ -2211,6 +2211,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
     const txProvider = mock<ITxProvider>();
     txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: [] } as any);
+    const tracker = new CheckpointReexecutionTracker();
 
     const blockHandler = new ProposalHandler(
       checkpointsBuilder,
@@ -2223,13 +2224,34 @@ describe('ProposalHandler checkpoint validation', () => {
       consensusTimetable,
       config,
       mock<BlobClientInterface>(),
-      new CheckpointReexecutionTracker(),
+      tracker,
       checkpointFeeSource,
       metrics,
       dateProvider,
     );
-    return { proposal, blockHandler, txProvider };
+    return { proposal, blockHandler, txProvider, tracker };
   }
+
+  describe('tx collection record', () => {
+    it("records the proposal's tx list as collected when every tx was collected", async () => {
+      const { proposal, blockHandler, tracker } = await setupGenesisProposal(Fr.random(), [TxHash.random()]);
+
+      await blockHandler.handleBlockProposal(proposal, {} as any, false);
+
+      expect(tracker.hasCollectedTxs(SlotNumber(1), proposal.txHashes)).toBe(true);
+    });
+
+    it('records nothing when some txs could not be collected', async () => {
+      const { proposal, blockHandler, txProvider, tracker } = await setupGenesisProposal(Fr.random(), [
+        TxHash.random(),
+      ]);
+      txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: proposal.txHashes });
+
+      await blockHandler.handleBlockProposal(proposal, {} as any, false);
+
+      expect(tracker.hasCollectedTxs(SlotNumber(1), proposal.txHashes)).toBe(false);
+    });
+  });
 
   describe('block proposals and the live Inbox', () => {
     // A checkpoint has to finish at a live bucket boundary, but its blocks may consume an arbitrary prefix and end
