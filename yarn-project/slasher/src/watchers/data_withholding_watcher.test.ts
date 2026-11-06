@@ -2,7 +2,7 @@ import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
-import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { CheckpointReexecutionTracker, type PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { ITxProvider, P2PApi } from '@aztec-labs/stdlib/interfaces/server';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
@@ -33,7 +33,7 @@ describe('DataWithholdingWatcher', () => {
   let l2BlockSource: MockProxy<Pick<L2BlockSource, 'getCheckpoint' | 'getSyncedL2SlotNumber'>>;
   let txProvider: MockProxy<Pick<ITxProvider, 'hasTxs'>>;
   let p2p: MockProxy<Pick<P2PApi, 'getCheckpointAttestationsForSlot' | 'getP2PConnectivity'>>;
-  let reexecutionTracker: MockProxy<Pick<CheckpointReexecutionTracker, 'getTxsCollectedRecord'>>;
+  let reexecutionTracker: CheckpointReexecutionTracker;
   let watcher: TestDataWithholdingWatcher;
   let l1Constants: L1RollupConstants;
 
@@ -45,8 +45,7 @@ describe('DataWithholdingWatcher', () => {
     p2p = mock<Pick<P2PApi, 'getCheckpointAttestationsForSlot' | 'getP2PConnectivity'>>();
     p2p.getCheckpointAttestationsForSlot.mockResolvedValue([]);
     p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 5 });
-    reexecutionTracker = mock<Pick<CheckpointReexecutionTracker, 'getTxsCollectedRecord'>>();
-    reexecutionTracker.getTxsCollectedRecord.mockReturnValue(undefined);
+    reexecutionTracker = new CheckpointReexecutionTracker();
 
     l1Constants = {
       l1StartBlock: 1n,
@@ -121,6 +120,15 @@ describe('DataWithholdingWatcher', () => {
     );
   };
 
+  /** Records that this node collected every tx of a proposal with the same txs as the given block. */
+  const recordCollected = (published: PublishedCheckpoint, blockIndex: number) => {
+    const block = published.checkpoint.blocks[blockIndex];
+    reexecutionTracker.recordTxsCollected(
+      block.header.getSlot(),
+      block.body.txEffects.map(e => e.txHash),
+    );
+  };
+
   it('does nothing on a tick before tolerance has elapsed', async () => {
     await startAtSlot(0);
     setSyncedSlot(TOLERANCE - 1);
@@ -157,33 +165,54 @@ describe('DataWithholdingWatcher', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('does not slash when all block proposals report collected=true (skips mempool probe)', async () => {
-    await startAtSlot(10);
-    setSyncedSlot(11 + TOLERANCE + 1);
-
-    const slot = 11;
-    const published = makePublished(slot, 2);
-    l2BlockSource.getCheckpoint.mockResolvedValue(published);
-    reexecutionTracker.getTxsCollectedRecord.mockReturnValue(true);
-    watcher.attestersBySlot.set(slot, [EthAddress.random(), EthAddress.random()]);
-    const captured = captureEmits();
-
-    await watcher.work();
-
-    expect(txProvider.hasTxs).not.toHaveBeenCalled();
-    expect(captured).toHaveLength(0);
-  });
-
-  it('falls back to mempool probe when some blocks have collected=false (DW tolerance may permit late arrivals)', async () => {
-    // A `false` record means we missed the re-execution deadline, but the DW tolerance window
-    // gives more time for txs to propagate. The watcher must consult the mempool to decide.
+  it('does not slash when the txs of every published block were collected, even if now missing from the pool', async () => {
     await startAtSlot(10);
     setSyncedSlot(11 + TOLERANCE + 1);
 
     const slot = 11;
     const published = makePublished(slot, 2, 2);
     l2BlockSource.getCheckpoint.mockResolvedValue(published);
-    reexecutionTracker.getTxsCollectedRecord.mockImplementation((_s, idx) => (idx === 0 ? true : false));
+    recordCollected(published, 0);
+    recordCollected(published, 1);
+    mockMissing(published.checkpoint.blocks.flatMap(b => b.body.txEffects.map(e => e.txHash)));
+    watcher.attestersBySlot.set(slot, [EthAddress.random(), EthAddress.random()]);
+    const captured = captureEmits();
+
+    await watcher.work();
+
+    expect(captured).toHaveLength(0);
+  });
+
+  it("does not skip the probe when the collected txs differ from the published block's", async () => {
+    await startAtSlot(10);
+    setSyncedSlot(11 + TOLERANCE + 1);
+
+    const slot = 11;
+    reexecutionTracker.recordTxsCollected(SlotNumber(slot), [TxHash.random(), TxHash.random()]);
+    const published = makePublished(slot, 2);
+    l2BlockSource.getCheckpoint.mockResolvedValue(published);
+    mockMissing(published.checkpoint.blocks[0].body.txEffects.map(e => e.txHash));
+    const attesters = [EthAddress.random(), EthAddress.random()];
+    watcher.attestersBySlot.set(slot, attesters);
+    const captured = captureEmits();
+
+    await watcher.work();
+
+    expect(captured.flat().map(a => [a.validator, a.offenseType])).toEqual(
+      attesters.map(a => [a, OffenseType.DATA_WITHHOLDING]),
+    );
+  });
+
+  it('does not slash when a block was not collected in time but its txs arrived within the tolerance window', async () => {
+    // Missing the re-execution deadline records nothing, but the DW tolerance window gives more time for txs to
+    // propagate. The watcher must consult the mempool to decide.
+    await startAtSlot(10);
+    setSyncedSlot(11 + TOLERANCE + 1);
+
+    const slot = 11;
+    const published = makePublished(slot, 2, 2);
+    l2BlockSource.getCheckpoint.mockResolvedValue(published);
+    recordCollected(published, 0);
 
     // Mempool now reports both txs as available — late arrival saves the proposer.
     mockMissing([]);
@@ -196,14 +225,14 @@ describe('DataWithholdingWatcher', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('falls back to mempool probe when records are partial (some undefined, no false)', async () => {
+  it('slashes when only some blocks were collected and the others have txs missing', async () => {
     await startAtSlot(10);
     setSyncedSlot(11 + TOLERANCE + 1);
 
     const slot = 11;
     const published = makePublished(slot, 1, 2);
     l2BlockSource.getCheckpoint.mockResolvedValue(published);
-    reexecutionTracker.getTxsCollectedRecord.mockImplementation((_s, idx) => (idx === 0 ? true : undefined));
+    recordCollected(published, 0);
 
     const missing = published.checkpoint.blocks[1].body.txEffects[0].txHash;
     mockMissing([missing]);
@@ -225,7 +254,6 @@ describe('DataWithholdingWatcher', () => {
     const slot = 11;
     const published = makePublished(slot, 2);
     l2BlockSource.getCheckpoint.mockResolvedValue(published);
-    reexecutionTracker.getTxsCollectedRecord.mockReturnValue(undefined);
     mockMissing([]);
     watcher.attestersBySlot.set(slot, [EthAddress.random()]);
     const captured = captureEmits();
