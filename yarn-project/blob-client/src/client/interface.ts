@@ -10,23 +10,16 @@ export interface GetBlobSidecarOptions {
    */
   isHistoricalSync?: boolean;
   /**
-   * The parent beacon block root for the L1 block containing the blobs.
-   * If provided, skips the eth_getBlockByHash execution RPC call inside getSlotNumber.
+   * The Unix timestamp in seconds of the L1 execution block containing the blobs.
    */
-  parentBeaconBlockRoot?: string;
-  /**
-   * The timestamp of the L1 execution block containing the blobs.
-   * When provided alongside a cached beacon genesis config (fetched at startup), allows computing
-   * the beacon slot directly via timestamp math, skipping the beacon headers network call entirely.
-   */
-  l1BlockTimestamp?: bigint;
+  l1BlockTimestamp: bigint;
 }
 
 export interface BlobClientInterface {
   /** Sends the given blobs to the filestore, to be indexed by blob hash. */
   sendBlobsToFilestore(blobs: Blob[]): Promise<boolean>;
   /** Fetches the given blob sidecars by block hash and blob hashes. */
-  getBlobSidecar(blockId: string, blobHashes?: Buffer[], opts?: GetBlobSidecarOptions): Promise<Blob[]>;
+  getBlobSidecar(blockId: string, blobHashes: Buffer[], opts: GetBlobSidecarOptions): Promise<Blob[]>;
   /** Starts the blob client (e.g., uploads healthcheck file if not exists). */
   start?(): Promise<void>;
   /** Tests all configured blob sources and logs whether they are reachable or not. */
