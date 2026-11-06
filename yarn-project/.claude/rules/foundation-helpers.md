@@ -6,7 +6,8 @@ paths:
 <foundation_helpers>
 Before hand-writing any code in the left column, use the helper on the right. Paths are subpaths of
 `@aztec-labs/foundation` (e.g. `/retry` is `@aztec-labs/foundation/retry`). Units differ between helpers: read the
-Gotchas column.
+Gotchas column. Lint flags several of these patterns (`aztec-custom/prefer-*`, defined in `foundation/eslint-rules/`):
+switch to the helper rather than disabling the rule, unless its Gotchas rule it out.
 
 | If you're about to write… | Use instead | Gotchas |
 |---|---|---|
@@ -25,5 +26,8 @@ Gotchas column.
 | A `Map` or `Set` trimmed by deleting `keys().next().value` | `LruMap` / `LruSet` — `/collection`; `FifoSet.withLimit(n)` — `/fifo-set` | `LruMap.has()` does not refresh recency (`get()` does); `LruSet.has()` does. Keys compare by identity: use primitive keys. |
 | `private x?: Promise<T>; getX() { return (this.x ??= this.load()); }` | `@memoize` on the method — `/decorators` | Zero-argument methods only. Caches per instance forever, including a rejected promise. |
 | `for (…) out.push(await f(x))`, a summing `reduce`, `[...new Set(a)]`, a slice loop for batches, `filter(x => x !== undefined)` | `asyncMap` — `/async-map`; `timesAsync`, `timesParallel`, `filterAsync`, `sum`, `unique`, `uniqueBy`, `chunk`, `compactArray`, `partition`, `maxBy` — `/collection` | `asyncMap` and `timesAsync` run in sequence; `filterAsync` and `timesParallel` run in parallel. `unique` compares by identity. `chunkBy` groups only adjacent items; it is not `groupBy`. `compactArray` keeps `null`. |
+| `Array.from({ length: n }, (_, i) => …)` or `Array(n).fill(x).map(…)` | `times(n, i => …)` — `/collection` | The callback gets only the index, not an element. `n` must be a valid array length. |
+| A summing `reduce` over bigints, starting from `0n` | `sumBigint(values)` — `/bigint` | Takes a mutable `bigint[]`. |
+| `` `0x${buffer.toString('hex')}` `` | `bufferToHex(buffer)` — `/string` | Takes a `Buffer` and returns the `` `0x${string}` `` type. |
 | An item array plus an array of waiting resolvers (a producer/consumer queue) | `FifoMemoryQueue` — `/queue` (`put`, `await get()`); `BatchQueue` to group items into batches | `get(timeoutSec)` takes **seconds** and returns `null` after `end()` or `cancel()`. `process(handler)` stops consuming at the first handler throw: catch inside the handler. `BatchQueue` rejects `put` until `start()`. |
 </foundation_helpers>
