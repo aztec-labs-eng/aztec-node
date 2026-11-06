@@ -11,7 +11,7 @@ export const TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT = 'Setup function targets 
 export const TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER = 'Setup only_self function called with incorrect msg_sender';
 export const TX_ERROR_SETUP_NULL_MSG_SENDER = 'Setup function called with null msg sender';
 export const TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH = 'Setup function called with wrong calldata length';
-export const TX_ERROR_SETUP_WRONG_STATIC_FLAG = 'Setup function called with wrong static flag';
+export const TX_ERROR_SETUP_STATIC_CALL = 'Static setup calls are not allowed';
 export const TX_ERROR_SETUP_INSUFFICIENT_GAS = 'Gas limits leave setup less gas than its allowed functions need';
 
 // Nullifiers

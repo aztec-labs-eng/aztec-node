@@ -13,8 +13,8 @@ import {
   TX_ERROR_SETUP_INSUFFICIENT_GAS,
   TX_ERROR_SETUP_NULL_MSG_SENDER,
   TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER,
+  TX_ERROR_SETUP_STATIC_CALL,
   TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH,
-  TX_ERROR_SETUP_WRONG_STATIC_FLAG,
   Tx,
   TxExecutionPhase,
   type TxValidationResult,
@@ -109,6 +109,10 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     if (publicCall.isEmpty()) {
       return { allowed: true };
     }
+    // A static call cannot write state, so in setup it can only consume gas or fail.
+    if (publicCall.request.isStaticCall) {
+      return { allowed: false, reason: TX_ERROR_SETUP_STATIC_CALL };
+    }
 
     const contractAddress = publicCall.request.contractAddress;
     const functionSelector = publicCall.functionSelector;
@@ -159,9 +163,6 @@ export class PhasesTxValidator implements TxValidator<Tx> {
       request.msgSender.equals(AztecAddress.fromBigIntUnsafe(NULL_MSG_SENDER_CONTRACT_ADDRESS))
     ) {
       return { allowed: false, reason: TX_ERROR_SETUP_NULL_MSG_SENDER };
-    }
-    if (request.isStaticCall !== (entry.isStaticCall ?? false)) {
-      return { allowed: false, reason: TX_ERROR_SETUP_WRONG_STATIC_FLAG };
     }
     return { allowed: true, minGas: entry.minGas };
   }

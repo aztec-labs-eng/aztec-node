@@ -13,7 +13,7 @@ export async function buildAllowedElement(
   artifact: ContractArtifact,
   target: { address: AztecAddress } | { classId: Fr },
   functionName: string,
-  opts?: { onlySelf?: boolean; rejectNullMsgSender?: boolean; isStaticCall?: boolean; minGas?: Gas },
+  opts?: { onlySelf?: boolean; rejectNullMsgSender?: boolean; minGas?: Gas },
 ): Promise<AllowedElement> {
   const allFunctions = getAllFunctionAbis(artifact);
   const fn = allFunctions.find(f => f.name === functionName);
@@ -28,7 +28,6 @@ export async function buildAllowedElement(
     calldataLength,
     ...(opts?.onlySelf ? { onlySelf: true } : {}),
     ...(opts?.rejectNullMsgSender ? { rejectNullMsgSender: true } : {}),
-    ...(opts?.isStaticCall ? { isStaticCall: true } : {}),
     ...(opts?.minGas ? { minGas: opts.minGas } : {}),
   } as AllowedElement;
 }

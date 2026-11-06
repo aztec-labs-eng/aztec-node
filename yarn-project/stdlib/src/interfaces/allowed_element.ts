@@ -11,8 +11,6 @@ type AllowedCallConstraints = {
   onlySelf?: boolean;
   rejectNullMsgSender?: boolean;
   calldataLength?: number;
-  /** Static flag the setup call must have. Absent means the call must be non-static. */
-  isStaticCall?: boolean;
   /** Gas the call needs to complete in setup. The tx's gas limits must leave at least this much for setup. */
   minGas?: Gas;
 };
@@ -32,7 +30,6 @@ const allowedCallConstraintsSchema = {
   onlySelf: z.boolean().optional(),
   rejectNullMsgSender: z.boolean().optional(),
   calldataLength: z.number().optional(),
-  isStaticCall: z.boolean().optional(),
   minGas: Gas.schema.optional(),
 };
 

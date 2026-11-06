@@ -13,8 +13,8 @@ import {
   TX_ERROR_SETUP_INSUFFICIENT_GAS,
   TX_ERROR_SETUP_NULL_MSG_SENDER,
   TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER,
+  TX_ERROR_SETUP_STATIC_CALL,
   TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH,
-  TX_ERROR_SETUP_WRONG_STATIC_FLAG,
   type Tx,
 } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
@@ -495,78 +495,6 @@ describe('PhasesTxValidator', () => {
     });
   });
 
-  describe('isStaticCall validation', () => {
-    let staticContract: AztecAddress;
-    let staticSelector: FunctionSelector;
-    let staticClassId: Fr;
-
-    beforeEach(() => {
-      staticContract = makeAztecAddress(80);
-      staticSelector = makeSelector(80);
-      staticClassId = Fr.random();
-
-      txValidator = new PhasesTxValidator(
-        contractDataSource,
-        [
-          { address: staticContract, selector: staticSelector, isStaticCall: true },
-          { classId: staticClassId, selector: staticSelector, isStaticCall: true },
-          { address: allowedContract, selector: allowedSetupSelector1 },
-        ],
-        timestamp,
-      );
-    });
-
-    const mockClassOf = (address: AztecAddress, classId: Fr) =>
-      contractDataSource.getContract.mockImplementationOnce(contractAddress =>
-        Promise.resolve(
-          address.equals(contractAddress)
-            ? ({ currentContractClassId: classId, originalContractClassId: Fr.random() } as any)
-            : undefined,
-        ),
-      );
-
-    it('rejects a static call to an entry without the static flag', async () => {
-      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-      await patchNonRevertibleFn(tx, 0, {
-        address: allowedContract,
-        selector: allowedSetupSelector1,
-        isStaticCall: true,
-      });
-
-      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
-    });
-
-    it('allows a static call to an address entry with the static flag', async () => {
-      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-      await patchNonRevertibleFn(tx, 0, { address: staticContract, selector: staticSelector, isStaticCall: true });
-
-      await expectValid(tx);
-    });
-
-    it('rejects a non-static call to an address entry with the static flag', async () => {
-      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-      await patchNonRevertibleFn(tx, 0, { address: staticContract, selector: staticSelector, isStaticCall: false });
-
-      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
-    });
-
-    it('allows a static call to a class entry with the static flag', async () => {
-      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-      const address = await patchNonRevertibleFn(tx, 0, { selector: staticSelector, isStaticCall: true });
-      mockClassOf(address, staticClassId);
-
-      await expectValid(tx);
-    });
-
-    it('rejects a non-static call to a class entry with the static flag', async () => {
-      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
-      const address = await patchNonRevertibleFn(tx, 0, { selector: staticSelector, isStaticCall: false });
-      mockClassOf(address, staticClassId);
-
-      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
-    });
-  });
-
   describe('minGas validation', () => {
     const gasUsed = new Gas(1_000, 50_000);
     const minGas1 = new Gas(64, 30_000);
@@ -663,7 +591,7 @@ describe('PhasesTxValidator', () => {
 
     it('rejects a static set_authorized setup call', async () => {
       const tx = await makeSetAuthorizedTx({ isStaticCall: true });
-      await expectInvalid(tx, TX_ERROR_SETUP_WRONG_STATIC_FLAG);
+      await expectInvalid(tx, TX_ERROR_SETUP_STATIC_CALL);
     });
 
     it('rejects a set_authorized setup call when the gas limits leave no gas for setup', async () => {
