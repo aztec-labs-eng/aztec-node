@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### Prover nodes prove epochs that an early proof already covered
+### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 
 A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
 
