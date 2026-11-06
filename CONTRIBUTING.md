@@ -44,7 +44,7 @@ If you are unsure which bucket a change is in, it is not trivial.
 - New behavior comes with unit tests. If it crosses component boundaries (sequencer ↔ p2p ↔ archiver, L1 interaction, reorgs, pruning), add or extend an e2e test.
 - If a test is flaky, file an issue for it.
 
-**Keep docs in sync.** Update the `README.md` of any component whose design, invariants, or flow you changed. Update the [operator docs](https://github.com/AztecProtocol/aztec-packages/tree/next/docs/docs-operate/) in aztec-packages when you change anything an operator configures or observes, and add an entry to [`CHANGELOG-OPERATORS.md`](./CHANGELOG-OPERATORS.md) in the same PR. Each release line keeps its own copy of that file on its own branch, so the entry goes in the copy on the branch your PR targets; a backport carries its entry with it. New config options need a description and a sensible default in the config mappings.
+**Keep docs in sync.** Update the `README.md` of any component whose design, invariants, or flow you changed. Update the [operator docs](https://github.com/AztecProtocol/aztec-packages/tree/next/docs/docs-operate/) in aztec-packages when you change anything an operator configures or observes, and add an entry to [`CHANGELOG-OPERATORS.md`](./CHANGELOG-OPERATORS.md) in the same PR. Likewise, add an entry to [`CHANGELOG-DEVELOPERS.md`](./CHANGELOG-DEVELOPERS.md) when you change anything a contract, app or wallet developer uses or observes in Aztec.nr, the PXE, Aztec.js or the CLI. Each release line keeps its own copy of these files on its own branch, so the entry goes in the copy on the branch your PR targets; a backport carries its entry with it. New config options need a description and a sensible default in the config mappings.
 
 **Keep it observable.** New code paths log at the right level (routine events at `debug`/`verbose`, not `info`), and new failure modes emit a metric or a `warn`/`error` log someone can alert on.
 
@@ -63,14 +63,7 @@ The description must include:
 
 ## Breaking changes
 
-Call these out explicitly in the description, say what breaks and what the migration path is, and add an entry to [`CHANGELOG-OPERATORS.md`](./CHANGELOG-OPERATORS.md) when operators are affected:
-
-- **P2P wire format**: gossip message encoding, topics, req/resp protocols, peer scoring. Nodes on the old and new version must still interoperate, or the PR must say they can't.
-- **Database schema**: archiver, world state, p2p, and slasher stores. Bump the schema version and say whether nodes need a resync.
-- **Node RPC API**: public and admin JSON-RPC methods, their params and return types.
-- **Operator interface**: CLI flags, environment variables, config defaults, keystore format, Helm values.
-- **Protocol**: block, checkpoint, or blob format; constants; circuits; L1 contract interactions and ABIs; slashing conditions.
-- **Observability**: renamed or removed metrics and log fields that dashboards or alerts depend on.
+Call breaking changes out explicitly in the description, say what breaks and what the migration path is, and add an entry to [`CHANGELOG-OPERATORS.md`](./CHANGELOG-OPERATORS.md) when operators are affected, or to [`CHANGELOG-DEVELOPERS.md`](./CHANGELOG-DEVELOPERS.md) when contract, app or wallet developers are. The Format section of each changelog lists what counts as breaking for its readers.
 
 ## Review
 

@@ -40,6 +40,12 @@ Every release line carries its own copy of the file on its own branch (`v6` ship
 A port PR (`port-<PR>-to-<target>`) carries the original entry in its cherry-pick, so the target branch's changelog is updated by the port itself and needs no separate edit. The conflict that produces is expected: keep the target branch's own headings, place the entry under its `## Unreleased`, and discard the source branch's heading. Resolving it by dropping the entry is wrong — a change that ships on two release lines is news to the operators of both.
 </operator_changelog>
 
+<developer_changelog>
+`CHANGELOG-DEVELOPERS.md` records the changes contract, app and wallet developers have to act on or will notice in Aztec.nr, the PXE, Aztec.js and the CLI: public APIs and types, the behaviour of the PXE and its hooks, and the `aztec` and `aztec-wallet` commands. A PR that changes one of those adds an entry under `## Unreleased`, in the component and subsection the file's Format section describes; a PR that does not, adds nothing.
+
+It follows the same branch rules as `<operator_changelog>`: a PR edits only the copy on the branch it targets, and a port carries its entry in the cherry-pick, with the conflict resolved the same way.
+</developer_changelog>
+
 <worktrees>
 `ci3/` is a git submodule, and `git worktree add` leaves it empty. Run `git submodule update --init ci3` in every new worktree before using any `bootstrap.sh` (including `yarn format` and `yarn lint`). Without it they fail with a misleading `syntax error near unexpected token '('`, because the extglob setup in `ci3` never loads.
 </worktrees>
@@ -115,7 +121,7 @@ Before adding a line to any `CLAUDE.md` file: answer in one sentence what specif
 </editorial_test>
 
 <writing_comments>
-Default to writing no inline comments. Add one only when the *why* is non-obvious: a hidden constraint, a subtle invariant, a workaround for a specific bug, or behavior that would surprise a reader. If removing the comment would not confuse a future reader, do not write it. 
+Default to writing no inline comments. Add one only when the *why* is non-obvious: a hidden constraint, a subtle invariant, a workaround for a specific bug, or behavior that would surprise a reader. If removing the comment would not confuse a future reader, do not write it.
 
 Do write jsdoc, rustdoc, or natspec comments for documenting public methods.
 

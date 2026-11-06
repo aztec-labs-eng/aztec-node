@@ -76,7 +76,7 @@ Run from `yarn-project`:
 2. **Format**: Run on entire project (`yarn format`)
 3. **Lint**: Run on entire project (`yarn lint`)
 4. **Test**: Run unit tests for modified files
-5. **Document**: Update changelog/release notes via the `/update-changelog` skill
+5. **Document**: Add an entry to `CHANGELOG-DEVELOPERS.md` or `CHANGELOG-OPERATORS.md`, at the repo root, for any change developers or operators will notice
 
 ## Testing
 
@@ -327,7 +327,7 @@ git push
 
 ### Breaking Changes
 
-1. Use the `/update-changelog` skill for documenting any breaking changes
+1. Add an entry to `CHANGELOG-DEVELOPERS.md` or `CHANGELOG-OPERATORS.md`, at the repo root, saying how to migrate
 2. Document breaking changes in PR description
 
 ### PR Descriptions
