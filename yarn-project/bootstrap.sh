@@ -459,6 +459,9 @@ function test_cmds {
 
   echo "$(cache_content_hash '^yarn-project/scripts/echo_test_cmd') yarn-project/scripts/echo_test_cmd.test.sh"
 
+  local eslint_rules_hash=$(cache_content_hash '^yarn-project/foundation/eslint-rules/' '^yarn-project/yarn.lock$')
+  echo "$eslint_rules_hash node --test yarn-project/foundation/eslint-rules/*.test.js"
+
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds
 

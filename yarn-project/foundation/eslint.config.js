@@ -12,6 +12,13 @@ import noAsyncDispose from './eslint-rules/no-async-dispose.js';
 import noGlobalBuffer from './eslint-rules/no-global-buffer.js';
 import noNonPrimitiveInCollections from './eslint-rules/no-non-primitive-in-collections.js';
 import noUnsafeBrandedTypeConversion from './eslint-rules/no-unsafe-branded-type-conversion.js';
+import preferBufferToHex from './eslint-rules/prefer-buffer-to-hex.js';
+import preferCompactArray from './eslint-rules/prefer-compact-array.js';
+import preferPromiseWithResolvers from './eslint-rules/prefer-promise-with-resolvers.js';
+import preferSleep from './eslint-rules/prefer-sleep.js';
+import preferSum from './eslint-rules/prefer-sum.js';
+import preferTimes from './eslint-rules/prefer-times.js';
+import preferUnique from './eslint-rules/prefer-unique.js';
 
 export default [
   globalIgnores([
@@ -57,6 +64,13 @@ export default [
           'no-global-buffer': noGlobalBuffer,
           'no-non-primitive-in-collections': noNonPrimitiveInCollections,
           'no-unsafe-branded-type-conversion': noUnsafeBrandedTypeConversion,
+          'prefer-buffer-to-hex': preferBufferToHex,
+          'prefer-compact-array': preferCompactArray,
+          'prefer-promise-with-resolvers': preferPromiseWithResolvers,
+          'prefer-sleep': preferSleep,
+          'prefer-sum': preferSum,
+          'prefer-times': preferTimes,
+          'prefer-unique': preferUnique,
         },
       },
     },
@@ -145,6 +159,13 @@ export default [
       'aztec-custom/no-global-buffer': 'error',
       'aztec-custom/no-non-primitive-in-collections': 'error',
       'aztec-custom/no-unsafe-branded-type-conversion': 'error',
+      'aztec-custom/prefer-buffer-to-hex': 'warn',
+      'aztec-custom/prefer-compact-array': 'warn',
+      'aztec-custom/prefer-promise-with-resolvers': 'warn',
+      'aztec-custom/prefer-sleep': 'warn',
+      'aztec-custom/prefer-sum': 'warn',
+      'aztec-custom/prefer-times': 'warn',
+      'aztec-custom/prefer-unique': 'warn',
     },
   }),
   {
