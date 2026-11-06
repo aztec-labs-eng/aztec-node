@@ -33,8 +33,8 @@ const beaconExecutionHashSchema = z
       message: z.object({
         body: z.union([
           z
-            .object({ ['execution_payload_header']: z.object({ ['block_hash']: z.string() }) })
-            .transform(body => body.execution_payload_header.block_hash),
+            .object({ ['execution_payload']: z.object({ ['block_hash']: z.string() }) })
+            .transform(body => body.execution_payload.block_hash),
           z
             .object({
               ['signed_execution_payload_bid']: z.object({ message: z.object({ ['block_hash']: z.string() }) }),
@@ -521,7 +521,7 @@ export class HttpBlobClient implements BlobClientInterface {
       if (!verifiedHosts.has(l1ConsensusHostIndex)) {
         try {
           const { url, ...options } = getBeaconNodeFetchOptions(
-            `${l1ConsensusHostUrl}/eth/v1/beacon/blinded_blocks/${slotNumber}`,
+            `${l1ConsensusHostUrl}/eth/v2/beacon/blocks/${slotNumber}`,
             this.config,
             l1ConsensusHostIndex,
           );

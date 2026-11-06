@@ -107,7 +107,7 @@ describe('HttpBlobClient', () => {
           const slot = isLagging ? laggingHostSlotNumber : latestSlotNumber;
           res.end(JSON.stringify({ data: { header: { message: { slot } } } }));
         } else if (
-          requestPath === `/eth/v1/beacon/blinded_blocks/${beaconSlot}` &&
+          requestPath === `/eth/v2/beacon/blocks/${beaconSlot}` &&
           (!isLagging || beaconSlot <= laggingHostSlotNumber)
         ) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -117,7 +117,7 @@ describe('HttpBlobClient', () => {
                 message: {
                   body: gloas
                     ? { ['signed_execution_payload_bid']: { message: { ['block_hash']: beaconExecutionHash } } }
-                    : { ['execution_payload_header']: { ['block_hash']: beaconExecutionHash } },
+                    : { ['execution_payload']: { ['block_hash']: beaconExecutionHash } },
                 },
               },
             }),
@@ -1032,11 +1032,11 @@ describe('HttpBlobClient FileStore Integration', () => {
         } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: { header: { message: { slot: 1 } } } }));
-        } else if (req.url?.includes('/eth/v1/beacon/blinded_blocks/')) {
+        } else if (req.url?.includes('/eth/v2/beacon/blocks/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
-              data: { message: { body: { ['execution_payload_header']: { ['block_hash']: '0x1234' } } } },
+              data: { message: { body: { ['execution_payload']: { ['block_hash']: '0x1234' } } } },
             }),
           );
         } else if (req.url?.includes('/eth/v1/beacon/blobs/')) {
