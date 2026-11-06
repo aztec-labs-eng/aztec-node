@@ -1,8 +1,11 @@
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
+import { Gas } from '../gas/gas.js';
 import { makeAvmCircuitInputs } from '../tests/factories.js';
-import { AvmCircuitInputs } from './avm.js';
+import { TxExecutionPhase } from '../tx/processed_tx.js';
+import { AvmCircuitInputs, CallStackMetadata, PublicTxResult } from './avm.js';
 import { deserializeFromMessagePack } from './message_pack.js';
 
 describe('Avm circuit inputs', () => {
@@ -26,5 +29,36 @@ describe('Avm circuit inputs', () => {
     const json = deserializeFromMessagePack(buffer);
     const res = AvmCircuitInputs.fromPlainObject(json);
     expect(res).toEqual(avmCircuitInputs);
+  });
+});
+
+describe('CallStackMetadata', () => {
+  const makeCall = (nested: CallStackMetadata[]) =>
+    new CallStackMetadata(
+      TxExecutionPhase.APP_LOGIC,
+      Fr.random(),
+      /*callerPc=*/ 3,
+      /*calldata=*/ [Fr.random()],
+      /*isStaticCall=*/ false,
+      Gas.from({ daGas: 10, l2Gas: 20 }),
+      /*output=*/ [Fr.random()],
+      /*internalCallStackAtExit=*/ [1, 2],
+      /*haltingMessage=*/ undefined,
+      /*reverted=*/ false,
+      nested,
+      /*numNestedCalls=*/ nested.length,
+    );
+
+  it('parses nested call metadata from JSON', () => {
+    const call = makeCall([makeCall([makeCall([])])]);
+    expect(jsonParseWithSchema(jsonStringify(call), CallStackMetadata.schema)).toEqual(call);
+  });
+
+  it('parses a public tx result carrying nested call metadata', () => {
+    const result = PublicTxResult.empty();
+    result.callStackMetadata = [makeCall([makeCall([])])];
+    expect(jsonParseWithSchema(jsonStringify(result), PublicTxResult.schema).callStackMetadata).toEqual(
+      result.callStackMetadata,
+    );
   });
 });

@@ -37,27 +37,32 @@ export type SnapshotsIndex = SnapshotsIndexMetadata & {
 export type UploadSnapshotMetadata = Pick<SnapshotMetadata, 'l2BlockNumber' | 'l2BlockHash' | 'l1BlockNumber'> &
   Pick<SnapshotsIndex, 'l1ChainId' | 'rollupVersion' | 'rollupAddress'>;
 
+/** Snapshots listed in a remote index. The index is never pruned, so this leaves room for years of uploads. */
+const MAX_SNAPSHOTS_IN_INDEX = 100_000;
+
 export const SnapshotsIndexSchema = zodFor<SnapshotsIndex>()(
   z.object({
     l1ChainId: z.number(),
     rollupVersion: z.number(),
     rollupAddress: schemas.EthAddress,
-    snapshots: z.array(
-      z.object({
-        l2BlockNumber: z.number(),
-        l2BlockHash: z.string(),
-        l1BlockNumber: z.number(),
-        timestamp: z.number(),
-        schemaVersions: z.object({
-          archiver: z.number(),
-          worldState: z.number(),
+    snapshots: z
+      .array(
+        z.object({
+          l2BlockNumber: z.number(),
+          l2BlockHash: z.string(),
+          l1BlockNumber: z.number(),
+          timestamp: z.number(),
+          schemaVersions: z.object({
+            archiver: z.number(),
+            worldState: z.number(),
+          }),
+          dataUrls: z
+            .record(z.enum(SnapshotDataKeys), z.string())
+            // See https://stackoverflow.com/questions/77958464/zod-record-with-required-keys
+            .refine((obj): obj is Required<typeof obj> => SnapshotDataKeys.every(key => !!obj[key])),
         }),
-        dataUrls: z
-          .record(z.enum(SnapshotDataKeys), z.string())
-          // See https://stackoverflow.com/questions/77958464/zod-record-with-required-keys
-          .refine((obj): obj is Required<typeof obj> => SnapshotDataKeys.every(key => !!obj[key])),
-      }),
-    ),
+      )
+      .max(MAX_SNAPSHOTS_IN_INDEX),
   }),
 );
 

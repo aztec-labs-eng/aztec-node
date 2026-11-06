@@ -1,6 +1,7 @@
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { countZodIssues } from '@aztec-labs/foundation/testing';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { MAX_RPC_CONTRACT_OVERRIDES_LEN, MAX_RPC_PUBLIC_STORAGE_OVERRIDES_LEN } from '../interfaces/api_limit.js';
@@ -39,6 +40,13 @@ describe('simulated_tx', () => {
     it('rejects contracts over the maximum count', async () => {
       const overrides = { contracts: await contracts(MAX_RPC_CONTRACT_OVERRIDES_LEN + 1) };
       expect(parse(overrides).success).toBe(false);
+    });
+
+    it('rejects an oversized contracts record of invalid entries with a bounded number of issues', () => {
+      const overrides = { contracts: Object.fromEntries(times(100_000, i => [`contract-${i}`, 'x'])) };
+      const result = parse(overrides);
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
     });
   });
 
