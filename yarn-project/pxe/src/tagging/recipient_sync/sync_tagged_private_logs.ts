@@ -62,8 +62,8 @@ import { findHighestIndexes } from './utils/find_highest_indexes.js';
  *
  * # Constrained secrets
  *
- * Constrained delivery enforces a contiguous index sequence (each send proves the predecessor's nullifier,
- * chaining back to the handshake), so there is only one sender and indexes are sequential. This means:
+ * Constrained delivery enforces a contiguous index sequence (each send proves its predecessor's nullifier, back to the
+ * send at index 0 that anchors the secret), so indexes are used in order with no gaps. This means:
  * - The lower bound is `highestFinalizedIndex + 1`. The `highestAgedIndex` mechanism is unnecessary because
  *   the nullifier chain prevents out-of-order index usage: no device can fill in a lower index after a higher
  *   one is already on-chain.

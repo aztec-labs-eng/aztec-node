@@ -36,12 +36,11 @@ pub struct HandshakePage {
 /// The app-siloed handshake secrets the registry returns for a `(sender, recipient)` pair.
 #[derive(Deserialize, Eq, Serialize)]
 pub struct AppSiloedHandshakeSecrets {
-    /// The handshake's messaging secret. The recipient can reconstruct it from the handshake's public ephemeral key
-    /// via ECDH.
+    /// The handshake's messaging secret, which the recipient can also derive.
     pub shared: Field,
-    /// The app-siloed sender-only secret, folded into the constrained-delivery sequence nullifier so only the
-    /// sender can advance a sequence. The recipient cannot reconstruct it: it derives from a random secret stored
-    /// only in the sender's handshake note and never transmitted.
+    /// A secret only the sender knows, which keeps anyone else from emitting the sender's constrained-delivery sequence
+    /// nullifiers. It derives from a random secret stored in the sender's handshake note and never shared with the
+    /// recipient.
     pub sender_only: Field,
 }
 
@@ -50,7 +49,7 @@ pub(crate) global PROVIDED_SECRETS_ARRAY_BASE_SLOT: Field =
 
 global HANDSHAKE_EPH_PKS_SLOT: Field = sha256_to_field("AZTEC_NR::HANDSHAKE_EPH_PKS_SLOT".as_bytes());
 
-// The helper cannot import the handshake registry interface because the registry contract depends on aztec-nr. These
+// This module cannot import the handshake registry interface because the registry contract depends on aztec-nr. These
 // selector constants pin the registry ABI surface this library calls. The registry's test suite compares them against
 // its macro-generated `HandshakeRegistry::at(...).method(...).selector` values so signature drift fails in tests.
 pub global GET_APP_SILOED_SECRETS_SELECTOR: FunctionSelector =
@@ -61,20 +60,21 @@ pub global INTERACTIVE_HANDSHAKE_SELECTOR: FunctionSelector =
     comptime { FunctionSelector::from_signature("interactive_handshake((Field),(Field))") };
 pub global GET_NON_INTERACTIVE_HANDSHAKES_SELECTOR: FunctionSelector =
     comptime { FunctionSelector::from_signature("get_non_interactive_handshakes((Field),u32)") };
+pub global VALIDATE_HANDSHAKE_SELECTOR: FunctionSelector =
+    comptime { FunctionSelector::from_signature("validate_handshake((Field),(Field),(Field,Field))") };
 
 /// Protects a handshake's shared secret from recipient forgery.
 ///
-/// The handshake's ECDH shared secret is symmetric: `S = eph_sk * recipient_pub`, where `(eph_sk, eph_pk)` is
-/// the sender's ephemeral key pair, also equals `recipient_priv * eph_pk`. The recipient recomputing `S` this
-/// way is normal: it is how they derive the handshake's tags when scanning. The attack is minting a second
-/// handshake with the same secret: the ephemeral key is unconstrained, so a malicious recipient can register
-/// its own handshake crafted to land on `S` again, with a different sender-only secret, and emit logs under
-/// the honest handshake's constrained-delivery tag. That breaks the invariant that a constrained-delivery log
-/// sequence is tied to a single sender: by colliding on the tag it blocks the honest sender, who can no longer
-/// emit the next note in their sequence.
+/// The handshake's ECDH shared secret is symmetric: `S = eph_sk * recipient_pub`, where `(eph_sk, eph_pk)` is the
+/// sender's ephemeral key pair, also equals `recipient_priv * eph_pk`. The recipient recomputing `S` this way is
+/// normal: it is how they derive the handshake's tags when scanning. The attack is minting a second handshake with the
+/// same secret: the ephemeral key is unconstrained, so a malicious recipient can register its own handshake crafted to
+/// land on `S` again, with a different sender-only secret, and emit logs under the honest handshake's
+/// constrained-delivery tags. That advances the honest sender's next index past a sequence nullifier they never
+/// emitted, so their next send fails its predecessor check.
 ///
-/// The protection multiplies `S` by the scalar `k = hash(eph_pk, recipient_point)`: a forgery must announce a
-/// different `eph_pk`, so the protected secrets diverge. The result is still a point and silos like `S`.
+/// The protection multiplies `S` by the scalar `k = hash(eph_pk, recipient_point)`: a forgery must use a different
+/// `eph_pk`, so the protected secrets diverge. The result is still a point and silos like `S`.
 ///
 /// The recipient point must be part of `k`: were `k` independent of it, an attacker choosing the fake
 /// recipient point as a multiple of the honest protected secret could solve for the multiplier that makes the
@@ -117,11 +117,7 @@ pub fn forgery_protected_eph_pk(eph_pk: EmbeddedCurvePoint, recipient_point: Emb
 /// Returns `None` when no handshake has been registered for the pair yet, in which case the caller decides how to
 /// source a messaging secret (see [`super::tag::resolve_delivery_messaging_secret`]).
 ///
-/// ## Batching
-///
-/// This reads committed state, so within a single transaction multiple sends cannot see each other's pending
-/// handshake. A brand-new recipient therefore needs one landed transaction to establish the handshake before further
-/// sends can be batched onto it.
+/// Reads committed state, so it does not see a handshake created earlier in the same transaction.
 pub(crate) unconstrained fn get_existing_app_siloed_handshake_secrets(
     registry: AztecAddress,
     sender: AztecAddress,
@@ -138,8 +134,8 @@ pub(crate) unconstrained fn get_existing_app_siloed_handshake_secrets(
 /// Establishes a non-interactive handshake for `(sender, recipient)` and returns its app-siloed secrets.
 ///
 /// The registry inserts a fresh handshake note and returns the app-siloed secrets. The constrained return value is the
-/// source of truth for the secrets, so constrained delivery anchoring a freshly bootstrapped handshake needs no
-/// separate call to the registry's `validate_handshake`.
+/// source of truth for the secrets, so constrained delivery anchoring a newly established handshake needs no separate
+/// call to the registry's `validate_handshake`.
 ///
 /// Any handshake already registered for the pair is overwritten.
 pub(crate) fn create_non_interactive_handshake(
@@ -155,9 +151,7 @@ pub(crate) fn create_non_interactive_handshake(
 
 /// Establishes an interactive handshake for `(sender, recipient)` and returns its app-siloed secrets.
 ///
-/// As with [`create_non_interactive_handshake`], the constrained return value is the source of truth for the
-/// secrets, so constrained delivery anchoring a freshly bootstrapped handshake needs no separate call to the
-/// registry's `validate_handshake`.
+/// As with [`create_non_interactive_handshake`], the constrained return value is the source of truth for the secrets.
 ///
 /// Any handshake already registered for the pair is overwritten.
 pub(crate) fn create_interactive_handshake(

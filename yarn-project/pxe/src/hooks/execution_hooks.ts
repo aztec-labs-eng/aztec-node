@@ -14,8 +14,8 @@ import type { defaultMessagingSecretStrategy } from './resolve_messaging_secret_
  * For example, {@link authorizeUtilityCall} is called whenever a utility function makes a cross-contract call. A call
  * made by a malicious contract could leak private information, so the hook lets the wallet decide, per-call, whether
  * to allow it. A static allowlist would not work here because neither the app nor the wallet can predict ahead of
- * time which contracts will be invoked during execution. Calls to standard contracts (such as the HandshakeRegistry)
- * bypass this hook and are always authorized. When the hook is absent, cross-contract utility calls are denied.
+ * time which contracts will be invoked during execution. Calls to the handshake registry's read functions bypass this
+ * hook and are always authorized. When the hook is absent, cross-contract utility calls are denied.
  *
  * Note: hooks are unrelated to authentication witnesses (authwits). Authwits are an on-chain
  * mechanism where a contract verifies that a caller was authorized by a specific account; hooks
@@ -32,10 +32,10 @@ import type { defaultMessagingSecretStrategy } from './resolve_messaging_secret_
  *         ? { authorized: true }
  *         : { authorized: false, reason: 'Unknown target' };
  *     },
- *     // Apply per-recipient policy: reach a known contact via their address keys (no onchain trace) and apply PXE's
- *     // default to everyone else.
+ *     // Use address-derived secrets for unconstrained messages to known contacts, who have registered this account as
+ *     // a sender, and PXE's default for everything else.
  *     resolveMessagingSecretStrategy: async request =>
- *       knownContacts.has(request.recipient.toString())
+ *       request.deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && knownContacts.has(request.recipient.toString())
  *         ? { type: 'address-derived' }
  *         : defaultMessagingSecretStrategy(request),
  *   },
@@ -46,9 +46,9 @@ export interface ExecutionHooks {
   /** Called when a contract attempts a cross-contract utility call. Calls are denied when absent. */
   authorizeUtilityCall?: AuthorizeUtilityCall;
   /**
-   * Resolves a message's messaging secret when none is already established for the sender/recipient pair, letting the
-   * wallet apply per-recipient policy. PXE applies {@link defaultMessagingSecretStrategy} when absent.
-   * See {@link ResolveMessagingSecretStrategy} for the request shape.
+   * Chooses the messaging secret strategy for outgoing messages, letting the wallet apply per-recipient policy; see
+   * {@link ResolveMessagingSecretStrategy} for when PXE calls it. PXE applies {@link defaultMessagingSecretStrategy}
+   * when absent.
    */
   resolveMessagingSecretStrategy?: ResolveMessagingSecretStrategy;
   /**
