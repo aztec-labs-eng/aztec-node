@@ -1,0 +1,89 @@
+name: Public API report comment
+
+on:
+  workflow_run:
+    workflows: [Public API report]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: public-api-comment-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      # This workflow runs from the default branch and never checks out or executes PR code.
+      - name: Download report data
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: public-api-report
+          path: ${{ runner.temp }}/public-api-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update API changes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_DIRECTORY: ${{ runner.temp }}/public-api-comment
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { owner, repo } = context.repo;
+            const run = context.payload.workflow_run;
+            const directory = process.env.REPORT_DIRECTORY;
+            const reportFile = path.join(directory, 'report.json');
+            if (!fs.existsSync(reportFile)) {
+              core.info('Analysis did not produce a report; no PR comment will be changed.');
+              return;
+            }
+            const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+            if (!['api-changed', 'no-api-changes'].includes(report.status)) {
+              core.info(`Analysis is ${report.status}; no PR comment will be changed.`);
+              return;
+            }
+            const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'pull-request.json'), 'utf8'));
+            if (!Number.isSafeInteger(metadata.number) || metadata.number <= 0) {
+              throw new Error('Invalid pull request number in report context');
+            }
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: metadata.number });
+            const associated = run.pull_requests ?? [];
+            if (pr.state !== 'open' || pr.head.sha !== run.head_sha || metadata.headSha !== run.head_sha ||
+                pr.head.ref !== run.head_branch || pr.head.repo?.id !== run.head_repository?.id ||
+                pr.base.repo.full_name !== `${owner}/${repo}` || pr.base.ref !== metadata.baseRef ||
+                (associated.length > 0 && !associated.some(item => item.number === metadata.number))) {
+              core.info('Report is stale or does not match the triggering PR; skipping comment.');
+              return;
+            }
+            const marker = '<!-- aztec-public-api-report -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const previous = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker));
+            if (report.status === 'no-api-changes') {
+              if (previous) await github.rest.issues.deleteComment({ owner, repo, comment_id: previous.id });
+              return;
+            }
+            if (!['added', 'removed', 'modified'].some(kind =>
+                Array.isArray(report.changes?.[kind]) && report.changes[kind].length > 0)) {
+              throw new Error('API-changed report has no change entries');
+            }
+            const markdown = fs.readFileSync(path.join(directory, 'report.md'), 'utf8');
+            const footer = `\n\nReport for \`${run.head_sha.slice(0, 12)}\` · [Full report and JSON artifact](${run.html_url})`;
+            const truncated = markdown.length > 58000;
+            const body = `${marker}\n${markdown.slice(0, 58000)}` +
+              (truncated ? '\n\n_Report truncated; see the full report linked below._' : '') + footer;
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }

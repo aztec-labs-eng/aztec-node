@@ -56,6 +56,25 @@ jobs:
           echo '## Public API analysis failed' >> "$GITHUB_STEP_SUMMARY"
           echo 'The checkout, parser setup, or report command failed before writing a report. No API comparison was produced; inspect the failed step.' >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Attach pull request context
+        if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import path from 'node:path';
+          const output = path.join(process.env.RUNNER_TEMP, 'public-api-report');
+          mkdirSync(output, { recursive: true });
+          writeFileSync(path.join(output, 'pull-request.json'), JSON.stringify({
+            number: Number(process.env.PR_NUMBER),
+            headSha: process.env.PR_HEAD_SHA,
+            baseRef: process.env.PR_BASE_REF,
+          }));
+          NODE
+
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

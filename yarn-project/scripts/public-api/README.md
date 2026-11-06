@@ -39,6 +39,15 @@ The workflow installs only the exact TypeScript version resolved in `yarn.lock`,
 runner's temporary directory. It uses read-only repository permission, no secrets, and no write credentials. Both summaries
 and artifacts survive a detected API difference; checkout/setup/analysis errors are reported separately.
 
+A separate `public-api-comment.yml` workflow reads the completed report and posts one bot comment when APIs change.
+Later runs update that comment; a complete report with no changes removes the previous findings. Failed or incomplete
+analysis does not create a comment. The comment includes the analyzed commit and a link to the full report.
+
+The comment workflow runs trusted default-branch code with artifact-read and PR-comment permissions; it never checks out
+or executes the PR. This also permits comments for fork PRs while the analyzer remains read-only. PR identity and current
+head are checked before publishing, so stale runs cannot update the current report. Like other `workflow_run` workflows,
+commenting starts after the workflow is merged into the default branch.
+
 A same-revision comparison on the initial main snapshot reads Git objects in batches and parses about 290 source files:
 roughly 5–7 seconds and 360 MB peak RSS locally, with 424 environment, 663 CLI, and 142 RPC entries. Runtime varies with source
 size and runner hardware. No submodules or monorepo installation are needed.
