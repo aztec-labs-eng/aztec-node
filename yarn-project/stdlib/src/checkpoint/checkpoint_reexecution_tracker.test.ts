@@ -187,15 +187,26 @@ describe('CheckpointReexecutionTracker', () => {
   describe('recordTxsCollected', () => {
     const txs = (n: number) => times(n, () => TxHash.random());
 
-    it('vouches only for the exact tx list collected at that slot', () => {
+    it('vouches for a block only if all its txs were recorded for that slot', () => {
       const collected = txs(2);
       tracker.recordTxsCollected(SlotNumber(11), collected);
 
       expect(tracker.hasCollectedTxs(SlotNumber(11), collected)).toBe(true);
-      expect(tracker.hasCollectedTxs(SlotNumber(11), [...collected].reverse())).toBe(false);
-      expect(tracker.hasCollectedTxs(SlotNumber(11), collected.slice(0, 1))).toBe(false);
       expect(tracker.hasCollectedTxs(SlotNumber(11), txs(2))).toBe(false);
+    });
+
+    it('does not count txs recorded for another slot', () => {
+      const collected = txs(2);
+      tracker.recordTxsCollected(SlotNumber(11), collected);
+
       expect(tracker.hasCollectedTxs(SlotNumber(12), collected)).toBe(false);
+    });
+
+    it('does not vouch for a block mixing a recorded tx and an unrecorded one', () => {
+      const [recorded] = txs(1);
+      tracker.recordTxsCollected(SlotNumber(11), [recorded]);
+
+      expect(tracker.hasCollectedTxs(SlotNumber(11), [recorded, TxHash.random()])).toBe(false);
     });
 
     it('does not vouch for txs it never recorded as collected', () => {
@@ -203,7 +214,7 @@ describe('CheckpointReexecutionTracker', () => {
       expect(tracker.hasCollectedTxs(SlotNumber(11), [])).toBe(false);
     });
 
-    it('keeps every tx list collected for the same slot', () => {
+    it('keeps the txs of every proposal recorded for the same slot', () => {
       const first = txs(2);
       const second = txs(3);
       tracker.recordTxsCollected(SlotNumber(11), first);
@@ -213,7 +224,7 @@ describe('CheckpointReexecutionTracker', () => {
       expect(tracker.hasCollectedTxs(SlotNumber(11), second)).toBe(true);
     });
 
-    it('preserves collected tx lists when recordOutcome fires for the same slot', () => {
+    it('preserves collected txs when recordOutcome fires for the same slot', () => {
       const collected = txs(2);
       tracker.recordTxsCollected(SlotNumber(11), collected);
 
@@ -223,7 +234,7 @@ describe('CheckpointReexecutionTracker', () => {
       expect(tracker.getOutcomeForSlot(SlotNumber(11))).toBe('valid');
     });
 
-    it('removeBefore drops collected tx lists together with their slot', () => {
+    it('removeBefore drops collected txs together with their slot', () => {
       const atSlot10 = txs(1);
       const atSlot20 = txs(1);
       tracker.recordTxsCollected(SlotNumber(10), atSlot10);
@@ -237,7 +248,7 @@ describe('CheckpointReexecutionTracker', () => {
       expect(tracker.hasCollectedTxs(SlotNumber(20), atSlot20)).toBe(true);
     });
 
-    it('removeBefore drops standalone collected tx lists via the slot watermark', () => {
+    it('removeBefore drops standalone collected txs via the slot watermark', () => {
       // recordTxsCollected without a subsequent recordOutcome creates a slot-only entry with
       // no checkpoint number; it must still be reachable by the slot-watermark cleanup.
       const atSlot5 = txs(1);

@@ -38,8 +38,8 @@ export type ReexecutionDetails = {
 /**
  * Tracks two pieces of per-slot state collected during proposal handling:
  *
- *  1. The tx hash lists of the block proposals whose transactions were all collected locally
- *     (keyed by `slot` and the ordered tx hashes). Consumed by the data-withholding watcher.
+ *  1. The txs this node held at proposal time, from block proposals whose txs were all collected
+ *     locally (per `slot`, by tx hash). Consumed by the data-withholding watcher.
  *  2. The outcome of locally re-executing each checkpoint proposal (keyed by
  *     `(checkpointNumber, archiveRoot)` and by `slot`). Consumed by the data-withholding
  *     watcher (via `hasReexecuted`) and the sentinel (via `getOutcomeForSlot` and `getRecordForSlot`).
@@ -58,8 +58,8 @@ interface Entry {
 
   slot: SlotNumber;
 
-  // Keys (see txListKey) of the tx hash lists of every block proposal at this slot whose txs were all collected.
-  collectedTxLists: Set<string>;
+  // Hashes of the txs of every block proposal at this slot whose txs were all collected.
+  collectedTxs: Set<string>;
 
   // Set by recordEquivocation when a proposal equivocation is seen for this slot. Consumed by the
   // sentinel: an honest attestor may have seen an invalid version of an equivocated proposal and
@@ -90,7 +90,7 @@ export class CheckpointReexecutionTracker {
   ): void {
     const archiveRootStr = archiveRoot.toString();
 
-    // Preserve any collected tx lists already accumulated for this slot.
+    // Preserve any collected txs already accumulated for this slot.
     const existing = this.bySlot.get(slot);
     const entry: Entry = {
       checkpointNumber,
@@ -99,7 +99,7 @@ export class CheckpointReexecutionTracker {
       payloadHash: details.payloadHash,
       slot,
       outcome,
-      collectedTxLists: existing?.collectedTxLists ?? new Set(),
+      collectedTxs: existing?.collectedTxs ?? new Set(),
       equivocated: existing?.equivocated ?? false,
     };
 
@@ -122,12 +122,12 @@ export class CheckpointReexecutionTracker {
    * now is too weak (txs may have been evicted from the mempool by the time the watcher runs), but a record that the
    * txs *were* available at proposal time still vouches for the block.
    *
-   * The record is keyed by the proposal's ordered tx hashes rather than by its position in the checkpoint, so it only
-   * vouches for a published block with exactly these txs, whatever index the proposal claimed. Every collected list
-   * for the slot is kept, so a later proposal for the slot does not replace an earlier one.
+   * The record vouches, per tx, that this node held each listed tx at proposal time for this slot. A vouched tx counts
+   * for whichever published block of the slot contains it, regardless of the block's index or the order of its txs,
+   * and records from every proposal for the slot accumulate, so a later proposal does not replace an earlier one.
    *
    * @param slot - Slot the block proposal was for.
-   * @param txHashes - The proposal's tx hashes, in block order.
+   * @param txHashes - The proposal's tx hashes.
    */
   public recordTxsCollected(slot: SlotNumber, txHashes: readonly TxHash[]): void {
     let entry = this.bySlot.get(slot);
@@ -139,12 +139,14 @@ export class CheckpointReexecutionTracker {
         payloadHash: undefined,
         slot,
         outcome: undefined,
-        collectedTxLists: new Set(),
+        collectedTxs: new Set(),
         equivocated: false,
       };
       this.bySlot.set(slot, entry);
     }
-    entry.collectedTxLists.add(txListKey(txHashes));
+    for (const txHash of txHashes) {
+      entry.collectedTxs.add(txHash.toString());
+    }
   }
 
   /**
@@ -162,7 +164,7 @@ export class CheckpointReexecutionTracker {
         payloadHash: undefined,
         slot,
         outcome: undefined,
-        collectedTxLists: new Set(),
+        collectedTxs: new Set(),
         equivocated: true,
       });
     } else {
@@ -218,12 +220,13 @@ export class CheckpointReexecutionTracker {
   }
 
   /**
-   * Whether this node collected every tx of a block proposal at the given slot with exactly these tx hashes, in this
-   * order. `false` means no such record (we never saw such a proposal, or failed to collect its txs), so callers
-   * should fall back to a current-state check such as a mempool probe.
+   * Whether every given tx was recorded by {@link recordTxsCollected} for this slot, in any order and from any
+   * proposals. `false` means some tx was not (we never saw a proposal carrying it, or failed to collect that
+   * proposal's txs), so callers should fall back to a current-state check such as a mempool probe.
    */
   public hasCollectedTxs(slot: SlotNumber, txHashes: readonly TxHash[]): boolean {
-    return this.bySlot.get(slot)?.collectedTxLists.has(txListKey(txHashes)) ?? false;
+    const collected = this.bySlot.get(slot)?.collectedTxs;
+    return collected !== undefined && txHashes.every(txHash => collected.has(txHash.toString()));
   }
 
   /** Drops entries for checkpoints with `number < checkpointNumber`. */
@@ -256,9 +259,4 @@ export class CheckpointReexecutionTracker {
       }
     }
   }
-}
-
-/** Identifies an ordered tx hash list within a slot. Hashes are hex strings, so a comma cannot appear inside one. */
-function txListKey(txHashes: readonly TxHash[]): string {
-  return txHashes.map(h => h.toString()).join(',');
 }
