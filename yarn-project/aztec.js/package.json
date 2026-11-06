@@ -106,7 +106,7 @@
     "buffer": "^6.0.3",
     "tslib": "^2.4.0",
     "viem": "2.57.1",
-    "zod": "~4.4.3"
+    "zod": "~4.6.7"
   },
   "devDependencies": {
     "@aztec-foundation/protocol-contracts-artifacts": "0.1.0-dummy",
