@@ -9,7 +9,7 @@ import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
-import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -169,65 +169,73 @@ export async function createAztecNodeService(
     );
   }
 
-  // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through it,
-  // rather than building its own from the L1 RPC URLs.
-  const publicClient = createPublicClient({
-    chain: ethereumChain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
-    pollingInterval: config.viemPollingIntervalMS,
-  });
-
-  // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
-  // or trace calls.
-  const debugClient =
-    config.l1DebugRpcUrls.length > 0
-      ? (createPublicClient({
-          chain: ethereumChain.chainInfo,
-          transport: makeL1HttpTransport(config.l1DebugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
-          pollingInterval: config.viemPollingIntervalMS,
-        }) as ViemPublicDebugClient)
-      : undefined;
-
-  const l1ContractsAddresses = await RegistryContract.collectAddresses(
-    publicClient,
-    config.registryAddress,
-    config.rollupVersion ?? 'canonical',
-  );
-
-  Object.assign(config, l1ContractsAddresses);
-
-  const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
-  // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
-  // bucket ring before accepting it, so every node needs one, validator or not.
-  const inboxContract = new InboxContract(publicClient, config.inboxAddress);
-  const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
-    rollupContract.getL1GenesisTime(),
-    rollupContract.getSlotDuration(),
-    rollupContract.getEpochDuration(),
-    rollupContract.getVersion(),
-  ] as const);
-
-  config.rollupVersion ??= Number(rollupVersionFromRollup);
-
-  if (config.rollupVersion !== Number(rollupVersionFromRollup)) {
-    log.warn(
-      `Registry looked up and returned a rollup with version (${config.rollupVersion}), but this does not match with version detected from the rollup directly: (${rollupVersionFromRollup}).`,
-    );
-  }
-
-  const blobClient = await createBlobClientWithFileStores(config, {
-    l1Client: publicClient,
-    logger: log.createChild('blob-client'),
-  });
-
-  // attempt snapshot sync if possible
-  await trySnapshotSync(config, publicClient, log, options.genesis);
-
-  const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
-
-  // Track started resources so we can clean up on partial failure during node creation.
+  // Track started resources so we can clean up on partial failure during node creation. Each L1 RPC grader goes in as
+  // soon as its transport starts it, so a failure building the next one does not leave it running.
   const started: { stop?(): Promise<void> | void }[] = [];
+  const l1RpcGraders: { stop(): Promise<void> }[] = [];
+  const makeL1Client = (urls: string[], graderName: string): ViemPublicClient => {
+    const transport = makeL1HttpTransport(urls, {
+      timeout: config.l1HttpTimeoutMS,
+      grader: { config, chainId: config.l1ChainId, logger: log.createChild(graderName) },
+    });
+    if (transport.grader) {
+      l1RpcGraders.push(transport.grader);
+      started.push(transport.grader);
+    }
+    return createPublicClient({
+      chain: ethereumChain.chainInfo,
+      transport,
+      pollingInterval: config.viemPollingIntervalMS,
+    });
+  };
+
   try {
+    // The one L1 public client of this process. Every module the node builds below reads from and sends to L1 through
+    // it, rather than building its own from the L1 RPC URLs.
+    const publicClient = makeL1Client(config.l1RpcUrls, 'l1-rpc-grader');
+    // The archiver traces L1 txs over the debug RPC URLs when there are any, since the regular ones may not serve debug
+    // or trace calls.
+    const debugClient = (
+      config.l1DebugRpcUrls.length > 0 ? makeL1Client(config.l1DebugRpcUrls, 'l1-debug-rpc-grader') : publicClient
+    ) as ViemPublicDebugClient;
+
+    const l1ContractsAddresses = await RegistryContract.collectAddresses(
+      publicClient,
+      config.registryAddress,
+      config.rollupVersion ?? 'canonical',
+    );
+
+    Object.assign(config, l1ContractsAddresses);
+
+    const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+    // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
+    // bucket ring before accepting it, so every node needs one, validator or not.
+    const inboxContract = new InboxContract(publicClient, config.inboxAddress);
+    const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup] = await Promise.all([
+      rollupContract.getL1GenesisTime(),
+      rollupContract.getSlotDuration(),
+      rollupContract.getEpochDuration(),
+      rollupContract.getVersion(),
+    ] as const);
+
+    config.rollupVersion ??= Number(rollupVersionFromRollup);
+
+    if (config.rollupVersion !== Number(rollupVersionFromRollup)) {
+      log.warn(
+        `Registry looked up and returned a rollup with version (${config.rollupVersion}), but this does not match with version detected from the rollup directly: (${rollupVersionFromRollup}).`,
+      );
+    }
+
+    const blobClient = await createBlobClientWithFileStores(config, {
+      l1Client: publicClient,
+      logger: log.createChild('blob-client'),
+    });
+
+    // attempt snapshot sync if possible
+    await trySnapshotSync(config, publicClient, log, options.genesis);
+
+    const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
+
     // Governance can change the rollup's fee settings (the mana target and limit among them) at any time, so every
     // component that needs them reads them from this tracker rather than from a copy taken at startup.
     const feeConfigTracker = await RollupFeeConfigTracker.create(rollupContract, {
@@ -261,7 +269,7 @@ export async function createAztecNodeService(
       config,
       {
         l1Client: publicClient,
-        l1DebugClient: debugClient ?? (publicClient as ViemPublicDebugClient),
+        l1DebugClient: debugClient,
         blobClient,
         epochCache,
         telemetry,
@@ -725,6 +733,7 @@ export async function createAztecNodeService(
       slasherClient,
       validatorsSentinel,
       stopStartedWatchers,
+      l1RpcGraders,
       l1ChainId: ethereumChain.chainInfo.id,
       version: config.rollupVersion,
       globalVariableBuilder,
