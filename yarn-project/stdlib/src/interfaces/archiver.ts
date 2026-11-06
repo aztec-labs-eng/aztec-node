@@ -60,7 +60,7 @@ export type ArchiverSpecificConfig = {
   /** Whether to allow starting the archiver without debug/trace method support on Ethereum hosts */
   ethereumAllowNoDebugHosts?: boolean;
 
-  /** Skip the startup check that probes the L1 RPC for historical logs on the Rollup contract. */
+  /** Log a warning instead of failing startup when an L1 RPC returns empty results for logs it should have. */
   archiverSkipHistoricalLogsCheck?: boolean;
 
   /** Skip validating checkpoint attestations (for testing purposes only) */

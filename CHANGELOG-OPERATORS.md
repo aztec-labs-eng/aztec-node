@@ -32,6 +32,14 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Startup L1 logs check reads from the node's latest checkpoint ([#683](https://github.com/aztec-labs-eng/aztec-node/pull/683))
+
+At startup the archiver asked every URL in `ETHEREUM_HOSTS` for the Rollup's deployment event, and refused to start if any URL returned nothing or an error. A node on L1 full nodes needed `ARCHIVER_SKIP_HISTORICAL_LOGS_CHECK=true` even when restored from a recent snapshot.
+
+It now asks each URL for the event of the latest checkpoint the node already holds, and only asks for the deployment event on a node with no checkpoints yet. A URL that answers with an error, including JSON-RPC error 4444 for pruned history, now only logs a warning, since requests move past it to the next URL. Startup still fails when a URL returns an empty result from a block it holds: such a URL hides logs from sync without an error, even alongside good URLs. A full node passes as long as it keeps logs back to the node's latest checkpoint, roughly the last 12 hours with a recent snapshot.
+
+**Migration**: none required. If you set `ARCHIVER_SKIP_HISTORICAL_LOGS_CHECK=true` only to start against full nodes or a provider that answers 4444 for old ranges, you can remove it. If startup fails naming a URL, that L1 node returns empty results for logs it has pruned: upgrade it (Reth 2.6.0 and later answer with an error), keep the Rollup and Inbox logs with Reth's `prune.segments.receipts_log_filter`, or remove the URL.
+
 ### Nightly tags from `main` are now `v7.0.0-nightly.<date>` ([#656](https://github.com/aztec-labs-eng/aztec-node/pull/656))
 
 `main` has moved to the 7.0.0 line, and the 6.x line now lives on the `v6` branch, which cuts its own nightlies. Both are tagged every night, so `v6.1.0-nightly.20261105` and `v7.0.0-nightly.20261105` both exist and are different code.
