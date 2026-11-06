@@ -22,6 +22,7 @@ import {
   witnessMapToFields,
 } from '@aztec-labs/simulator/client';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -1107,8 +1108,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     }
 
     if (!targetContractAddress.equals(this.contractAddress)) {
-      // Standard handshake registry reads are authorized by default; every other cross-contract call needs the hook.
-      if (!(await isStandardHandshakeRegistryUtilityRead(targetContractAddress, functionSelector))) {
+      // Preauthorized calls skip the hook, every other cross-contract call needs it.
+      if (!(await isPreauthorizedUtilityCall(targetContractAddress, functionSelector))) {
         const [callerClassId, targetClassId] = await allToCompletion([
           this.anchoredContractData.getCurrentClassId(this.contractAddress),
           this.anchoredContractData.getCurrentClassId(targetContractAddress),
@@ -1387,13 +1388,28 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 }
 
-// Registry reads that any contract may issue without an `authorizeUtilityCall` hook. Aztec.nr's message delivery and
-// discovery call these implicitly for the app, and they are safe to default-authorize: `get_app_siloed_secrets` siloes
-// every returned secret to `msg_sender`, and `get_non_interactive_handshakes` only exposes ephemeral public keys, from
-// which the shared secret cannot be derived without the recipient's secret keys.
-const STANDARD_HANDSHAKE_REGISTRY_DEFAULT_AUTHORIZED_READ_SIGNATURES = [
-  'get_non_interactive_handshakes((Field),u32)',
-  'get_app_siloed_secrets((Field),(Field))',
+// Cross-contract utility calls that any contract may make without an `authorizeUtilityCall` hook. Aztec.nr makes these
+// on the app's behalf, and each is safe to make for any app.
+const PREAUTHORIZED_UTILITY_CALLS: { contract: AztecAddress; signatures: string[] }[] = [
+  {
+    // Aztec.nr's message delivery and discovery read handshakes from the handshake registry.
+    contract: STANDARD_HANDSHAKE_REGISTRY_ADDRESS,
+    signatures: [
+      // Only exposes ephemeral public keys, from which the shared secret cannot be derived without the recipient's
+      // secret keys.
+      'get_non_interactive_handshakes((Field),u32)',
+      // Siloes every returned secret to `msg_sender`.
+      'get_app_siloed_secrets((Field),(Field))',
+    ],
+  },
+  {
+    // Aztec.nr reads recipients' post-quantum public keys from the post-quantum public key registry.
+    contract: STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS,
+    signatures: [
+      // Only returns public keys.
+      'get_post_quantum_public_key((Field))',
+    ],
+  },
 ];
 
 async function doesSelectorHaveSignature(functionSelector: FunctionSelector, signature: string): Promise<boolean> {
@@ -1401,23 +1417,22 @@ async function doesSelectorHaveSignature(functionSelector: FunctionSelector, sig
 }
 
 /**
- * Whether a cross-contract utility call targets one of the standard handshake registry's read functions.
+ * Whether a cross-contract utility call is one of the {@link PREAUTHORIZED_UTILITY_CALLS}.
  *
- * These reads are authorized by PXE for every wallet, without consulting the `authorizeUtilityCall` hook, so that
- * wallets don't need to know the handshake registry exists in order to deliver and discover messages through it.
+ * These calls are authorized by PXE for every wallet, without consulting the `authorizeUtilityCall` hook, so that
+ * wallets don't need to know the registries exist in order to send and discover messages through them.
  */
-async function isStandardHandshakeRegistryUtilityRead(
+async function isPreauthorizedUtilityCall(
   targetContractAddress: AztecAddress,
   functionSelector: FunctionSelector,
 ): Promise<boolean> {
-  if (!targetContractAddress.equals(STANDARD_HANDSHAKE_REGISTRY_ADDRESS)) {
+  const calls = PREAUTHORIZED_UTILITY_CALLS.find(({ contract }) => contract.equals(targetContractAddress));
+  if (!calls) {
     return false;
   }
 
   const matches = await allToCompletion(
-    STANDARD_HANDSHAKE_REGISTRY_DEFAULT_AUTHORIZED_READ_SIGNATURES.map(signature =>
-      doesSelectorHaveSignature(functionSelector, signature),
-    ),
+    calls.signatures.map(signature => doesSelectorHaveSignature(functionSelector, signature)),
   );
   return matches.some(Boolean);
 }

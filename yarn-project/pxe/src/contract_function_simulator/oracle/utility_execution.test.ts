@@ -11,6 +11,8 @@ import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js
 import { type CircuitSimulator, WASMSimulator, toACVMField } from '@aztec-labs/simulator/client';
 import { HandshakeRegistryArtifact } from '@aztec-labs/standard-contracts/handshake-registry';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { PostQuantumPublicKeyRegistryArtifact } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry';
+import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import {
   type ContractArtifact,
   FunctionCall,
@@ -474,9 +476,8 @@ describe('Utility Execution test suite', () => {
       });
     });
 
-    // Pins the production oracle's default-authorization allowlist for cross-contract utility reads of the
-    // standard HandshakeRegistry: only get_non_interactive_handshakes and get_app_siloed_secrets are allowed,
-    // everything else is denied.
+    // Pins the production oracle's preauthorized cross-contract utility calls to the standard registries: only the calls
+    // listed for each registry are allowed without a hook, everything else is denied.
     describe('cross-contract utility authorization', () => {
       const prepareNestedUtilityCall = async (
         targetContractAddress: AztecAddress,
@@ -512,16 +513,10 @@ describe('Utility Execution test suite', () => {
       };
 
       let nestedSimulator: ReturnType<typeof makeNestedSimulator>;
-      // The standard HandshakeRegistry reads the oracle default-authorizes, mapped to the args each is called with.
-      let defaultAuthorizedHandshakeRegistryReads: Map<string, Fr[]>;
 
       beforeEach(() => {
         nestedSimulator = makeNestedSimulator();
         utilityExecutionOracle = makeOracle({ simulator: nestedSimulator });
-        defaultAuthorizedHandshakeRegistryReads = new Map<string, Fr[]>([
-          ['get_non_interactive_handshakes', []],
-          ['get_app_siloed_secrets', [Fr.random(), Fr.random()]],
-        ]);
       });
 
       afterEach(() => {
@@ -529,31 +524,41 @@ describe('Utility Execution test suite', () => {
         nestedSimulator.executeUserCircuit.mockClear();
       });
 
-      it.each(HandshakeRegistryArtifact.functions.map(fn => fn.name))(
-        'authorizes %s only if it is in the standard HandshakeRegistry read allowlist',
-        async name => {
-          const selector = await prepareNestedUtilityCall(
-            STANDARD_HANDSHAKE_REGISTRY_ADDRESS,
-            HandshakeRegistryArtifact,
-            name,
-          );
+      // Each standard registry with its preauthorized calls, mapped to the args each is called with.
+      describe.each([
+        {
+          name: 'HandshakeRegistry',
+          address: STANDARD_HANDSHAKE_REGISTRY_ADDRESS,
+          artifact: HandshakeRegistryArtifact,
+          preauthorizedCalls: new Map<string, Fr[]>([
+            ['get_non_interactive_handshakes', []],
+            ['get_app_siloed_secrets', [Fr.random(), Fr.random()]],
+          ]),
+        },
+        {
+          name: 'PostQuantumPublicKeyRegistry',
+          address: STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS,
+          artifact: PostQuantumPublicKeyRegistryArtifact,
+          preauthorizedCalls: new Map<string, Fr[]>([['get_post_quantum_public_key', [Fr.random()]]]),
+        },
+      ])('$name', ({ address, artifact, preauthorizedCalls }) => {
+        it.each(artifact.functions.map(fn => fn.name))('authorizes %s only if it is preauthorized', async name => {
+          const selector = await prepareNestedUtilityCall(address, artifact, name);
 
-          if (defaultAuthorizedHandshakeRegistryReads.has(name)) {
-            const args = defaultAuthorizedHandshakeRegistryReads.get(name) ?? [];
-            await expect(
-              utilityExecutionOracle.callUtilityFunction(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, selector, args),
-            ).resolves.toEqual([]);
+          if (preauthorizedCalls.has(name)) {
+            const args = preauthorizedCalls.get(name) ?? [];
+            await expect(utilityExecutionOracle.callUtilityFunction(address, selector, args)).resolves.toEqual([]);
             expect(contractSyncService.ensureContractSynced).toHaveBeenCalled();
             expect(nestedSimulator.executeUserCircuit).toHaveBeenCalled();
           } else {
-            await expect(
-              utilityExecutionOracle.callUtilityFunction(STANDARD_HANDSHAKE_REGISTRY_ADDRESS, selector, []),
-            ).rejects.toThrow('Cross-contract utility call denied: No authorizeUtilityCall hook configured');
+            await expect(utilityExecutionOracle.callUtilityFunction(address, selector, [])).rejects.toThrow(
+              'Cross-contract utility call denied: No authorizeUtilityCall hook configured',
+            );
             expect(contractSyncService.ensureContractSynced).not.toHaveBeenCalled();
             expect(nestedSimulator.executeUserCircuit).not.toHaveBeenCalled();
           }
-        },
-      );
+        });
+      });
     });
 
     describe('getSharedSecrets', () => {

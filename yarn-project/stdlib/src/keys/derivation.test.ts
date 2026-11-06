@@ -1,7 +1,11 @@
+import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
+import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem';
+import { Buffer } from 'buffer';
 
-import { computeAddress, computePreaddress } from './derivation.js';
+import { computeAddress, computePreaddress, derivePostQuantumKeyPair } from './derivation.js';
 import { PublicKey, hashPublicKey } from './public_key.js';
 import { PublicKeys } from './public_keys.js';
 
@@ -78,5 +82,31 @@ describe('🔑', () => {
       'expected_computed_address_from_partial_and_pubkeys',
       address.toString(),
     );
+  });
+});
+
+describe('derivePostQuantumKeyPair', () => {
+  it('derives a pair whose secret key decapsulates what is encapsulated to its public key', () => {
+    const { publicKey, secretKey } = derivePostQuantumKeyPair(GrumpkinScalar.random());
+
+    const { cipherText, sharedSecret } = mlKem768.encapsulate(publicKey.toBuffer());
+
+    expect(Buffer.from(mlKem768.decapsulate(cipherText, secretKey))).toEqual(Buffer.from(sharedSecret));
+  });
+
+  it('derives the fixed public key for a fixed tagging key', () => {
+    const { publicKey } = derivePostQuantumKeyPair(new GrumpkinScalar(1n));
+
+    // The key is 1184 bytes long, so this pins its hash.
+    expect(sha256(publicKey.toBuffer()).toString('hex')).toMatchInlineSnapshot(
+      `"8a6e213f75431543e033aa06b9fa20537be2ddae96ca92325535294cef7ac057"`,
+    );
+  });
+
+  it('derives a different pair from each tagging key', () => {
+    const a = derivePostQuantumKeyPair(GrumpkinScalar.random());
+    const b = derivePostQuantumKeyPair(GrumpkinScalar.random());
+
+    expect(b.publicKey.toBuffer()).not.toEqual(a.publicKey.toBuffer());
   });
 });
