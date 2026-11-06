@@ -56,17 +56,17 @@ describe('config', () => {
     expect(() => parseAllowList(`I:${address}:${selector}:cl=abc`)).toThrow('invalid calldataLength');
   });
 
-  it('parses the static flag and minimum setup gas', async () => {
+  it('parses minimum setup gas flags', async () => {
     const address = await AztecAddress.random();
     const selector = FunctionSelector.random();
     const classId = Fr.random();
 
     const allowList = parseAllowList(
-      `I:${address}:${selector}:st+l2=1000+da=64,C:${classId}:${selector}:l2=500,I:${address}:${selector}:da=32+os`,
+      `I:${address}:${selector}:l2=1000+da=64,C:${classId}:${selector}:l2=500,I:${address}:${selector}:da=32+os`,
     );
 
     expect(allowList).toEqual([
-      { address, selector, isStaticCall: true, minGas: new Gas(64, 1000) },
+      { address, selector, minGas: new Gas(64, 1000) },
       { classId, selector, minGas: new Gas(0, 500) },
       { address, selector, minGas: new Gas(32, 0), onlySelf: true },
     ]);

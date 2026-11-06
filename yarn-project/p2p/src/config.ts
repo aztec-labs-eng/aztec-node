@@ -525,7 +525,7 @@ export const p2pConfigMappings: ConfigMappingsType<P2PConfig> = {
     env: 'TX_PUBLIC_SETUP_ALLOWLIST',
     parseEnv: (val: string) => parseAllowList(val),
     description:
-      'Additional entries to extend the default setup allow list. Format: I:address:selector[:flags],C:classId:selector[:flags]. Flags: os (onlySelf), rn (rejectNullMsgSender), cl=N (calldataLength), st (call must be static; without it the call must be non-static), l2=N and da=N (L2 and DA gas the call needs in setup; txs whose gas limits leave setup less are rejected), joined with +. Only add functions that cannot revert for any calldata the entry allows: a failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.',
+      'Additional entries to extend the default setup allow list. Format: I:address:selector[:flags],C:classId:selector[:flags]. Flags: os (onlySelf), rn (rejectNullMsgSender), cl=N (calldataLength), l2=N and da=N (L2 and DA gas the call needs in setup; txs whose gas limits leave setup less are rejected), joined with +. Static setup calls are always rejected. Only add functions that cannot revert for any calldata the entry allows: a failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.',
     printDefault: () =>
       'Default: AuthRegistry._set_authorized, AuthRegistry.set_authorized, FeeJuice._increase_public_balance',
   },
@@ -700,15 +700,12 @@ export const bootnodeConfigMappings = pickConfigMappings(
   bootnodeConfigKeys,
 );
 
-type AllowListFlags = Pick<
-  AllowedElement,
-  'onlySelf' | 'rejectNullMsgSender' | 'calldataLength' | 'isStaticCall' | 'minGas'
->;
+type AllowListFlags = Pick<AllowedElement, 'onlySelf' | 'rejectNullMsgSender' | 'calldataLength' | 'minGas'>;
 
 /**
  * Parses a `+`-separated flags string into validation properties for an allow list entry.
- * Supported flags: `os` (onlySelf), `rn` (rejectNullMsgSender), `cl=N` (calldataLength), `st` (isStaticCall),
- * `l2=N` and `da=N` (minGas; a dimension left unset is zero).
+ * Supported flags: `os` (onlySelf), `rn` (rejectNullMsgSender), `cl=N` (calldataLength), `l2=N` and `da=N` (minGas; a
+ * dimension left unset is zero).
  */
 function parseFlags(flags: string, entry: string): AllowListFlags {
   const result: AllowListFlags = {};
@@ -728,8 +725,6 @@ function parseFlags(flags: string, entry: string): AllowListFlags {
       result.onlySelf = true;
     } else if (flag === 'rn') {
       result.rejectNullMsgSender = true;
-    } else if (flag === 'st') {
-      result.isStaticCall = true;
     } else if (flag.startsWith('cl=')) {
       result.calldataLength = parseNonNegativeInt(flag, 'calldataLength');
     } else if (flag.startsWith('l2=')) {
@@ -738,7 +733,7 @@ function parseFlags(flags: string, entry: string): AllowListFlags {
       minDaGas = parseNonNegativeInt(flag, 'minimum DA gas');
     } else {
       throw new Error(
-        `Invalid allow list entry "${entry}": unknown flag "${flag}". Supported flags: os, rn, cl=N, st, l2=N, da=N.`,
+        `Invalid allow list entry "${entry}": unknown flag "${flag}". Supported flags: os, rn, cl=N, l2=N, da=N.`,
       );
     }
   }
@@ -756,9 +751,8 @@ function parseFlags(flags: string, entry: string): AllowListFlags {
  *
  * An optional flags segment can be appended after the selector:
  * `I:${address}:${selector}:${flags}` or `C:${classId}:${selector}:${flags}`
- * where flags is a `+`-separated list of: `os` (onlySelf), `rn` (rejectNullMsgSender), `cl=N` (calldataLength),
- * `st` (isStaticCall: the call must be static; without it the call must be non-static), and `l2=N` / `da=N` (minGas: the
- * L2 and DA gas the call needs in setup; a dimension left unset is zero).
+ * where flags is a `+`-separated list of: `os` (onlySelf), `rn` (rejectNullMsgSender), `cl=N` (calldataLength), and
+ * `l2=N` / `da=N` (minGas: the L2 and DA gas the call needs in setup; a dimension left unset is zero).
  *
  * @param value The string to parse
  * @returns A list of allowed elements
