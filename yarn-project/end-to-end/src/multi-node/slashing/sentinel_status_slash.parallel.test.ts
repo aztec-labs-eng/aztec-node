@@ -4,8 +4,11 @@ import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { unique } from '@aztec-labs/foundation/collection';
+import { TimeoutError } from '@aztec-labs/foundation/error';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { OffenseType } from '@aztec-labs/slasher';
+import { getSlotRangeForEpoch, getSlotStartBuildTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import type { ValidatorStatusInSlot } from '@aztec-labs/stdlib/validators';
 import { jest } from '@jest/globals';
@@ -15,8 +18,9 @@ import {
   MultiNodeTestContext,
   SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
   buildMockGossipValidators,
+  getProposerFixingSeed,
 } from '../multi_node_test_context.js';
-import { SENTINEL_TIMING, awaitCommitteeExists, findUpcomingProposerSlot } from './setup.js';
+import { SENTINEL_TIMING, awaitCommitteeExists } from './setup.js';
 
 /**
  * Exercises the sentinel's six-case proposer-status taxonomy end-to-end by driving each of the
@@ -66,6 +70,9 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
 
   beforeEach(async () => {
     test = await MultiNodeTestContext.setup({
+      // Sets every epoch up early, so a proposer slot that opens an epoch is not lost while the slot's committee is
+      // unknown. Without it the malicious node can lose every proposal after its first one.
+      keepEpochsSetUp: true,
       ...SLASHER_ENABLED_MULTI_VALIDATOR_OPTS,
       ...SENTINEL_TIMING,
       aztecTargetCommitteeSize: COMMITTEE_SIZE,
@@ -177,7 +184,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
     expectedStatus: ValidatorStatusInSlot;
   }): Promise<void> {
     const targetAddress = await spawnMaliciousAndHonestNodes(maliciousOverride);
-    await warpToSlotBeforeTargetProposer(targetAddress);
+    await warpToStagedTargetProposerSlot(targetAddress);
     // nodes[0] is the malicious node; honest observers are nodes[1..].
     const honestObservers = nodes.slice(1);
     const faultSlot = await findObservedStatusSlot(honestObservers, targetAddress, expectedStatus);
@@ -218,36 +225,79 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
     return targetAddress;
   }
 
-  // Land two slots before an upcoming slot in which `targetAddress` is the proposer, so the network
-  // has a slot of real-time to settle before the malicious node (which we control) builds.
-  const MIN_LEAD_SLOTS = 2;
+  // A search budget: the target is the proposer of the staged epoch's second slot about one attempt in six.
+  const MAX_STAGING_ATTEMPTS = 60;
 
   /**
-   * Warps L1 time to {@link MIN_LEAD_SLOTS} slots before an upcoming slot in which `targetAddress` is
-   * the proposer, so the proposer-pipelining build phase for the target's slot lands on the malicious
-   * node with a slot of real-time for the network to settle first.
+   * Warps to a point where the malicious node is about to propose a slot that every honest observer can validate.
    *
-   * The proposer search is delegated to the shared `findUpcomingProposerSlot`, which scans forward
-   * from {@link MIN_LEAD_SLOTS} ahead — examining both epoch parities so the RANDAO-shuffled 1-of-N
-   * target is reliably found — and guarantees the returned slot is at least {@link MIN_LEAD_SLOTS}
-   * ahead, so the landing warp can never go backwards.
+   * An observer ignores proposals for a slot while its epoch cache reports the slot's committee as unstable, and a
+   * cached unstable lookup can outlive the L1 block that fixes the seed. A warp that lands late in an epoch with no
+   * randao write leaves the next epoch's seed to be fixed just as its proposers start building, so some observers drop
+   * the target's proposal. Each attempt instead warps to the first slot of a staging epoch, fixes the seed of the epoch
+   * after it, and takes a slot of that epoch where the target proposes only once every honest observer reports the
+   * target as its proposer before the target can start building. The observers are checked rather than assumed to
+   * recover within any particular time, and an attempt whose committee does not settle in time is abandoned.
    */
-  async function warpToSlotBeforeTargetProposer(targetAddress: EthAddress): Promise<void> {
-    const epochCache = (nodes[0] as TestAztecNodeService).epochCache;
+  async function warpToStagedTargetProposerSlot(targetAddress: EthAddress): Promise<void> {
     const cheatCodes = test.context.cheatCodes.rollup;
-    const targetSlot = await findUpcomingProposerSlot({
-      epochCache,
-      cheatCodes,
-      targetProposer: targetAddress,
-      logger: test.logger,
-      minLeadSlots: MIN_LEAD_SLOTS,
-    });
-    // The malicious sequencer pipelines for slot N during N-1, so landing at N - MIN_LEAD_SLOTS leaves
-    // slot N-1 of real-time for the network to settle before it broadcasts.
-    const landingSlot = SlotNumber(targetSlot - MIN_LEAD_SLOTS);
-    if (landingSlot > Number(await cheatCodes.getSlot())) {
-      await cheatCodes.advanceToSlot(landingSlot);
+    const constants = test.epochCache.getL1Constants();
+    const honestObservers = nodes.slice(1);
+    for (let attempt = 0; attempt < MAX_STAGING_ATTEMPTS; attempt++) {
+      const stagingEpoch = EpochNumber((await cheatCodes.getEpoch()) + 1);
+      await cheatCodes.advanceToEpoch(stagingEpoch);
+      // advanceToEpoch logs and swallows a failed warp.
+      if ((await cheatCodes.getEpoch()) !== stagingEpoch) {
+        test.logger.warn(`Warp to staging epoch ${stagingEpoch} did not land`, { attempt });
+        continue;
+      }
+      const [firstSlot, lastSlot] = getSlotRangeForEpoch(EpochNumber(stagingEpoch + 1), constants);
+      for (let slot = firstSlot; slot <= lastSlot; slot = SlotNumber(slot + 1)) {
+        let proposer: EthAddress | undefined;
+        try {
+          proposer = await getProposerFixingSeed(test.epochCache, cheatCodes, slot);
+        } catch (err) {
+          if (!(err instanceof TimeoutError)) {
+            throw err;
+          }
+          test.logger.warn(`Committee for slot ${slot} did not become stable, staging again`, { attempt });
+          break;
+        }
+        if (!proposer?.equals(targetAddress)) {
+          continue;
+        }
+        if (await allObserversKnowProposerBeforeBuildStart(honestObservers, slot, targetAddress)) {
+          test.logger.warn(`Staged target proposer ${targetAddress} at slot ${slot}`, { attempt });
+          return;
+        }
+        test.logger.warn(`Not every observer knew the proposer of slot ${slot} before its build start`, { attempt });
+      }
     }
+    throw new Error(`Could not stage target proposer ${targetAddress} in ${MAX_STAGING_ATTEMPTS} attempts`);
+  }
+
+  /**
+   * Polls every observer's epoch cache until each reports `expectedProposer` for `slot`. Returns false if that does not
+   * happen before the slot's proposer can start building it, which under pipelining is one L1 slot before the previous
+   * L2 slot starts.
+   */
+  async function allObserversKnowProposerBeforeBuildStart(
+    observerNodes: AztecNodeService[],
+    slot: SlotNumber,
+    expectedProposer: EthAddress,
+  ): Promise<boolean> {
+    const buildStartMs = getSlotStartBuildTimestamp(SlotNumber(slot - 1), test.epochCache.getL1Constants()) * 1000;
+    while (test.context.dateProvider.now() < buildStartMs) {
+      const lookups = await Promise.all(
+        observerNodes.map(node => (node as TestAztecNodeService).epochCache.lookupProposer(slot)),
+      );
+      if (lookups.every(lookup => lookup.state === 'members' && lookup.proposer.equals(expectedProposer))) {
+        // A lookup that resolved after the build start may have answered too late for the proposal.
+        return test.context.dateProvider.now() < buildStartMs;
+      }
+      await sleep(200);
+    }
+    return false;
   }
 
   /**
