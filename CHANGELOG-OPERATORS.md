@@ -32,6 +32,14 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Address entries in `TX_PUBLIC_SETUP_ALLOWLIST` require a deployed contract
+
+A setup call that matches an address entry (`I:<address>:<selector>`) is now rejected, with `Setup function targets unknown contract`, when no contract is deployed at that address. Before, the node admitted the tx without checking, and its setup then failed when a proposer ran it. Class entries already required a deployed contract.
+
+Standard contracts, such as the AuthRegistry targeted by the default entries, are exempt: the node treats them as deployed from network start. Protocol contracts such as FeeJuice exist from genesis and pass the check.
+
+**Migration**: none. An address entry for a contract that is not yet deployed admits no tx until the contract is deployed.
+
 ### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas ([#701](https://github.com/aztec-labs-eng/aztec-node/pull/701))
 
 Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
