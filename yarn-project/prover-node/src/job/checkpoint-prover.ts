@@ -252,19 +252,26 @@ export class CheckpointProver {
     this.subTreeProofs.reject(err);
   }
 
-  /** Fetches every tx in this checkpoint from the tx pool (by hash, via the block tx effects). */
-  private async fetchTxs(): Promise<{ txs: Map<string, Tx>; missingTxs: TxHash[] }> {
+  /**
+   * Fetches every tx in this checkpoint from the tx pool (by hash, via the block tx effects). Aborting `signal` stops
+   * the fetch's retries early; txs not found by then are reported as missing.
+   */
+  private async fetchTxs(signal?: AbortSignal): Promise<{ txs: Map<string, Tx>; missingTxs: TxHash[] }> {
     const deadline = new Date(this.deps.dateProvider.now() + this.deps.txGatheringTimeoutMs);
     const txsByBlock = await Promise.all(
-      this.checkpoint.blocks.map(block => this.deps.txProvider.getTxsForBlock(block, { deadline })),
+      this.checkpoint.blocks.map(block => this.deps.txProvider.getTxsForBlock(block, { deadline, signal })),
     );
     const txs = txsByBlock.flatMap(({ txs }) => txs);
     const missingTxs = txsByBlock.flatMap(({ missingTxs }) => missingTxs);
     return { txs: new Map<string, Tx>(txs.map(tx => [tx.getTxHash().toString(), tx])), missingTxs };
   }
 
+  /**
+   * Fetches the txs to prove. Cancelling the prover stops the fetch's retries and the waits between them; a request
+   * already sent to a tx source still has to settle.
+   */
   private async gatherTxs(): Promise<Map<string, Tx>> {
-    const { txs, missingTxs } = await this.fetchTxs();
+    const { txs, missingTxs } = await this.fetchTxs(this.abortController.signal);
     if (missingTxs.length > 0) {
       throw new Error(
         `Txs not found for checkpoint ${this.checkpoint.number}: ${missingTxs.map(hash => hash.toString()).join(', ')}`,

@@ -144,17 +144,23 @@ export class TxCollection {
   public collectFastForBlock(
     block: L2Block,
     txHashes: TxHash[] | string[],
-    opts: { deadline: Date; pinnedPeer?: PeerId },
-  ) {
+    opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
+  ): Promise<Tx[]> {
     return this.collectFastFor({ type: 'block', block }, txHashes, opts);
   }
 
-  /** Collects the set of txs for the given proposal or block as fast as possible */
+  /**
+   * Collects the set of txs for the given proposal or block as fast as possible. Reaching `deadline` or aborting
+   * `signal` stops new attempts; a request already sent to a source still has to settle before this returns.
+   */
   public async collectFastFor(
     input: FastCollectionRequestInput,
     txHashes: TxHash[] | string[],
-    opts: { deadline: Date; pinnedPeer?: PeerId },
-  ) {
+    opts: { deadline: Date; pinnedPeer?: PeerId; signal?: AbortSignal },
+  ): Promise<Tx[]> {
+    if (opts.signal?.aborted) {
+      return [];
+    }
     const timeout = opts.deadline.getTime() - this.dateProvider.now();
     if (timeout <= 0) {
       this.log.warn(`Deadline for fast tx collection is in the past (${timeout}ms)`, {
@@ -177,7 +183,10 @@ export class TxCollection {
       requestTracker: RequestTracker.create(hashes, opts.deadline, this.dateProvider),
     };
 
+    const cancelOnAbort = () => request.requestTracker.cancel();
+    opts.signal?.addEventListener('abort', cancelOnAbort, { once: true });
     const [duration] = await elapsed(() => this.collectFast(request, { pinnedPeer: opts.pinnedPeer }));
+    opts.signal?.removeEventListener('abort', cancelOnAbort);
 
     this.log.verbose(
       `Collected ${request.requestTracker.collectedTxs.length} txs out of ${hashes.length} for ${input.type} at slot ${blockInfo.slotNumber}`,
