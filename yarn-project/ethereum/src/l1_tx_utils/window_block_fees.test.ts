@@ -31,7 +31,7 @@ describe('captureWindowBlockFees', () => {
   const makeClient = (
     blocks: Map<bigint, ReturnType<typeof makeBlock>>,
     headNumber: bigint,
-    rewardsByNumber: Record<number, [number, number]> = {},
+    rewardsByNumber: Record<number, [string, string]> = {},
   ) =>
     ({
       getBlock: (args: { blockTag?: string; blockNumber?: bigint }) =>
@@ -39,8 +39,8 @@ describe('captureWindowBlockFees', () => {
       getFeeHistory: (args: { blockCount: number; blockNumber: bigint; rewardPercentiles: number[] }) => {
         const oldestBlock = args.blockNumber - BigInt(args.blockCount) + 1n;
         const reward = Array.from({ length: args.blockCount }, (_, i) => {
-          const [min, p75] = rewardsByNumber[Number(oldestBlock) + i] ?? [0, 0];
-          return [parseGwei(`${min}`), parseGwei(`${p75}`)];
+          const [min, p75] = rewardsByNumber[Number(oldestBlock) + i] ?? ['0', '0'];
+          return [parseGwei(min), parseGwei(p75)];
         });
         return Promise.resolve({
           oldestBlock,
@@ -72,7 +72,7 @@ describe('captureWindowBlockFees', () => {
   it('reads the min-included and p75 priority fees per block from eth_feeHistory', async () => {
     const blocks = buildChain(108);
     const result = await captureWindowBlockFees(
-      makeClient(blocks, 108n, { 101: [1, 4], 103: [2, 3] }),
+      makeClient(blocks, 108n, { 101: ['1', '4'], 103: ['2', '3'] }),
       WINDOW_START_S,
       WINDOW_END_S,
     );
