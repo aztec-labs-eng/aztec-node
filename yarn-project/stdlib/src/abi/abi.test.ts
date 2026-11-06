@@ -1,7 +1,15 @@
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { countZodIssues } from '@aztec-labs/foundation/testing';
+
+import { getTestContractArtifact } from '../tests/fixtures.js';
 import {
   type AbiType,
+  AbiTypeSchema,
+  AbiValueSchema,
   type ContractArtifact,
+  ContractArtifactSchema,
   type FunctionArtifact,
+  FunctionDebugMetadataSchema,
   FunctionType,
   getDefaultInitializer,
   getFunctionReturnType,
@@ -148,6 +156,49 @@ describe('abi', () => {
       expect(() => getFunctionReturnType({ returnTypes: [boolean, field] })).toThrow(
         'Expected at most one return type',
       );
+    });
+  });
+
+  describe('schemas', () => {
+    const nestedType = (depth: number): AbiType => {
+      let type: AbiType = { kind: 'field' };
+      for (let i = 0; i < depth; i++) {
+        type = { kind: 'array', length: 1, type };
+      }
+      return type;
+    };
+
+    it('parses nested types of realistic depth', () => {
+      expect(AbiTypeSchema.parse(nestedType(20))).toEqual(nestedType(20));
+    });
+
+    it('rejects a deeply nested type without overflowing the stack', () => {
+      expect(AbiTypeSchema.safeParse(nestedType(20_000)).success).toBe(false);
+    });
+
+    it('rejects a deeply nested value without overflowing the stack', () => {
+      let value: unknown = { kind: 'boolean', value: true };
+      for (let i = 0; i < 20_000; i++) {
+        value = { kind: 'array', value: [value] };
+      }
+      expect(AbiValueSchema.safeParse(value).success).toBe(false);
+    });
+
+    it('rejects debug metadata with an oversized file map without parsing each entry', () => {
+      // eslint-disable-next-line camelcase
+      const debugSymbols = { location_tree: { locations: [] }, acir_locations: {}, brillig_locations: {} };
+      const files = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`${i}`, {}]));
+      const result = FunctionDebugMetadataSchema.safeParse({ debugSymbols, files });
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
+    });
+
+    it('rejects an artifact with an oversized storage layout without parsing each entry', () => {
+      const json = JSON.parse(jsonStringify(getTestContractArtifact()));
+      json.storageLayout = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`slot${i}`, {}]));
+      const result = ContractArtifactSchema.safeParse(json);
+      expect(result.success).toBe(false);
+      expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
     });
   });
 });
