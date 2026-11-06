@@ -128,6 +128,13 @@ function boundedArray<T extends ZodTypeAny>(item: T, maxSize: number) {
 }
 
 /**
+ * Pipes whose input guard checks the size of the record they feed before it parses any entry, which zod's own checks
+ * cannot show. This is the opt-out of the unbounded-container walker, the only reader: it treats a record that is the
+ * immediate output of one of these pipes as bounded. Only `boundedRecord` adds to it.
+ */
+export const sizeCheckedBeforeParse = new WeakSet<z.core.$ZodType>();
+
+/**
  * Creates a record schema that rejects objects with more than `maxKeys` keys before parsing any entry. A record has no
  * size bound zod checks up front, and a `.refine` on the record would only run after every entry was parsed. Input that
  * is not a plain object skips the key count and is rejected by the record itself, so an array is never enumerated.
@@ -137,11 +144,13 @@ export function boundedRecord<TKey extends z.core.$ZodRecordKey, TValue extends 
   value: TValue,
   maxKeys: number,
 ) {
-  return z
+  const guarded = z
     .custom<object>(input => !z.core.util.isPlainObject(input) || Object.keys(input).length <= maxKeys, {
       message: `Must have at most ${maxKeys} entries`,
     })
     .pipe(z.record(key, value));
+  sizeCheckedBeforeParse.add(guarded);
+  return guarded;
 }
 
 /**
