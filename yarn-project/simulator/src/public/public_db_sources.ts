@@ -69,6 +69,11 @@ export class PublicContractsDB implements PublicContractsDBInterface {
     );
   }
 
+  /** Adds the contracts the tx publishes in its non-revertible half, which the AVM makes visible before setup. */
+  public addNewNonRevertibleContracts(tx: Tx): void {
+    this.addContractsFromLogs(AllContractDeploymentData.fromTx(tx).getNonRevertibleContractDeploymentData());
+  }
+
   public addNewContracts(tx: Tx): void {
     const contractDeploymentData = AllContractDeploymentData.fromTx(tx);
     this.addContractsFromLogs(contractDeploymentData.getNonRevertibleContractDeploymentData());
