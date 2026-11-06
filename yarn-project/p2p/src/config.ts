@@ -709,11 +709,12 @@ type AllowListFlags = Pick<AllowedElement, 'onlySelf' | 'rejectNullMsgSender' | 
  */
 function parseFlags(flags: string, entry: string): AllowListFlags {
   const result: AllowListFlags = {};
-  const parseNonNegativeInt = (flag: string, name: string) => {
-    const n = parseInt(flag.slice(flag.indexOf('=') + 1), 10);
-    if (isNaN(n) || n < 0) {
+  const parseUInt32 = (flag: string, name: string) => {
+    const digits = flag.slice(flag.indexOf('=') + 1);
+    const n = Number(digits);
+    if (!/^\d+$/.test(digits) || n > 2 ** 32 - 1) {
       throw new Error(
-        `Invalid allow list entry "${entry}": invalid ${name} in flag "${flag}". Expected a non-negative integer.`,
+        `Invalid allow list entry "${entry}": invalid ${name} in flag "${flag}". Expected an integer from 0 to 2^32-1.`,
       );
     }
     return n;
@@ -726,11 +727,11 @@ function parseFlags(flags: string, entry: string): AllowListFlags {
     } else if (flag === 'rn') {
       result.rejectNullMsgSender = true;
     } else if (flag.startsWith('cl=')) {
-      result.calldataLength = parseNonNegativeInt(flag, 'calldataLength');
+      result.calldataLength = parseUInt32(flag, 'calldataLength');
     } else if (flag.startsWith('l2=')) {
-      minL2Gas = parseNonNegativeInt(flag, 'minimum L2 gas');
+      minL2Gas = parseUInt32(flag, 'minimum L2 gas');
     } else if (flag.startsWith('da=')) {
-      minDaGas = parseNonNegativeInt(flag, 'minimum DA gas');
+      minDaGas = parseUInt32(flag, 'minimum DA gas');
     } else {
       throw new Error(
         `Invalid allow list entry "${entry}": unknown flag "${flag}". Supported flags: os, rn, cl=N, l2=N, da=N.`,

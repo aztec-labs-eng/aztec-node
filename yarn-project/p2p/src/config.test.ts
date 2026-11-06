@@ -72,10 +72,27 @@ describe('config', () => {
     ]);
   });
 
-  it.each(['l2=abc', 'da=-1', 'l2='])('rejects entry with invalid minimum gas flag %s', async flag => {
+  it.each(['l2=abc', 'da=-1', 'l2=', 'l2=1e6', 'l2=40k', 'da=64gas', 'l2=40_000', 'da=4294967296'])(
+    'rejects entry with invalid minimum gas flag %s',
+    async flag => {
+      const address = await AztecAddress.random();
+      const selector = FunctionSelector.random();
+      expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid minimum');
+    },
+  );
+
+  it.each(['cl=4x', 'cl=', 'cl=4294967296'])('rejects entry with invalid calldataLength flag %s', async flag => {
     const address = await AztecAddress.random();
     const selector = FunctionSelector.random();
-    expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid minimum');
+    expect(() => parseAllowList(`I:${address}:${selector}:${flag}`)).toThrow('invalid calldataLength');
+  });
+
+  it('accepts the largest UInt32 in numeric flags', async () => {
+    const address = await AztecAddress.random();
+    const selector = FunctionSelector.random();
+    expect(parseAllowList(`I:${address}:${selector}:l2=4294967295+cl=4294967295`)).toEqual([
+      { address, selector, minGas: new Gas(0, 4294967295), calldataLength: 4294967295 },
+    ]);
   });
 
   it('rejects instance entry without selector', async () => {
