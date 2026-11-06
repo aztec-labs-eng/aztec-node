@@ -154,13 +154,15 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
 
     const checkpointNumber = published.checkpoint.number;
 
-    // Whether the validator's proposal handler collected, by the *re-execution* deadline, every tx of a block proposal
-    // with exactly the txs of each published block. Used as a positive short-circuit only: a match for every block
-    // means the data was available locally, so this checkpoint cannot be a data-withholding offense. The match is on
-    // the block's tx hashes, not its slot and index, so a collected proposal vouches only for a block with the same
-    // txs. A miss does *not* trigger a slash on its own — the re-execution deadline is much earlier than the
-    // data-withholding tolerance window, so txs missing at that earlier deadline may still arrive in time. Anything
-    // short of a match for every block falls through to the mempool probe, which respects the tolerance window.
+    // Per published block: whether every one of its txs was held locally at proposal time, i.e. recorded for the
+    // block's slot by the validator's proposal handler from a proposal whose txs were all collected by the
+    // *re-execution* deadline. The lookup is per slot and per tx hash: it does not depend on the block's index within
+    // the checkpoint or on the order of its txs, and a tx the record does not hold leaves the block unvouched. Used as
+    // a positive short-circuit only: every block vouched for means the data was available locally, so this checkpoint
+    // cannot be a data-withholding offense. An unvouched block does *not* trigger a slash on its own — the
+    // re-execution deadline is much earlier than the data-withholding tolerance window, so txs missing at that earlier
+    // deadline may still arrive in time. Anything short of every block vouched for falls through to the mempool probe,
+    // which respects the tolerance window.
     const collectionRecords = published.checkpoint.blocks.map(block =>
       this.reexecutionTracker.hasCollectedTxs(
         block.header.getSlot(),
