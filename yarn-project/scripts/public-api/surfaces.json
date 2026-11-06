@@ -1,0 +1,40 @@
+{
+  "environment": {
+    "root": "yarn-project/",
+    "exclude": ["/test/", "/testbench/", "/test-helpers/", "/end-to-end/", ".test.", ".bench.", "/fixtures"],
+    "names": {
+      "file": "yarn-project/foundation/src/config/env_var.ts",
+      "export": "EnvVar"
+    }
+  },
+  "cli": {
+    "entrypoint": "yarn-project/aztec/src/bin/index.ts",
+    "startOptions": {
+      "file": "yarn-project/aztec/src/cli/aztec_start_options.ts",
+      "export": "aztecStartOptions"
+    },
+    "adapters": [
+      {
+        "file": "yarn-project/aztec/src/cli/aztec_start_options.ts",
+        "export": "getOptions",
+        "fingerprints": ["4af42377a54c3d9a30600581c98fd67ed8e838a6c9996ef97fe9f702087d2ada"]
+      },
+      {
+        "file": "yarn-project/aztec/src/cli/aztec_start_options.ts",
+        "export": "configToFlag",
+        "fingerprints": ["13a317025675f6dbc484ea7d0ecd34b6e7e2852549f441e4a771ffc47fce84a6"]
+      },
+      {
+        "file": "yarn-project/aztec/src/cli/util.ts",
+        "export": "addOptions",
+        "fingerprints": ["70ba5b030fee2fd14731340647650eb9fe6b3d09c365e0330f0b66e6f3d6a23a"]
+      }
+    ]
+  },
+  "rpc": {
+    "registration": "yarn-project/aztec-node/src/aztec-node/register_node_rpc_handlers.ts",
+    "registries": ["services", "adminServices"],
+    "excludeNamespaces": ["aztecDebug", "nodeDebug"],
+    "schemas": ["AztecNodeApiSchema", "AztecNodeAdminApiSchema", "P2PApiSchema"]
+  }
+}
