@@ -4,7 +4,7 @@ use crate::messages::{
         private_notes::process_private_note_msg,
     },
     encoding::{decode_message, MESSAGE_CIPHERTEXT_LEN, MESSAGE_PLAINTEXT_LEN},
-    encryption::{aes128::AES128, message_encryption::MessageEncryption},
+    encryption::aes128,
     msg_type::{
         MIN_CUSTOM_MSG_TYPE_ID, PARTIAL_NOTE_PRIVATE_MSG_TYPE_ID, PRIVATE_EVENT_MSG_TYPE_ID, PRIVATE_NOTE_MSG_TYPE_ID,
     },
@@ -69,7 +69,7 @@ unconstrained fn decrypt_message_ciphertext(
     recipient: AztecAddress,
     contract_address: AztecAddress,
 ) -> Option<BoundedVec<Field, MESSAGE_PLAINTEXT_LEN>> {
-    messaging_secret.and_then(|secret| AES128::decrypt_with_messaging_secret(message_ciphertext, secret)).or_else(|| {
+    messaging_secret.and_then(|secret| aes128::decrypt_with_messaging_secret(message_ciphertext, secret)).or_else(|| {
         // In most cases, we'd attempt decryption with the address keys only if the messaging secret is not present.
         // There are some rare scenarios however in which we _do_ have a messaging secret, but decryption using it fails
         // and so we fall back to this mechanism. These include contracts that are upgraded from a version that did not
@@ -84,7 +84,7 @@ unconstrained fn decrypt_message_ciphertext(
         // process is finite and bounded (as e.g. it'd not emit any more after the upgrade), and b) decrypting with the
         // wrong messaging secret fails except with probability around 2^-112, which is how often a wrongly decrypted
         // header has the exact length of a valid one.
-        AES128::decrypt(message_ciphertext, recipient, contract_address)
+        aes128::decrypt_with_ecdh_secret(message_ciphertext, recipient, contract_address)
     })
 }
 
@@ -171,7 +171,7 @@ pub(crate) unconstrained fn process_message_plaintext(
 }
 
 mod test {
-    use crate::messages::encryption::{aes128::AES128, message_encryption::MessageEncryption};
+    use crate::messages::encryption::aes128;
     use crate::test::helpers::test_environment::TestEnvironment;
     use super::decrypt_message_ciphertext;
 
@@ -184,7 +184,7 @@ mod test {
         let recipient = env.create_light_account();
 
         env.private_context(|context| {
-            let ciphertext = AES128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
+            let ciphertext = aes128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
 
             assert_eq(
                 decrypt_message_ciphertext(
@@ -206,7 +206,7 @@ mod test {
 
         env.private_context(|context| {
             let contract_address = context.this_address();
-            let ciphertext = AES128::encrypt(PLAINTEXT, recipient, contract_address);
+            let ciphertext = aes128::encrypt_with_ecdh_secret(PLAINTEXT, recipient, contract_address);
 
             assert_eq(
                 decrypt_message_ciphertext(
@@ -228,7 +228,7 @@ mod test {
 
         env.private_context(|context| {
             let contract_address = context.this_address();
-            let ciphertext = AES128::encrypt(PLAINTEXT, recipient, contract_address);
+            let ciphertext = aes128::encrypt_with_ecdh_secret(PLAINTEXT, recipient, contract_address);
 
             assert_eq(
                 decrypt_message_ciphertext(
@@ -249,7 +249,7 @@ mod test {
         let recipient = env.create_light_account();
 
         env.private_context(|context| {
-            let ciphertext = AES128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
+            let ciphertext = aes128::encrypt_with_messaging_secret(PLAINTEXT, MESSAGING_SECRET);
 
             assert(decrypt_message_ciphertext(
                 BoundedVec::from_array(ciphertext),

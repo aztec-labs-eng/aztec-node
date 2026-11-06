@@ -82,7 +82,7 @@ where
 ///
 /// Note that while [`encode_private_note_message`] returns a fixed-size array, this function takes a [`BoundedVec`]
 /// instead. This is because when decoding we're typically processing runtime-sized plaintexts, more specifically,
-/// those that originate from [`crate::messages::encryption::message_encryption::MessageEncryption::decrypt`].
+/// those that originate from message decryption.
 pub(crate) unconstrained fn decode_private_note_message(
     msg_metadata: u64,
     msg_content: BoundedVec<Field, MAX_MESSAGE_CONTENT_LEN>,

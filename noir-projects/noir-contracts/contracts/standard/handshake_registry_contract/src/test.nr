@@ -86,8 +86,9 @@ unconstrained fn non_interactive_handshake_stores_handshake_for_sender_and_recip
 }
 
 // The DH-direct flow lifts `recipient` to a curve point and fails loud if the address has no
-// corresponding point. We deliberately do not replicate AES128's "king of the hill" fallback here: a fallback
-// would insert a permanent note recording a handshake with an invalid recipient, polluting registry state.
+// corresponding point. We deliberately do not replicate `aes128::encrypt_with_ecdh_secret`'s "king of the hill"
+// fallback here: a fallback would insert a permanent note recording a handshake with an invalid recipient,
+// polluting registry state.
 #[test(should_fail_with = "recipient address is not on the curve")]
 unconstrained fn handshake_to_invalid_recipient_panics() {
     let (env, registry_address, sender, _, _) = setup();
