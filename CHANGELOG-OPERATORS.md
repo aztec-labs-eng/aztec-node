@@ -48,7 +48,7 @@ TX_PUBLIC_SETUP_ALLOWLIST=I:0x1234…:0xabcd1234:os+cl=4+l2=40000+da=64
 
 The node RPC method `aztec_getAllowedPublicSetup` returns the new `minGas` field on the entries that set it.
 
-A peer that gossips a tx failing any setup allow list check, old or new, now gets the high-tolerance penalty instead of the mid-tolerance one. The allow list is local configuration, so peers running an older version or a different allow list relay such txs honestly, and are no longer disconnected or banned for it.
+A peer that gossips a tx failing any setup allow list check, old or new, now gets the high-tolerance penalty instead of the mid-tolerance one. The allow list is local configuration, so peers running an older version or a different allow list relay such txs honestly. It now takes several times as many such rejections before a relayer is disconnected or banned, and each still counts briefly against its gossipsub score.
 
 Only allow list functions that cannot revert for any calldata their entry allows. A failed setup call makes the whole tx invalid, so for example a token transfer that can fail on balance or authorization is not a safe entry.
 

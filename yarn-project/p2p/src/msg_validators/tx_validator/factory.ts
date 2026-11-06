@@ -171,7 +171,8 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       severity: PeerErrorSeverity.MidToleranceError,
     },
     // Mild because the setup allow list and its checks are local: peers running an older version or a different
-    // allow list honestly relay txs this node rejects, and should not be disconnected or banned for it.
+    // allow list honestly relay txs this node rejects. This takes many more rejections to disconnect or ban such a
+    // relayer, though each still counts against its gossipsub score for a few slots.
     phasesValidator: {
       validator: new PhasesTxValidator(contractDataSource, allowedInSetup, timestamp, bindings),
       severity: PeerErrorSeverity.HighToleranceError,
