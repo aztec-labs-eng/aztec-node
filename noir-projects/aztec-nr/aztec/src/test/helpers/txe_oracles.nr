@@ -21,8 +21,8 @@ use crate::protocol::{
 /// [`oracle::version`](crate::oracle::version), which covers oracles used during contract execution by PXE.
 ///
 /// The TypeScript counterparts are in `yarn-project/txe/src/oracle/txe_oracle_version.ts`.
-pub global TXE_ORACLE_VERSION_MAJOR: Field = 10;
-pub global TXE_ORACLE_VERSION_MINOR: Field = 1;
+pub global TXE_ORACLE_VERSION_MAJOR: Field = 11;
+pub global TXE_ORACLE_VERSION_MINOR: Field = 0;
 
 /// Asserts that the TXE oracle interface version is compatible.
 pub unconstrained fn assert_compatible_txe_oracle_version() {
@@ -228,8 +228,8 @@ pub unconstrained fn add_authwit(address: AztecAddress, message_hash: Field) {}
 
 #[oracle(aztec_txe_sendL1ToL2Message)]
 pub unconstrained fn send_l1_to_l2_message(
-    content: Field,
-    secret_hash: Field,
+    public_content_hash: Field,
+    private_content_hash: Field,
     sender: EthAddress,
     recipient: AztecAddress,
 ) -> Field {}

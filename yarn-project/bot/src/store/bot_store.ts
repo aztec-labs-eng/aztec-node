@@ -14,12 +14,12 @@ export interface BridgeClaimData {
 }
 
 export interface PendingL1ToL2Message {
-  /** Random content field sent in the message. */
-  content: string;
-  /** Secret for consuming the message. */
+  /** Random public content hash sent in the message. */
+  publicContentHash: string;
+  /** Secret for consuming the message; it forms the message's private content. */
   secret: string;
-  /** Hash of the secret. */
-  secretHash: string;
+  /** The message's private content hash (hash of the claim secret). */
+  privateContentHash: string;
   /** Hash of the L1→L2 message. */
   msgHash: string;
   /** L1 sender address (hex). */
@@ -37,11 +37,12 @@ export interface PendingL1ToL2Message {
  */
 export class BotStore {
   /**
-   * Bumped to 2 to introduce the inbox bot's maps. `initStoreForRollupAndSchemaVersion` clears the database when
-   * this changes, so a store written by a version-1 build is discarded rather than migrated: its records are
-   * crosschain seeds the bot re-creates on startup.
+   * Bumped to 2 to introduce the inbox bot's maps, and to 3 when the L1→L2 message fields were renamed to public and
+   * private content hashes. `initStoreForRollupAndSchemaVersion` clears the database when this changes, so a store
+   * written by an older build is discarded rather than migrated: its records are crosschain seeds the bot re-creates
+   * on startup, and messages whose private content hash the current hash function no longer reproduces.
    */
-  public static readonly SCHEMA_VERSION = 2;
+  public static readonly SCHEMA_VERSION = 3;
 
   /** Durable state owned by the inbox bot. */
   public readonly inbox: InboxStore;

@@ -64,13 +64,14 @@ export async function bridgeL1FeeJuice(
   }
 
   if (wait) {
+    const privateContent = [claimSecret];
     await retryUntil(
       async () => {
         const witness = await getNonNullifiedL1ToL2MessageWitness(
           node,
           ProtocolContractAddress.FeeJuice,
           Fr.fromHexString(messageHash),
-          claimSecret,
+          privateContent,
         );
         if (!witness) {
           log(`No L1 to L2 message found yet, checking again in ${interval / 1000}s`);

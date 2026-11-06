@@ -20,7 +20,7 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { SiblingPath } from '@aztec-labs/foundation/trees';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec-labs/stdlib/hash';
+import { computeL2ToL1MessageHash, computePrivateContentHash } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { getL2ToL1MessageLeafId } from '@aztec-labs/stdlib/messaging';
 import { Buffer } from 'buffer';
@@ -28,9 +28,9 @@ import { type Hex, encodeFunctionData, getContract, toFunctionSelector } from 'v
 
 /** L1 to L2 message info to claim it on L2. */
 export type L2Claim = {
-  /** Secret for claiming. */
+  /** Secret for claiming, used as the private content of the L1 to L2 message. */
   claimSecret: Fr;
-  /** Hash of the secret for claiming. */
+  /** Hash of the claim secret, used as the private content hash of the L1 to L2 message. */
   claimSecretHash: Fr;
   /** Hash of the message. */
   messageHash: Hex;
@@ -49,14 +49,6 @@ export type L2AmountClaimWithRecipient = L2AmountClaim & {
 /** Stringifies an eth address for logging. */
 function stringifyEthAddress(address: EthAddress | Hex, name?: string) {
   return name ? `${name} (${address.toString()})` : address.toString();
-}
-
-/** Generates a pair secret and secret hash */
-export async function generateClaimSecret(logger?: Logger): Promise<[Fr, Fr]> {
-  const secret = Fr.random();
-  const secretHash = await computeSecretHash(secret);
-  logger?.verbose(`Generated claim secret=${secret.toString()} hash=${secretHash.toString()}`);
-  return [secret, secretHash];
 }
 
 // `Inbox.sendL2Message` (reached by every `depositToAztec*` call) inserts into a height-10
@@ -190,7 +182,9 @@ export class L1FeeJuicePortalManager {
    * @param mint - Whether to mint the tokens before sending (only during testing).
    */
   public async bridgeTokensPublic(to: AztecAddress, amount: bigint | undefined, mint = false): Promise<L2AmountClaim> {
-    const [claimSecret, claimSecretHash] = await generateClaimSecret();
+    const claimSecret = Fr.random();
+    const privateContent = [claimSecret];
+    const claimSecretHash = await computePrivateContentHash(privateContent);
     const amountToBridge = amount ?? (await this.tokenManager.getMintAmount());
     if (mint) {
       const mintableAmount = await this.tokenManager.getMintAmount();
@@ -230,12 +224,12 @@ export class L1FeeJuicePortalManager {
           return hexStr.toLowerCase();
         };
 
-        const secretHashMatch = normalizeHex(log.args.secretHash) === normalizeHex(claimSecretHash.toString());
+        const secretHashMatch = normalizeHex(log.args.privateContentHash) === normalizeHex(claimSecretHash.toString());
         const amountMatch = log.args.amount === amountToBridge;
         const toMatch = normalizeHex(log.args.to) === normalizeHex(to.toString());
 
         this.logger.debug(
-          `Event filter matching: secretHash=${secretHashMatch} (${log.args.secretHash} vs ${claimSecretHash.toString()}), ` +
+          `Event filter matching: secretHash=${secretHashMatch} (${log.args.privateContentHash} vs ${claimSecretHash.toString()}), ` +
             `amount=${amountMatch} (${log.args.amount} vs ${amountToBridge}), ` +
             `to=${toMatch} (${log.args.to} vs ${to.toString()})`,
         );
@@ -343,7 +337,7 @@ export class L1ToL2TokenPortalManager {
         };
 
         return (
-          normalizeHex(log.args.secretHash) === normalizeHex(claimSecretHash.toString()) &&
+          normalizeHex(log.args.privateContentHash) === normalizeHex(claimSecretHash.toString()) &&
           log.args.amount === amount &&
           normalizeHex(log.args.to) === normalizeHex(to.toString())
         );
@@ -400,7 +394,7 @@ export class L1ToL2TokenPortalManager {
 
         return (
           log.args.amount === amount &&
-          normalizeHex(log.args.secretHashForL2MessageConsumption) === normalizeHex(claimSecretHash.toString())
+          normalizeHex(log.args.privateContentHash) === normalizeHex(claimSecretHash.toString())
         );
       },
       this.logger,
@@ -420,7 +414,7 @@ export class L1ToL2TokenPortalManager {
     };
   }
 
-  private async bridgeSetup(amount: bigint, mint: boolean) {
+  private async bridgeSetup(amount: bigint, mint: boolean): Promise<[Fr, Fr]> {
     if (mint) {
       const mintableAmount = await this.tokenManager.getMintAmount();
       if (amount !== mintableAmount) {
@@ -429,7 +423,10 @@ export class L1ToL2TokenPortalManager {
       await this.tokenManager.mint(this.extendedClient.account.address);
     }
     await this.tokenManager.approve(amount, this.portal.address, 'TokenPortal');
-    return generateClaimSecret();
+    const claimSecret = Fr.random();
+    const privateContent = [claimSecret];
+    const claimSecretHash = await computePrivateContentHash(privateContent);
+    return [claimSecret, claimSecretHash];
   }
 }
 

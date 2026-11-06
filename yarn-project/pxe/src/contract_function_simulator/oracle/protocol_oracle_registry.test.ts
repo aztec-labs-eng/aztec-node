@@ -143,7 +143,7 @@ describe('protocol oracle dispatch', () => {
 
     expect(handlerArgs).toEqual([
       messageHash,
-      Option.some({ contractAddress, nullifier: await computeFeeJuiceMessageNullifier(messageHash, secret) }),
+      Option.some({ contractAddress, nullifier: await computeFeeJuiceMessageNullifier(messageHash, [secret]) }),
     ]);
     expect(wire).toEqual([toACVMField(witness.leafIndex), witness.siblingPath.map(toACVMField)]);
   });

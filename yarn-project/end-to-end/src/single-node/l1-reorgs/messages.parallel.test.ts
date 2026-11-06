@@ -84,7 +84,7 @@ describe('single-node/l1-reorgs/messages', () => {
 
   const sendMessage = async () =>
     sendL1ToL2Message(
-      { recipient: await AztecAddress.random(), content: Fr.random(), secretHash: Fr.random() },
+      { recipient: await AztecAddress.random(), publicContentHash: Fr.random(), privateContentHash: Fr.random() },
       { l1ContractAddresses: context.deployL1ContractsValues.l1ContractAddresses, l1Client },
     );
 
@@ -101,8 +101,8 @@ describe('single-node/l1-reorgs/messages', () => {
       await new RollupContract(l1Client, l1ContractAddresses.rollupAddress.toString()).getVersion(),
     );
     const messages = [
-      { recipient: await AztecAddress.random(), content: Fr.random(), secretHash: Fr.random() },
-      { recipient: await AztecAddress.random(), content: Fr.random(), secretHash: Fr.random() },
+      { recipient: await AztecAddress.random(), publicContentHash: Fr.random(), privateContentHash: Fr.random() },
+      { recipient: await AztecAddress.random(), publicContentHash: Fr.random(), privateContentHash: Fr.random() },
     ];
     const sent = await sendL1ToL2MessagesInOneBlock(messages, { l1ContractAddresses, l1Client });
     return sent.map((message, index) => ({

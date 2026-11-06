@@ -45,7 +45,7 @@ unconstrained fn try_get_l1_to_l2_membership_witness_oracle(
 ) -> Option<(Field, [Field; L1_TO_L2_MSG_TREE_HEIGHT])> {}
 
 mod test {
-    use crate::hash::{compute_l1_to_l2_message_hash, compute_l1_to_l2_message_nullifier, compute_secret_hash};
+    use crate::hash::{compute_l1_to_l2_message_hash, compute_l1_to_l2_message_nullifier, compute_private_content_hash};
     use crate::protocol::{
         address::{AztecAddress, EthAddress},
         merkle_tree::root::root_from_sibling_path,
@@ -54,8 +54,8 @@ mod test {
     use crate::test::helpers::test_environment::TestEnvironment;
     use super::{try_get_l1_to_l2_membership_witness, UnsiloedNullifier};
 
-    global CONTENT: Field = 0x0a0b0c;
-    global SECRET: Field = 0x1234;
+    global PUBLIC_CONTENT_HASH: Field = 0x0a0b0c;
+    global PRIVATE_CONTENT: [Field; 1] = [0x1234];
 
     #[test]
     unconstrained fn try_get_returns_witness_for_existing_message() {
@@ -90,7 +90,7 @@ mod test {
         let (sender, recipient, leaf_index, message_hash) = send_message(env);
         let nullifier = UnsiloedNullifier {
             contract_address: recipient,
-            nullifier: compute_l1_to_l2_message_nullifier(message_hash, [SECRET]),
+            nullifier: compute_l1_to_l2_message_nullifier(message_hash, PRIVATE_CONTENT),
         };
 
         env.utility_context(|_| {
@@ -98,7 +98,7 @@ mod test {
         });
 
         env.private_context_at(recipient, |context| {
-            context.consume_l1_to_l2_message(CONTENT, [SECRET], sender, leaf_index);
+            context.consume_l1_to_l2_message(PUBLIC_CONTENT_HASH, PRIVATE_CONTENT, sender, leaf_index);
         });
         env.utility_context(|_| {
             assert(try_get_l1_to_l2_membership_witness(message_hash, Option::some(nullifier)).is_none());
@@ -109,15 +109,15 @@ mod test {
     unconstrained fn send_message(env: TestEnvironment) -> (EthAddress, AztecAddress, Field, Field) {
         let sender = EthAddress::from_field(0xdead);
         let recipient = AztecAddress::from_field(17);
-        let leaf_index = env.send_l1_to_l2_message(CONTENT, SECRET, sender, recipient);
+        let leaf_index = env.send_l1_to_l2_message(PUBLIC_CONTENT_HASH, PRIVATE_CONTENT, sender, recipient);
         let message_hash = env.utility_context(|context| {
             compute_l1_to_l2_message_hash(
                 sender,
                 context.chain_id(),
                 recipient,
                 context.version(),
-                CONTENT,
-                compute_secret_hash([SECRET]),
+                PUBLIC_CONTENT_HASH,
+                compute_private_content_hash(PRIVATE_CONTENT),
                 leaf_index,
             )
         });
