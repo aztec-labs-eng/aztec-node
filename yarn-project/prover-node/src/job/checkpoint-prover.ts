@@ -267,8 +267,8 @@ export class CheckpointProver {
   }
 
   /**
-   * Fetches the txs to prove. Cancelling the prover stops the fetch's retries, so a stop does not wait out the gathering
-   * timeout.
+   * Fetches the txs to prove. Cancelling the prover stops the fetch's retries and the waits between them; a request
+   * already sent to a tx source still has to settle.
    */
   private async gatherTxs(): Promise<Map<string, Tx>> {
     const { txs, missingTxs } = await this.fetchTxs(this.abortController.signal);
