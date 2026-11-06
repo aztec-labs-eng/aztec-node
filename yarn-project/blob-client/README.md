@@ -50,9 +50,11 @@ import { createBlobClient, createBlobClientWithFileStores } from '@aztec-labs/bl
 
 // Simple client with L1 consensus and archive sources
 const client = createBlobClient({
+  l1ChainId: 1,
   l1ConsensusHostUrls: ['https://beacon.example.com'],
   archiveApiUrl: 'https://api.blobscan.com',
 });
+await client.start?.();
 
 // Client with file store support
 const clientWithFileStore = await createBlobClientWithFileStores({
@@ -64,8 +66,18 @@ const clientWithFileStore = await createBlobClientWithFileStores({
 });
 
 // Fetch blobs
-const blobs = await client.getBlobSidecar(blockHash, blobHashes);
+const blobs = await client.getBlobSidecar(blockHash, blobHashes, { l1BlockTimestamp });
 
 // Upload blobs to file store
 await client.sendBlobsToFilestore(blobs);
+```
+
+The execution block timestamp is required when fetching blobs. Mainnet and Sepolia beacon configuration is built in.
+Custom devnets with consensus hosts discover their genesis time and slot duration in `start()` and fail startup if the
+configuration cannot be loaded. Anvil clients without consensus hosts do not need beacon configuration.
+
+The CLI takes a block hash, its execution timestamp in seconds, and optional blob hashes:
+
+```bash
+L1_CHAIN_ID=11155111 yarn blob-client <block-hash> <timestamp-seconds> [blob-hash...]
 ```

@@ -33,7 +33,7 @@ export function runBlobClientTests(
 
     await client.sendBlobsToFilestore([blob]);
 
-    const retrievedBlobs = await client.getBlobSidecar(blockId, [blobHash]);
+    const retrievedBlobs = await client.getBlobSidecar(blockId, [blobHash], { l1BlockTimestamp: 0n });
     expect(retrievedBlobs).toHaveLength(1);
     expect(retrievedBlobs[0]).toEqual(blob);
   });
@@ -44,7 +44,7 @@ export function runBlobClientTests(
 
     await client.sendBlobsToFilestore(blobs);
 
-    const retrievedBlobs = await client.getBlobSidecar(blockId, blobHashes);
+    const retrievedBlobs = await client.getBlobSidecar(blockId, blobHashes, { l1BlockTimestamp: 0n });
     expect(retrievedBlobs.length).toBe(3);
 
     for (let i = 0; i < blobs.length; i++) {
@@ -56,7 +56,10 @@ export function runBlobClientTests(
     const nonExistentHash = Buffer.alloc(32);
     nonExistentHash.fill(0xff);
 
-    const retrievedBlobs = await client.getBlobSidecar(blockId, [nonExistentHash]);
+    const retrievedBlobs = await client.getBlobSidecar(blockId, [nonExistentHash], {
+      l1BlockTimestamp: 0n,
+      isHistoricalSync: true,
+    });
     expect(retrievedBlobs).toEqual([]);
   });
 }
