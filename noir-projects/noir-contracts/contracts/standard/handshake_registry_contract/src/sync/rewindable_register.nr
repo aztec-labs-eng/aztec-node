@@ -1,6 +1,9 @@
 use aztec::{
     ephemeral::EphemeralArray,
-    facts::{delete_fact_collection, Fact, FactCollection, FactScope, get_fact_collection, record_retractable_fact},
+    facts::{
+        delete_fact_collection, deserialize_payload, Fact, FactCollection, FactScope, get_fact_collection,
+        record_retractable_fact, serialize_payload,
+    },
     oracle::block_reference::BlockReference,
     protocol::{address::AztecAddress, hash::sha256_to_field, traits::{Deserialize, Serialize}},
 };
@@ -156,31 +159,6 @@ unconstrained fn newest_finalized_block_number(versions: EphemeralArray<Fact>) -
         }
     }
     newest
-}
-
-/// Serializes a value into a fact payload.
-pub(crate) unconstrained fn serialize_payload<T>(value: T) -> EphemeralArray<Field>
-where
-    T: Serialize,
-{
-    EphemeralArray::from_array(value.serialize())
-}
-
-/// Deserializes a fact payload into a value.
-///
-/// # Panics
-/// If the payload length does not match the value's serialized length.
-pub(crate) unconstrained fn deserialize_payload<T>(payload: EphemeralArray<Field>) -> T
-where
-    T: Deserialize,
-{
-    let n = <T as Deserialize>::N;
-    assert_eq(payload.len(), n, "Fact payload length does not match the value's serialized length");
-    let mut fields = [0; <T as Deserialize>::N];
-    for i in 0..n {
-        fields[i] = payload.get(i);
-    }
-    T::deserialize(fields)
 }
 
 mod test {

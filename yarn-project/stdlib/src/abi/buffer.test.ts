@@ -1,7 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Buffer } from 'buffer';
 
-import { bufferAsFields, bufferFromFields } from './buffer.js';
+import { bufferAsFields, bufferFromFieldChunks, bufferFromFields, bufferToFieldChunks } from './buffer.js';
 
 describe('buffer', () => {
   it('converts buffer back and forth from fields', () => {
@@ -58,5 +58,14 @@ describe('buffer', () => {
   it('returns an empty buffer for an empty field array', () => {
     const result = bufferFromFields([]);
     expect(result.length).toBe(0);
+  });
+
+  it.each([0, 1, 31, 32, 63])('round-trips a %i-byte buffer through one field per 31-byte chunk', length => {
+    const buffer = Buffer.from(Array.from({ length }, (_, i) => i + 1));
+
+    const fields = bufferToFieldChunks(buffer);
+
+    expect(fields).toHaveLength(Math.ceil(length / 31));
+    expect(bufferFromFieldChunks(fields).subarray(0, length)).toEqual(buffer);
   });
 });

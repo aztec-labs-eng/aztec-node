@@ -1,18 +1,21 @@
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry/constants';
 import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint/constants';
+import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import { STANDARD_PUBLIC_CHECKS_ADDRESS } from '@aztec-labs/standard-contracts/public-checks/constants';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * Canonical contracts that hold no private state and are therefore never synced.
  *
- * The protocol contracts (registries, fee juice) plus the standard AuthRegistry, MultiCallEntrypoint and PublicChecks
- * declare no notes and no events, so their macro-generated `sync_state` has nothing to discover.
+ * The protocol contracts (registries, fee juice) plus the standard AuthRegistry, PostQuantumPublicKeyRegistry,
+ * MultiCallEntrypoint and PublicChecks declare no notes and no events, so their macro-generated `sync_state` has
+ * nothing to discover.
  */
 export const skipSyncContracts: AztecAddress[] = [
   ...Object.values(ProtocolContractAddress),
   STANDARD_AUTH_REGISTRY_ADDRESS,
+  STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS,
   STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS,
   STANDARD_PUBLIC_CHECKS_ADDRESS,
 ];

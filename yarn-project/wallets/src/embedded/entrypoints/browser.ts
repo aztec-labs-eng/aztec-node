@@ -6,6 +6,7 @@ import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
 import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry/lazy';
 import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry/lazy';
 import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint/lazy';
+import { getStandardPostQuantumPublicKeyRegistry } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/lazy';
 
 import { LazyAccountContractsProvider } from '../account-contract-providers/lazy.js';
 import type { AccountContractsProvider } from '../account-contract-providers/types.js';
@@ -58,6 +59,7 @@ export class BrowserEmbeddedWallet extends EmbeddedWallet {
           await getStandardMultiCallEntrypoint(),
           await getStandardAuthRegistry(),
           await getStandardHandshakeRegistry(),
+          await getStandardPostQuantumPublicKeyRegistry(),
         ],
       },
       loggers: {
