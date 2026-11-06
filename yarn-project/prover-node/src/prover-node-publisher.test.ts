@@ -10,6 +10,7 @@ import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addr
 import type { L1TxState, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -32,9 +33,7 @@ import { ProverNodePublisher } from './prover-node-publisher.js';
  * them, but the `attestationsHash` the rollup stores at propose time covers them.
  */
 const makePackedAttestations = (committeeSize: number, { spareBit = false } = {}): ViemCommitteeAttestations => {
-  const attestations = Array.from({ length: committeeSize }, () =>
-    CommitteeAttestation.fromAddress(EthAddress.random()),
-  );
+  const attestations = times(committeeSize, () => CommitteeAttestation.fromAddress(EthAddress.random()));
   const packed = CommitteeAttestationsAndSigners.packAttestations(attestations);
   if (!spareBit) {
     return packed;
@@ -46,7 +45,7 @@ const makePackedAttestations = (committeeSize: number, { spareBit = false } = {}
 };
 
 const makeHeadersForRange = (fromCheckpoint: number, toCheckpoint: number) =>
-  Array.from({ length: toCheckpoint - fromCheckpoint + 1 }, () => CheckpointHeader.random());
+  times(toCheckpoint - fromCheckpoint + 1, () => CheckpointHeader.random());
 
 describe('prover-node-publisher', () => {
   // Prover publisher dependencies
@@ -82,7 +81,7 @@ describe('prover-node-publisher', () => {
 
   const setupPublishData = (pending: number, proven: number, fromCheckpoint: number, toCheckpoint: number) => {
     // Create public inputs for every checkpoint
-    const checkpoints = Array.from({ length: 100 }, () => {
+    const checkpoints = times(100, () => {
       return RootRollupPublicInputs.random();
     });
 
@@ -357,14 +356,14 @@ describe('prover-node-publisher', () => {
           status: 'success',
           effectiveGasPrice: 1n,
           gasUsed: 1n,
-          transactionHash: `0x${randomBytes(32).toString('hex')}`,
+          transactionHash: bufferToHex(randomBytes(32)),
         }),
       });
       l1Utils.getTransactionStats.mockResolvedValue({
         calldataGas: 1,
         calldataSize: 1,
         sender: EthAddress.random().toString(),
-        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        transactionHash: bufferToHex(randomBytes(32)),
       });
 
       await expect(publisher.submitEpochProof(args)).resolves.toEqual('published');
@@ -474,7 +473,7 @@ describe('prover-node-publisher', () => {
 
     rollup.getTips.mockResolvedValue({ pending: CheckpointNumber(65), proven: CheckpointNumber(proven) });
 
-    const checkpoints = Array.from({ length: 100 }, () => RootRollupPublicInputs.random());
+    const checkpoints = times(100, () => RootRollupPublicInputs.random());
     rollup.getCheckpoint.mockImplementation((n: CheckpointNumber) =>
       Promise.resolve({
         archive: checkpoints[n - 1].endArchiveRoot,
@@ -556,7 +555,7 @@ describe('prover-node-publisher', () => {
         status,
         effectiveGasPrice: 1n,
         gasUsed: gasLimit,
-        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        transactionHash: bufferToHex(randomBytes(32)),
       }),
     });
 
@@ -566,7 +565,7 @@ describe('prover-node-publisher', () => {
         calldataGas: 1,
         calldataSize: 1,
         sender: EthAddress.random().toString(),
-        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        transactionHash: bufferToHex(randomBytes(32)),
       });
     });
 
@@ -669,10 +668,10 @@ describe('prover-node-publisher', () => {
         status: 'reverted',
         effectiveGasPrice: 1n,
         gasUsed: 1n,
-        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        transactionHash: bufferToHex(randomBytes(32)),
         cumulativeGasUsed: 1n,
         blockNumber: 42n,
-        blockHash: `0x${randomBytes(32).toString('hex')}`,
+        blockHash: bufferToHex(randomBytes(32)),
         from: EthAddress.random().toString(),
       } as any,
     });
@@ -681,7 +680,7 @@ describe('prover-node-publisher', () => {
       calldataGas: 1,
       calldataSize: 1,
       sender: EthAddress.random().toString(),
-      transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      transactionHash: bufferToHex(randomBytes(32)),
     });
 
     const result = await publisher.submitEpochProof({

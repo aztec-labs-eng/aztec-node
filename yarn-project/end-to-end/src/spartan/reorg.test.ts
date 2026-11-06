@@ -5,7 +5,7 @@ import { EthCheatCodesWithState } from '@aztec-labs/ethereum/test';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { DateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { expect, jest } from '@jest/globals';
 
 import { TestWallet } from '../test-wallet/test_wallet.js';
@@ -129,13 +129,13 @@ describe('reorg test', () => {
     const stabilizationTimeoutSeconds = Math.max(minWaitSeconds + 60, Math.min(5 * 60, epochDurationSeconds / 2));
     try {
       const startPendingBlock = await rollupCheatCodes.getTips().then(t => t.pending);
-      const startTime = Date.now();
+      const elapsedTimer = new Timer();
       debugLogger.info(
         `Waiting for pending block to advance from ${startPendingBlock} (min wait: ${minWaitSeconds}s, timeout: ${stabilizationTimeoutSeconds}s)...`,
       );
       await retryUntil(
         async () => {
-          const elapsedSeconds = (Date.now() - startTime) / 1000;
+          const elapsedSeconds = elapsedTimer.ms() / 1000;
           const currentPending = await rollupCheatCodes.getTips().then(t => t.pending);
           if (currentPending > startPendingBlock && elapsedSeconds >= minWaitSeconds) {
             debugLogger.info(

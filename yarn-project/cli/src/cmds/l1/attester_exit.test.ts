@@ -3,6 +3,7 @@ import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { Command } from 'commander';
@@ -48,7 +49,7 @@ describe('initiate-withdraw-by-attester command', () => {
       initiateWithdrawByAttester({
         rpcUrls: ['http://127.0.0.1:1'],
         chainId: foundry.id,
-        privateKey: `0x${Buffer.from(attester.getHdKey().privateKey!).toString('hex')}`,
+        privateKey: bufferToHex(Buffer.from(attester.getHdKey().privateKey!)),
         attesterAddress: EthAddress.fromString(withdrawer.address),
         rollupAddress: EthAddress.ZERO,
         log: () => {},
@@ -59,7 +60,7 @@ describe('initiate-withdraw-by-attester command', () => {
 });
 
 describe('initiate-withdraw-by-attester-batch command', () => {
-  const relayerKey = `0x${Buffer.from(withdrawer.getHdKey().privateKey!).toString('hex')}`;
+  const relayerKey = bufferToHex(Buffer.from(withdrawer.getHdKey().privateKey!));
   const rollupAddress = EthAddress.fromString('0x1234567890123456789012345678901234567890');
   // January 1, 2100 (Unix seconds), so the test authorizations stay valid as time passes.
   const deadline = 4102444800n;

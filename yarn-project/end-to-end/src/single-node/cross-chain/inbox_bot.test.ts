@@ -15,6 +15,7 @@ import {
   sendL1ToL2MessageBatch,
 } from '@aztec-labs/bot';
 import { RecordingTelemetryClient } from '@aztec-labs/bot/testing';
+import { unique } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -290,7 +291,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
       expect(indices.map(index => index - indices[0])).toEqual(indices.map((_, i) => BigInt(i)));
 
       // The buckets the batch used, in the order it used them, and what the Inbox held in them at that L1 block.
-      const buckets = [...new Set(messages.map(message => BigInt(message.bucketSeq!)))];
+      const buckets = unique(messages.map(message => BigInt(message.bucketSeq!)));
       const l1BlockNumber = BigInt(batch.l1BlockNumber!);
       const totals = await Promise.all(buckets.map(seq => t.inbox.getBucket(seq, { blockNumber: l1BlockNumber })));
       const inFirstBucket = messages.filter(message => BigInt(message.bucketSeq!) === buckets[0]).length;

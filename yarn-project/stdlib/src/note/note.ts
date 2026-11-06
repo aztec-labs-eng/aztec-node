@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
@@ -41,7 +42,7 @@ export class Note extends Vector<Fr> {
    */
   static random() {
     const numItems = randomInt(10) + 1;
-    const items = Array.from({ length: numItems }, () => Fr.random());
+    const items = times(numItems, () => Fr.random());
     return new Note(items);
   }
 

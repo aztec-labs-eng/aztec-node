@@ -1,4 +1,5 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { MAX_LOGS_PER_TAG, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
@@ -30,7 +31,7 @@ function makeLog({ blockNumber = 1, logIndexWithinTx = 0 }: { blockNumber?: numb
 
 /** Convenience: build a same-length array of cloned logs that share a cursor target (the last one). */
 function fillPage(size: number, lastLog: LogResult): LogResult[] {
-  const filler = Array.from({ length: size - 1 }, (_, i) => makeLog({ logIndexWithinTx: i }));
+  const filler = times(size - 1, i => makeLog({ logIndexWithinTx: i }));
   return [...filler, lastLog];
 }
 
@@ -64,7 +65,7 @@ describe('getAllPrivateLogsByTags', () => {
   });
 
   it('returns logs when all fit in a single page', async () => {
-    const logsPerTag = tags.map((_tag, i) => Array.from({ length: i + 1 }, () => makeLog()));
+    const logsPerTag = tags.map((_tag, i) => times(i + 1, () => makeLog()));
     aztecNode.getPrivateLogsByTags.mockResolvedValue(logsPerTag);
 
     const result = await getAllPrivateLogsByTags(aztecNode, tags, MOCK_ANCHOR);
@@ -76,7 +77,7 @@ describe('getAllPrivateLogsByTags', () => {
   it('paginates only tags that returned a full page, using their afterLog cursor', async () => {
     const lastLogOfFirstPage = makeLog({ blockNumber: 42, logIndexWithinTx: 9 });
     const firstPage = [fillPage(MAX_LOGS_PER_TAG, lastLogOfFirstPage), [makeLog()], []];
-    const secondPage = [Array.from({ length: 5 }, () => makeLog())];
+    const secondPage = [times(5, () => makeLog())];
 
     aztecNode.getPrivateLogsByTags.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(secondPage);
 
@@ -147,7 +148,7 @@ describe('getAllPrivateLogsByTags', () => {
     let manyTags: SiloedTag[];
 
     beforeAll(async () => {
-      manyTags = await Promise.all(Array.from({ length: MAX_RPC_LEN + 50 }, () => SiloedTag.random()));
+      manyTags = await Promise.all(times(MAX_RPC_LEN + 50, () => SiloedTag.random()));
     });
 
     it('splits tags into batches and concatenates results', async () => {
@@ -197,7 +198,7 @@ describe('getAllPrivateLogsByTags', () => {
           const tagEntry = query.tags[0];
           expect(typeof tagEntry).toBe('object');
           expect((tagEntry as { afterLog: LogCursor }).afterLog.equals(LogCursor.fromLog(lastLog))).toBe(true);
-          return Promise.resolve([Array.from({ length: 3 }, () => makeLog())]);
+          return Promise.resolve([times(3, () => makeLog())]);
         }
         // Second batch (50 tags), single round
         return Promise.resolve(query.tags.map(() => [makeLog()]));

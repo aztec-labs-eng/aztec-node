@@ -7,6 +7,7 @@ import { randomBytes } from '../../crypto/random/index.js';
 import { inspect } from '../../inspect/index.js';
 import { hexSchemaFor } from '../../schemas/utils.js';
 import { BufferReader } from '../../serialize/buffer_reader.js';
+import { bufferToHex } from '../../string/index.js';
 import { Fr } from '../bn254/field.js';
 
 /**
@@ -61,7 +62,7 @@ export abstract class BLS12Field {
   }
 
   toString(): `0x${string}` {
-    return `0x${this.toBuffer().toString('hex')}`;
+    return bufferToHex(this.toBuffer());
   }
 
   toBigInt(): bigint {
@@ -82,7 +83,7 @@ export abstract class BLS12Field {
       limbs.push(buffer.subarray(-(i + 1) * 15, this.size() - i * 15));
     }
     return {
-      limbs: limbs.map(l => `0x${l.toString('hex')}`),
+      limbs: limbs.map(l => bufferToHex(l)),
     };
   }
 

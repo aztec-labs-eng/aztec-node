@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { toArray } from '@aztec-labs/foundation/iterable';
 
 import type { Key, Range } from './common.js';
@@ -40,7 +41,7 @@ export function describeAztecMap(
       }
       await map.set('first', 'A');
       await map.set('last', 'B');
-      const missing = Array.from({ length: 901 }, (_, index) => `missing-${index}`);
+      const missing = times(901, index => `missing-${index}`);
       expect(await map.getManyAsync(['first', ...missing, 'last', 'first'])).toEqual([
         'A',
         ...missing.map(() => undefined),
@@ -117,7 +118,7 @@ export function describeAztecMap(
     });
 
     it('should be able to set many values', async () => {
-      const pairs = Array.from({ length: 100 }, (_, i) => ({ key: `key${i}`, value: `value${i}` }));
+      const pairs = times(100, i => ({ key: `key${i}`, value: `value${i}` }));
       await map.setMany(pairs);
 
       for (const { key, value } of pairs) {

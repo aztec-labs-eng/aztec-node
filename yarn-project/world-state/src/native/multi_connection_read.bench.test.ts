@@ -1,7 +1,9 @@
 import { type IpcClientAsync, UdsIpcClient, createNapiShmAsyncClient } from '@aztec-foundation/ipc-runtime';
 import { AsyncApi } from '@aztec-foundation/wsdb';
 
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import { NativeWorldStateService } from './native_world_state.js';
@@ -79,7 +81,7 @@ describe('world-state multi-connection read throughput', () => {
     for (const connections of CONNECTION_COUNTS) {
       // Bench connections use client ids 1..N (id 0 is the NativeWorldStateService's
       // own connection). Fresh connections each round so rings start empty.
-      const clients = await Promise.all(Array.from({ length: connections }, (_, i) => makeClient(i + 1)));
+      const clients = await Promise.all(times(connections, i => makeClient(i + 1)));
 
       const perConn = Math.floor(TOTAL_READS / connections);
       const reads = perConn * connections;
@@ -96,9 +98,9 @@ describe('world-state multi-connection read throughput', () => {
         clients.map(({ api }) => api.getSiblingPath({ treeId: TREE, revision: COMMITTED, leafIndex: 0 })),
       );
 
-      const start = performance.now();
+      const timer = new Timer();
       await Promise.all(clients.map(({ api }, c) => connectionWorker(c, api)));
-      const ms = performance.now() - start;
+      const ms = timer.ms();
       const throughput = reads / (ms / 1000);
 
       results.push({ connections, reads, ms, throughput });

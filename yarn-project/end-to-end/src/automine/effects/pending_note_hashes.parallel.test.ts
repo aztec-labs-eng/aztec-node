@@ -10,7 +10,7 @@ import {
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
 } from '@aztec-labs/constants';
 import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
-import { chunk } from '@aztec-labs/foundation/collection';
+import { chunk, times } from '@aztec-labs/foundation/collection';
 import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
 import { PendingNoteHashesContract } from '@aztec-labs/noir-test-contracts.js/PendingNoteHashes';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
@@ -374,11 +374,7 @@ describe('automine/effects/pending_note_hashes', () => {
     // We use 10 different recipients to send private logs to in order to avoid exceeding
     // UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN logs emitted for any single sender-recipient pair.
     const recipients = (
-      await Promise.all(
-        Array.from({ length: 10 }, () =>
-          wallet.createSchnorrAccount(Fr.random(), Fr.random(), GrumpkinScalar.random()),
-        ),
-      )
+      await Promise.all(times(10, () => wallet.createSchnorrAccount(Fr.random(), Fr.random(), GrumpkinScalar.random())))
     ).map(a => a.address);
 
     // A delivery to a recipient without a handshake establishes one through a private call, and one per recipient

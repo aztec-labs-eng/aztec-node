@@ -1,3 +1,4 @@
+import { times } from '../collection/index.js';
 import { Fq, type Fr } from '../curves/bn254/field.js';
 import type { Tuple } from './types.js';
 
@@ -178,7 +179,7 @@ export class FieldReader {
       fromFields: (reader: FieldReader) => T;
     },
   ): Tuple<T, N> {
-    const result = Array.from({ length: size }, () => itemDeserializer.fromFields(this));
+    const result = times(size, () => itemDeserializer.fromFields(this));
     return result as Tuple<T, N>;
   }
 

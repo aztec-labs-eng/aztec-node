@@ -2,6 +2,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { mapTuple } from '@aztec-labs/foundation/serialize';
 import { Buffer } from 'buffer';
 
+import { bufferToHex } from '../../string/index.js';
 import type { Signature } from '../signature/index.js';
 
 /**
@@ -49,7 +50,7 @@ export class SchnorrSignature implements Signature {
    * @returns A string containing the signature in hex format.
    */
   toString() {
-    return `0x${this.buffer.toString('hex')}`;
+    return bufferToHex(this.buffer);
   }
 
   /**

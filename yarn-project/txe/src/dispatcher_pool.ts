@@ -2,6 +2,7 @@ import { BackendType, Barretenberg, BarretenbergSync } from '@aztec-foundation/b
 
 import { getSchnorrAccountContractArtifact } from '@aztec-labs/accounts/schnorr/lazy';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { openEphemeralStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { LazyProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/lazy';
 import { ContractStore } from '@aztec-labs/pxe/client/lazy';
@@ -149,7 +150,7 @@ export class TXEDispatcherPool {
   }
 
   private async init(): Promise<void> {
-    const t0 = Date.now();
+    const timer = new Timer();
     const { dataDir, schnorrClassId } = await buildSharedContractStore();
     this.contractStoreSourceDir = dataDir;
     this.schnorrClassId = schnorrClassId;
@@ -157,7 +158,7 @@ export class TXEDispatcherPool {
     this.logger.debug(`TXE dispatcher pool ready (lazy spawn, cap=${this.maxWorkers})`, {
       contractStoreSourceDir: dataDir,
       schnorrClassId,
-      ms: Date.now() - t0,
+      ms: timer.ms(),
     });
   }
 

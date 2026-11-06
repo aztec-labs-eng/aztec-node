@@ -7,6 +7,7 @@ import {
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -333,9 +334,9 @@ describe('TxPoolV2: benchmarks', () => {
 
         let totalDuration = 0;
         for (let i = 0; i < MUTATION_ITERATIONS; i++) {
-          const startTime = performance.now();
+          const timer = new Timer();
           await pool.addPendingTxs(txsToAdd);
-          totalDuration += performance.now() - startTime;
+          totalDuration += timer.ms();
 
           // Reset: remove added txs
           await pool.handleFailedExecution(hashesToRemove);
@@ -372,9 +373,9 @@ describe('TxPoolV2: benchmarks', () => {
 
         let totalDuration = 0;
         for (let i = 0; i < MUTATION_ITERATIONS; i++) {
-          const startTime = performance.now();
+          const timer = new Timer();
           await pool.handleMinedBlock(block);
-          totalDuration += performance.now() - startTime;
+          totalDuration += timer.ms();
 
           // Reset: un-mine by pruning back to block 0
           await pool.handlePrunedBlocks(block0Id);
@@ -426,9 +427,9 @@ describe('TxPoolV2: benchmarks', () => {
           await pool.addProtectedTxs(protectedTxs, slotNHeader);
 
           // Measure prepareForSlot(N+1) which unprotects slot N txs
-          const startTime = performance.now();
+          const timer = new Timer();
           await pool.prepareForSlot(SlotNumber(i * 2 + 2));
-          totalDuration += performance.now() - startTime;
+          totalDuration += timer.ms();
         }
 
         metrics.addMetric(
@@ -471,9 +472,9 @@ describe('TxPoolV2: benchmarks', () => {
           await pool.handleMinedBlock(block);
 
           // Measure: prune back to block 1 (un-mines the transactions)
-          const startTime = performance.now();
+          const timer = new Timer();
           await pool.handlePrunedBlocks(block1Id);
-          totalDuration += performance.now() - startTime;
+          totalDuration += timer.ms();
         }
 
         metrics.addMetric(
@@ -525,9 +526,9 @@ describe('TxPoolV2: benchmarks', () => {
             nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
           });
 
-          const startTime = performance.now();
+          const timer = new Timer();
           await pool2.start();
-          totalDuration += performance.now() - startTime;
+          totalDuration += timer.ms();
 
           // Verify hydration was successful
           expect(await pool2.getPendingTxCount()).toBe(1000);

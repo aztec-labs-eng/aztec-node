@@ -2,6 +2,7 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { TestProverNode } from '@aztec-labs/prover-node/test';
@@ -686,10 +687,7 @@ describe('single-node/proving/optimistic', () => {
       // precisely during that window. We use the session's `beforeTopTreeProve` hook
       // rather than monkey-patching the orchestrator factory.
       const proverNode = test.proverNodes[0].getProverNode() as TestProverNode;
-      let releaseProvingGate: () => void = () => {};
-      const provingGate = new Promise<void>(resolve => {
-        releaseProvingGate = resolve;
-      });
+      const { promise: provingGate, resolve: releaseProvingGate } = promiseWithResolvers<void>();
 
       // Capture the session the hook actually gates so the test reorgs the right epoch.
       // The `beforeTopTreeProve` hook takes no session argument, so we identify the calling

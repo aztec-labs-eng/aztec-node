@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EventSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -68,7 +69,7 @@ describe('StoredPrivateEvent', () => {
     });
 
     it('handles many msgContent fields', async () => {
-      const content = Array.from({ length: 20 }, () => Fr.random());
+      const content = times(20, () => Fr.random());
       const event = await makeEvent({ msgContent: content });
       const restored = StoredPrivateEvent.fromBuffer(event.toBuffer());
 
@@ -90,7 +91,7 @@ describe('StoredPrivateEvent', () => {
     });
 
     it('handles many scopes', async () => {
-      const scopes = new Set(Array.from({ length: 10 }, (_, i) => `scope-${i}`));
+      const scopes = new Set(times(10, i => `scope-${i}`));
       const event = await makeEvent({ scopes });
       const restored = StoredPrivateEvent.fromBuffer(event.toBuffer());
 

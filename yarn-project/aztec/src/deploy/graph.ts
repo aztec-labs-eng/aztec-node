@@ -1,3 +1,5 @@
+import { times } from '@aztec-labs/foundation/collection';
+
 /**
  * Dependency-graph utilities for the deploy framework: topological layering (which steps
  * can run together) and a pretty-printer for the resulting plan.
@@ -82,7 +84,7 @@ export function scheduleLayers(
     layerOf.set(node, Math.max(layerOf.get(node)!, latest));
   }
 
-  const layers: string[][] = Array.from({ length: asap.length }, () => []);
+  const layers: string[][] = times(asap.length, () => []);
   for (const node of nodes) {
     layers[layerOf.get(node)!].push(node);
   }

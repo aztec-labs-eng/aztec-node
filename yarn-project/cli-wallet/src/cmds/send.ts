@@ -4,6 +4,7 @@ import { Contract, NO_WAIT, type SendInteractionOptions } from '@aztec-labs/azte
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { prepTx } from '@aztec-labs/cli/utils';
 import type { LogFn } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { DEFAULT_TX_TIMEOUT_S } from '../utils/cli_wallet_and_node_wrapper.js';
@@ -39,7 +40,7 @@ export async function send(
     authWitnesses,
   };
 
-  const localStart = performance.now();
+  const localTimer = new Timer();
   const sim = await call.simulate({
     ...sendOptions,
     includeMetadata: true,
@@ -61,15 +62,15 @@ export async function send(
     fee: { ...sendOptions.fee, gasSettings: estimatedGas },
     wait: NO_WAIT,
   });
-  const localTimeMs = performance.now() - localStart;
+  const localTimeMs = localTimer.ms();
 
   log(`\nTransaction hash: ${txHash.toString()}`);
 
   if (wait) {
     try {
-      const nodeStart = performance.now();
+      const nodeTimer = new Timer();
       const receipt = await waitForTx(node, txHash, { timeout: DEFAULT_TX_TIMEOUT_S, waitForStatus });
-      const nodeTimeMs = performance.now() - nodeStart;
+      const nodeTimeMs = nodeTimer.ms();
 
       const statusLabel = waitForStatus === TxStatus.PROPOSED ? 'proposed' : 'checkpointed';
       log(`Transaction has been ${statusLabel}`);

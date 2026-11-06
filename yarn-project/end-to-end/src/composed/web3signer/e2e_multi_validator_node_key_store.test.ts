@@ -11,8 +11,10 @@ import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { type CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { type EthPrivateKey, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
 import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
 import type { Sequencer, SequencerClient, SequencerPublisherFactory } from '@aztec-labs/sequencer-client';
@@ -53,14 +55,14 @@ const PUBLISHER_KEY_START_INDEX = VALIDATOR_COUNT + VALIDATOR_KEY_START_INDEX;
 const PROVER_PUBLISHER_INDEX = PUBLISHER_KEY_START_INDEX + PUBLISHER_COUNT;
 const BLOCK_COUNT = 20;
 
-const publishers = Array.from({ length: PUBLISHER_COUNT }, (_, i) => ({
+const publishers = times(PUBLISHER_COUNT, i => ({
   index: i + PUBLISHER_KEY_START_INDEX,
-  key: `0x${getPrivateKeyFromIndex(i + PUBLISHER_KEY_START_INDEX)!.toString('hex')}` as EthPrivateKey,
+  key: bufferToHex(getPrivateKeyFromIndex(i + PUBLISHER_KEY_START_INDEX)!) as EthPrivateKey,
 }));
 
-const validators = Array.from(
-  { length: VALIDATOR_COUNT },
-  (_, i) => `0x${getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!.toString('hex')}` as EthPrivateKey,
+const validators = times(
+  VALIDATOR_COUNT,
+  i => bufferToHex(getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!) as EthPrivateKey,
 );
 
 async function createKeyFiles() {
@@ -74,13 +76,13 @@ async function createKeyFiles() {
   const file5 = join(directory, 'keyfile5.json');
   const file6 = join(directory, 'keyfile6.json');
 
-  const proverPrivateKey = `0x${getPrivateKeyFromIndex(PROVER_PUBLISHER_INDEX)!.toString('hex')}` as EthPrivateKey;
+  const proverPrivateKey = bufferToHex(getPrivateKeyFromIndex(PROVER_PUBLISHER_INDEX)!) as EthPrivateKey;
 
-  const coinbaseAddresses = Array.from({ length: VALIDATOR_COUNT }, (_, i) => {
+  const coinbaseAddresses = times(VALIDATOR_COUNT, i => {
     return EthAddress.fromNumber(i + 1);
   });
 
-  const feeRecipientAddresses = Array.from({ length: VALIDATOR_COUNT }, (_, i) => {
+  const feeRecipientAddresses = times(VALIDATOR_COUNT, i => {
     return AztecAddress.fromNumberUnsafe(i + 1);
   });
 
@@ -182,9 +184,9 @@ describe('e2e_multi_validator_node', () => {
   const expectedPublishers = new Map<string, string[]>();
 
   beforeEach(async () => {
-    initialValidatorPrivateKeys = Array.from(
-      { length: VALIDATOR_COUNT },
-      (_, i) => `0x${getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!.toString('hex')}` as `0x${string}`,
+    initialValidatorPrivateKeys = times(
+      VALIDATOR_COUNT,
+      i => bufferToHex(getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!) as `0x${string}`,
     );
     validatorAddresses = initialValidatorPrivateKeys.map(pk => {
       const account = privateKeyToAccount(pk);
@@ -273,7 +275,7 @@ describe('e2e_multi_validator_node', () => {
 
     // Create keys and wallets for signing using our remote signer
     for (let i = 0; i < VALIDATOR_COUNT + PUBLISHER_COUNT + 1; i++) {
-      const pk = `0x${getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!.toString('hex')}` as EthPrivateKey;
+      const pk = bufferToHex(getPrivateKeyFromIndex(i + VALIDATOR_KEY_START_INDEX)!) as EthPrivateKey;
       const account = getAddressFromPrivateKey(pk);
       addressToPrivateKey.set(account.toLowerCase(), pk);
     }
@@ -409,7 +411,7 @@ describe('e2e_multi_validator_node', () => {
 
     // Now we just submit some transactions to create some blocks. 1 tx per block.
     // Then we check the results captured above
-    const sentTransactionPromises = Array.from({ length: BLOCK_COUNT }, (_, i) => {
+    const sentTransactionPromises = times(BLOCK_COUNT, i => {
       const contractAddressSalt = new Fr(i + 1);
       return sendTx(contractAddressSalt);
     });

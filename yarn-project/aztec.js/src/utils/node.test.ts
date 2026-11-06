@@ -1,5 +1,6 @@
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { TimeoutError } from '@aztec-labs/foundation/error';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import {
@@ -95,24 +96,24 @@ describe('waitForTx', () => {
 
     it('does not consume the dropped-receipt grace period', async () => {
       node.getTxReceipt.mockResolvedValue(new DroppedTxReceipt(txHash, 'Tx dropped'));
-      const start = Date.now();
+      const timer = new Timer();
 
       await expect(
         waitForTx(node, txHash, { timeout: 2, interval: 0.05, initialDelay: 0.3, ignoreDroppedReceiptsFor: 0.2 }),
       ).rejects.toThrow(/dropped/);
 
-      expect(Date.now() - start).toBeGreaterThanOrEqual(450);
+      expect(timer.ms()).toBeGreaterThanOrEqual(450);
     });
 
     it('counts against the timeout', async () => {
       node.getTxReceipt.mockResolvedValue(new PendingTxReceipt(txHash, undefined));
-      const start = Date.now();
+      const timer = new Timer();
 
       await expect(waitForTx(node, txHash, { timeout: 0.3, interval: 0.05, initialDelay: 1 })).rejects.toThrow(
         /Timeout/,
       );
 
-      expect(Date.now() - start).toBeLessThan(1000);
+      expect(timer.ms()).toBeLessThan(1000);
     });
   });
 

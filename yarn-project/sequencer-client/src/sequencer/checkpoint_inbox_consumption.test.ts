@@ -1,4 +1,5 @@
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -21,7 +22,7 @@ describe('CheckpointInboxConsumption', () => {
   let streamingInbox: MockStreamingInbox;
   let deps: CheckpointInboxConsumptionDeps;
 
-  const leaves = (count: number, offset = 0) => Array.from({ length: count }, (_, i) => new Fr(offset + i + 1));
+  const leaves = (count: number, offset = 0) => times(count, i => new Fr(offset + i + 1));
   /** A far-future build deadline, in seconds, so endpoint lookups never time out unless a test wants them to. */
   const farDeadline = () => Date.now() / 1000 + 60;
 

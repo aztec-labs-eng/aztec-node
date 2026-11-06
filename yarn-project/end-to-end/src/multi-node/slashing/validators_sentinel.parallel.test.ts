@@ -1,5 +1,6 @@
 import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { times } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ValidatorsStats } from '@aztec-labs/stdlib/validators';
@@ -46,7 +47,7 @@ describe('multi-node/slashing/validators_sentinel', () => {
     });
 
     // Create the first NUM_NODES validators' nodes; the last validator shows as offline.
-    nodes = await Promise.all(Array.from({ length: NUM_NODES }, (_, i) => test.createValidatorNodeAt(i)));
+    nodes = await Promise.all(times(NUM_NODES, i => test.createValidatorNodeAt(i)));
 
     test.logger.info(`Setup complete`, { validators: test.validators });
   });

@@ -19,9 +19,11 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { GovernanceProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { TopicType } from '@aztec-labs/stdlib/p2p';
@@ -181,14 +183,11 @@ export class HaFullTestContext {
     // Connect to database (migrations already run by docker-compose entrypoint)
     this.mainPool = setupHADatabase(this.databaseConfig.databaseUrl.getValue()!);
 
-    this.attesterPrivateKeys = Array.from(
-      { length: VALIDATOR_COUNT },
-      (_, i) => `0x${getPrivateKeyFromIndex(i)!.toString('hex')}` as `0x${string}`,
-    );
+    this.attesterPrivateKeys = times(VALIDATOR_COUNT, i => bufferToHex(getPrivateKeyFromIndex(i)!) as `0x${string}`);
 
-    this.publisherPrivateKeys = Array.from(
-      { length: NODE_COUNT },
-      (_, i) => `0x${getPrivateKeyFromIndex(i + VALIDATOR_COUNT)!.toString('hex')}` as `0x${string}`,
+    this.publisherPrivateKeys = times(
+      NODE_COUNT,
+      i => bufferToHex(getPrivateKeyFromIndex(i + VALIDATOR_COUNT)!) as `0x${string}`,
     );
 
     const web3SignerDir = getWeb3SignerTestKeystoreDir();
@@ -205,7 +204,7 @@ export class HaFullTestContext {
     await refreshWeb3Signer(this.web3SignerUrl, ...this.attesterAddresses, ...this.publisherAddresses);
 
     // Create database pools for HA nodes
-    this.haNodePools = Array.from({ length: NODE_COUNT }, () => {
+    this.haNodePools = times(NODE_COUNT, () => {
       const pool = new Pool({ connectionString: this.databaseConfig.databaseUrl.getValue()! });
       // pg-pool re-emits idle-client errors on the pool; with no listener the emit throws - in production this
       // crashes the validator process.

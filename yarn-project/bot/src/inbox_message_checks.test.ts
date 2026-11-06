@@ -4,6 +4,7 @@ import {
   IndexWithinCheckpoint,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { computeRootFromSiblingPath } from '@aztec-labs/foundation/trees';
 import { type BlockData, BlockHash } from '@aztec-labs/stdlib/block';
@@ -46,7 +47,7 @@ function nodeWithLeaves(leavesAt: (blockNumber: number) => number | undefined): 
 
 describe('verifyL1ToL2MessageWitness', () => {
   const msgHash = new Fr(42n);
-  const siblingPath = Array.from({ length: MESSAGE_TREE_HEIGHT }, (_, i) => new Fr(BigInt(i + 1)).toBuffer());
+  const siblingPath = times(MESSAGE_TREE_HEIGHT, i => new Fr(BigInt(i + 1)).toBuffer());
 
   const rootFor = async (index: number) =>
     Fr.fromBuffer(

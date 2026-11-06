@@ -8,6 +8,7 @@ import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { count } from '@aztec-labs/foundation/string';
@@ -431,7 +432,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       // Fetch checkpoints and blocks in bounded batches to avoid unbounded concurrent
       // promises when the gap between local pending and proven checkpoint numbers is large.
       const BATCH_SIZE = 10;
-      const indices = Array.from({ length: checkpointsToUnwind }, (_, i) => CheckpointNumber(i + pruneFrom));
+      const indices = times(checkpointsToUnwind, i => CheckpointNumber(i + pruneFrom));
       const checkpoints = (
         await asyncPool(BATCH_SIZE, indices, idx => this.stores.blocks.getCheckpointData(idx))
       ).filter(isDefined);

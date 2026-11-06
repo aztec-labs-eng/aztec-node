@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { countZodIssues } from '@aztec-labs/foundation/testing';
 
@@ -187,7 +188,7 @@ describe('abi', () => {
     it('rejects debug metadata with an oversized file map without parsing each entry', () => {
       // eslint-disable-next-line camelcase
       const debugSymbols = { location_tree: { locations: [] }, acir_locations: {}, brillig_locations: {} };
-      const files = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`${i}`, {}]));
+      const files = Object.fromEntries(times(10_000, i => [`${i}`, {}]));
       const result = FunctionDebugMetadataSchema.safeParse({ debugSymbols, files });
       expect(result.success).toBe(false);
       expect(countZodIssues(result.error!.issues)).toBeLessThan(10);
@@ -195,7 +196,7 @@ describe('abi', () => {
 
     it('rejects an artifact with an oversized storage layout without parsing each entry', () => {
       const json = JSON.parse(jsonStringify(getTestContractArtifact()));
-      json.storageLayout = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`slot${i}`, {}]));
+      json.storageLayout = Object.fromEntries(times(10_000, i => [`slot${i}`, {}]));
       const result = ContractArtifactSchema.safeParse(json);
       expect(result.success).toBe(false);
       expect(countZodIssues(result.error!.issues)).toBeLessThan(10);

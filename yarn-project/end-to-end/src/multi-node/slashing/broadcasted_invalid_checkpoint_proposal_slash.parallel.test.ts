@@ -4,6 +4,7 @@ import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { BlockNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -352,7 +353,7 @@ describe('multi-node/slashing/broadcasted_invalid_checkpoint_proposal_slash', ()
       }),
     ];
     const honestNodes = await Promise.all(
-      Array.from({ length: NUM_VALIDATORS - 1 }, (_, i) =>
+      times(NUM_VALIDATORS - 1, i =>
         test.createValidatorNodeAt(i + 1, {
           dontStartSequencer: true,
           minTxsPerBlock: 0,

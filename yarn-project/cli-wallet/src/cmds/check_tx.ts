@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { ProtocolContractAddress } from '@aztec-labs/aztec.js/protocol';
 import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import { unique } from '@aztec-labs/foundation/collection';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import {
   computeSiloedPrivateInitializationNullifier,
@@ -202,7 +203,7 @@ async function getKnownArtifacts(wallet: CLIWallet): Promise<ArtifactMap> {
   );
   const classIdFor = (metadata: (typeof knownContracts)[number]): Fr | undefined =>
     metadata.updatedContractClassId ?? metadata.instance?.originalContractClassId;
-  const classIds = [...new Set(knownContracts.map(classIdFor))];
+  const classIds = unique(knownContracts.map(classIdFor));
   const knownArtifacts = (
     await Promise.all(classIds.map(classId => (classId ? wallet.getContractArtifact(classId) : undefined)))
   ).map((artifact, index) => (artifact ? { ...artifact, classId: classIds[index] } : undefined));

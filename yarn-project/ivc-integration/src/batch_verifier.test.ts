@@ -1,5 +1,6 @@
 import { AztecClientBackend, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 
@@ -60,7 +61,7 @@ describe('Batch Chonk Verifier workloads', () => {
       vks: [vk],
       numCores: 0,
       batchSize: 8,
-      proofs: Array.from({ length: 4 }, () => ({ vkIndex: 0, proofFields: validProofFields })),
+      proofs: times(4, () => ({ vkIndex: 0, proofFields: validProofFields })),
     });
     expect(results).toHaveLength(4);
     expect(results.every(r => r.valid)).toBe(true);

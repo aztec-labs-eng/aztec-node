@@ -18,6 +18,7 @@ import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
 import type { BootstrapNode } from '@aztec-labs/p2p/bootstrap';
 import { createBootstrapNodeFromPrivateKey, getBootstrapNodeEnr } from '@aztec-labs/p2p/test-helpers';
@@ -110,7 +111,7 @@ export class P2PNetworkTest {
     this.logger = createLogger(`e2e:e2e_p2p:${testName}`);
 
     // Set up the base account and node private keys for the initial network deployment
-    this.baseAccountPrivateKey = `0x${getPrivateKeyFromIndex(1)!.toString('hex')}`;
+    this.baseAccountPrivateKey = bufferToHex(getPrivateKeyFromIndex(1)!);
     this.baseAccount = privateKeyToAccount(this.baseAccountPrivateKey);
     this.attesterPrivateKeys = generatePrivateKeys(
       ATTESTER_PRIVATE_KEYS_START_INDEX + numberOfNodes,

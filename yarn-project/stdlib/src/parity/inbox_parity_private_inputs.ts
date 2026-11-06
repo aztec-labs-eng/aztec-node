@@ -5,7 +5,7 @@ import {
   INBOX_PARITY_SIZE_XSMALL,
   INBOX_PARITY_SIZE_XXSMALL,
 } from '@aztec-labs/constants';
-import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
@@ -99,7 +99,7 @@ export class InboxParityPrivateInputs {
     const reader = BufferReader.asReader(buffer);
     const size = Fr.fromBuffer(reader).toNumber() as InboxParitySize;
     // Array.from keeps the type `Fr[]`; readArray with the union-literal `size` would infer a deep tuple.
-    const messages = Array.from({ length: size }, () => Fr.fromBuffer(reader));
+    const messages = times(size, () => Fr.fromBuffer(reader));
     return new InboxParityPrivateInputs(
       size,
       messages,

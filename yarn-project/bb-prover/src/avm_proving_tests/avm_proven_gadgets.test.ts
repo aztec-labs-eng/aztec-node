@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { AvmGadgetsTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmGadgetsTest';
@@ -64,7 +65,7 @@ describe.skip('AVM proven gadgets test', () => {
         {
           address: avmGadgetsTestContract.address,
           fnName: 'keccak_hash_1400',
-          args: [/*input=*/ Array.from({ length: 1400 }, () => randomInt(2 ** 8))],
+          args: [/*input=*/ times(1400, () => randomInt(2 ** 8))],
         },
       ],
     );
@@ -80,7 +81,7 @@ describe.skip('AVM proven gadgets test', () => {
         {
           address: avmGadgetsTestContract.address,
           fnName: 'sha256_hash_1536',
-          args: [/*input=*/ Array.from({ length: 1536 }, () => randomInt(2 ** 8))],
+          args: [/*input=*/ times(1536, () => randomInt(2 ** 8))],
         },
       ],
     );
@@ -96,7 +97,7 @@ describe.skip('AVM proven gadgets test', () => {
         {
           address: avmGadgetsTestContract.address,
           fnName: 'poseidon2_hash_1000fields',
-          args: [/*input=*/ Array.from({ length: 2000 }, () => randomInt(2 ** 8))],
+          args: [/*input=*/ times(2000, () => randomInt(2 ** 8))],
         },
       ],
     );
@@ -150,7 +151,7 @@ describe('AVM proven gadgets test: test vectors', () => {
   it('keccak_hash_test_vector_300bytes', async () => {
     // 300 bytes exceeds the keccak256 rate (136 bytes), triggering multi-block permutation.
     // keccak256([0x00, 0x01, ..., 0x2b, 0x00, 0x01, ..., 0x2b, ...]) for 300 bytes
-    const input = Array.from({ length: 300 }, (_, i) => i % 256);
+    const input = times(300, i => i % 256);
     const result = await tester.executeTxWithLabel(
       /*txLabel=*/ 'AvmGadgetsTest/keccak_hash_300',
       /*sender=*/ sender,
@@ -193,7 +194,7 @@ describe('AVM proven gadgets test: test vectors', () => {
   it('sha256_hash_test_vector_255bytes', async () => {
     // 255 bytes exceeds the sha256 block size (64 bytes), triggering multi-block compression.
     // sha256([0x00, 0x01, ..., 0xfe]) = 3f8591112c6bbe5c963965954e293108b7208ed2af893e500d859368c654eabe
-    const input = Array.from({ length: 255 }, (_, i) => i);
+    const input = times(255, i => i);
     const result = await tester.executeTxWithLabel(
       /*txLabel=*/ 'AvmGadgetsTest/sha256_hash_255',
       /*sender=*/ sender,

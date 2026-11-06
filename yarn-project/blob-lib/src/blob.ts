@@ -2,6 +2,7 @@ import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
 import { BLS12Fr } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 
 import { computeBlobCommitment, computeChallengeZ, computeEthVersionedBlobHash } from './hash.js';
@@ -107,9 +108,9 @@ export class Blob {
    */
   toJSON(): BlobJson {
     return {
-      blob: `0x${Buffer.from(this.data).toString('hex')}`,
+      blob: bufferToHex(Buffer.from(this.data)),
       // eslint-disable-next-line camelcase
-      kzg_commitment: `0x${this.commitment.toString('hex')}`,
+      kzg_commitment: bufferToHex(this.commitment),
     };
   }
 

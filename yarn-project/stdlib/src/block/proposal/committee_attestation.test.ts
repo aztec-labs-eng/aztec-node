@@ -1,5 +1,6 @@
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { bufferToHex } from '@aztec-labs/foundation/string';
@@ -30,8 +31,8 @@ function referenceFromPacked(packed: ViemCommitteeAttestations, committeeSize: n
         throw new Error(`Insufficient data for signature at position ${i}`);
       }
       const v = dataBuffer[dataIndex];
-      const r = `0x${dataBuffer.subarray(dataIndex + 1, dataIndex + 33).toString('hex')}` as const;
-      const s = `0x${dataBuffer.subarray(dataIndex + 33, dataIndex + 65).toString('hex')}` as const;
+      const r = bufferToHex(dataBuffer.subarray(dataIndex + 1, dataIndex + 33));
+      const s = bufferToHex(dataBuffer.subarray(dataIndex + 33, dataIndex + 65));
       attestations.push(new CommitteeAttestation(EthAddress.ZERO, Signature.fromViemSignature({ r, s, v })));
       dataIndex += 65;
     } else {
@@ -39,9 +40,7 @@ function referenceFromPacked(packed: ViemCommitteeAttestations, committeeSize: n
         throw new Error(`Insufficient data for address at position ${i}`);
       }
       const addressBytes = dataBuffer.subarray(dataIndex, dataIndex + 20);
-      attestations.push(
-        new CommitteeAttestation(EthAddress.fromString(`0x${addressBytes.toString('hex')}`), Signature.empty()),
-      );
+      attestations.push(new CommitteeAttestation(EthAddress.fromString(bufferToHex(addressBytes)), Signature.empty()));
       dataIndex += 20;
     }
   }
@@ -51,7 +50,7 @@ function referenceFromPacked(packed: ViemCommitteeAttestations, committeeSize: n
 
 /** A committee where every third member signed, so both branches of the decoder are exercised. */
 function mixedCommittee(size: number): CommitteeAttestation[] {
-  return Array.from({ length: size }, (_, i) =>
+  return times(size, i =>
     i % 3 === 0 ? CommitteeAttestation.fromSignature(Signature.random()) : CommitteeAttestation.random(),
   );
 }

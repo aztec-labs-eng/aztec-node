@@ -8,6 +8,7 @@ import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { SequencerClient } from '@aztec-labs/sequencer-client';
 import type { TestSequencerClient } from '@aztec-labs/sequencer-client/test';
 import { jest } from '@jest/globals';
@@ -36,7 +37,7 @@ const toPrivateKeyHex = (index: number): Hex => {
   if (!buf) {
     throw new Error(`Failed to derive private key for index ${index}`);
   }
-  return `0x${buf.toString('hex')}`;
+  return bufferToHex(buf);
 };
 
 const FUNDING_THRESHOLD = parseEther('2');

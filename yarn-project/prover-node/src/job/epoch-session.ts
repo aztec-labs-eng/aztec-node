@@ -6,6 +6,7 @@ import {
 } from '@aztec-labs/foundation/branded-types';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
@@ -126,8 +127,7 @@ export class EpochSession implements Traceable {
   /** Cancelled top-tree jobs whose teardown is still in flight. Awaited at session stop. */
   private readonly pendingTopTreeCleanups: TopTreeJob[] = [];
 
-  private readonly completionPromise: Promise<EpochProvingJobState>;
-  private resolveCompletion!: (state: EpochProvingJobState) => void;
+  private readonly completion = promiseWithResolvers<EpochProvingJobState>();
 
   /** Stable reference; never mutated after construction. */
   private readonly checkpoints: readonly CheckpointProver[];
@@ -147,9 +147,6 @@ export class EpochSession implements Traceable {
       instanceId: `session-${spec.kind}-${spec.epochNumber}-${spec.fromSlot}-${spec.toSlot}`,
     });
     this.tracer = deps.metrics.tracer;
-    this.completionPromise = new Promise(resolve => {
-      this.resolveCompletion = resolve;
-    });
     this.scheduleDeadlineStop();
     this.log.info(`Created EpochSession ${this.uuid}`, {
       uuid: this.uuid,
@@ -189,7 +186,7 @@ export class EpochSession implements Traceable {
 
   /** Resolves when the session reaches a terminal state. */
   public whenDone(): Promise<EpochProvingJobState> {
-    return this.completionPromise;
+    return this.completion.promise;
   }
 
   /** True if the session is in a terminal state. */
@@ -249,7 +246,7 @@ export class EpochSession implements Traceable {
     } finally {
       clearTimeout(this.deadlineTimeoutHandler);
       await this.teardownTopTreeIfNeeded();
-      this.resolveCompletion(this.state);
+      this.completion.resolve(this.state);
     }
     return this.state;
   }
@@ -283,7 +280,7 @@ export class EpochSession implements Traceable {
       this.pendingTopTreeCleanups.push(job);
     }
     await this.teardownTopTreeIfNeeded();
-    this.resolveCompletion(this.state);
+    this.completion.resolve(this.state);
   }
 
   private async run(): Promise<void> {

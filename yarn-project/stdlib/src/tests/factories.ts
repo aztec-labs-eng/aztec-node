@@ -44,13 +44,14 @@ import {
 } from '@aztec-labs/constants';
 import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber, CheckpointNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
-import { compact } from '@aztec-labs/foundation/collection';
+import { compact, times } from '@aztec-labs/foundation/collection';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
 import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Bufferable, Serializable, Tuple } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import { Buffer } from 'buffer';
 
@@ -214,7 +215,7 @@ function makePrivateLogData(seed: number) {
 function makePublicLog(seed: number) {
   return new PublicLog(
     makeAztecAddress(seed),
-    new Array(10).fill(null).map((_, i) => new Fr(seed + i)),
+    times(10, i => new Fr(seed + i)),
   );
 }
 
@@ -397,7 +398,7 @@ function makeAvmAccumulatedData(seed = 1) {
     makeTuple(MAX_NOTE_HASHES_PER_TX, fr, seed),
     makeTuple(MAX_NULLIFIERS_PER_TX, fr, seed + 0x100),
     makeTuple(MAX_L2_TO_L1_MSGS_PER_TX, makeScopedL2ToL1Message, seed + 0x200),
-    FlatPublicLogs.fromLogs(new Array(20).fill(null).map((_, i) => makePublicLog(seed + i * 256))),
+    FlatPublicLogs.fromLogs(times(20, i => makePublicLog(seed + i * 256))),
     makeTuple(MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX, makePublicDataWrite, seed + 0x400),
   );
 }
@@ -836,7 +837,7 @@ export function makeParityPublicInputs(seed = 0): ParityPublicInputs {
 export function makeInboxParityPrivateInputs(seed = 0): InboxParityPrivateInputs {
   const size = INBOX_PARITY_SIZE_SMALL;
   const numMsgs = seed % (size + 1);
-  const messages = Array.from({ length: size }, (_, i) => (i < numMsgs ? fr(i + seed + 0x3000) : Fr.ZERO));
+  const messages = times(size, i => (i < numMsgs ? fr(i + seed + 0x3000) : Fr.ZERO));
   return new InboxParityPrivateInputs(size, messages, numMsgs, new Fr(seed + 0x3500), new Fr(seed + 0x5000));
 }
 
@@ -1174,15 +1175,11 @@ function makeContractClassPrivateFunction(seed = 0): PrivateFunction {
 }
 
 export function makeArray<T>(length: number, fn: (i: number) => T, offset = 0) {
-  return Array.from({ length }, (_: any, i: number) => fn(i + offset));
+  return times(length, (i: number) => fn(i + offset));
 }
 
 export function makeArrayAsync<T>(length: number, fn: (i: number) => Promise<T>, offset = 0) {
-  return Promise.all(
-    Array(length)
-      .fill(0)
-      .map((_: any, i: number) => fn(i + offset)),
-  );
+  return Promise.all(times(length, (i: number) => fn(i + offset)));
 }
 
 export function makeVector<T extends Bufferable>(length: number, fn: (i: number) => T, offset = 0) {
@@ -1253,7 +1250,7 @@ export async function makeContractInstanceFromClassId(
 
 export function makeAvmGetSiblingPathHint(seed = 0): AvmGetSiblingPathHint {
   // We want a possibly large index, but non-random.
-  const index = BigInt(`0x${sha256(Buffer.from(seed.toString())).toString('hex')}`) % (1n << 64n);
+  const index = BigInt(bufferToHex(sha256(Buffer.from(seed.toString())))) % (1n << 64n);
   return new AvmGetSiblingPathHint(
     makeAppendOnlyTreeSnapshot(seed),
     /*treeId=*/ (seed + 1) % 5,
@@ -1264,8 +1261,8 @@ export function makeAvmGetSiblingPathHint(seed = 0): AvmGetSiblingPathHint {
 
 export function makeAvmGetPreviousValueIndexHint(seed = 0): AvmGetPreviousValueIndexHint {
   // We want a possibly large index, but non-random.
-  const index = BigInt(`0x${sha256(Buffer.from(seed.toString())).toString('hex')}`) % (1n << 64n);
-  const value = new Fr(BigInt(`0x${sha256(Buffer.from((seed + 2).toString())).toString('hex')}`) % (1n << 128n));
+  const index = BigInt(bufferToHex(sha256(Buffer.from(seed.toString())))) % (1n << 64n);
+  const value = new Fr(BigInt(bufferToHex(sha256(Buffer.from((seed + 2).toString())))) % (1n << 128n));
   return new AvmGetPreviousValueIndexHint(
     makeAppendOnlyTreeSnapshot(seed),
     /*treeId=*/ (seed + 1) % 5,
@@ -1277,7 +1274,7 @@ export function makeAvmGetPreviousValueIndexHint(seed = 0): AvmGetPreviousValueI
 
 export function makeAvmGetLeafPreimageHintPublicDataTree(seed = 0): AvmGetLeafPreimageHintPublicDataTree {
   // We want a possibly large index, but non-random.
-  const index = BigInt(`0x${sha256(Buffer.from(seed.toString())).toString('hex')}`) % (1n << 64n);
+  const index = BigInt(bufferToHex(sha256(Buffer.from(seed.toString())))) % (1n << 64n);
   return new AvmGetLeafPreimageHintPublicDataTree(
     makeAppendOnlyTreeSnapshot(seed),
     /*index=*/ index,
@@ -1287,7 +1284,7 @@ export function makeAvmGetLeafPreimageHintPublicDataTree(seed = 0): AvmGetLeafPr
 
 export function makeAvmGetLeafPreimageHintNullifierTree(seed = 0): AvmGetLeafPreimageHintNullifierTree {
   // We want a possibly large index, but non-random.
-  const index = BigInt(`0x${sha256(Buffer.from(seed.toString())).toString('hex')}`) % (1n << 64n);
+  const index = BigInt(bufferToHex(sha256(Buffer.from(seed.toString())))) % (1n << 64n);
   return new AvmGetLeafPreimageHintNullifierTree(
     makeAppendOnlyTreeSnapshot(seed),
     /*index=*/ index,
@@ -1297,7 +1294,7 @@ export function makeAvmGetLeafPreimageHintNullifierTree(seed = 0): AvmGetLeafPre
 
 export function makeAvmGetLeafValueHint(seed = 0): AvmGetLeafValueHint {
   // We want a possibly large index, but non-random.
-  const index = BigInt(`0x${sha256(Buffer.from(seed.toString())).toString('hex')}`) % (1n << 64n);
+  const index = BigInt(bufferToHex(sha256(Buffer.from(seed.toString())))) % (1n << 64n);
   return new AvmGetLeafValueHint(
     makeAppendOnlyTreeSnapshot(seed),
     /*treeId=*/ (seed + 1) % 5,

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
@@ -25,7 +26,7 @@ describe('calculateTxResponseSize', () => {
   });
 
   it('should return correct size for 8 tx hashes (default batch size)', () => {
-    const hashes = new TxHashArray(...Array.from({ length: 8 }, () => TxHash.random()));
+    const hashes = new TxHashArray(...times(8, () => TxHash.random()));
     const buffer = hashes.toBuffer();
 
     expect(calculateTxResponseSize(buffer)).toBe(8 * MAX_TX_SIZE_KB + 1);
@@ -80,7 +81,7 @@ describe('reqRespTxHandler', () => {
   });
 
   it('still serves each distinct hash in a normal batch', async () => {
-    const hashes = Array.from({ length: 3 }, () => TxHash.random());
+    const hashes = times(3, () => TxHash.random());
     const lookups: string[] = [];
     const mempools = makeMempools((x: TxHash) => {
       lookups.push(x.toString());
@@ -99,7 +100,7 @@ describe('reqRespTxHandler', () => {
       lookups.push(x.toString());
       return Promise.resolve(undefined);
     });
-    const request = new TxHashArray(...Array.from({ length: 101 }, () => TxHash.random())).toBuffer();
+    const request = new TxHashArray(...times(101, () => TxHash.random())).toBuffer();
 
     const err = await reqRespTxHandler(mempools)(peerId, request).then(
       () => undefined,

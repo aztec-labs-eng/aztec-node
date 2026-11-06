@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { sleep } from '@aztec-labs/foundation/sleep';
 
@@ -172,7 +173,7 @@ describe('sqlite-opfs store management', () => {
       });
     }
     const values = await toArray(reopened.openMap<number, string>('m').valuesAsync());
-    expect(values).toEqual(Array.from({ length: entries }, (_, i) => `v${i}`));
+    expect(values).toEqual(times(entries, i => `v${i}`));
     await reopened.close();
     await deleteStore(name);
   });

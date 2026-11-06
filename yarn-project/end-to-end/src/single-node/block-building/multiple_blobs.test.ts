@@ -7,6 +7,7 @@ import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { encodeCheckpointBlobDataFromBlocks } from '@aztec-labs/blob-lib/encoding';
 import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { sum, times } from '@aztec-labs/foundation/collection';
 import { AvmGadgetsTestContract } from '@aztec-labs/noir-test-contracts.js/AvmGadgetsTest';
 import { AvmTestContract } from '@aztec-labs/noir-test-contracts.js/AvmTest';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
@@ -70,7 +71,7 @@ describe('single-node/block-building/multiple_blobs', () => {
         contract.methods.create_l2_to_l1_message_arbitrary_recipient_private(Fr.random(), EthAddress.random()),
         contract.methods.emit_array_as_encrypted_log(
           0n,
-          Array.from({ length: 5 }).map(() => Fr.random()),
+          times(5, () => Fr.random()),
           defaultAccountAddress,
           true,
         ),
@@ -113,10 +114,9 @@ describe('single-node/block-building/multiple_blobs', () => {
         nullifiers: acc.nullifiers + tx.nullifiers.length,
         l2ToL1Msgs: acc.l2ToL1Msgs + tx.l2ToL1Msgs.length,
         publicDataWrites: acc.publicDataWrites + tx.publicDataWrites.length,
-        privateLogs: acc.privateLogs + tx.privateLogs.map(l => l.emittedLength).reduce((a, b) => a + b, 0),
-        publicLogs: acc.publicLogs + tx.publicLogs.map(l => l.fields.length).reduce((a, b) => a + b, 0),
-        contractClassLogs:
-          acc.contractClassLogs + tx.contractClassLogs.map(l => l.emittedLength).reduce((a, b) => a + b, 0),
+        privateLogs: acc.privateLogs + sum(tx.privateLogs.map(l => l.emittedLength)),
+        publicLogs: acc.publicLogs + sum(tx.publicLogs.map(l => l.fields.length)),
+        contractClassLogs: acc.contractClassLogs + sum(tx.contractClassLogs.map(l => l.emittedLength)),
       }),
       {
         noteHashes: 0,

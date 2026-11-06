@@ -51,13 +51,11 @@ const mockTxsWithCCLog = (numTxs: number) =>
     });
     // The length is at least 1 and at most CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - 1.
     // -1 so that we can tweak the fields to have an extra field.
-    const emittedLengths = Array.from(
-      { length: MAX_CONTRACT_CLASS_LOGS_PER_TX },
+    const emittedLengths = times(
+      MAX_CONTRACT_CLASS_LOGS_PER_TX,
       () => 1 + randomInt(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - 2),
     );
-    const logs = Array.from({ length: MAX_CONTRACT_CLASS_LOGS_PER_TX }, (_, i) =>
-      ContractClassLogFields.random(emittedLengths[i]),
-    );
+    const logs = times(MAX_CONTRACT_CLASS_LOGS_PER_TX, i => ContractClassLogFields.random(emittedLengths[i]));
     const logHashes = await Promise.all(
       logs.map(async (log, i) =>
         LogHash.from({

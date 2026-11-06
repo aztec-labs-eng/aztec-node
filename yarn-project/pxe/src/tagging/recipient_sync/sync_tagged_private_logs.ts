@@ -1,4 +1,5 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { isDefined } from '@aztec-labs/foundation/types';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
@@ -194,7 +195,7 @@ async function fetchLogsForSecrets(
   anchor: LogQueryAnchor,
 ): Promise<LogWithIndex[][]> {
   // Determine the index range for each secret
-  const indexesPerSecret = pending.map(({ start, end }) => Array.from({ length: end - start }, (_, i) => start + i));
+  const indexesPerSecret = pending.map(({ start, end }) => times(end - start, i => start + i));
 
   // Compute siloed tags for all indexes
   const tagsPerSecret = await allToCompletion(

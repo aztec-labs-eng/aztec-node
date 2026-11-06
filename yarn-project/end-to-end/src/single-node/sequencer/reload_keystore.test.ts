@@ -7,6 +7,7 @@ import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { CheatCodes } from '@aztec-labs/aztec/testing';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { EthPrivateKey } from '@aztec-labs/node-keystore';
 import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
 import { type SequencerClient, SequencerState } from '@aztec-labs/sequencer-client';
@@ -63,11 +64,11 @@ describe('single-node/sequencer/reload_keystore', () => {
   beforeAll(async () => {
     // Derive keys from the test mnemonic (these accounts are funded in Anvil)
     for (const idx of VALIDATOR_KEY_INDICES) {
-      const key = `0x${getPrivateKeyFromIndex(idx)!.toString('hex')}` as EthPrivateKey;
+      const key = bufferToHex(getPrivateKeyFromIndex(idx)!) as EthPrivateKey;
       validatorKeys.push(key);
       validatorAddresses.push(privateKeyToAccount(key).address);
     }
-    publisherKey = `0x${getPrivateKeyFromIndex(PUBLISHER_KEY_INDEX)!.toString('hex')}` as EthPrivateKey;
+    publisherKey = bufferToHex(getPrivateKeyFromIndex(PUBLISHER_KEY_INDEX)!) as EthPrivateKey;
 
     // Create temp directory for keystore files
     keyStoreDirectory = await mkdtemp(join(tmpdir(), 'reload-keystore-'));

@@ -1,4 +1,5 @@
 import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -27,7 +28,7 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
 
   beforeEach(() => {
     ap = getAttestationPool();
-    signers = Array.from({ length: NUMBER_OF_SIGNERS_PER_TEST }, () => Secp256k1Signer.random());
+    signers = times(NUMBER_OF_SIGNERS_PER_TEST, () => Secp256k1Signer.random());
   });
 
   /**

@@ -10,6 +10,7 @@ import {
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
@@ -1350,7 +1351,7 @@ describe('aztec node', () => {
           depth: ARCHIVE_HEIGHT,
         });
         const index = 7n;
-        const siblings = Array.from({ length: ARCHIVE_HEIGHT }, () => Fr.random());
+        const siblings = times(ARCHIVE_HEIGHT, () => Fr.random());
         merkleTreeOps.findSiblingPaths.mockImplementation(treeId =>
           Promise.resolve([
             {

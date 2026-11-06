@@ -1,4 +1,4 @@
-import { chunk } from '@aztec-labs/foundation/collection';
+import { chunk, compactArray } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -86,13 +86,13 @@ export class NoteService {
     const nullifiersToCheck = contractNotes.map(note => note.siloedNullifier);
     const nullifierIndexes = await this.#findNullifierIndexes(anchor, nullifiersToCheck);
 
-    const foundNullifiers = nullifiersToCheck
-      .map((nullifier, i) => {
+    const foundNullifiers = compactArray(
+      nullifiersToCheck.map((nullifier, i) => {
         if (nullifierIndexes[i] !== undefined) {
           return { ...nullifierIndexes[i], ...{ data: nullifier } } as DataInBlock<Fr>;
         }
-      })
-      .filter(nullifier => nullifier !== undefined) as DataInBlock<Fr>[];
+      }),
+    ) as DataInBlock<Fr>[];
 
     await this.noteStore.applyNullifiers(foundNullifiers, this.changeSetId);
   }

@@ -1,6 +1,7 @@
 import { type IpcClientAsync, UdsIpcClient, createNapiShmAsyncClient } from '@aztec-foundation/ipc-runtime';
 import { AsyncApi } from '@aztec-foundation/wsdb';
 
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
@@ -105,7 +106,7 @@ describe(`wsdb IPC churn/contention correlation (transport=${TRANSPORT})`, () =>
     const rev = { forkId, blockNumber: 0xffffffff, includeUncommitted: true };
     const before = await api.getTreeInfo({ treeId: TREE, revision: rev });
     const baseSize = Number(before.size);
-    const idLeaves = Array.from({ length: M }, (_, i) => identityLeaf(seed, i));
+    const idLeaves = times(M, i => identityLeaf(seed, i));
     await api.appendLeaves({ treeId: TREE, leaves: idLeaves, forkId });
     const after = await api.getTreeInfo({ treeId: TREE, revision: rev });
     if (Number(after.size) !== baseSize + M) {
@@ -191,7 +192,7 @@ describe(`wsdb IPC churn/contention correlation (transport=${TRANSPORT})`, () =>
       ipcPath = undefined; // in-process build — no IPC to exercise
       return;
     }
-    leaves = Array.from({ length: N }, (_, i) => new Fr(BigInt(i) * 0x1_0000_0001n + 1n));
+    leaves = times(N, i => new Fr(BigInt(i) * 0x1_0000_0001n + 1n));
     leafBytes = leaves.map(l => l.toBuffer());
 
     // Seed a shared fork (forks are shared world-state objects, not per-connection). Legs A/C use
@@ -319,7 +320,7 @@ describe(`wsdb IPC churn/contention correlation (transport=${TRANSPORT})`, () =>
     }
     const READERS = 3;
     const WRITERS = 3;
-    const conns = await Promise.all(Array.from({ length: READERS + WRITERS }, (_, i) => makeClient(i + 1)));
+    const conns = await Promise.all(times(READERS + WRITERS, i => makeClient(i + 1)));
     try {
       // Distinct identity per connection; readers keep theirs immutable so roots stay checkable.
       const ids = [];
@@ -356,7 +357,7 @@ describe(`wsdb IPC churn/contention correlation (transport=${TRANSPORT})`, () =>
       return;
     }
     const CONNS = 6;
-    const clients = await Promise.all(Array.from({ length: CONNS }, (_, i) => makeClient(i + 1)));
+    const clients = await Promise.all(times(CONNS, i => makeClient(i + 1)));
     const ids: ConnIdentity[] = [];
     for (let c = 0; c < CONNS; c++) {
       ids.push(await plantIdentity(clients[c].api, 200 + c));

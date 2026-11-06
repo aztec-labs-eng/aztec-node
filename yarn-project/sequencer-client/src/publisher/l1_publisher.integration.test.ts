@@ -62,7 +62,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
 import { ProtocolContractsList, protocolContractsHash } from '@aztec-labs/protocol-contracts';
@@ -766,7 +766,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
           args: [
             {
               header: checkpoint.header.toViem(),
-              archive: `0x${block.archive.root.toBuffer().toString('hex')}`,
+              archive: bufferToHex(block.archive.root.toBuffer()),
               oracleInput: {
                 feeAssetPriceModifier: 0n,
               },

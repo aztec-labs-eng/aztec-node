@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 
 import type { AztecAsyncMap } from '../interfaces/map.js';
@@ -26,7 +27,7 @@ describe('Clean shutdown', () => {
 
     // Queue up 2 lots of reads with a close in the middle, there should be no unrecoverable errors
     // though not all reads will complete
-    const reads = Array.from({ length: numValues }).map((_, index) =>
+    const reads = times(numValues, index =>
       map
         .getAsync((index % numValues).toString())
         .then(_ => true)
@@ -38,7 +39,7 @@ describe('Clean shutdown', () => {
       .then(_ => true)
       .catch(_ => false);
 
-    const reads2 = Array.from({ length: numValues }).map((_, index) =>
+    const reads2 = times(numValues, index =>
       map
         .getAsync((index % numValues).toString())
         .then(_ => true)

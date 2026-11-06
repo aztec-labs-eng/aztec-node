@@ -5,6 +5,7 @@ import { BatchCall } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { OutboxContract, RollupContract, type ViemL2ToL1Msg } from '@aztec-labs/ethereum/contracts';
+import { times } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { SequencerState } from '@aztec-labs/sequencer-client';
@@ -349,7 +350,7 @@ describe('single-node/cross-chain/l2_to_l1', () => {
 
   function generateMessages(numMessages: number) {
     // Assign msgSender as recipient by default so we can consume the messages later.
-    const recipients = Array.from({ length: numMessages }, () => msgSender);
+    const recipients = times(numMessages, () => msgSender);
     const contents = recipients.map(() => Fr.random());
     const messages = recipients.map((recipient, i) => makeL2ToL1Message(recipient, contents[i]));
     return { recipients, contents, messages };

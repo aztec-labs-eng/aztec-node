@@ -10,7 +10,7 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { BlockNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -1184,7 +1184,7 @@ describe('NativeWorldState', () => {
       await ws.close();
     });
 
-    const emptyMessages = () => Array(16).fill(0).map(Fr.zero);
+    const emptyMessages = () => times(16, () => Fr.zero());
 
     // A *different* empty block at height 1: the same (empty) contents as the canonical block, but a different slot,
     // so a different block-header hash — the proposer-race orphan from A-1235, not a tampered block.
@@ -1659,20 +1659,14 @@ describe('NativeWorldState', () => {
 
       const initialPath = await testFork.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n);
 
-      const firstReadsUncommitted = Array.from({ length: numReads }, () =>
-        testFork.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n),
-      );
-      const firstReadsCommitted = Array.from({ length: numReads }, () =>
-        commitmentDb.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n),
-      );
+      const firstReadsUncommitted = times(numReads, () => testFork.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n));
+      const firstReadsCommitted = times(numReads, () => commitmentDb.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n));
       const write = testFork.sequentialInsert(
         MerkleTreeId.PUBLIC_DATA_TREE,
         block3.body.txEffects.flatMap(tx => tx.publicDataWrites.map(w => w.toBuffer())),
       );
-      const secondReadsUncommitted = Array.from({ length: numReads }, () =>
-        testFork.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n),
-      );
-      const secondReadsCommitted = Array.from({ length: numReads }, () =>
+      const secondReadsUncommitted = times(numReads, () => testFork.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n));
+      const secondReadsCommitted = times(numReads, () =>
         commitmentDb.getSiblingPath(MerkleTreeId.PUBLIC_DATA_TREE, 0n),
       );
       await Promise.all([
@@ -1732,19 +1726,19 @@ describe('NativeWorldState', () => {
       await Promise.all([
         fork.appendLeaves(
           MerkleTreeId.L1_TO_L2_MESSAGE_TREE,
-          Array.from({ length: 8 }, () => Fr.random()),
+          times(8, () => Fr.random()),
         ),
         fork.appendLeaves(
           MerkleTreeId.NOTE_HASH_TREE,
-          Array.from({ length: 8 }, () => Fr.random()),
+          times(8, () => Fr.random()),
         ),
         fork.sequentialInsert(
           MerkleTreeId.PUBLIC_DATA_TREE,
-          Array.from({ length: 8 }, () => PublicDataWrite.random().toBuffer()),
+          times(8, () => PublicDataWrite.random().toBuffer()),
         ),
         fork.batchInsert(
           MerkleTreeId.NULLIFIER_TREE,
-          Array.from({ length: 8 }, () => Fr.random().toBuffer()),
+          times(8, () => Fr.random().toBuffer()),
           0,
         ),
       ]);

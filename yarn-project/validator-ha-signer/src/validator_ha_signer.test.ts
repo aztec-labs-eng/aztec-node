@@ -1,9 +1,10 @@
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { type BaseSignerConfig, defaultValidatorHASignerConfig } from '@aztec-labs/stdlib/ha-signing';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { PGlite } from '@electric-sql/pglite';
@@ -242,7 +243,7 @@ describe('ValidatorHASigner', () => {
         const hangingSignFn = jest.fn<(messageHash: Buffer32) => Promise<Signature>>();
         hangingSignFn.mockReturnValue(new Promise<Signature>(() => {}));
 
-        const startedAt = Date.now();
+        const elapsedTimer = new Timer();
         await expect(
           clampedSigner.signWithProtection(
             VALIDATOR_ADDRESS,
@@ -257,7 +258,7 @@ describe('ValidatorHASigner', () => {
             hangingSignFn,
           ),
         ).rejects.toThrow(/timed out after 200ms/);
-        expect(Date.now() - startedAt).toBeLessThan(5000);
+        expect(elapsedTimer.ms()).toBeLessThan(5000);
       } finally {
         await clampedSigner.stop();
       }
@@ -891,7 +892,7 @@ describe('ValidatorHASigner', () => {
 
     it('should allow only one signer to succeed when multiple signers for same validator try to sign the same duty', async () => {
       const numSigners = 10;
-      const nodeIds = Array.from({ length: numSigners }, (_, i) => `node-${i + 1}`);
+      const nodeIds = times(numSigners, i => `node-${i + 1}`);
 
       // Create separate signers with different node IDs for the same validator
       const signers = nodeIds.map(

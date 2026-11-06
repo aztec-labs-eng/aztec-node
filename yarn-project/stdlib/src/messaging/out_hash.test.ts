@@ -1,11 +1,12 @@
 import { EMPTY_EPOCH_OUT_HASH, MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { computeEpochOutHash } from './out_hash.js';
 
 describe('out hash', () => {
   it('computes the out hash for a full epoch', () => {
-    const messagesInEpoch = Array.from({ length: MAX_CHECKPOINTS_PER_EPOCH }, (_, i) => [[[new Fr(i + 123)]]]);
+    const messagesInEpoch = times(MAX_CHECKPOINTS_PER_EPOCH, i => [[[new Fr(i + 123)]]]);
 
     const outHash = computeEpochOutHash(messagesInEpoch).toString();
 

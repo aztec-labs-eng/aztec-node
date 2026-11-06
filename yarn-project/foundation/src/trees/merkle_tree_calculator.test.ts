@@ -1,6 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Buffer } from 'buffer';
 
+import { times } from '../collection/index.js';
 import { makePoseidonMerkleHash } from './hasher.js';
 import { MerkleTreeCalculator } from './merkle_tree_calculator.js';
 
@@ -12,13 +13,13 @@ describe('merkle tree root calculator', () => {
   it('should correctly handle no leaves', async () => {
     // Height of 3 is 8 leaves.
     const calculator = await MerkleTreeCalculator.create(4, undefined, hasher);
-    const expected = await calculator.computeTreeRoot(new Array(8).fill(new Fr(0)).map(fr => fr.toBuffer()));
+    const expected = await calculator.computeTreeRoot(times(8, () => new Fr(0).toBuffer()));
     await expect(calculator.computeTreeRoot()).resolves.toEqual(expected);
   });
 
   it('should correctly leverage zero hashes', async () => {
     const calculator = await MerkleTreeCalculator.create(4, undefined, hasher);
-    const leaves = Array.from({ length: 5 }).map((_, i) => new Fr(i).toBuffer());
+    const leaves = times(5, i => new Fr(i).toBuffer());
     const padded = [...leaves, ...new Array(3).fill(Buffer.alloc(32))];
     const expected = await calculator.computeTreeRoot(padded);
     const result = await calculator.computeTreeRoot(leaves);
@@ -29,7 +30,7 @@ describe('merkle tree root calculator', () => {
   it('should correctly handle non default zero leaf', async () => {
     const zeroLeaf = new Fr(666).toBuffer() as Buffer<ArrayBuffer>;
     const calculator = await MerkleTreeCalculator.create(4, zeroLeaf, hasher);
-    const leaves = Array.from({ length: 5 }).map((_, i) => new Fr(i).toBuffer());
+    const leaves = times(5, i => new Fr(i).toBuffer());
     const padded = [...leaves, ...new Array(3).fill(zeroLeaf)];
     const expected = await calculator.computeTreeRoot(padded);
     await expect(calculator.computeTreeRoot(leaves)).resolves.toEqual(expected);
@@ -37,7 +38,7 @@ describe('merkle tree root calculator', () => {
 
   it('should compute entire tree', async () => {
     const calculator = await MerkleTreeCalculator.create(4, undefined, hasher);
-    const leaves = Array.from({ length: 5 }).map((_, i) => new Fr(i).toBuffer());
+    const leaves = times(5, i => new Fr(i).toBuffer());
     const expectedRoot = await calculator.computeTreeRoot(leaves);
     const result = await calculator.computeTree(leaves);
     expect(result.nodes.length).toEqual(31);

@@ -1,3 +1,4 @@
+import { sum, unique } from '@aztec-labs/foundation/collection';
 import { toArray } from '@aztec-labs/foundation/iterable';
 
 import type { Key, Range } from './common.js';
@@ -343,10 +344,10 @@ export function describeAztecMultiMap(
       await multiMap.set('baz', '5');
 
       const allKeys = await keys();
-      const uniqueKeys = Array.from(new Set(allKeys));
+      const uniqueKeys = unique(allKeys);
       const counts = await Promise.all(uniqueKeys.map(k => getValueCount(k)));
-      const sum = counts.reduce((s, n) => s + n, 0);
-      expect(sum).toBe(await size());
+      const total = sum(counts);
+      expect(total).toBe(await size());
     });
 
     it('supports sparse slots: delete middle, reinsert new, count remains correct', async () => {

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { Buffer } from 'buffer';
 
@@ -63,7 +64,7 @@ export class BitVector {
    * Ordered by index. No duplicates.
    */
   getTrueIndices(): number[] {
-    return Array.from({ length: this.length }, (_, i) => i).filter(i => this.isSet(i));
+    return times(this.length, i => i).filter(i => this.isSet(i));
   }
 
   /**

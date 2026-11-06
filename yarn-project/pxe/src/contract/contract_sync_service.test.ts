@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -251,12 +252,8 @@ describe('ContractSyncService', () => {
     // MAX_CONCURRENT_SCOPE_SYNCS outer syncs would hold every slot while awaiting nested syncs that can never
     // acquire one. Per-call limiters give the nested syncs their own slots, so the batch completes.
     it('does not deadlock when concurrent syncs each trigger a nested sync', async () => {
-      const outerContracts = Array.from({ length: MAX_CONCURRENT_SCOPE_SYNCS }, (_, i) =>
-        AztecAddress.fromBigIntUnsafe(1000n + BigInt(i)),
-      );
-      const nestedContracts = Array.from({ length: MAX_CONCURRENT_SCOPE_SYNCS }, (_, i) =>
-        AztecAddress.fromBigIntUnsafe(2000n + BigInt(i)),
-      );
+      const outerContracts = times(MAX_CONCURRENT_SCOPE_SYNCS, i => AztecAddress.fromBigIntUnsafe(1000n + BigInt(i)));
+      const nestedContracts = times(MAX_CONCURRENT_SCOPE_SYNCS, i => AztecAddress.fromBigIntUnsafe(2000n + BigInt(i)));
       const nestedByOuter = new Map(outerContracts.map((outer, i) => [outer.toString(), nestedContracts[i]]));
 
       utilityExecutor.mockImplementation(async (call, scopes) => {
@@ -292,9 +289,7 @@ describe('ContractSyncService', () => {
     });
 
     it('bounds the number of concurrently syncing scopes within a single call', async () => {
-      const scopes = Array.from({ length: MAX_CONCURRENT_SCOPE_SYNCS + 3 }, (_, i) =>
-        AztecAddress.fromBigIntUnsafe(500n + BigInt(i)),
-      );
+      const scopes = times(MAX_CONCURRENT_SCOPE_SYNCS + 3, i => AztecAddress.fromBigIntUnsafe(500n + BigInt(i)));
 
       let inFlight = 0;
       let peak = 0;

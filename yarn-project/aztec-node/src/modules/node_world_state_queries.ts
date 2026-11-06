@@ -1,6 +1,6 @@
 import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { chunkBy } from '@aztec-labs/foundation/collection';
+import { chunkBy, compactArray } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -77,7 +77,7 @@ export class NodeWorldStateQueries {
       leafValues.map(x => x.toBuffer()),
     );
     // Filter out undefined values to query block numbers only for found leaves
-    const definedIndices = maybeIndices.filter(x => x !== undefined);
+    const definedIndices = compactArray(maybeIndices);
 
     // Now we find the block numbers for the defined indices
     const blockNumbers = await committedDb.getBlockNumbersForLeafIndices(treeId, definedIndices);

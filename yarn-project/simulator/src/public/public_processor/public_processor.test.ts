@@ -2,6 +2,7 @@ import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE, CONTRACT_CLASS_REGISTRY_CONTRACT_
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
@@ -313,10 +314,7 @@ describe('public_processor', () => {
       const tx = await mockTxWithPublicCalls();
       const controller = new AbortController();
 
-      let finishSimulation!: () => void;
-      const simulationFinished = new Promise<void>(resolve => {
-        finishSimulation = resolve;
-      });
+      const { promise: simulationFinished, resolve: finishSimulation } = promiseWithResolvers<void>();
 
       publicTxSimulator.simulate.mockImplementation(async () => {
         controller.abort();

@@ -185,6 +185,7 @@ export class OTelPinoStream extends Writable {
       return;
     }
     let timer: NodeJS.Timeout | undefined;
+    // eslint-disable-next-line aztec-custom/prefer-execute-timeout
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
         () => reject(new Error(`timed out after ${FLUSH_ON_END_TIMEOUT_MS}ms`)),

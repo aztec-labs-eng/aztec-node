@@ -4,6 +4,7 @@ import { deriveBlsKeyFromMnemonic } from '@aztec-labs/foundation/crypto/bls';
 import { computeBn254G1PublicKey, computeBn254G2PublicKey } from '@aztec-labs/foundation/crypto/bn254';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { AttesterAccount, BLSAccount, EthAccount } from '@aztec-labs/node-keystore/types';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { Buffer } from 'buffer';
@@ -25,7 +26,7 @@ function deriveKeysFromMnemonic(mnemonic: string, accountIndex = 0, addressIndex
 
   return {
     ethPrivateKey: account.getHdKey().privateKey
-      ? (`0x${Buffer.from(account.getHdKey().privateKey!).toString('hex')}` as EthAccount)
+      ? (bufferToHex(Buffer.from(account.getHdKey().privateKey!)) as EthAccount)
       : (account.address as any),
     blsPrivateKey,
   };

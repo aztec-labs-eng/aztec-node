@@ -7,6 +7,8 @@ import { sha512 } from '@noble/hashes/sha2';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import { Buffer } from 'buffer';
 
+import { bufferToHex } from '../../string/index.js';
+
 export function deriveBlsPrivateKey(mnemonic: string | undefined, ikm: string | undefined, path: string): Hex<32> {
   if (ikm) {
     return deriveBlsKeyFromEntropy(ikm, path) as Hex<32>;
@@ -25,7 +27,7 @@ export function deriveBlsKeyFromMnemonic(mnemonic: string, derivationPath: strin
   const seed = Buffer.from(mnemonicToSeedSync(mnemonic, passphrase)); // 64 bytes
   const data = Buffer.concat([Buffer.from([0x00]), seed, Buffer.from(derivationPath, 'utf8')]);
   const sk = deriveBn254ScalarFromData(data);
-  return `0x${toFixed32(sk).toString('hex')}`;
+  return bufferToHex(toFixed32(sk));
 }
 
 /**
@@ -36,7 +38,7 @@ export function deriveBlsKeyFromEntropy(ikm: string, derivationPath: string): st
   const ikmBytes = parseIkm(ikm);
   const data = Buffer.concat([Buffer.from([0x01]), ikmBytes, Buffer.from(derivationPath, 'utf8')]);
   const sk = deriveBn254ScalarFromData(data);
-  return `0x${toFixed32(sk).toString('hex')}`;
+  return bufferToHex(toFixed32(sk));
 }
 
 function deriveBn254ScalarFromData(data: Buffer): bigint {

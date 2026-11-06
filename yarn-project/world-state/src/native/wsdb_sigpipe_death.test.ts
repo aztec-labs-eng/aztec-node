@@ -1,6 +1,7 @@
 import { type IpcClientAsync, UdsIpcClient } from '@aztec-foundation/ipc-runtime';
 import { AsyncApi } from '@aztec-foundation/wsdb';
 
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
@@ -41,7 +42,7 @@ describe('wsdb server survives a mid-flight client disconnect', () => {
       return;
     }
     // The generated AsyncApi is bytes-in/bytes-out (wire `Fr = Uint8Array`), so pass raw buffers.
-    leafBytes = Array.from({ length: 64 }, (_, i) => new Fr(BigInt(i) * 0x1_0000_0001n + 1n).toBuffer());
+    leafBytes = times(64, i => new Fr(BigInt(i) * 0x1_0000_0001n + 1n).toBuffer());
     const seeder = await connect();
     const forkId = (await seeder.api.createFork({ latest: true, blockNumber: 0 })).forkId;
     seedRev = { forkId, blockNumber: 0xffffffff, includeUncommitted: true };

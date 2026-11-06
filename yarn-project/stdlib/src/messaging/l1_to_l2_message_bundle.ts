@@ -1,5 +1,5 @@
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
-import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
@@ -22,7 +22,7 @@ export class L1ToL2MessageBundle {
   /** An empty bundle: no leaves inserted, nothing absorbed. */
   static empty(): L1ToL2MessageBundle {
     return new L1ToL2MessageBundle(
-      Array.from({ length: MAX_L1_TO_L2_MSGS_PER_BLOCK }, () => Fr.ZERO),
+      times(MAX_L1_TO_L2_MSGS_PER_BLOCK, () => Fr.ZERO),
       0,
     );
   }
@@ -38,7 +38,7 @@ export class L1ToL2MessageBundle {
   static fromBuffer(buffer: Buffer | BufferReader) {
     const reader = BufferReader.asReader(buffer);
     // Array.from (not readArray with the literal cap) keeps the type `Fr[]` and avoids TS's deep-tuple instantiation.
-    const messages = Array.from({ length: MAX_L1_TO_L2_MSGS_PER_BLOCK }, () => Fr.fromBuffer(reader));
+    const messages = times(MAX_L1_TO_L2_MSGS_PER_BLOCK, () => Fr.fromBuffer(reader));
     return new L1ToL2MessageBundle(messages, reader.readNumber());
   }
 
