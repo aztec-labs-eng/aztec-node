@@ -211,10 +211,10 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
 
   /**
    * Returns the slot's L1 proposer if it gossiped a block proposal that differs from the block at the same index in the
-   * checkpoint L1 accepted for the slot, and has no DUPLICATE_PROPOSAL offense emitted for the slot yet. A gossiped index
-   * beyond the L1 checkpoint's blocks is truncation rather than a second payload at one position, and is left out. So is
-   * an L1 block from another slot, which the archiver can return when a prune and re-add of the checkpoint land between
-   * its reads.
+   * checkpoint L1 accepted for the slot, and has no DUPLICATE_PROPOSAL offense emitted for the slot yet. A gossiped
+   * index beyond the L1 checkpoint's blocks is truncation rather than a second payload at one position, and is left
+   * out. So is an L1 block from another slot, which the archiver can return when a prune and re-add of the checkpoint
+   * land between its reads.
    */
   private async findL1Equivocator(slot: SlotNumber, blockProposals: BlockProposal[]): Promise<EthAddress | undefined> {
     // A signer already reported for the slot needs no L1 read or lookup, which would otherwise repeat on every scan.
@@ -237,9 +237,9 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       return undefined;
     }
 
-    // An uncached L1 call. It repeats on every scan only while a diverging proposal stays unreported, which happens with
-    // an empty committee: in that dev setup anyone may propose, so the blocks of sequencers that lost the slot differ from
-    // L1 and are never attributed.
+    // An uncached L1 call. It repeats on every scan only while a diverging proposal stays unreported, which happens
+    // with an empty committee: in that dev setup anyone may propose, so the blocks of sequencers that lost the slot
+    // differ from L1 and are never attributed.
     const l1Proposer = await this.tryGetL1ProposerForSlot(slot);
     if (!l1Proposer || !diverging.some(proposal => proposal.getSender()?.equals(l1Proposer))) {
       return undefined;
@@ -249,7 +249,8 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
 
   /**
    * Returns the blocks of the slot's L1 checkpoint, or undefined when there is none or it cannot be read. A failed read
-   * skips only the L1 comparison, so the slot's gossip-only offenses and the later slots in the scan are still reported.
+   * skips only the L1 comparison, so the slot's gossip-only offenses and the later slots in the scan are still
+   * reported.
    */
   private async tryGetL1BlocksForSlot(slot: SlotNumber): Promise<L2Block[] | undefined> {
     try {
