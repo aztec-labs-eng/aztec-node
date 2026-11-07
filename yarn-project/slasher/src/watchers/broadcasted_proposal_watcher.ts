@@ -214,11 +214,10 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     if (blockProposals.length === 0) {
       return undefined;
     }
-    const published = await this.l2BlockSource.getCheckpoint({ slot });
-    if (!published) {
+    const l1Blocks = await this.tryGetL1BlocksForSlot(slot);
+    if (!l1Blocks) {
       return undefined;
     }
-    const l1Blocks = published.checkpoint.blocks;
     const diverging = blockProposals.filter(proposal => {
       const l1Block = l1Blocks[proposal.indexWithinCheckpoint];
       return l1Block !== undefined && !matchesL1Block(proposal, l1Block);
@@ -232,6 +231,19 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       return undefined;
     }
     return l1Proposer;
+  }
+
+  /**
+   * Returns the blocks of the slot's L1 checkpoint, or undefined when there is none or it cannot be read. A failed read
+   * skips only the L1 comparison, so the slot's gossip-only offenses and the later slots in the scan are still reported.
+   */
+  private async tryGetL1BlocksForSlot(slot: SlotNumber): Promise<L2Block[] | undefined> {
+    try {
+      return (await this.l2BlockSource.getCheckpoint({ slot }))?.checkpoint.blocks;
+    } catch (err) {
+      this.log.warn(`Failed to read the L1 checkpoint for slot ${slot}`, { slot, err });
+      return undefined;
+    }
   }
 
   /** Returns undefined when the lookup fails, leaving the slot to be compared again on a later scan. */
