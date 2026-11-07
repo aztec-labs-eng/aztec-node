@@ -1,5 +1,6 @@
 import { NULL_MSG_SENDER_CONTRACT_ADDRESS, PUBLIC_TX_L2_GAS_OVERHEAD, TX_DA_GAS_OVERHEAD } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { addNewContractInstanceToTx } from '@aztec-labs/simulator/public/fixtures';
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry';
 import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
@@ -43,7 +44,8 @@ describe('PhasesTxValidator', () => {
 
   beforeEach(() => {
     allowedContractClass = Fr.random();
-    allowedContract = makeAztecAddress();
+    // Low addresses belong to protocol contracts, which the validator treats as deployed.
+    allowedContract = makeAztecAddress(1000);
     allowedSetupSelector1 = makeSelector(1);
     allowedSetupSelector2 = makeSelector(2);
 
@@ -628,6 +630,26 @@ describe('PhasesTxValidator', () => {
     it('allows a set_authorized setup call while no instance of the standard AuthRegistry is known', async () => {
       contractDataSource.getContract.mockResolvedValue(undefined);
       const tx = await makeSetAuthorizedTx({ isStaticCall: false });
+      await expectValid(tx);
+    });
+
+    it('allows a FeeJuice _increase_public_balance setup call while no instance of FeeJuice is known', async () => {
+      contractDataSource.getContract.mockResolvedValue(undefined);
+      const increaseBalance = (await getDefaultAllowedSetupFunctions()).find(
+        e => 'address' in e && e.address.equals(ProtocolContractAddress.FeeJuice),
+      )!;
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 1,
+        numberOfRevertiblePublicCallRequests: 0,
+        gasUsed: privateGasUsed,
+      });
+      await patchNonRevertibleFn(tx, 0, {
+        address: ProtocolContractAddress.FeeJuice,
+        selector: increaseBalance.selector,
+        args: [new Fr(7), new Fr(1)],
+        msgSender: ProtocolContractAddress.FeeJuice,
+        isStaticCall: false,
+      });
       await expectValid(tx);
     });
 
