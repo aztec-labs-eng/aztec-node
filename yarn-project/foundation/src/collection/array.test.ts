@@ -27,6 +27,20 @@ describe('times', () => {
     const result = times(0, i => i * 2);
     expect(result).toEqual([]);
   });
+
+  it('stops at the first throwing call without building the whole range', () => {
+    const fn = (i: number) => {
+      if (i === 3) {
+        throw new Error('corrupt element');
+      }
+      return i;
+    };
+    expect(() => times(2 ** 32 - 1, fn)).toThrow('corrupt element');
+  });
+
+  it.each([-1, 2.5, NaN, 2 ** 32])('throws a RangeError for invalid length %s', n => {
+    expect(() => times(n, i => i)).toThrow(RangeError);
+  });
 });
 
 describe('filterAsync', () => {
