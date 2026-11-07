@@ -126,7 +126,7 @@ Prover nodes previously accepted rolling world-state retention shorter than the 
 
 **Migration**: if startup rejects your retention setting, increase `WS_HISTORY_RETENTION` to the minimum printed in the error or use `archive`. This also applies to rolling retention configured through the deprecated `WS_NUM_HISTORIC_CHECKPOINTS` and `WS_NUM_HISTORIC_BLOCKS` variables. Increasing retention does not restore history already pruned; rebuild the world-state database if required checkpoints are missing.
 
-### Nodes record `DUPLICATE_PROPOSAL` when a proposer's gossiped block differs from the one it published on L1
+### Nodes record `DUPLICATE_PROPOSAL` when a proposer's gossiped block differs from the one it published on L1 ([#709](https://github.com/aztec-labs-eng/aztec-node/pull/709))
 
 A proposer could gossip a block proposal for a position in its slot, then publish a checkpoint on L1 that holds a different block at that position, and no node recorded an offense unless the proposer had also gossiped a checkpoint proposal for the slot. Nodes that collect offenses now compare each block proposal they kept from gossip for a closed slot with the block at the same position in the slot's L1 checkpoint. When the archive root or the ordered list of tx hashes differs, and the rollup required the proposal's signer to sign the slot's checkpoint, the node records a `DUPLICATE_PROPOSAL` offense against that signer for the slot. Nothing is recorded for a slot whose epoch had the escape hatch open, since L1 did not check the proposer then.
 
