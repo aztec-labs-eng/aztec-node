@@ -16,6 +16,7 @@ import { DateProvider, elapsed } from '@aztec-labs/foundation/timer';
 import {
   type ArchiverEmitter,
   type BlockHash,
+  type L1ProposerSource,
   type L1SyncPoint,
   L2Block,
   type L2BlockSink,
@@ -116,7 +117,7 @@ const noCheckpointProposalPresence: CheckpointProposalPresence = {
  * Responsible for handling robust L1 polling so that other components do not need to
  * concern themselves with it.
  */
-export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Traceable {
+export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, L1ProposerSource, Traceable {
   /** Event emitter for archiver events (L2BlockProven, L2PruneUnproven, L2PruneUncheckpointed, etc). */
   public readonly events: ArchiverEmitter;
 
@@ -757,6 +758,10 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
 
   public getL1Timestamp(): Promise<bigint | undefined> {
     return Promise.resolve(this.synchronizer.getL1Timestamp());
+  }
+
+  public getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+    return this.synchronizer.getL1ProposerForSlot(slot);
   }
 
   public async getSyncedL2SlotNumber(): Promise<SlotNumber | undefined> {
