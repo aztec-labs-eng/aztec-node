@@ -236,6 +236,9 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       return undefined;
     }
 
+    // An uncached L1 call. It repeats on every scan only while a diverging proposal stays unreported, which happens with
+    // an empty committee: in that dev setup anyone may propose, so the blocks of sequencers that lost the slot differ from
+    // L1 and are never attributed.
     const l1Proposer = await this.tryGetL1ProposerForSlot(slot);
     if (!l1Proposer || !diverging.some(proposal => proposal.getSender()?.equals(l1Proposer))) {
       return undefined;
