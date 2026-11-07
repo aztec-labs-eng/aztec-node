@@ -216,24 +216,21 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
    * when a prune and re-add of the checkpoint land between its reads.
    */
   private async findL1Equivocator(slot: SlotNumber, blockProposals: BlockProposal[]): Promise<EthAddress | undefined> {
-    if (blockProposals.length === 0) {
+    // A signer already reported for the slot needs no L1 read or lookup, which would otherwise repeat on every scan.
+    const unreported = blockProposals.filter(proposal => {
+      const signer = proposal.getSender();
+      return signer !== undefined && !this.hasEmittedOffense(slot, signer, OffenseType.DUPLICATE_PROPOSAL);
+    });
+    if (unreported.length === 0) {
       return undefined;
     }
     const l1Blocks = await this.tryGetL1BlocksForSlot(slot);
     if (!l1Blocks) {
       return undefined;
     }
-    // A signer already reported for the slot needs no second L1 lookup, which would otherwise repeat on every scan.
-    const diverging = blockProposals.filter(proposal => {
+    const diverging = unreported.filter(proposal => {
       const l1Block = l1Blocks[proposal.indexWithinCheckpoint];
-      const signer = proposal.getSender();
-      return (
-        signer !== undefined &&
-        !this.hasEmittedOffense(slot, signer, OffenseType.DUPLICATE_PROPOSAL) &&
-        l1Block !== undefined &&
-        l1Block.slot === slot &&
-        !matchesL1Block(proposal, l1Block)
-      );
+      return l1Block !== undefined && l1Block.slot === slot && !matchesL1Block(proposal, l1Block);
     });
     if (diverging.length === 0) {
       return undefined;
