@@ -36,7 +36,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 A setup call that matches an address entry (`I:<address>:<selector>`) is now rejected, with `Setup function targets unknown contract`, when no contract is deployed at that address. Before, the node admitted the tx without checking, and its setup then failed when a proposer ran it. Class entries already required a deployed contract.
 
-Standard contracts, such as the AuthRegistry targeted by the default entries, are exempt: the node treats them as deployed from network start. Protocol contracts such as FeeJuice exist from genesis and pass the check.
+Standard contracts, such as the AuthRegistry targeted by the default entries, are exempt: the node treats them as deployed from network start and does not check for them. Protocol contracts such as FeeJuice exist from genesis and pass the check.
 
 **Migration**: none. An address entry for a contract that is not yet deployed admits no tx until the contract is deployed.
 
