@@ -6,10 +6,11 @@ import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { count } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
@@ -162,6 +163,11 @@ export class ArchiverL1Synchronizer implements Traceable {
   /** Returns the last L1 timestamp that was synced. */
   public getL1Timestamp(): bigint | undefined {
     return this.l1Timestamp;
+  }
+
+  /** Returns the proposer whose signature the rollup required for a checkpoint at the given past slot. */
+  public getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+    return this.checkpointIngestor.getL1ProposerForSlot(slot);
   }
 
   /** Checks that the ethereum node we are connected to has a latest timestamp no more than the allowed drift. Throw if not. */

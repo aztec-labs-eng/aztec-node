@@ -1,10 +1,10 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { merge, pick } from '@aztec-labs/foundation/collection';
+import { areArraysEqual, merge, pick } from '@aztec-labs/foundation/collection';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { L1ProposerSource, L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { P2PClient, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
 import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
@@ -30,11 +30,25 @@ type SignedBlockProposal = {
   signer: EthAddress;
 };
 
+/** Whether a gossiped block proposal carries the same archive root and ordered tx hashes as a block published on L1. */
+function matchesL1Block(proposal: BlockProposal, l1Block: L2Block): boolean {
+  return (
+    proposal.archive.equals(l1Block.archive.root) &&
+    areArraysEqual(
+      proposal.txHashes,
+      l1Block.body.txEffects.map(effect => effect.txHash),
+      (a, b) => a.equals(b),
+    )
+  );
+}
+
 /**
  * Detects offenses in retained signed P2P proposals once their slot has closed: truncated checkpoint proposals, and
  * duplicate proposals, where one signer signed two different payloads for the same block index or for the slot's
  * checkpoint. Offenses are attributed to the signer recovered from each proposal, so payloads from different signers
- * at the same position are never counted against each other.
+ * at the same position are never counted against each other. A block proposal that differs from the block at the same
+ * index in the slot's L1 checkpoint is also a duplicate proposal, attributed only to the key the rollup required to
+ * sign that checkpoint.
  */
 export class BroadcastedProposalWatcher extends (EventEmitter as new () => WatcherEmitter) implements Watcher {
   private readonly log: Logger = createLogger('broadcasted-proposal-watcher');
@@ -52,7 +66,8 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
 
   constructor(
     private readonly p2pClient: P2PProposalsForSlotSource,
-    private readonly l2BlockSource: Pick<L2BlockSource, 'getSyncedL2SlotNumber'>,
+    private readonly l2BlockSource: Pick<L2BlockSource, 'getSyncedL2SlotNumber' | 'getCheckpoint'>,
+    private readonly l1ProposerSource: L1ProposerSource,
     private readonly epochCache: Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>,
     config: BroadcastedProposalWatcherConfig,
     scanSlotLookback = DEFAULT_SCAN_SLOT_LOOKBACK,
@@ -112,7 +127,9 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
   /** Scans a single slot. Public for tests. */
   public async scanSlot(slot: SlotNumber): Promise<void> {
     const proposals = await this.p2pClient.getProposalsForSlot(slot);
-    const slashArgs = this.getSlashArgsForProposals(slot, proposals).filter(args => this.markAsNewOffense(args));
+    const slashArgs = (await this.getSlashArgsForProposals(slot, proposals)).filter(args =>
+      this.markAsNewOffense(args),
+    );
     if (slashArgs.length === 0) {
       return;
     }
@@ -129,10 +146,14 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     this.emit(WANT_TO_SLASH_EVENT, slashArgs);
   }
 
-  private getSlashArgsForProposals(slot: SlotNumber, proposals: ProposalsForSlot): WantToSlashArgs[] {
+  private async getSlashArgsForProposals(slot: SlotNumber, proposals: ProposalsForSlot): Promise<WantToSlashArgs[]> {
     const { blockProposals, checkpointProposals } = proposals;
     const truncators = this.findTruncatedCheckpointSigners(blockProposals, checkpointProposals);
     const equivocators = this.findEquivocators(blockProposals, checkpointProposals);
+    const l1Equivocator = await this.findL1Equivocator(slot, blockProposals);
+    if (l1Equivocator) {
+      equivocators.set(l1Equivocator.toString(), l1Equivocator);
+    }
     return [
       ...[...truncators.values()].map(validator => ({
         validator,
@@ -182,6 +203,45 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       }
     }
     return equivocators;
+  }
+
+  /**
+   * Returns the slot's L1 proposer if it gossiped a block proposal that differs from the block at the same index in the
+   * checkpoint L1 accepted for the slot. A gossiped index beyond the L1 checkpoint's blocks is truncation rather than a
+   * second payload at one position, and is left out.
+   */
+  private async findL1Equivocator(slot: SlotNumber, blockProposals: BlockProposal[]): Promise<EthAddress | undefined> {
+    if (blockProposals.length === 0) {
+      return undefined;
+    }
+    const published = await this.l2BlockSource.getCheckpoint({ slot });
+    if (!published) {
+      return undefined;
+    }
+    const l1Blocks = published.checkpoint.blocks;
+    const diverging = blockProposals.filter(proposal => {
+      const l1Block = l1Blocks[proposal.indexWithinCheckpoint];
+      return l1Block !== undefined && !matchesL1Block(proposal, l1Block);
+    });
+    if (diverging.length === 0) {
+      return undefined;
+    }
+
+    const l1Proposer = await this.tryGetL1ProposerForSlot(slot);
+    if (!l1Proposer || !diverging.some(proposal => proposal.getSender()?.equals(l1Proposer))) {
+      return undefined;
+    }
+    return l1Proposer;
+  }
+
+  /** Returns undefined when the lookup fails, leaving the slot to be compared again on a later scan. */
+  private async tryGetL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+    try {
+      return await this.l1ProposerSource.getL1ProposerForSlot(slot);
+    } catch (err) {
+      this.log.warn(`Failed to get the L1 proposer for slot ${slot}`, { slot, err });
+      return undefined;
+    }
   }
 
   private findTruncatedCheckpointSigners(

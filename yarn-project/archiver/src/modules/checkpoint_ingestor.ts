@@ -697,7 +697,7 @@ export class CheckpointIngestor {
    * proposer, because an escape hatch was open for the epoch, or when the committee was empty. Throws while the epoch's
    * committee is not stable, since whether its escape hatch was open is not known yet.
    */
-  private async getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+  public async getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
     const epoch = getEpochAtSlot(slot, this.deps.l1Constants);
     const { isEscapeHatchOpen } = requireStableCommittee(await this.deps.epochCache.getCommitteeForEpoch(epoch));
     if (isEscapeHatchOpen) {
