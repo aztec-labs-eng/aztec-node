@@ -632,7 +632,7 @@ describe('BroadcastedProposalWatcher', () => {
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
       });
 
-      it('does not ask L1 for the proposer again once the offense is recorded', async () => {
+      it('does not read the L1 checkpoint or ask L1 for the proposer again once the offense is recorded', async () => {
         const proposer = Secp256k1Signer.random();
         const checkpoint = await publishCheckpoint(1);
         l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
@@ -644,6 +644,7 @@ describe('BroadcastedProposalWatcher', () => {
 
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
         expect(l1ProposerSource.getL1ProposerForSlot).toHaveBeenCalledTimes(1);
+        expect(l2BlockSource.getCheckpoint).toHaveBeenCalledTimes(1);
       });
 
       it('does not compare against L1 blocks from another slot', async () => {
