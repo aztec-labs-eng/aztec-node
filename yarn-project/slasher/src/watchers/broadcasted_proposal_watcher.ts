@@ -30,6 +30,10 @@ type SignedBlockProposal = {
   signer: EthAddress;
 };
 
+function emittedOffenseKey(validator: EthAddress, offenseType: OffenseType): string {
+  return `${validator.toString()}-${offenseType}`;
+}
+
 /** Whether a gossiped block proposal carries the same archive root and ordered tx hashes as a block published on L1. */
 function matchesL1Block(proposal: BlockProposal, l1Block: L2Block): boolean {
   return (
@@ -219,9 +223,17 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     if (!l1Blocks) {
       return undefined;
     }
+    // A signer already reported for the slot needs no second L1 lookup, which would otherwise repeat on every scan.
     const diverging = blockProposals.filter(proposal => {
       const l1Block = l1Blocks[proposal.indexWithinCheckpoint];
-      return l1Block !== undefined && l1Block.slot === slot && !matchesL1Block(proposal, l1Block);
+      const signer = proposal.getSender();
+      return (
+        signer !== undefined &&
+        !this.hasEmittedOffense(slot, signer, OffenseType.DUPLICATE_PROPOSAL) &&
+        l1Block !== undefined &&
+        l1Block.slot === slot &&
+        !matchesL1Block(proposal, l1Block)
+      );
     });
     if (diverging.length === 0) {
       return undefined;
@@ -309,14 +321,17 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     return blocksBySigner;
   }
 
+  private hasEmittedOffense(slot: SlotNumber, validator: EthAddress, offenseType: OffenseType): boolean {
+    return this.emittedOffensesBySlot.get(slot)?.has(emittedOffenseKey(validator, offenseType)) ?? false;
+  }
+
   private markAsNewOffense(args: WantToSlashArgs): boolean {
     const slot = SlotNumber(Number(args.epochOrSlot));
-    const key = `${args.validator.toString()}-${args.offenseType}`;
-    const emitted = this.emittedOffensesBySlot.get(slot) ?? new Set<string>();
-    if (emitted.has(key)) {
+    if (this.hasEmittedOffense(slot, args.validator, args.offenseType)) {
       return false;
     }
-    emitted.add(key);
+    const emitted = this.emittedOffensesBySlot.get(slot) ?? new Set<string>();
+    emitted.add(emittedOffenseKey(args.validator, args.offenseType));
     this.emittedOffensesBySlot.set(slot, emitted);
     return true;
   }
