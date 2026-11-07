@@ -70,9 +70,15 @@ export function arrayNonEmptyLength<T>(arr: T[], isEmpty: (item: T) => boolean):
  * @param n - How many times to repeat.
  * @param fn - Mapper from index to value.
  * @returns The array with the result from all executions.
+ * @throws RangeError if `n` is not a valid array length.
  */
 export function times<T>(n: number, fn: (i: number) => T): T[] {
-  return [...Array(n).keys()].map(i => fn(i));
+  // `new Array(n)` checks the length without allocating n slots, so a throwing `fn` stops a huge `n` at once.
+  const results = new Array<T>(n);
+  for (let i = 0; i < n; i++) {
+    results[i] = fn(i);
+  }
+  return results;
 }
 
 /**
