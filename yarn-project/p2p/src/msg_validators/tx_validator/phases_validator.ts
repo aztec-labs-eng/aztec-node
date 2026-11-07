@@ -26,7 +26,7 @@ import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 const standardContractAddresses = Object.values(StandardContractAddress);
 
-/** Whether the node treats the contract at this address as deployed from network start: protocol and standard contracts. */
+/** Whether the node treats the contract at this address as deployed from network start. */
 function isAssumedDeployed(address: AztecAddress): boolean {
   return (
     isProtocolContract(address) || standardContractAddresses.some(standardAddress => standardAddress.equals(address))
@@ -132,7 +132,7 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     for (const entry of allowList) {
       if ('address' in entry) {
         if (contractAddress.equals(entry.address) && entry.selector.equals(functionSelector)) {
-          // The node treats protocol and standard contracts as deployed from network start, so it does not look them up.
+          // Protocol and standard contracts are treated as deployed from network start, so they are not looked up.
           if (
             !isAssumedDeployed(contractAddress) &&
             !(await this.contractsDB.getContractInstance(contractAddress, this.timestamp))
