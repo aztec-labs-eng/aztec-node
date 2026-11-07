@@ -128,7 +128,7 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     for (const entry of allowList) {
       if ('address' in entry) {
         if (contractAddress.equals(entry.address) && entry.selector.equals(functionSelector)) {
-          // Standard contracts are assumed deployed from network start, so they skip the lookup.
+          // The node treats standard contracts as deployed from network start, so it does not look them up.
           if (
             !isStandardContractAddress(contractAddress) &&
             !(await this.contractsDB.getContractInstance(contractAddress, this.timestamp))
