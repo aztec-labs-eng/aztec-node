@@ -1,5 +1,6 @@
 import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec-labs/constants';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
 import { PublicContractsDB, getCallRequestsWithCalldataByPhase } from '@aztec-labs/simulator/server';
 import { StandardContractAddress } from '@aztec-labs/standard-contracts/data';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -25,8 +26,11 @@ import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 const standardContractAddresses = Object.values(StandardContractAddress);
 
-function isStandardContractAddress(address: AztecAddress): boolean {
-  return standardContractAddresses.some(standardAddress => standardAddress.equals(address));
+/** Whether the node treats the contract at this address as deployed from network start: protocol and standard contracts. */
+function isAssumedDeployed(address: AztecAddress): boolean {
+  return (
+    isProtocolContract(address) || standardContractAddresses.some(standardAddress => standardAddress.equals(address))
+  );
 }
 
 /** Outcome of checking one setup call against the allow list: the gas it needs if allowed, or why it is rejected. */
@@ -128,9 +132,9 @@ export class PhasesTxValidator implements TxValidator<Tx> {
     for (const entry of allowList) {
       if ('address' in entry) {
         if (contractAddress.equals(entry.address) && entry.selector.equals(functionSelector)) {
-          // The node treats standard contracts as deployed from network start, so it does not look them up.
+          // The node treats protocol and standard contracts as deployed from network start, so it does not look them up.
           if (
-            !isStandardContractAddress(contractAddress) &&
+            !isAssumedDeployed(contractAddress) &&
             !(await this.contractsDB.getContractInstance(contractAddress, this.timestamp))
           ) {
             return { allowed: false, reason: TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT };
