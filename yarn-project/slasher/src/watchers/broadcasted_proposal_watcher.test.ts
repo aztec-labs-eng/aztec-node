@@ -1,8 +1,9 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { L1ProposerSource, L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { P2PClient } from '@aztec-labs/stdlib/interfaces/server';
 import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
@@ -13,6 +14,7 @@ import {
   makeCheckpointHeader,
   makeCheckpointProposal,
 } from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -22,7 +24,8 @@ import { BroadcastedProposalWatcher } from './broadcasted_proposal_watcher.js';
 
 describe('BroadcastedProposalWatcher', () => {
   let p2pClient: MockProxy<Pick<P2PClient, 'getProposalsForSlot'>>;
-  let l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber'>>;
+  let l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber' | 'getCheckpoint'>>;
+  let l1ProposerSource: MockProxy<L1ProposerSource>;
   let epochCache: MockProxy<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>>;
   let config: SlasherConfig;
   let watcher: BroadcastedProposalWatcher;
@@ -30,8 +33,10 @@ describe('BroadcastedProposalWatcher', () => {
 
   beforeEach(() => {
     p2pClient = mock<Pick<P2PClient, 'getProposalsForSlot'>>();
-    l2BlockSource = mock<Pick<L2BlockSource, 'getSyncedL2SlotNumber'>>();
+    l2BlockSource = mock<Pick<L2BlockSource, 'getSyncedL2SlotNumber' | 'getCheckpoint'>>();
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(12));
+    l2BlockSource.getCheckpoint.mockResolvedValue(undefined);
+    l1ProposerSource = mock<L1ProposerSource>();
     epochCache = mock<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>>();
     epochCache.getSlotNow.mockReturnValue(SlotNumber(12));
     epochCache.getL1Constants.mockReturnValue({
@@ -44,7 +49,7 @@ describe('BroadcastedProposalWatcher', () => {
       slashBroadcastedInvalidCheckpointProposalPenalty: 11n,
       slashDuplicateProposalPenalty: 23n,
     };
-    watcher = new BroadcastedProposalWatcher(p2pClient, l2BlockSource, epochCache, config, 4);
+    watcher = new BroadcastedProposalWatcher(p2pClient, l2BlockSource, l1ProposerSource, epochCache, config, 4);
     handler = jest.fn();
     watcher.on(WANT_TO_SLASH_EVENT, handler);
   });
@@ -504,6 +509,182 @@ describe('BroadcastedProposalWatcher', () => {
       await watcher.scanSlot(slot);
 
       expect(emittedOffenses()).toEqual([{ ...duplicateOffense(signer), amount: 0n }]);
+    });
+
+    describe('against the checkpoint published on L1', () => {
+      /** Makes the archiver return a checkpoint for the scanned slot, whose blocks are from `blockSlot`. */
+      const publishCheckpoint = async (numBlocks: number, blockSlot = slot): Promise<Checkpoint> => {
+        const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks, slotNumber: blockSlot });
+        const published = new PublishedCheckpoint(checkpoint, L1PublishedData.random(), [], {
+          signatureIndices: '0x',
+          signaturesOrAddresses: '0x',
+        });
+        l2BlockSource.getCheckpoint.mockImplementation(query =>
+          Promise.resolve('slot' in query && query.slot === slot ? published : undefined),
+        );
+        return checkpoint;
+      };
+
+      const proposeBlock = (
+        signer: Secp256k1Signer,
+        block: L2Block,
+        overrides: { archiveRoot?: Fr; txHashes?: TxHash[] } = {},
+      ): Promise<BlockProposal> =>
+        makeBlockProposal({
+          signer,
+          blockHeader: block.header,
+          indexWithinCheckpoint: block.indexWithinCheckpoint,
+          archiveRoot: overrides.archiveRoot ?? block.archive.root,
+          txHashes: overrides.txHashes ?? block.body.txEffects.map(effect => effect.txHash),
+        });
+
+      it('slashes the L1 proposer for a gossiped block whose archive differs from the L1 block', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(2);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+      });
+
+      it('slashes the L1 proposer for a gossiped block whose tx hashes differ from the L1 block', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(2);
+        const l1Block = checkpoint.blocks[1];
+        const extendedTxHashes = [...l1Block.body.txEffects.map(effect => effect.txHash), TxHash.random()];
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await proposeBlock(proposer, l1Block, { txHashes: extendedTxHashes })], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+      });
+
+      it('does not slash gossiped blocks that match the L1 blocks, nor ask L1 for the proposer', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(2);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, await Promise.all(checkpoint.blocks.map(block => proposeBlock(proposer, block))), []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+        expect(l1ProposerSource.getL1ProposerForSlot).not.toHaveBeenCalled();
+      });
+
+      it('does not slash a diverging gossiped block signed by someone other than the L1 proposer', async () => {
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(Secp256k1Signer.random().address);
+        const otherSigner = Secp256k1Signer.random();
+        mockProposals(slot, [await proposeBlock(otherSigner, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('does not slash when L1 did not check the proposer for the slot', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(undefined);
+        mockProposals(slot, [await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('does not slash a gossiped block at an index beyond the L1 checkpoint', async () => {
+        const proposer = Secp256k1Signer.random();
+        await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await makeBlockAt(proposer, 1)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('does not slash when the slot has no checkpoint on L1', async () => {
+        const proposer = Secp256k1Signer.random();
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await makeBlockAt(proposer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('slashes on a later scan when the L1 proposer lookup fails at first', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockRejectedValueOnce(new Error('committee not stable'));
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+        expect(emittedOffenses()).toEqual([]);
+
+        await watcher.scanSlot(slot);
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+      });
+
+      it('does not read the L1 checkpoint or ask L1 for the proposer again once the offense is recorded', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+        await watcher.scanSlot(slot);
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+        expect(l1ProposerSource.getL1ProposerForSlot).toHaveBeenCalledTimes(1);
+        expect(l2BlockSource.getCheckpoint).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not compare against L1 blocks from another slot', async () => {
+        const proposer = Secp256k1Signer.random();
+        await publishCheckpoint(1, SlotNumber(slot + 1));
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await makeBlockAt(proposer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('still reports gossip-only offenses when the L1 checkpoint cannot be read', async () => {
+        const signer = Secp256k1Signer.random();
+        l2BlockSource.getCheckpoint.mockRejectedValue(new Error('blocks for checkpoint not found'));
+        mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+      });
+
+      it('emits one offense when the L1 proposer also gossiped two payloads at the same position', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(
+          slot,
+          [
+            await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() }),
+            await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() }),
+          ],
+          [],
+        );
+
+        await watcher.scanSlot(slot);
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+      });
     });
   });
 });

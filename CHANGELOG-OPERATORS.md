@@ -32,6 +32,14 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Nodes record `DUPLICATE_PROPOSAL` when a proposer's gossiped block differs from the one it published on L1 ([#709](https://github.com/aztec-labs-eng/aztec-node/pull/709))
+
+A proposer could gossip a block proposal for a position in its slot, then publish a checkpoint on L1 that holds a different block at that position, and no node recorded an offense unless the proposer had also gossiped a checkpoint proposal for the slot. Nodes that collect offenses now compare each block proposal they kept from gossip for a closed slot with the block at the same position in the slot's L1 checkpoint. When the archive root or the ordered list of tx hashes differs, and the rollup required the proposal's signer to sign the slot's checkpoint, the node records a `DUPLICATE_PROPOSAL` offense against that signer for the slot. Nothing is recorded for a slot whose epoch had the escape hatch open, since L1 did not check the proposer then.
+
+Honest proposers never sign two different blocks for one position, so they are not affected. The node asks the rollup for the slot's proposer only when a gossiped block differs from L1, which adds an L1 RPC call in that case alone. If that call fails, the node logs a warning and retries on its next scan of the slot.
+
+**Migration**: none.
+
 ### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 
 A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
