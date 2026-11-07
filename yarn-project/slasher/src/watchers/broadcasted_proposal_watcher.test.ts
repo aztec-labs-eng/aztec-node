@@ -512,8 +512,9 @@ describe('BroadcastedProposalWatcher', () => {
     });
 
     describe('against the checkpoint published on L1', () => {
-      const publishCheckpoint = async (numBlocks: number): Promise<Checkpoint> => {
-        const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks, slotNumber: slot });
+      /** Makes the archiver return a checkpoint for the scanned slot, whose blocks are from `blockSlot`. */
+      const publishCheckpoint = async (numBlocks: number, blockSlot = slot): Promise<Checkpoint> => {
+        const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks, slotNumber: blockSlot });
         const published = new PublishedCheckpoint(checkpoint, L1PublishedData.random(), [], {
           signatureIndices: '0x',
           signaturesOrAddresses: '0x',
@@ -628,6 +629,17 @@ describe('BroadcastedProposalWatcher', () => {
 
         await watcher.scanSlot(slot);
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+      });
+
+      it('does not compare against L1 blocks from another slot', async () => {
+        const proposer = Secp256k1Signer.random();
+        await publishCheckpoint(1, SlotNumber(slot + 1));
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await makeBlockAt(proposer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
       });
 
       it('still reports gossip-only offenses when the L1 checkpoint cannot be read', async () => {
