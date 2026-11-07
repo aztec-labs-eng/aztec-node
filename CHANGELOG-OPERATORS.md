@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### Address entries in `TX_PUBLIC_SETUP_ALLOWLIST` require a deployed contract
+### Address entries in `TX_PUBLIC_SETUP_ALLOWLIST` require a deployed contract ([#706](https://github.com/aztec-labs-eng/aztec-node/pull/706))
 
 A setup call that matches an address entry (`I:<address>:<selector>`) is now rejected, with `Setup function targets unknown contract`, when no contract is deployed at that address. Before, the node admitted the tx without checking, and its setup then failed when a proposer ran it. Class entries already required a deployed contract.
 
