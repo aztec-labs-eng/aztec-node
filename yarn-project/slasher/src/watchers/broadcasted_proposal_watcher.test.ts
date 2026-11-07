@@ -631,6 +631,20 @@ describe('BroadcastedProposalWatcher', () => {
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
       });
 
+      it('does not ask L1 for the proposer again once the offense is recorded', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, [await proposeBlock(proposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+        await watcher.scanSlot(slot);
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
+        expect(l1ProposerSource.getL1ProposerForSlot).toHaveBeenCalledTimes(1);
+      });
+
       it('does not compare against L1 blocks from another slot', async () => {
         const proposer = Secp256k1Signer.random();
         await publishCheckpoint(1, SlotNumber(slot + 1));
