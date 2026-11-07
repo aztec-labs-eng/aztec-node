@@ -211,7 +211,8 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
 
   /**
    * Returns the slot's L1 proposer if it gossiped a block proposal that differs from the block at the same index in the
-   * checkpoint L1 accepted for the slot. A gossiped index beyond the L1 checkpoint's blocks is truncation rather than a
+   * checkpoint L1 accepted for the slot, unless it already has a DUPLICATE_PROPOSAL offense emitted for the slot: signers
+   * already reported for the slot are skipped. A gossiped index beyond the L1 checkpoint's blocks is truncation rather than a
    * second payload at one position, and is left out. So is an L1 block from another slot, which the archiver can return
    * when a prune and re-add of the checkpoint land between its reads.
    */
