@@ -630,6 +630,16 @@ describe('BroadcastedProposalWatcher', () => {
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
       });
 
+      it('still reports gossip-only offenses when the L1 checkpoint cannot be read', async () => {
+        const signer = Secp256k1Signer.random();
+        l2BlockSource.getCheckpoint.mockRejectedValue(new Error('blocks for checkpoint not found'));
+        mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+      });
+
       it('emits one offense when the L1 proposer also gossiped two payloads at the same position', async () => {
         const proposer = Secp256k1Signer.random();
         const checkpoint = await publishCheckpoint(1);
