@@ -525,7 +525,7 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
 }
 
 /**
- * Creates a function that checks whether a tx's setup-phase calls pass the allow list checks.
+ * Creates a function that checks whether a tx's setup-phase calls pass the checks of the given allow list.
  *
  * Uses the `PhasesTxValidator` on the full Tx. The result is stored as a boolean
  * flag in `TxMetaData.allowedSetupCalls` at receipt time, so the pending pool
@@ -533,10 +533,9 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
  */
 export function createCheckAllowedSetupCalls(
   contractDataSource: ContractDataSource,
-  setupAllowList: AllowedElement[],
   getTimestamp: () => UInt64,
-): (tx: Tx) => Promise<boolean> {
-  return async (tx: Tx) => {
+): (tx: Tx, setupAllowList: AllowedElement[]) => Promise<boolean> {
+  return async (tx: Tx, setupAllowList: AllowedElement[]) => {
     const validator = new PhasesTxValidator(contractDataSource, setupAllowList, getTimestamp());
     const result = await validator.validateTx(tx);
     return result.result === 'valid';

@@ -37,3 +37,10 @@ export async function getDefaultAllowedSetupFunctions(): Promise<AllowedElement[
   }
   return defaultAllowedSetupFunctions;
 }
+
+/** Returns the effective setup allow list: the defaults plus the operator's `txPublicSetupAllowListExtend` entries. */
+export async function getSetupAllowList(config: {
+  txPublicSetupAllowListExtend?: AllowedElement[];
+}): Promise<AllowedElement[]> {
+  return [...(await getDefaultAllowedSetupFunctions()), ...(config.txPublicSetupAllowListExtend ?? [])];
+}
