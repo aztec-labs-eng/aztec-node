@@ -1,6 +1,7 @@
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Timer } from '@aztec-labs/foundation/timer';
 
 import { type InsertingBlockNodeView, findInsertingBlock } from './find_inserting_block.js';
 
@@ -79,11 +80,11 @@ describe('findInsertingBlock', () => {
 
   it('bounds the whole search by one deadline rather than restarting the wait on every attempt', async () => {
     const node = { ...nodeFailingHistoricalReads(0), getL1ToL2MessageIndex: () => Promise.resolve(undefined) };
-    const start = Date.now();
+    const timer = new Timer();
 
     await expect(findInsertingBlock(node, msgHash, log, { attempts: 3, timeoutSeconds: 1 })).rejects.toThrow(
       /Could not confirm which block inserted/,
     );
-    expect(Date.now() - start).toBeLessThan(2500);
+    expect(timer.ms()).toBeLessThan(2500);
   });
 });

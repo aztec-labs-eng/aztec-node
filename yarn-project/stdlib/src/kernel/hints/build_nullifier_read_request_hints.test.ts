@@ -1,6 +1,7 @@
 import { MAX_NULLIFIERS_PER_TX, MAX_NULLIFIER_READ_REQUESTS_PER_TX } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 
@@ -37,9 +38,7 @@ describe('buildNullifierReadRequestHints', () => {
   const nullifiers: Tuple<ScopedNullifier, typeof MAX_NULLIFIERS_PER_TX> = makeTuple(MAX_NULLIFIERS_PER_TX, i =>
     makeNullifier(innerNullifier(i)),
   );
-  const futureNullifiers = Array.from({ length: MAX_NULLIFIERS_PER_TX }).map((_, i) =>
-    makeNullifier(innerNullifier(i + MAX_NULLIFIERS_PER_TX)),
-  );
+  const futureNullifiers = times(MAX_NULLIFIERS_PER_TX, i => makeNullifier(innerNullifier(i + MAX_NULLIFIERS_PER_TX)));
 
   /**
    * Set up initial state.

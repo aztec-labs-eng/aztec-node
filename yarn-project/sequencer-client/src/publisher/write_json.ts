@@ -2,6 +2,7 @@ import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommit
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { getL1FixturePath } from '@aztec-labs/foundation/testing/files';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { L2Block } from '@aztec-labs/stdlib/block';
@@ -51,7 +52,7 @@ export async function writeJson(
       blobCommitments: getPrefixedEthBlobCommitments(blobs),
       batchedBlobInputs: getEthBlobEvaluationInputs(batchedBlob),
       checkpointNumber: block.number,
-      body: `0x${block.body.toBuffer().toString('hex')}`,
+      body: bufferToHex(block.body.toBuffer()),
       header: {
         lastArchiveRoot: asHex(checkpointHeader.lastArchiveRoot),
         blockHeadersHash: asHex(checkpointHeader.blockHeadersHash),

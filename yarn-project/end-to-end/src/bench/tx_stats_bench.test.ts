@@ -1,5 +1,6 @@
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { compactArray, sum, times } from '@aztec-labs/foundation/collection';
 import { parseBooleanEnv } from '@aztec-labs/foundation/config';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -129,8 +130,8 @@ describe('transaction benchmarks', () => {
         const proofSizeCompressed = compressedProof.length;
         const txAsBuffer = tx.toBuffer();
         const numIterations = 50;
-        const uncompressed: Buffer[] = Array.from({ length: numIterations }, () => Buffer.alloc(0));
-        const compressed: Buffer[] = Array.from({ length: numIterations }, () => Buffer.alloc(0));
+        const uncompressed: Buffer[] = times(numIterations, () => Buffer.alloc(0));
+        const compressed: Buffer[] = times(numIterations, () => Buffer.alloc(0));
         const compressionTimer = new Timer();
         for (let i = 0; i < numIterations; i++) {
           compressed[i] = compress(txAsBuffer);
@@ -212,25 +213,23 @@ describe('transaction benchmarks', () => {
 
   const runSingleProofVerificationTest = async (tx: Tx, type: 'Private' | 'Public') => {
     const numIterations = 20;
-    const resultsArray: (IVCProofVerificationResult | undefined)[] = Array.from({ length: numIterations }).map(
-      _ => undefined,
-    );
+    const resultsArray: (IVCProofVerificationResult | undefined)[] = times(numIterations, () => undefined);
     // Verify proof serially and take an average
     for (let i = 0; i < numIterations; i++) {
       const result = await t.circuitProofVerifier?.verifyProof(tx);
       resultsArray[i] = result;
     }
     resultsArray.forEach(result => expect(result?.valid ?? false).toBe(true));
-    const durations = resultsArray.filter(result => result !== undefined).map(result => result.durationMs);
-    const totalDurations = resultsArray.filter(result => result !== undefined).map(result => result.totalDurationMs);
+    const durations = compactArray(resultsArray).map(result => result.durationMs);
+    const totalDurations = compactArray(resultsArray).map(result => result.totalDurationMs);
     results.push({
       name: `Tx IVC Verification/Single ${type} Transaction/IVC Verification Time`,
-      value: durations.reduce((a, b) => a + b, 0) / numIterations,
+      value: sum(durations) / numIterations,
       unit: 'ms',
     });
     results.push({
       name: `Tx IVC Verification/Single ${type} Transaction/Total Verification Time (includes serde)`,
-      value: totalDurations.reduce((a, b) => a + b, 0) / numIterations,
+      value: sum(totalDurations) / numIterations,
       unit: 'ms',
     });
   };
@@ -274,11 +273,11 @@ describe('transaction benchmarks', () => {
       const resultsArray = await Promise.all(promises);
       const totalDuration = timer.ms();
       resultsArray.forEach(result => expect(result?.valid ?? false).toBe(true));
-      const durations = resultsArray.filter(result => result !== undefined).map(result => result.durationMs);
-      const totalDurations = resultsArray.filter(result => result !== undefined).map(result => result.totalDurationMs);
+      const durations = compactArray(resultsArray).map(result => result.durationMs);
+      const totalDurations = compactArray(resultsArray).map(result => result.totalDurationMs);
       results.push({
         name: `Tx IVC Verification/${seconds} Seconds @${proofsPerSecond}TPS/Avg IVC Verification Time`,
-        value: durations.reduce((a, b) => a + b, 0) / totalNumProofs,
+        value: sum(durations) / totalNumProofs,
         unit: 'ms',
       });
       results.push({
@@ -293,7 +292,7 @@ describe('transaction benchmarks', () => {
       });
       results.push({
         name: `Tx IVC Verification/${seconds} Seconds @${proofsPerSecond}TPS/Avg Total Verification Time (includes serde)`,
-        value: totalDurations.reduce((a, b) => a + b, 0) / totalNumProofs,
+        value: sum(totalDurations) / totalNumProofs,
         unit: 'ms',
       });
       results.push({

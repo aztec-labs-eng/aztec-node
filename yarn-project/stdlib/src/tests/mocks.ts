@@ -416,7 +416,7 @@ export const mockSimulatedTx = async (seed = 1) => {
 };
 
 export function mockL1ToL2Messages(numL1ToL2Messages: number): Fr[] {
-  return Array.from({ length: numL1ToL2Messages }, () => Fr.random());
+  return times(numL1ToL2Messages, () => Fr.random());
 }
 
 export async function mockCheckpointAndMessages(

@@ -1,4 +1,5 @@
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { ManualDateProvider } from '@aztec-labs/foundation/timer';
@@ -844,7 +845,7 @@ describe('SessionManager', () => {
     const epochs = 20;
     l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, proofSubmissionEpochs: epochs });
     dateProvider.advanceTime(46 * l1Constants.slotDuration);
-    setStore(Array.from({ length: epochs }, (_, i) => proverForCheckpoint(i + 1, 6 + 2 * i)));
+    setStore(times(epochs, i => proverForCheckpoint(i + 1, 6 + 2 * i)));
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
     mockNextUnprovenSlot(epochs, undefined);
     rollupContract.getHasSubmittedFullEpochProof.mockResolvedValue(true);

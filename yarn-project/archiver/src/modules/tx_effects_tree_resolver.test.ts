@@ -2,6 +2,7 @@ import { DomainSeparator } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { type BlockData, BlockHash, Body } from '@aztec-labs/stdlib/block';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, TxHash, computeTxEffectLeaves, verifyTxEffectMembershipWitness } from '@aztec-labs/stdlib/tx';
@@ -71,10 +72,10 @@ describe('TxEffectsTreeResolver', () => {
     it.each(['success', 'failure'])('waits 50ms between retries ending in %s', async outcome => {
       jest.useFakeTimers();
       try {
-        const start = Date.now();
+        const timer = new Timer();
         const attemptTimes: number[] = [];
         blocks.getTxLocation.mockImplementation(() => {
-          attemptTimes.push(Date.now() - start);
+          attemptTimes.push(timer.ms());
           return Promise.resolve({ blockNumber: BLOCK_NUMBER, blockHash: blockData.blockHash, txIndexInBlock: 0 });
         });
         blocks.getTxEffectLeaves.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
@@ -90,7 +91,7 @@ describe('TxEffectsTreeResolver', () => {
         await Promise.all([result, jest.runAllTimersAsync()]);
 
         expect(attemptTimes).toEqual([0, 50, 100]);
-        expect(Date.now() - start).toBe(100);
+        expect(timer.ms()).toBe(100);
       } finally {
         jest.useRealTimers();
       }

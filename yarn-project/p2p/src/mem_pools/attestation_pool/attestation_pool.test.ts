@@ -1,4 +1,5 @@
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
@@ -45,7 +46,7 @@ describe('Attestation Pool', () => {
 
       // Create distinct checkpoint attestations for the same (slot, proposalId) from different signers
       const numSigners = 10;
-      const signers = Array.from({ length: numSigners }, () => Secp256k1Signer.random());
+      const signers = times(numSigners, () => Secp256k1Signer.random());
       const attestations = signers.map(s => mockCheckpointAttestation(s, slotNumber, archive));
 
       // Add each attestation using tryAddCheckpointAttestation

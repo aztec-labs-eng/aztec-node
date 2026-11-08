@@ -1,4 +1,6 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import { NativeWorldStateService } from './native_world_state.js';
@@ -40,7 +42,7 @@ describe('world-state parallel read throughput', () => {
 
     // Warm up (open db pages, JIT, connect rings) so the first measured run
     // isn't penalised.
-    await Promise.all(Array.from({ length: 16 }, () => committed.getSiblingPath(TREE, 0n)));
+    await Promise.all(times(16, () => committed.getSiblingPath(TREE, 0n)));
 
     const results: { concurrency: number; reads: number; ms: number; throughput: number }[] = [];
 
@@ -55,9 +57,9 @@ describe('world-state parallel read throughput', () => {
         }
       };
 
-      const start = performance.now();
-      await Promise.all(Array.from({ length: concurrency }, (_, w) => worker(w)));
-      const ms = performance.now() - start;
+      const timer = new Timer();
+      await Promise.all(times(concurrency, w => worker(w)));
+      const ms = timer.ms();
       const throughput = reads / (ms / 1000);
 
       results.push({ concurrency, reads, ms, throughput });

@@ -1,3 +1,4 @@
+import { unique } from '@aztec-labs/foundation/collection';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -491,8 +492,8 @@ export class InboxStore {
       const message = await this.requireMessage(messageId);
       await this.writeMessage({
         ...message,
-        exportedMilestones: [...new Set([...message.exportedMilestones, ...(args.milestones ?? [])])],
-        exportedStages: [...new Set([...message.exportedStages, ...(args.stages ?? [])])],
+        exportedMilestones: unique([...message.exportedMilestones, ...(args.milestones ?? [])]),
+        exportedStages: unique([...message.exportedStages, ...(args.stages ?? [])]),
       });
     });
   }
@@ -505,7 +506,7 @@ export class InboxStore {
         batchId,
         JSON.stringify({
           ...batch,
-          exportedStages: [...new Set([...batch.exportedStages, ...(args.stages ?? [])])],
+          exportedStages: unique([...batch.exportedStages, ...(args.stages ?? [])]),
           resultExported: batch.resultExported || args.result === true,
         }),
       );

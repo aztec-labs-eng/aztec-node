@@ -13,7 +13,7 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
@@ -1103,7 +1103,7 @@ function unpackElements<T>(element: TypeMapping<T>, reader: FieldReader, count: 
         `fields each of their ${element.shape.length} slots holds`,
     );
   }
-  return Array.from({ length: count }, () => deserializeElement(element, reader.readFieldArray(elementWidth)));
+  return times(count, () => deserializeElement(element, reader.readFieldArray(elementWidth)));
 }
 
 /** Builds the zero-filled slots for a `None`, matching a `Some`'s wire shape (variable slots sized from `size`). */

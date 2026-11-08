@@ -1,8 +1,9 @@
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
-import { withoutHexPrefix } from '@aztec-labs/foundation/string';
+import { bufferToHex, withoutHexPrefix } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 
 export type ViemZkPassportProofParams = {
@@ -57,7 +58,7 @@ export class ZkPassportProofParams {
     const committedInputs = randomBytes(Number(numberOfCommittedInputs) * 32);
 
     const publicInputsCount = numberOfCommittedInputs + 16n;
-    const publicInputs = Array.from({ length: Number(publicInputsCount) }, () => Fr.random());
+    const publicInputs = times(Number(publicInputsCount), () => Fr.random());
 
     return new ZkPassportProofParams(
       false,
@@ -104,10 +105,10 @@ export class ZkPassportProofParams {
       version: '0x0000000000000000000000000000000000000000000000000000000000000000',
       proofVerificationData: {
         vkeyHash: this.vkeyHash.toString(),
-        proof: `0x${this.proof.toString('hex')}`,
+        proof: bufferToHex(this.proof),
         publicInputs: this.publicInputs.map(input => input.toString()),
       },
-      committedInputs: `0x${this.committedInputs.toString('hex')}`,
+      committedInputs: bufferToHex(this.committedInputs),
       serviceConfig: {
         devMode: this.devMode,
         validityPeriodInSeconds: this.validityPeriodInSeconds,

@@ -1,4 +1,5 @@
 import { BBNativeRollupProver, type BBProverConfig } from '@aztec-labs/bb-prover';
+import { times } from '@aztec-labs/foundation/collection';
 import { parseBooleanEnv } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -46,7 +47,7 @@ describe('prover/bb_prover/parity', () => {
     'proves and verifies the inbox parity circuit at size %i',
     async size => {
       // Fill the rung with real messages so `numMessages === size` (the largest circuit for that rung).
-      const messages = Array.from({ length: size }, () => Fr.random());
+      const messages = times(size, () => Fr.random());
       const proverId = Fr.random();
 
       const inputs = InboxParityPrivateInputs.fromMessages(messages, Fr.ZERO, proverId);

@@ -5,7 +5,7 @@ import {
   PRIVATE_LOG_CIPHERTEXT_LEN,
 } from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { chunk, uniqueBy } from '@aztec-labs/foundation/collection';
+import { chunk, times, uniqueBy } from '@aztec-labs/foundation/collection';
 import { Aes128 } from '@aztec-labs/foundation/crypto/aes128';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
@@ -628,9 +628,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     numberOfElements: number,
   ) {
     return this.#queryWithBlockHashNotAfterAnchor(blockHash, async referenceBlock => {
-      const slots = Array(numberOfElements)
-        .fill(0)
-        .map((_, i) => new Fr(startStorageSlot.toBigInt() + BigInt(i)));
+      const slots = times(numberOfElements, i => new Fr(startStorageSlot.toBigInt() + BigInt(i)));
       const values = await allToCompletion(
         slots.map(storageSlot => this.aztecNode.getPublicStorageAt(referenceBlock, contractAddress, storageSlot)),
       );

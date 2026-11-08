@@ -12,6 +12,7 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { RollupCheatCodes } from '@aztec-labs/ethereum/test';
 import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { sum } from '@aztec-labs/foundation/collection';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { BlockHash } from '@aztec-labs/stdlib/block';
@@ -61,7 +62,7 @@ function calculateStats(timings: number[]): TimingStats {
   if (timings.length === 0) {
     return { avg: 0, min: 0, max: 0, total: 0, count: 0 };
   }
-  const total = timings.reduce((a, b) => a + b, 0);
+  const total = sum(timings);
   return {
     avg: total / timings.length,
     min: Math.min(...timings),

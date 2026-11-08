@@ -1,3 +1,4 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { ACIRCallback, ACIRExecutionResult, ACVMWitness, CircuitSimulator } from '@aztec-labs/simulator/client';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import { Buffer } from 'buffer';
@@ -37,8 +38,7 @@ describe('CircuitRecorder', () => {
   describe('record', () => {
     it('isolates oracle calls between concurrent recordings sharing one recorder', async () => {
       const recorder = new MemoryCircuitRecorder();
-      let releaseA: () => void;
-      const gateA = new Promise<void>(resolve => (releaseA = resolve));
+      const { promise: gateA, resolve: releaseA } = promiseWithResolvers<void>();
 
       // A records a1, suspends so B interleaves, then records a2. With a single shared recording this corrupts; with
       // a per-recording context each recording sees only its own calls regardless of interleaving.

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 
@@ -35,8 +36,8 @@ export function describeAztecMapBench(
     const results: BenchResult[] = [];
 
     const generateKeyValuePairs = (count: number, offset = 0) => {
-      const keys = Array.from({ length: count }, (_, i) => `key-${i + offset}`);
-      const values = Array.from({ length: count }, (_, i) => `value-${i + offset}`);
+      const keys = times(count, i => `key-${i + offset}`);
+      const values = times(count, i => `value-${i + offset}`);
       return keys.map((key, i) => ({ key, value: values[i] }));
     };
 
@@ -69,7 +70,7 @@ export function describeAztecMapBench(
     });
 
     it('adds batched values', async () => {
-      const batches = Array.from({ length: 100 }, (_, i) => generateKeyValuePairs(1000, i * 1000));
+      const batches = times(100, i => generateKeyValuePairs(1000, i * 1000));
       const timer = new Timer();
       for (const batch of batches) {
         await map.setMany(batch);

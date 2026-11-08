@@ -1,4 +1,5 @@
 import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
@@ -87,7 +88,7 @@ describe('blob', () => {
 
   it('should evaluate full blob', async () => {
     // This test ensures that the noir blob lib correctly matches the kzg lib
-    const blobFields = Array.from({ length: FIELDS_PER_BLOB }).map((_, i) => new Fr(i + 2));
+    const blobFields = times(FIELDS_PER_BLOB, i => new Fr(i + 2));
     const blobFieldsHash = await poseidon2Hash(blobFields);
     const blob = await Blob.fromFields(blobFields);
     const challengeZ = await blob.computeChallengeZ(blobFieldsHash);

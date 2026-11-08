@@ -1,5 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { flipSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -44,7 +45,7 @@ describe('attestation manipulation', () => {
   beforeEach(() => {
     epochCache = mock<Pick<EpochCache, 'computeProposerIndex'>>();
     epochCache.computeProposerIndex.mockReturnValue(BigInt(proposerIndex));
-    committee = Array.from({ length: 4 }, () => EthAddress.random());
+    committee = times(4, () => EthAddress.random());
     // The last member has not signed, so it is never a manipulation target.
     attestations = committee.map((address, i) =>
       i === 3 ? CommitteeAttestation.fromAddress(address) : new CommitteeAttestation(address, Signature.random()),

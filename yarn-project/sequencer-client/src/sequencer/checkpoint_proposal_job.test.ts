@@ -10,7 +10,7 @@ import {
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
@@ -763,7 +763,7 @@ describe('CheckpointProposalJob', () => {
     // Create txs - determine total needed
     const txsPerBlockArray = Array.isArray(txsPerBlock) ? txsPerBlock : Array(numBlocks).fill(txsPerBlock);
     const totalTxs = txsPerBlockArray.reduce((sum, count) => sum + count, 0);
-    const txs = await Promise.all(Array.from({ length: totalTxs }, (_, i) => makeTx(i + 1, chainId)));
+    const txs = await Promise.all(times(totalTxs, i => makeTx(i + 1, chainId)));
 
     // Set up p2p mocks
     p2p.getPendingTxCount.mockResolvedValue(txs.length);
@@ -1737,7 +1737,7 @@ describe('CheckpointProposalJob', () => {
   });
 
   describe('streaming inbox', () => {
-    const leaves = (count: number, from = 1) => Array.from({ length: count }, (_, i) => new Fr(from + i));
+    const leaves = (count: number, from = 1) => times(count, i => new Fr(from + i));
     /** Mocks `count` sub-slots, the last one flagged as the checkpoint's final block. */
     const mockSubslots = (count: number) => {
       const spy = jest.spyOn(job.getTimetable(), 'selectNextSubslot');
@@ -2535,7 +2535,7 @@ describe('CheckpointProposalJob', () => {
   // checkpoint. What makes it usable is exactly where it sits: after the block is committed to the proposer's own
   // archiver and before that block reaches the network or the next block freezes its message range.
   describe('checkpoint phase test hooks', () => {
-    const leaves = (count: number, from = 1) => Array.from({ length: count }, (_, i) => new Fr(from + i));
+    const leaves = (count: number, from = 1) => times(count, i => new Fr(from + i));
 
     /** Mocks `count` sub-slots, the last one flagged as the checkpoint's final block. */
     const mockSubslots = (hookedJob: TestCheckpointProposalJob, count: number) => {

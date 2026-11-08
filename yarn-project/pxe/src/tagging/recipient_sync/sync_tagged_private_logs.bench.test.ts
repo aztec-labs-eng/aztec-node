@@ -91,7 +91,7 @@ type Scenario = {
  * seeding sanity check.
  */
 function newLogsPerSecret(scenario: Scenario): number[] {
-  return Array.from({ length: scenario.secretCount }, (_, i) =>
+  return times(scenario.secretCount, i =>
     scenario.deepCohort && i < scenario.deepCohort.count ? scenario.deepCohort.newLogs : scenario.newLogs,
   );
 }
@@ -164,7 +164,7 @@ describeBench('syncTaggedPrivateLogs constrained-sync bench', () => {
     aztecNode.getPrivateLogsByTags.mockReset();
     const taggingStore = new RecipientTaggingStore(await openTmpStore('bench'));
     taggingStore.beginChangeSet(CHANGE_SET_ID);
-    const secrets = await Promise.all(Array.from({ length: secretCount }, () => randomAppTaggingSecret(deliveryMode)));
+    const secrets = await Promise.all(times(secretCount, () => randomAppTaggingSecret(deliveryMode)));
 
     // Seed the persisted finalized indexes to simulate a recipient that already synced prior finalized messages. The
     // per-secret writes are independent, so run them concurrently.

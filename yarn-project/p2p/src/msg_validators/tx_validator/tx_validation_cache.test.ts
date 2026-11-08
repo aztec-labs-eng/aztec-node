@@ -1,3 +1,4 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import type { Tx, TxValidationResult } from '@aztec-labs/stdlib/tx';
@@ -114,10 +115,7 @@ describe('TxValidationCache', () => {
     it('shares an in-flight validation so concurrent calls for the same key validate once', async () => {
       const expected: TxValidationResult = { result: 'invalid', reason: ['bad proof'] };
 
-      let resolveValidation!: (v: TxValidationResult) => void;
-      const inFlight = new Promise<TxValidationResult>(resolve => {
-        resolveValidation = resolve;
-      });
+      const { promise: inFlight, resolve: resolveValidation } = promiseWithResolvers<TxValidationResult>();
       const validate = jest.fn<() => Promise<TxValidationResult>>().mockReturnValue(inFlight);
 
       const first = cache.getOrValidate(validatorA, tx, validate);
@@ -165,10 +163,7 @@ describe('TxValidationCache', () => {
       const error = new Error('downstream unavailable');
       const success: TxValidationResult = { result: 'invalid', reason: ['bad tx'] };
 
-      let rejectValidation!: (err: Error) => void;
-      const firstInFlight = new Promise<TxValidationResult>((_, reject) => {
-        rejectValidation = reject;
-      });
+      const { promise: firstInFlight, reject: rejectValidation } = promiseWithResolvers<TxValidationResult>();
 
       const validate = jest
         .fn<() => Promise<TxValidationResult>>()

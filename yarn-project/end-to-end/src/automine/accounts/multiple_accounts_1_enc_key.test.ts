@@ -2,6 +2,7 @@ import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/acc
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
+import { times } from '@aztec-labs/foundation/collection';
 import { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 
 import { deployTestToken, expectTokenBalance } from '../../fixtures/token_utils.js';
@@ -29,7 +30,7 @@ describe('automine/accounts/multiple_accounts_1_enc_key', () => {
     // These accounts share one encryption key but use different signing keys, so we build and create them
     // ourselves (the default setup accounts each use a distinct secret). They are initializerless.
     const accountsData = await Promise.all(
-      Array.from({ length: numAccounts }).map(async () => {
+      times(numAccounts, async () => {
         // A different signing key for each account.
         const signingKey = GrumpkinScalar.random();
         const salt = Fr.random();

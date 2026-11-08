@@ -5,6 +5,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { sum } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { executeTimeout } from '@aztec-labs/foundation/timer';
 
@@ -289,7 +290,7 @@ describe('multi-node/block-production/redistribution', () => {
           lastSeenCheckpoint = pc.checkpoint.number;
 
           const blockTxCounts = pc.checkpoint.blocks.map(b => b.body.txEffects.length);
-          const totalTxs = blockTxCounts.reduce((a, b) => a + b, 0);
+          const totalTxs = sum(blockTxCounts);
 
           // Skip empty checkpoints (no txs to analyze).
           if (totalTxs === 0) {

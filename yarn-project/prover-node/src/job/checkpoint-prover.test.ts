@@ -1,6 +1,7 @@
 import { ARCHIVE_HEIGHT, MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { CheckpointNumber, EpochNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -631,7 +632,7 @@ describe('CheckpointProver', () => {
 
       const prover = makeProver({
         previousBlockHeader: makePreviousBlockHeader(0),
-        l1ToL2Messages: Array.from({ length: MAX_L1_TO_L2_MSGS_PER_BLOCK + 2 }, () => Fr.random()),
+        l1ToL2Messages: times(MAX_L1_TO_L2_MSGS_PER_BLOCK + 2, () => Fr.random()),
       });
 
       await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();

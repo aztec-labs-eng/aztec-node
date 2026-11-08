@@ -176,9 +176,9 @@ export class WalletManager {
               return Promise.resolve({ value: undefined, done: true });
             }
 
-            return new Promise(resolve => {
-              pendingResolve = resolve;
-            });
+            const { promise, resolve } = promiseWithResolvers<IteratorResult<WalletProvider>>();
+            pendingResolve = resolve;
+            return promise;
           },
         };
       },

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import getPort from 'get-port';
 
 /**
@@ -5,4 +6,4 @@ import getPort from 'get-port';
  * @param numberOfPeers - The number of peers to get ports for
  * @returns A list of ports
  */
-export const getPorts = (numberOfPeers: number) => Promise.all(Array.from({ length: numberOfPeers }, () => getPort()));
+export const getPorts = (numberOfPeers: number) => Promise.all(times(numberOfPeers, () => getPort()));

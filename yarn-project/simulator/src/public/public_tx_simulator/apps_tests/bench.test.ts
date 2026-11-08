@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -105,7 +106,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmTestContract.address,
               fnName: 'nested_call_large_calldata',
-              args: [/*input=*/ Array.from({ length: 300 }, () => Fr.random())],
+              args: [/*input=*/ times(300, () => Fr.random())],
             },
           ],
         );
@@ -210,7 +211,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
               {
                 address: avmGadgetsTestContract.address,
                 fnName: `sha256_hash_${length}`,
-                args: [/*input=*/ Array.from({ length: length }, () => randomInt(2 ** 8))],
+                args: [/*input=*/ times(length, () => randomInt(2 ** 8))],
               },
             ],
           );
@@ -227,7 +228,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'keccak_hash',
-              args: [/*input=*/ Array.from({ length: 10 }, () => randomInt(2 ** 8))],
+              args: [/*input=*/ times(10, () => randomInt(2 ** 8))],
             },
           ],
         );
@@ -243,7 +244,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'keccak_hash_1400',
-              args: [/*input=*/ Array.from({ length: 1400 }, () => randomInt(2 ** 8))],
+              args: [/*input=*/ times(1400, () => randomInt(2 ** 8))],
             },
           ],
         );
@@ -259,7 +260,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'keccak_f1600',
-              args: [/*input=*/ Array.from({ length: 25 }, () => randomInt(2 ** 32))],
+              args: [/*input=*/ times(25, () => randomInt(2 ** 32))],
             },
           ],
         );
@@ -275,7 +276,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'poseidon2_hash',
-              args: [/*input=*/ Array.from({ length: 10 }, () => Fr.random())],
+              args: [/*input=*/ times(10, () => Fr.random())],
             },
           ],
         );
@@ -291,7 +292,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'poseidon2_hash_1000fields',
-              args: [/*input=*/ Array.from({ length: 1000 }, () => Fr.random())],
+              args: [/*input=*/ times(1000, () => Fr.random())],
             },
           ],
         );
@@ -307,7 +308,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'pedersen_hash',
-              args: [/*input=*/ Array.from({ length: 10 }, () => Fr.random())],
+              args: [/*input=*/ times(10, () => Fr.random())],
             },
           ],
         );
@@ -323,7 +324,7 @@ describe('Public TX simulator apps tests: benchmarks', () => {
             {
               address: avmGadgetsTestContract.address,
               fnName: 'pedersen_hash_with_index',
-              args: [/*input=*/ Array.from({ length: 10 }, () => Fr.random())],
+              args: [/*input=*/ times(10, () => Fr.random())],
             },
           ],
         );

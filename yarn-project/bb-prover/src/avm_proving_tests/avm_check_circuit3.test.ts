@@ -3,6 +3,7 @@ import {
   MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT,
   MAX_PROCESSABLE_L2_GAS,
 } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
@@ -117,7 +118,7 @@ describe('AVM check-circuit – unhappy paths 3', () => {
       // so we use the side-effect limit path to exercise the skip-to-teardown behavior.
       // 1 non-revertible + MAX_NULLIFIERS_PER_TX revertible exceeds the limit on the last revertible
       // nullifier insertion; subsequent revertible note hashes and L2→L1 messages are skipped.
-      const revertibleNullifiers = Array.from({ length: MAX_NULLIFIERS_PER_TX }, (_, i) => new Fr(100_000 + i));
+      const revertibleNullifiers = times(MAX_NULLIFIERS_PER_TX, i => new Fr(100_000 + i));
       await tester.simProveVerify(
         sender,
         /*setupCalls=*/ [],

@@ -1,5 +1,6 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BlockProposal, MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
@@ -24,7 +25,7 @@ describe('BlockTxRequest', () => {
 
   it('should serialize and deserialize correctly', () => {
     const archiveRoot = Fr.random();
-    const missing = new TxHashArray(...Array.from({ length: 4 }, () => TxHash.random()));
+    const missing = new TxHashArray(...times(4, () => TxHash.random()));
     const txIndices = BitVector.init(16, [0, 5, 10, 15]);
     const commitment = Buffer32.random();
 
@@ -53,7 +54,7 @@ describe('BlockTxRequest', () => {
   });
 
   it('should create request with full tx hashes when includeFullTxHashes=true', async () => {
-    const allTxHashes = Array.from({ length: 5 }, () => TxHash.random());
+    const allTxHashes = times(5, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
     const missingHashes = [allTxHashes[1], allTxHashes[3]];
 
@@ -70,7 +71,7 @@ describe('BlockTxRequest', () => {
   });
 
   it('should create request without tx hashes when includeFullTxHashes=false', async () => {
-    const allTxHashes = Array.from({ length: 5 }, () => TxHash.random());
+    const allTxHashes = times(5, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
     const missingHashes = [allTxHashes[0], allTxHashes[2], allTxHashes[4]];
 
@@ -84,7 +85,7 @@ describe('BlockTxRequest', () => {
   });
 
   it('should create request without tx hashes when includeFullTxHashes is not provided', async () => {
-    const allTxHashes = Array.from({ length: 3 }, () => TxHash.random());
+    const allTxHashes = times(3, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
     const missingHashes = [allTxHashes[1]];
 
@@ -97,7 +98,7 @@ describe('BlockTxRequest', () => {
   });
 
   it('should return undefined when no missing txs are provided', async () => {
-    const allTxHashes = Array.from({ length: 3 }, () => TxHash.random());
+    const allTxHashes = times(3, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
 
     const request = BlockTxsRequest.fromTxsSourceAndMissingTxs(blockProposal, [], true);
@@ -108,16 +109,16 @@ describe('BlockTxRequest', () => {
   });
 
   it('should return undefined when missing tx hashes do not match proposal hashes', async () => {
-    const allTxHashes = Array.from({ length: 3 }, () => TxHash.random());
+    const allTxHashes = times(3, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
-    const nonMatchingHashes = Array.from({ length: 2 }, () => TxHash.random());
+    const nonMatchingHashes = times(2, () => TxHash.random());
 
     const request = BlockTxsRequest.fromTxsSourceAndMissingTxs(blockProposal, nonMatchingHashes, true);
     expect(request).toBeUndefined();
   });
 
   it('should serialize and deserialize correctly with full tx hashes', async () => {
-    const allTxHashes = Array.from({ length: 4 }, () => TxHash.random());
+    const allTxHashes = times(4, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
     const missingHashes = [allTxHashes[0], allTxHashes[3]];
 
@@ -132,7 +133,7 @@ describe('BlockTxRequest', () => {
   });
 
   it('should serialize and deserialize correctly without tx hashes', async () => {
-    const allTxHashes = Array.from({ length: 4 }, () => TxHash.random());
+    const allTxHashes = times(4, () => TxHash.random());
     const blockProposal = await createBlockProposal(allTxHashes);
     const missingHashes = [allTxHashes[1], allTxHashes[2]];
 
@@ -219,7 +220,7 @@ describe('calculateBlockTxsResponseSize', () => {
 
   it('should return correct size for request with all indices set', () => {
     const count = 32;
-    const allIndices = Array.from({ length: count }, (_, i) => i);
+    const allIndices = times(count, i => i);
     const archiveRoot = Fr.random();
     const txIndices = BitVector.init(count, allIndices);
     const request = new BlockTxsRequest(archiveRoot, txIndices, Buffer32.random(), new TxHashArray());

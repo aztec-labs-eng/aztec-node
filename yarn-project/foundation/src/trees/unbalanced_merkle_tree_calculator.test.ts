@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 
+import { times } from '../collection/index.js';
 import { computeBalancedMerkleTreeRoot } from './balanced_merkle_tree_root.js';
 import { shaMerkleHash } from './hasher.js';
 import { MerkleTreeCalculator } from './merkle_tree_calculator.js';
@@ -38,7 +39,7 @@ describe('UnbalancedMerkleTreeCalculator', () => {
   describe('without compressed leaves', () => {
     // Fill the tree with leaves containing incrementing values from 1 to `numLeaves`.
     const createAndFillTree = (numLeaves: number) => {
-      leaves = Array.from({ length: numLeaves }, (_, i) => leaf(i + 1));
+      leaves = times(numLeaves, i => leaf(i + 1));
       tree = UnbalancedMerkleTreeCalculator.create(leaves);
     };
 
@@ -181,10 +182,8 @@ describe('UnbalancedMerkleTreeCalculator', () => {
 
     // Fill the tree with leaves containing incrementing values from 1 to `numLeaves`.
     // If a value is not in `keptValues`, it is replaced with `valueToCompress`.
-    const createAndFillTree = (numLeaves: number, keptValues = Array.from({ length: numLeaves }, (_, i) => i + 1)) => {
-      leaves = Array.from({ length: numLeaves }, (_, i) =>
-        keptValues.includes(i + 1) ? leaf(i + 1) : valueToCompress,
-      );
+    const createAndFillTree = (numLeaves: number, keptValues = times(numLeaves, i => i + 1)) => {
+      leaves = times(numLeaves, i => (keptValues.includes(i + 1) ? leaf(i + 1) : valueToCompress));
       tree = UnbalancedMerkleTreeCalculator.create(leaves, valueToCompress, emptyRoot);
     };
 

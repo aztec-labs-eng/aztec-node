@@ -40,9 +40,10 @@ import {
   tryDecodeRevertReason,
   tryExtractEvent,
 } from '@aztec-labs/ethereum/utils';
+import { sumBigint } from '@aztec-labs/foundation/bigint';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { trimmedBytesLength } from '@aztec-labs/foundation/buffer';
-import { pick, sum } from '@aztec-labs/foundation/collection';
+import { compactArray, pick, sum } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -542,8 +543,8 @@ export class SequencerPublisher implements Disposable {
 
     // Get gas configs
     const gasConfigs = requestsToAnalyze.filter(request => request.gasConfig).map(request => request.gasConfig);
-    const gasLimits = gasConfigs.map(g => g?.gasLimit).filter((g): g is bigint => g !== undefined);
-    const gasLimit = gasLimits.length > 0 ? gasLimits.reduce((sum, g) => sum + g, 0n) : 0n;
+    const gasLimits = compactArray(gasConfigs.map(g => g?.gasLimit));
+    const gasLimit = gasLimits.length > 0 ? sumBigint(gasLimits) : 0n;
 
     // Get the transaction requests
     const l1Requests = requestsToAnalyze.map(r => r.request);
@@ -616,7 +617,7 @@ export class SequencerPublisher implements Disposable {
 
     // Collect earliest txTimeoutAt across all requests.
     const gasConfigs = validRequests.filter(request => request.gasConfig).map(request => request.gasConfig);
-    const txTimeoutAts = gasConfigs.map(g => g?.txTimeoutAt).filter((g): g is Date => g !== undefined);
+    const txTimeoutAts = compactArray(gasConfigs.map(g => g?.txTimeoutAt));
     const txTimeoutAt = txTimeoutAts.length > 0 ? new Date(Math.min(...txTimeoutAts.map(g => g.getTime()))) : undefined;
 
     // Sort the requests so that proposals always go first

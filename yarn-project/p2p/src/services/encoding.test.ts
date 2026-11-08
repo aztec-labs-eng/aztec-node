@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { MAX_TX_SIZE_KB, P2PMessage, TopicType } from '@aztec-labs/stdlib/p2p';
 import { Buffer } from 'buffer';
 import { compressSync, uncompressSync } from 'snappy';
@@ -162,7 +163,7 @@ describe('readSnappyPreamble', () => {
     it('should correctly read preamble from compressed structured data', () => {
       // Test with JSON data
       const data = {
-        users: Array.from({ length: 100 }, (_, i) => ({
+        users: times(100, i => ({
           id: i,
           name: `User ${i}`,
           email: `user${i}@example.com`,

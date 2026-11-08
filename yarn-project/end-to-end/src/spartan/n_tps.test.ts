@@ -15,6 +15,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { BenchmarkingContract } from '@aztec-labs/noir-test-contracts.js/Benchmarking';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { TopicType } from '@aztec-labs/stdlib/p2p';
@@ -807,7 +808,7 @@ function sendTxsAtTps(
         async () => {
           const { wallet, aztecNode: walletNode, address } = lanes[i];
 
-          const start = performance.now(); // ms
+          const timer = new Timer(); // ms
           try {
             const txHash = await sendTx(wallet, walletNode, address);
             txHashes.push(txHash);
@@ -815,7 +816,7 @@ function sendTxsAtTps(
             logger.error('Failed to submit tx', { walletIndex: i, err });
             throw err;
           }
-          const dt = performance.now() - start; // ms
+          const dt = timer.ms(); // ms
 
           const tps = 1000 / dt; // We just sent one tx. Calculate TPS. Note: we have to convert ms to s
 

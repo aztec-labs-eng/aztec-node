@@ -1,4 +1,5 @@
 import { makeTuple } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
 import { BLS12Fq, BLS12Fr, BLS12Point, BLSPointNotOnCurveError } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
@@ -90,5 +91,5 @@ export function makeFinalBlobBatchingChallenges(seed = 1) {
  * @returns
  */
 export function makeRandomBlob(length: number): Promise<Blob> {
-  return Blob.fromFields([...Array.from({ length: length }, () => Fr.random())]);
+  return Blob.fromFields([...times(length, () => Fr.random())]);
 }

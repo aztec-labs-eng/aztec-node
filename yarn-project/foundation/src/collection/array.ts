@@ -107,11 +107,7 @@ export async function filterAsync<T>(arr: T[], fn: (item: T) => Promise<boolean>
  * @returns The array with the result from all executions.
  */
 export async function timesParallel<T>(n: number, fn: (i: number) => Promise<T>): Promise<T[]> {
-  const results: T[] = await Promise.all(
-    Array(n)
-      .fill(0)
-      .map((_, i) => fn(i)),
-  );
+  const results: T[] = await Promise.all(times(n, i => fn(i)));
   return results;
 }
 
@@ -123,10 +119,7 @@ export async function timesParallel<T>(n: number, fn: (i: number) => Promise<T>)
 export function arraySerializedSizeOfNonEmpty(
   arr: (({ isZero: () => boolean } | { isEmpty: () => boolean }) & { toBuffer: () => Buffer })[],
 ) {
-  return arr
-    .filter(x => x && ('isZero' in x ? !x.isZero() : !x.isEmpty()))
-    .map(x => x!.toBuffer().length)
-    .reduce((a, b) => a + b, 0);
+  return sum(arr.filter(x => x && ('isZero' in x ? !x.isZero() : !x.isEmpty())).map(x => x!.toBuffer().length));
 }
 
 /**
@@ -224,7 +217,7 @@ export function mean(values: number[]) {
   if (values.length === 0) {
     return undefined;
   }
-  return values.reduce((a, b) => a + b, 0) / values.length;
+  return sum(values) / values.length;
 }
 
 /** Computes the variance of a numeric array. Returns undefined if there are less than 2 points. */

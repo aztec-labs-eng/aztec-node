@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 
+import { times } from '../collection/index.js';
 import { Fr } from '../curves/bn254/index.js';
 import { jsonStringify } from '../json-rpc/index.js';
 import { type MerkleTree, MerkleTreeCalculator } from '../trees/index.js';
@@ -61,7 +62,7 @@ describe('SiblingPath', () => {
 
     beforeAll(async () => {
       const calculator = await MerkleTreeCalculator.create(4, undefined, hasher);
-      const leaves = Array.from({ length: 5 }).map((_, i) => new Fr(i).toBuffer());
+      const leaves = times(5, i => new Fr(i).toBuffer());
       tree = await calculator.computeTree(leaves);
     });
 

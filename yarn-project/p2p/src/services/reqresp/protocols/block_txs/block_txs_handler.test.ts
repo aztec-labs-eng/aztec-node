@@ -1,4 +1,5 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -79,7 +80,7 @@ describe('reqRespBlockTxsHandler', () => {
     it('rejects a request naming more explicit hashes than the per-request cap', async () => {
       // A peer with an empty bit list but many explicit hashes would otherwise force one
       // full tx to be served per hash; the request must be rejected before the pool lookup.
-      const tooMany = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST + 1 }, () => TxHash.random());
+      const tooMany = times(MAX_BLOCK_TXS_PER_REQUEST + 1, () => TxHash.random());
       const request = makeRequest(Fr.random(), BitVector.init(0, []), [], tooMany);
 
       const err = await callHandler(request).then(
@@ -94,7 +95,7 @@ describe('reqRespBlockTxsHandler', () => {
     it('rejects an over-cap request before any pool or archiver lookup', async () => {
       // The cheap early bound short-circuits before the attestation pool / archiver / tx pool are
       // touched, so one oversized request drives no lookup work.
-      const tooMany = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST + 1 }, () => TxHash.random());
+      const tooMany = times(MAX_BLOCK_TXS_PER_REQUEST + 1, () => TxHash.random());
       const request = makeRequest(Fr.random(), BitVector.init(0, []), [], tooMany);
 
       const err = await callHandler(request).then(
@@ -112,8 +113,8 @@ describe('reqRespBlockTxsHandler', () => {
       // Each form is under the cap (so the early bound passes), but the deduplicated served set is
       // over it; the final deduplicated cap must reject it after looking the proposal up.
       const under = Math.ceil(MAX_BLOCK_TXS_PER_REQUEST * 0.8);
-      const blockTxHashes = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST }, () => TxHash.random());
-      const explicit = Array.from({ length: under }, () => TxHash.random()); // distinct from the block
+      const blockTxHashes = times(MAX_BLOCK_TXS_PER_REQUEST, () => TxHash.random());
+      const explicit = times(under, () => TxHash.random()); // distinct from the block
       const proposal = await createBlockProposal(blockTxHashes);
       attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
       txPool.hasTxs.mockResolvedValue(blockTxHashes.map(() => true));
@@ -122,7 +123,7 @@ describe('reqRespBlockTxsHandler', () => {
         proposal.archive,
         BitVector.init(
           MAX_BLOCK_TXS_PER_REQUEST,
-          Array.from({ length: under }, (_, i) => i),
+          times(under, i => i),
         ),
         blockTxHashes,
         explicit,
@@ -332,7 +333,7 @@ describe('reqRespBlockTxsHandler', () => {
       // Selecting more than the cap positions for a retained proposal would otherwise drive an
       // over-cap pool fetch and response; reject before the fetch and serialization.
       const tooMany = MAX_BLOCK_TXS_PER_REQUEST + 1;
-      const txHashes = Array.from({ length: tooMany }, () => TxHash.random());
+      const txHashes = times(tooMany, () => TxHash.random());
       const proposal = await createBlockProposal(txHashes);
       attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
       txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
@@ -342,7 +343,7 @@ describe('reqRespBlockTxsHandler', () => {
           proposal.archive,
           BitVector.init(
             tooMany,
-            Array.from({ length: tooMany }, (_, i) => i),
+            times(tooMany, i => i),
           ),
           txHashes,
         ),
@@ -352,7 +353,7 @@ describe('reqRespBlockTxsHandler', () => {
 
     it('serves a request selecting exactly the per-request cap', async () => {
       const atCap = MAX_BLOCK_TXS_PER_REQUEST;
-      const txHashes = Array.from({ length: atCap }, () => TxHash.random());
+      const txHashes = times(atCap, () => TxHash.random());
       const proposal = await createBlockProposal(txHashes);
       attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
       txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
@@ -363,7 +364,7 @@ describe('reqRespBlockTxsHandler', () => {
           proposal.archive,
           BitVector.init(
             atCap,
-            Array.from({ length: atCap }, (_, i) => i),
+            times(atCap, i => i),
           ),
           txHashes,
         ),
@@ -378,7 +379,7 @@ describe('reqRespBlockTxsHandler', () => {
       // can sum past the cap while the distinct tx count stays within it. Such a batch must be served,
       // not rejected: the cap is on the deduplicated served count.
       const count = MAX_BLOCK_TXS_PER_REQUEST; // 128 distinct, sent twice => raw sum 256
-      const txHashes = Array.from({ length: count }, () => TxHash.random());
+      const txHashes = times(count, () => TxHash.random());
       const proposal = await createBlockProposal(txHashes);
       attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
       txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
@@ -389,7 +390,7 @@ describe('reqRespBlockTxsHandler', () => {
           proposal.archive,
           BitVector.init(
             count,
-            Array.from({ length: count }, (_, i) => i),
+            times(count, i => i),
           ),
           txHashes,
           txHashes,

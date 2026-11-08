@@ -1,6 +1,7 @@
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { unfreeze } from '@aztec-labs/foundation/types';
 import { type AvmSimulator, PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
@@ -249,7 +250,7 @@ describe('NodePublicCallsSimulator', () => {
         size,
         depth: 16,
       });
-    const leaves = (count: number) => Array.from({ length: count }, (_, i) => new Fr(i + 1));
+    const leaves = (count: number) => times(count, i => new Fr(i + 1));
     const threshold = MAX_L1_TO_L2_MSGS_PER_CHECKPOINT - MAX_L1_TO_L2_MSGS_PER_BLOCK;
 
     beforeEach(() => {

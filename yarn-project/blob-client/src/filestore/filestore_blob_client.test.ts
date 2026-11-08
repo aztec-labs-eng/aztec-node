@@ -1,5 +1,6 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { FileStore, ReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
 import { Buffer } from 'buffer';
 
@@ -76,7 +77,7 @@ describe('FileStoreBlobClient', () => {
   describe('saveBlob', () => {
     it('should save a blob to the filestore', async () => {
       const blob = await Blob.fromFields([Fr.random(), Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
 
       await client.saveBlob(blob);
 
@@ -85,12 +86,12 @@ describe('FileStoreBlobClient', () => {
 
       const data = await mockStore.read(`${basePath}/blobs/${versionedHash}.data`);
       const json = JSON.parse(inboundTransform(data).toString());
-      expect(json.kzg_commitment).toBe(`0x${blob.commitment.toString('hex')}`);
+      expect(json.kzg_commitment).toBe(bufferToHex(blob.commitment));
     });
 
     it('should skip saving if blob already exists and skipIfExists=true', async () => {
       const blob = await Blob.fromFields([Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
 
       // Save first time
       await client.saveBlob(blob);
@@ -109,7 +110,7 @@ describe('FileStoreBlobClient', () => {
 
     it('should overwrite if skipIfExists=false', async () => {
       const blob = await Blob.fromFields([Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
 
       // Save first time
       await client.saveBlob(blob);
@@ -125,7 +126,7 @@ describe('FileStoreBlobClient', () => {
       const data = await mockStore.read(`${basePath}/blobs/${versionedHash}.data`);
       const json = JSON.parse(inboundTransform(data).toString());
       expect(json.modified).toBeUndefined();
-      expect(json.kzg_commitment).toBe(`0x${blob.commitment.toString('hex')}`);
+      expect(json.kzg_commitment).toBe(bufferToHex(blob.commitment));
     });
   });
 
@@ -136,8 +137,8 @@ describe('FileStoreBlobClient', () => {
 
       await client.saveBlobs([blob1, blob2]);
 
-      const hash1 = `0x${blob1.getEthVersionedBlobHash().toString('hex')}`;
-      const hash2 = `0x${blob2.getEthVersionedBlobHash().toString('hex')}`;
+      const hash1 = bufferToHex(blob1.getEthVersionedBlobHash());
+      const hash2 = bufferToHex(blob2.getEthVersionedBlobHash());
 
       expect(await mockStore.exists(`${basePath}/blobs/${hash1}.data`)).toBe(true);
       expect(await mockStore.exists(`${basePath}/blobs/${hash2}.data`)).toBe(true);
@@ -147,14 +148,14 @@ describe('FileStoreBlobClient', () => {
   describe('getBlobsByHashes', () => {
     it('should retrieve blobs by their versioned hashes', async () => {
       const blob = await Blob.fromFields([Fr.random(), Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
 
       await client.saveBlob(blob);
 
       const blobs = await client.getBlobsByHashes([versionedHash]);
 
       expect(blobs.length).toBe(1);
-      expect(blobs[0].kzg_commitment).toBe(`0x${blob.commitment.toString('hex')}`);
+      expect(blobs[0].kzg_commitment).toBe(bufferToHex(blob.commitment));
     });
 
     it('should return empty array for non-existent blob', async () => {
@@ -169,8 +170,8 @@ describe('FileStoreBlobClient', () => {
 
       await client.saveBlobs([blob1, blob2]);
 
-      const hash1 = `0x${blob1.getEthVersionedBlobHash().toString('hex')}`;
-      const hash2 = `0x${blob2.getEthVersionedBlobHash().toString('hex')}`;
+      const hash1 = bufferToHex(blob1.getEthVersionedBlobHash());
+      const hash2 = bufferToHex(blob2.getEthVersionedBlobHash());
 
       const blobs = await client.getBlobsByHashes([hash1, hash2]);
 
@@ -179,7 +180,7 @@ describe('FileStoreBlobClient', () => {
 
     it('should skip blobs that fail to parse', async () => {
       const blob = await Blob.fromFields([Fr.random()]);
-      const hash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const hash = bufferToHex(blob.getEthVersionedBlobHash());
 
       // Save invalid JSON
       await mockStore.save(`${basePath}/blobs/${hash}.data`, Buffer.from('invalid json'));
@@ -193,7 +194,7 @@ describe('FileStoreBlobClient', () => {
   describe('exists', () => {
     it('should return true if blob exists', async () => {
       const blob = await Blob.fromFields([Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
 
       await client.saveBlob(blob);
 
@@ -249,7 +250,7 @@ describe('FileStoreBlobClient', () => {
     it('should be able to read from read-only store', async () => {
       const files = new Map<string, Buffer>();
       const blob = await Blob.fromFields([Fr.random()]);
-      const versionedHash = `0x${blob.getEthVersionedBlobHash().toString('hex')}`;
+      const versionedHash = bufferToHex(blob.getEthVersionedBlobHash());
       const path = `${basePath}/blobs/${versionedHash}.data`;
 
       files.set(path, outboundTransform(Buffer.from(JSON.stringify(blob.toJSON()))));
@@ -260,7 +261,7 @@ describe('FileStoreBlobClient', () => {
       const blobs = await readOnlyClient.getBlobsByHashes([versionedHash]);
 
       expect(blobs.length).toBe(1);
-      expect(blobs[0].kzg_commitment).toBe(`0x${blob.commitment.toString('hex')}`);
+      expect(blobs[0].kzg_commitment).toBe(bufferToHex(blob.commitment));
     });
   });
 });

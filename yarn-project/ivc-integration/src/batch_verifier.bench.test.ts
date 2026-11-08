@@ -5,7 +5,9 @@
  * then benchmarks batch verification throughput at various configurations.
  */
 import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { jest } from '@jest/globals';
 import { execFile } from 'node:child_process';
@@ -75,11 +77,11 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
 
     // Prove the flow
     logger.info(`Proving flow: ${flow}...`);
-    const proveStart = performance.now();
+    const proveTimer = new Timer();
     await execFileAsync(BB_PATH, ['prove', '--scheme', 'chonk', '--ivc_inputs_path', ivcInputsPath, '-o', proofDir], {
       timeout: 600_000,
     });
-    const proveMs = performance.now() - proveStart;
+    const proveMs = proveTimer.ms();
     logger.info(`Proof generated in ${Math.ceil(proveMs)}ms`);
 
     // Read the proof and convert to field elements
@@ -115,14 +117,14 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
     it(`throughput: 16 proofs, batch_size=8, ${numCores} cores`, async () => {
       const numProofs = 16;
       const batchSize = 8;
-      const proofs = Array.from({ length: numProofs }, () => ({ vkIndex: 0, proofFields: validProofFields }));
+      const proofs = times(numProofs, () => ({ vkIndex: 0, proofFields: validProofFields }));
 
       const verifier = await BatchChonkVerifier.newForTesting({ bbChonkVerifyConcurrency: numCores }, [vk], batchSize);
 
       try {
-        const wallStart = performance.now();
+        const wallTimer = new Timer();
         const results = await Promise.all(proofs.map(p => verifier.enqueueProof(p.vkIndex, p.proofFields)));
-        const wallMs = performance.now() - wallStart;
+        const wallMs = wallTimer.ms();
 
         expect(results).toHaveLength(numProofs);
         expect(results.every(r => r.valid)).toBe(true);
@@ -152,14 +154,14 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
   for (const batchSize of [2, 4, 8]) {
     it(`batch_size sweep: 8 proofs, batch_size=${batchSize}, 8 cores`, async () => {
       const numProofs = 8;
-      const proofs = Array.from({ length: numProofs }, () => ({ vkIndex: 0, proofFields: validProofFields }));
+      const proofs = times(numProofs, () => ({ vkIndex: 0, proofFields: validProofFields }));
 
       const verifier = await BatchChonkVerifier.newForTesting({ bbChonkVerifyConcurrency: 8 }, [vk], batchSize);
 
       try {
-        const wallStart = performance.now();
+        const wallTimer = new Timer();
         const results = await Promise.all(proofs.map(p => verifier.enqueueProof(p.vkIndex, p.proofFields)));
-        const wallMs = performance.now() - wallStart;
+        const wallMs = wallTimer.ms();
 
         expect(results).toHaveLength(numProofs);
         expect(results.every(r => r.valid)).toBe(true);
@@ -183,7 +185,7 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
   it('bisection overhead: 8 proofs with 2 bad, batch_size=8, 8 cores', async () => {
     const numProofs = 8;
     const numBad = 2;
-    const proofs = Array.from({ length: numProofs }, (_, i) => ({
+    const proofs = times(numProofs, i => ({
       vkIndex: 0,
       proofFields: i < numBad ? invalidProofFields : validProofFields,
     }));
@@ -191,9 +193,9 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
     const verifier = await BatchChonkVerifier.newForTesting({ bbChonkVerifyConcurrency: 8 }, [vk], 8);
 
     try {
-      const wallStart = performance.now();
+      const wallTimer = new Timer();
       const results = await Promise.all(proofs.map(p => verifier.enqueueProof(p.vkIndex, p.proofFields)));
-      const wallMs = performance.now() - wallStart;
+      const wallMs = wallTimer.ms();
 
       expect(results).toHaveLength(numProofs);
       expect(results.filter(r => r.valid)).toHaveLength(numProofs - numBad);

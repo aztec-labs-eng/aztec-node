@@ -1,6 +1,7 @@
 import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 
 import {
   MultiNodeTestContext,
@@ -84,11 +85,9 @@ export class InactivityTest {
 
     // Create all active nodes (running sequencer) plus the inactive ones (sequencer disabled).
     const activeCount = NUM_NODES - this.inactiveNodeCount;
-    this.activeNodes = await Promise.all(
-      Array.from({ length: activeCount }, (_, i) => this.test.createValidatorNodeAt(i)),
-    );
+    this.activeNodes = await Promise.all(times(activeCount, i => this.test.createValidatorNodeAt(i)));
     this.inactiveNodes = await Promise.all(
-      Array.from({ length: this.inactiveNodeCount }, (_, i) =>
+      times(this.inactiveNodeCount, i =>
         this.test.createValidatorNodeAt(activeCount + i, { dontStartSequencer: true }),
       ),
     );

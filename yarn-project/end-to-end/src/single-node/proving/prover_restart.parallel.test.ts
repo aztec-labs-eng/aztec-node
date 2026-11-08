@@ -1,5 +1,6 @@
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -362,7 +363,7 @@ describe('single-node/proving/prover_restart', () => {
       // complete.
       const pendingTxProofIds = await retryUntil(
         async () => {
-          const ids = [...new Set(broker.enqueues.filter(e => isTxBaseRollup(e.job.type)).map(e => e.job.id))];
+          const ids = unique(broker.enqueues.filter(e => isTxBaseRollup(e.job.type)).map(e => e.job.id));
           const inQueue: ProvingJobId[] = [];
           for (const id of ids) {
             if ((await broker.getProvingJobStatus(id)).status === 'in-queue') {

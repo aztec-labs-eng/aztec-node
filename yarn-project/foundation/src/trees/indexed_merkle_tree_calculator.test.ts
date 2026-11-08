@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 
 import { toBigIntBE } from '../bigint-buffer/index.js';
+import { times } from '../collection/index.js';
 import { poseidon2Hash } from '../crypto/poseidon/index.js';
 import { Fr } from '../curves/bn254/field.js';
 import { BufferReader } from '../serialize/buffer_reader.js';
@@ -122,14 +123,14 @@ describe('indexed merkle tree root calculator', () => {
   it('should correctly handle no leaves', async () => {
     // Height of 3 is 8 leaves.
     const calculator = await IndexedMerkleTreeCalculator.create(4, new TestHasher(), TestLeafPreimage);
-    const expected = await calculator.computeTreeRoot(new Array(8).fill(new Fr(0)).map(fr => fr.toBuffer()));
+    const expected = await calculator.computeTreeRoot(times(8, () => new Fr(0).toBuffer()));
     await expect(calculator.computeTreeRoot()).resolves.toEqual(expected);
   });
 
   it('should compute entire tree', async () => {
     const hasher = new TestHasher();
     const calculator = await IndexedMerkleTreeCalculator.create(4, hasher, TestLeafPreimage);
-    const values = Array.from({ length: 5 }).map((_, i) => new Fr(i).toBuffer());
+    const values = times(5, i => new Fr(i).toBuffer());
     const result = await calculator.computeTree(values);
 
     const expectedLeafPreimages = values.map(
@@ -145,7 +146,7 @@ describe('indexed merkle tree root calculator', () => {
   it('should correctly get a membership witness', async () => {
     const hasher = new TestHasher();
     const calculator = await IndexedMerkleTreeCalculator.create(3, hasher, TestLeafPreimage);
-    const values = Array.from({ length: 5 }).map((_, i) => new Fr(i + 1).toBuffer());
+    const values = times(5, i => new Fr(i + 1).toBuffer());
     const tree = await calculator.computeTree(values);
 
     // We will have the below leaf at index 2.
@@ -166,7 +167,7 @@ describe('indexed merkle tree root calculator', () => {
   it('should correctly get a non membership witness', async () => {
     const hasher = new TestHasher();
     const calculator = await IndexedMerkleTreeCalculator.create(3, hasher, TestLeafPreimage);
-    const values = Array.from({ length: 5 }).map((_, i) => new Fr(i * 2).toBuffer());
+    const values = times(5, i => new Fr(i * 2).toBuffer());
     const tree = await calculator.computeTree(values);
 
     // Choose an odd value which will not be in the tree.
@@ -192,7 +193,7 @@ describe('indexed merkle tree root calculator', () => {
   it('should correctly get a membership witness for addresses', async () => {
     const hasher = new TestHasher();
     const calculator = await IndexedMerkleTreeCalculator.create(3, hasher, TestLeafPreimage);
-    let values: Fr[] = await Promise.all(Array.from({ length: 7 }).map(() => Fr.random()));
+    let values: Fr[] = await Promise.all(times(7, () => Fr.random()));
     // Manually add the zero leaf here, so the below recalcs are easier.
     values = [Fr.ZERO, ...values];
     const tree = await calculator.computeTree(values.map(a => a.toBuffer()));
@@ -225,7 +226,7 @@ describe('indexed merkle tree root calculator', () => {
   it('should correctly get a non membership witness for addresses', async () => {
     const hasher = new TestHasher();
     const calculator = await IndexedMerkleTreeCalculator.create(3, hasher, TestLeafPreimage);
-    let values: Fr[] = await Promise.all(Array.from({ length: 7 }).map(() => Fr.random()));
+    let values: Fr[] = await Promise.all(times(7, () => Fr.random()));
     // Manually add the zero leaf here, so the below recalcs are easier.
     values = [Fr.ZERO, ...values];
     const tree = await calculator.computeTree(values.map(a => a.toBuffer()));

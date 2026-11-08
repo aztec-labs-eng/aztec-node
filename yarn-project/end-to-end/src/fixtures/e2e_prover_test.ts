@@ -11,6 +11,7 @@ import type { ClientProtocolCircuitVerifier } from '@aztec-labs/bb-prover';
 import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { SecretValue } from '@aztec-labs/foundation/config';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
@@ -228,7 +229,7 @@ export class FullProverTest extends SingleNodeTestContext {
 
     // The simulated prover node (now shutdown) used private key index 2
     const proverNodePrivateKey = getPrivateKeyFromIndex(2);
-    const proverNodePrivateKeyHex = `0x${proverNodePrivateKey!.toString('hex')}` as const;
+    const proverNodePrivateKeyHex = bufferToHex(proverNodePrivateKey!);
     const proverNodeSenderAddress = privateKeyToAddress(new Buffer32(proverNodePrivateKey!).toString());
     this.proverAddress = EthAddress.fromString(proverNodeSenderAddress);
 

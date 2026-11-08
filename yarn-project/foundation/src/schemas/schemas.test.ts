@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { Buffer32 } from '../buffer/buffer32.js';
+import { times } from '../collection/index.js';
 import { schemas } from './schemas.js';
 import { boundedRecord, optional, withMaxDepth } from './utils.js';
 
@@ -30,7 +31,7 @@ describe('schemas', () => {
     });
 
     it('rejects an oversized record of invalid entries with a single issue', () => {
-      const input = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`k${i}`, 'not a number']));
+      const input = Object.fromEntries(times(10_000, i => [`k${i}`, 'not a number']));
       expect(schema.safeParse(input).error?.issues).toHaveLength(1);
     });
 
@@ -75,7 +76,7 @@ describe('schemas', () => {
 
     it('accepts wide shallow input and rejects one deep element among many', () => {
       const schema = withMaxDepth(z.unknown(), 4);
-      const wide: unknown[] = Array.from({ length: 100_000 }, () => ({ a: [] }));
+      const wide: unknown[] = times(100_000, () => ({ a: [] }));
       expect(schema.safeParse(wide).success).toBe(true);
       wide.splice(50_000, 0, { a: [[[]]] });
       expect(schema.safeParse(wide).success).toBe(false);

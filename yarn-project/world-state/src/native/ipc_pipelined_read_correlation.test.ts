@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
@@ -25,7 +26,7 @@ describe('IPC world-state pipelined read correlation', () => {
         ws = await NativeWorldStateService.tmp();
 
         fork = await ws.fork();
-        leaves = Array.from({ length: N }, (_, i) => new Fr(BigInt(i) * 0x1_0000_0001n + 1n));
+        leaves = times(N, i => new Fr(BigInt(i) * 0x1_0000_0001n + 1n));
         await fork.appendLeaves(MerkleTreeId.NOTE_HASH_TREE, leaves);
       });
 

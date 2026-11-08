@@ -1,6 +1,7 @@
 import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { jest } from '@jest/globals';
@@ -54,7 +55,7 @@ describe('multi-node/slashing/multiple_validators_sentinel', () => {
 
     // Two nodes, each carrying VALIDATORS_PER_NODE consecutive validator keys.
     const keysFor = (nodeIndex: number) =>
-      Array.from({ length: VALIDATORS_PER_NODE }, (_, j) => test.privateKeyAt(nodeIndex * VALIDATORS_PER_NODE + j));
+      times(VALIDATORS_PER_NODE, j => test.privateKeyAt(nodeIndex * VALIDATORS_PER_NODE + j));
     nodes = await Promise.all([0, 1].map(nodeIndex => test.createValidatorNode(keysFor(nodeIndex))));
 
     sentinel = await test.createNonValidatorNode({ sentinelEnabled: true });

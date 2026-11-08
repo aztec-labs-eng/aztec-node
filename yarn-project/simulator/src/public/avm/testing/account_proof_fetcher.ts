@@ -2,6 +2,7 @@
  * Fetches an account proof from the Ethereum mainnet and saves it as account_proof.json.
  * This script is not using any Aztec library code, so it's easily portable.
  */
+import { times } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import fs from 'fs';
 import { dirname, join } from 'path';
@@ -26,7 +27,7 @@ function toBytes(hex: `0x${string}`) {
 
 function bytesToU64s(bytes: number[]) {
   const paddedBytes = padTo(bytes, 32);
-  return Array.from({ length: 4 }, (_, i) => {
+  return times(4, i => {
     let val = 0n;
     for (let j = 0; j < 8; j++) {
       val += BigInt(paddedBytes[i * 8 + j]) << BigInt(j * 8);
@@ -51,9 +52,7 @@ function parseNode(rlp: `0x${string}`) {
   // Should be safe when working with branches and extensions without embedded children.
   const decoded = fromRlp(rlp) as `0x${string}`[];
   const node = {
-    rows: Array(16)
-      .fill(0)
-      .map(() => Array(32).fill(0)),
+    rows: times(16, () => Array(32).fill(0)),
     row_exist: Array(16).fill(false),
     node_type: 0,
   };
@@ -90,9 +89,7 @@ function parseProof(proof: `0x${string}`[], maxLen: number) {
   const nodes = proof.slice(0, -1).slice(0, maxLen).map(parseNode);
   while (nodes.length < maxLen) {
     nodes.push({
-      rows: Array(16)
-        .fill(0)
-        .map(() => Array(32).fill(0)),
+      rows: times(16, () => Array(32).fill(0)),
       row_exist: Array(16).fill(false),
       node_type: 0,
     });

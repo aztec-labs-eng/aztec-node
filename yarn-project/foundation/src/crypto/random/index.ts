@@ -2,6 +2,7 @@ import { randomBytes as bbRandomBytes } from '@aztec-foundation/bb.js';
 
 import { Buffer } from 'buffer';
 
+import { bufferToHex } from '../../string/index.js';
 import { RandomnessSingleton } from './randomness_singleton.js';
 
 export const randomBytes = (len: number) => {
@@ -35,7 +36,7 @@ export const randomInt = (max: number) => {
  */
 export const randomBigInt = (max: bigint) => {
   const randomBuffer = randomBytes(8); // Generate a buffer of 8 random bytes.
-  const randomBigInt = BigInt(`0x${randomBuffer.toString('hex')}`); // Convert buffer to a large integer.
+  const randomBigInt = BigInt(bufferToHex(randomBuffer)); // Convert buffer to a large integer.
   return randomBigInt % max; // Use modulo to ensure the result is less than max.
 };
 

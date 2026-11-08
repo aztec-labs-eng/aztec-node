@@ -1,3 +1,4 @@
+import { times } from '../collection/index.js';
 import { sleep } from '../sleep/index.js';
 import { Timer } from '../timer/timer.js';
 import { SerialQueue } from './serial_queue.js';
@@ -46,7 +47,7 @@ describe('SerialQueue', () => {
     queue.start(8);
     startSignals = new Array(numConcurrentJobs).fill(false);
     endSignals = new Array(numConcurrentJobs).fill(false);
-    const promises = Array.from({ length: numConcurrentJobs }).map((_, i) => queue.put(() => enqueuedFunction(i)));
+    const promises = times(numConcurrentJobs, i => queue.put(() => enqueuedFunction(i)));
     const timeout = await waitForJobs(30);
     await Promise.all(promises);
     expect(endSignals.every(signal => signal)).toBe(true);

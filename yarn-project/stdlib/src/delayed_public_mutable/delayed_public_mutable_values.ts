@@ -1,4 +1,5 @@
 import { UPDATES_VALUE_SIZE } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
@@ -69,7 +70,7 @@ export class DelayedPublicMutableValues {
   }
 
   static async readFromTree(delayedPublicMutableSlot: Fr, readStorage: (storageSlot: Fr) => Promise<Fr>) {
-    const fieldPromises = Array.from({ length: DELAYED_PUBLIC_MUTABLE_VALUES_LEN }).map((_, i) =>
+    const fieldPromises = times(DELAYED_PUBLIC_MUTABLE_VALUES_LEN, i =>
       readStorage(delayedPublicMutableSlot.add(new Fr(i))),
     );
     return DelayedPublicMutableValues.fromFields(await Promise.all(fieldPromises));

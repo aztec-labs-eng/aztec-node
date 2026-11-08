@@ -9,7 +9,7 @@ import {
   IndexWithinCheckpoint,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
-import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { compactArray, times, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { map, sort, toArray } from '@aztec-labs/foundation/iterable';
 import { unfreeze } from '@aztec-labs/foundation/types';
@@ -240,18 +240,18 @@ describe('TxPoolV2 Compatibility Tests', () => {
 
       const requestedTxs = await pool.getTxsByHash([tx1.getTxHash(), tx3.getTxHash()]);
       expect(requestedTxs).toHaveLength(2);
-      const requestedHashes = requestedTxs.filter(tx => tx !== undefined).map(tx => tx!.getTxHash());
+      const requestedHashes = compactArray(requestedTxs).map(tx => tx!.getTxHash());
       expect(requestedHashes).toEqual(expect.arrayContaining([tx1.getTxHash(), tx3.getTxHash()]));
     });
 
     it('returns a large number of transactions by their hash', async () => {
       const numTxs = 1_000;
-      const txs = await Promise.all(Array.from({ length: numTxs }, (_, i) => mockTx(i)));
+      const txs = await Promise.all(times(numTxs, i => mockTx(i)));
       const hashes = txs.map(tx => tx.getTxHash());
       await pool.addPendingTxs(txs);
       const requestedTxs = await pool.getTxsByHash(hashes);
-      expect(requestedTxs.filter(tx => tx !== undefined)).toHaveLength(numTxs);
-      const requestedHashes = requestedTxs.filter(tx => tx !== undefined).map(tx => tx!.getTxHash());
+      expect(compactArray(requestedTxs)).toHaveLength(numTxs);
+      const requestedHashes = compactArray(requestedTxs).map(tx => tx!.getTxHash());
       expect(requestedHashes).toEqual(expect.arrayContaining(hashes));
     });
 

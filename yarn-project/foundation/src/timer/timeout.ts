@@ -1,5 +1,6 @@
 import { TimeoutError } from '../error/index.js';
 import { promiseWithResolvers } from '../promise/utils.js';
+import { Timer } from './timer.js';
 
 /**
  * TimeoutTask class creates an instance for managing and executing a given asynchronous function with a specified timeout duration.
@@ -40,9 +41,9 @@ export class TimeoutTask<T> {
       );
     });
 
-    const start = Date.now();
+    const executionTimer = new Timer();
     const result = await Promise.race<T>([this.fn(signal), this.timeoutPromise]);
-    this.totalTime = Date.now() - start;
+    this.totalTime = executionTimer.ms();
     return result;
   }
 

@@ -1,4 +1,5 @@
 import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import type { BlockData, BlockParameter, CommitteeAttestation, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { CheckpointData, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
@@ -146,8 +147,10 @@ export class NodeBlockProvider {
   async #getCheckpointContextsForBlocks(
     blocks: { checkpointNumber: CheckpointNumber }[],
   ): Promise<Map<CheckpointNumber, { l1?: L1PublishedData; attestations?: CommitteeAttestation[] } | undefined>> {
-    const unique = Array.from(new Set(blocks.map(b => b.checkpointNumber)));
-    const entries = await Promise.all(unique.map(async n => [n, await this.#getCheckpointContext(n)] as const));
+    const checkpointNumbers = unique(blocks.map(b => b.checkpointNumber));
+    const entries = await Promise.all(
+      checkpointNumbers.map(async n => [n, await this.#getCheckpointContext(n)] as const),
+    );
     return new Map(entries);
   }
 }

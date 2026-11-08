@@ -7,6 +7,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
@@ -71,7 +72,7 @@ describe('world-state integration', () => {
   });
 
   const awaitSync = async (blockToSyncTo: number, finalized?: number, maxTimeoutMS = 30000) => {
-    const startTime = Date.now();
+    const timer = new Timer();
     let sleepTime = 0;
     let tips = await synchronizer.getL2Tips();
 
@@ -84,13 +85,13 @@ describe('world-state integration', () => {
 
     while (tips.proposed.number < blockToSyncTo && sleepTime < maxTimeoutMS) {
       await sleep(100);
-      sleepTime = Date.now() - startTime;
+      sleepTime = timer.ms();
       tips = await synchronizer.getL2Tips();
     }
 
     while (waitForFinalized(tips.finalized.block.number) && sleepTime < maxTimeoutMS) {
       await sleep(100);
-      sleepTime = Date.now() - startTime;
+      sleepTime = timer.ms();
       tips = await synchronizer.getL2Tips();
     }
   };
