@@ -426,7 +426,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         try {
-          const slots = Array.from({ length: count }, (_, i) => SlotNumber(candidate + i));
+          const slots = times(count, i => SlotNumber(candidate + i));
           const maybeProposers: (EthAddress | undefined)[] = [];
           for (const slot of slots) {
             maybeProposers.push(await getProposerFixingSeed(this.epochCache, this.context.cheatCodes.rollup, slot));

@@ -5,7 +5,7 @@ import type {
 } from '@aztec-labs/constants';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { chunk } from '@aztec-labs/foundation/collection';
+import { chunk, compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { truncate } from '@aztec-labs/foundation/string';
@@ -349,9 +349,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       return true;
     };
 
-    const toBeRetrieved = Array.from(this.jobsToRetrieve.values())
-      .map(id => this.jobs.get(id)!)
-      .filter(x => x !== undefined);
+    const toBeRetrieved = compactArray(Array.from(this.jobsToRetrieve.values()).map(id => this.jobs.get(id)!));
     const totalJobsToRetrieve = toBeRetrieved.length;
     const results = await asyncPool(MAX_CONCURRENT_JOB_SETTLED_REQUESTS, toBeRetrieved, job => processJob(job));
     const totalJobsRetrieved = results.filter(x => x).length;

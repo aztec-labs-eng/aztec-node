@@ -351,9 +351,7 @@ describe('Utility Execution test suite', () => {
     });
 
     const results = await Promise.all(
-      Array.from({ length: N }, (_, i) =>
-        acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], `reentrance-change set-${i}`),
-      ),
+      times(N, i => acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], `reentrance-change set-${i}`)),
     );
 
     expect(results).toHaveLength(N);

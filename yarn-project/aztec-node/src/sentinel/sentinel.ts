@@ -6,7 +6,14 @@ import {
   EpochNumber,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
-import { countWhile, filterAsync, fromEntries, getEntries, mapValues } from '@aztec-labs/foundation/collection';
+import {
+  compactArray,
+  countWhile,
+  filterAsync,
+  fromEntries,
+  getEntries,
+  mapValues,
+} from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
@@ -589,7 +596,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     // Used regardless of which case applies.
     const checkpoint = await this.getCheckpointForSlot(slot);
     const p2pAttested = await this.p2p.getCheckpointAttestationsForSlot(slot, checkpoint?.proposalPayloadHash);
-    const p2pAttestors = p2pAttested.map(a => a.getSender()).filter((s): s is EthAddress => s !== undefined);
+    const p2pAttestors = compactArray(p2pAttested.map(a => a.getSender()));
     const attestors = new Set(
       [...p2pAttestors.map(a => a.toString()), ...(checkpoint?.attestors.map(a => a.toString()) ?? [])].filter(
         addr => proposer.toString() !== addr,

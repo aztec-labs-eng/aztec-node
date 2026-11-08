@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -71,7 +72,7 @@ export async function bulkTest(
       {
         address: avmTestContract.address,
         fnName: 'assert_calldata_copy_large',
-        args: [Array.from({ length: 300 }, () => Fr.random()), /* with_selector: */ true],
+        args: [times(300, () => Fr.random()), /* with_selector: */ true],
       },
       {
         address: avmTestContract.address,
@@ -81,7 +82,7 @@ export async function bulkTest(
       {
         address: avmTestContract.address,
         fnName: 'assert_calldata_copy_large',
-        args: [Array.from({ length: 300 }, () => Fr.random()), /* with_selector: */ true],
+        args: [times(300, () => Fr.random()), /* with_selector: */ true],
       },
       // 3 calls to external contracts
       { address: avmTestContract.address, fnName: 'call_fee_juice', args: [] },

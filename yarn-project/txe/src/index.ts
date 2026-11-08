@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { cloneEphemeralStoreFrom } from '@aztec-labs/kv-store/lmdb-v2';
 import type { ProtocolContractName } from '@aztec-labs/protocol-contracts';
 import { ContractStore } from '@aztec-labs/pxe/client/lazy';
@@ -91,7 +92,7 @@ export class TXEDispatcher {
     if (this.contractStore) {
       return;
     }
-    const t0 = Date.now();
+    const timer = new Timer();
     const kvStore = await cloneEphemeralStoreFrom(
       join(this.contractStoreSourceDir, 'data.mdb'),
       'txe-contracts',
@@ -100,7 +101,7 @@ export class TXEDispatcher {
     );
     this.contractStore = new ContractStore(kvStore);
     this.artifactResolver = new TXEArtifactResolver(this.contractStore, this.schnorrClassId);
-    this.logger.debug('Cloned shared protocol-contracts store', { totalMs: Date.now() - t0 });
+    this.logger.debug('Cloned shared protocol-contracts store', { totalMs: timer.ms() });
   }
 
   // eslint-disable-next-line camelcase

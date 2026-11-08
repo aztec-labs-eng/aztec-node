@@ -1,4 +1,5 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { type LogResult, type MessagingSecret, SiloedTag } from '@aztec-labs/stdlib/logs';
@@ -34,7 +35,7 @@ export async function loadAndStoreNewTaggingIndexes(
 ): Promise<Map<string, TxInLogs>> {
   // We compute the tags for the current window of indexes
   const siloedTagsForWindow = await allToCompletion(
-    Array.from({ length: end - start }, (_, i) => SiloedTag.compute({ extendedSecret, index: start + i })),
+    times(end - start, i => SiloedTag.compute({ extendedSecret, index: start + i })),
   );
 
   const allLogs = await getAllPrivateLogsByTags(aztecNode, siloedTagsForWindow, anchor);

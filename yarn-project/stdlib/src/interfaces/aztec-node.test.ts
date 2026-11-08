@@ -611,13 +611,13 @@ describe('AztecNodeApiSchema', () => {
   });
 
   it('getValidatorStatsBatch(disabled)', async () => {
-    const addresses = Array.from({ length: 100 }, () => EthAddress.random());
+    const addresses = times(100, () => EthAddress.random());
     await expect(context.client.getValidatorStatsBatch(addresses)).resolves.toEqual(addresses.map(() => null));
   });
 
   it('getValidatorStatsBatch(size limit)', async () => {
     const address = EthAddress.random();
-    await expect(context.client.getValidatorStatsBatch(Array.from({ length: 101 }, () => address))).rejects.toThrow();
+    await expect(context.client.getValidatorStatsBatch(times(101, () => address))).rejects.toThrow();
   });
 
   it('getValidatorStats(non-existent)', async () => {
@@ -885,13 +885,7 @@ class MockAztecNode implements AztecNode {
   }
   getL2ToL1Messages(_epoch: EpochNumber): Promise<Fr[][][][]> {
     return Promise.resolve(
-      Array.from({ length: 3 }, (_, i) =>
-        Array.from({ length: 4 }, (_, j) =>
-          Array.from({ length: 2 }, (_, k) =>
-            Array.from({ length: 3 }).map((_, l) => new Fr(i * 11 + j * 22 + k * 33 + l * 44)),
-          ),
-        ),
-      ),
+      times(3, i => times(4, j => times(2, k => times(3, l => new Fr(i * 11 + j * 22 + k * 33 + l * 44))))),
     );
   }
   getL2ToL1MembershipWitness(txHash: TxHash, message: Fr, _messageIndexInTx?: number) {

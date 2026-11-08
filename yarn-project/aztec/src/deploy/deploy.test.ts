@@ -4,6 +4,7 @@ import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
 import { describeWithAnvil } from '@aztec-labs/ethereum/test';
+import { times } from '@aztec-labs/foundation/collection';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { deriveMasterMessageSigningSecretKey } from '@aztec-labs/stdlib/keys';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -72,7 +73,7 @@ describeWithAnvil('runDeployment', () => {
     // defToken's deferred name reads the admin balance, and it must not depend on where these
     // land relative to its resolution.
     const extraMints = Object.fromEntries(
-      Array.from({ length: 5 }, (_, i) => [
+      times(5, i => [
         `mintExtra${i}`,
         {
           kind: 'action',

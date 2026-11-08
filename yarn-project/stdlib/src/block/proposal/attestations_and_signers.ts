@@ -129,8 +129,8 @@ export class CommitteeAttestationsAndSigners implements Signable {
     }
 
     return {
-      signatureIndices: `0x${Buffer.from(signatureIndices).toString('hex')}`,
-      signaturesOrAddresses: `0x${Buffer.from(signaturesOrAddresses).toString('hex')}`,
+      signatureIndices: bufferToHex(Buffer.from(signatureIndices)),
+      signaturesOrAddresses: bufferToHex(Buffer.from(signaturesOrAddresses)),
     };
   }
 

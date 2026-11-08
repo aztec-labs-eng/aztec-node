@@ -1,5 +1,4 @@
-The shared foundation ESLint config enables these rules. `prefer-sleep` and `prefer-running-promise` are errors, since
-the code base has no remaining violations; the rest are warnings:
+The shared foundation ESLint config enables these rules as errors:
 
 - `aztec-custom/prefer-sleep` reports promises whose executor only schedules their resolver with `setTimeout`, including
   callbacks that only call `resolve()`. Use `sleep(ms)` from `@aztec-labs/foundation/sleep`.

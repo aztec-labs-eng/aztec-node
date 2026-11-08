@@ -1,5 +1,6 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -51,7 +52,7 @@ describe('BroadcastedProposalWatcher', () => {
 
   const makeBlocks = async (signer: Secp256k1Signer, slot: SlotNumber, count: number): Promise<BlockProposal[]> =>
     await Promise.all(
-      Array.from({ length: count }, (_, index) =>
+      times(count, index =>
         makeBlockProposal({
           signer,
           blockHeader: makeBlockHeader(index + 1, { slotNumber: slot }),
@@ -428,7 +429,7 @@ describe('BroadcastedProposalWatcher', () => {
     });
 
     it('emits each offense once when several signers offend in one slot across the scan window', async () => {
-      const equivocators = Array.from({ length: 5 }, () => Secp256k1Signer.random());
+      const equivocators = times(5, () => Secp256k1Signer.random());
       const duplicateBlocks = (
         await Promise.all(
           equivocators.map(async (signer, index) => [

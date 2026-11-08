@@ -1,4 +1,5 @@
 import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
@@ -188,7 +189,7 @@ function composite<K extends CompositeMapping>(
 
 /** Synthesized element values for a collection. */
 function collectionData(element: TypeMapping<any>, seed: number, length: number): unknown[] {
-  return Array.from({ length }, (_, i) => testValueFor(element, seed + i));
+  return times(length, i => testValueFor(element, seed + i));
 }
 
 /**

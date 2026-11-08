@@ -6,6 +6,7 @@ import {
 } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
+import { sum } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type PrivateExecutionStep, serializePrivateExecutionSteps } from '@aztec-labs/stdlib/kernel';
 import type {
@@ -201,7 +202,7 @@ export function generateBenchmark(
         time: step.timings.witgen,
         oracles: Object.entries(step.timings.oracles ?? {}).reduce(
           (acc, [oracleName, oracleData]) => {
-            const total = oracleData.times.reduce((sum, time) => sum + time, 0);
+            const total = sum(oracleData.times);
             const calls = oracleData.times.length;
             acc[oracleName] = {
               calls,
@@ -234,7 +235,7 @@ export function generateBenchmark(
     },
     rpc: Object.entries(nodeRPCCalls.perMethod).reduce(
       (acc, [RPCName, RPCCalls]) => {
-        const total = RPCCalls.times.reduce((sum, time) => sum + time, 0);
+        const total = sum(RPCCalls.times);
         const calls = RPCCalls.times.length;
         acc[RPCName] = {
           calls,

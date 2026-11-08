@@ -12,6 +12,7 @@ import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { SerialQueue } from '@aztec-labs/foundation/queue';
 import { type Tuple, assertLength } from '@aztec-labs/foundation/serialize';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { TreeNodeLocation } from '@aztec-labs/foundation/trees';
 import { EthAddress } from '@aztec-labs/stdlib/block';
 import type {
@@ -579,7 +580,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     // BaseRollupHintsWithoutProofAndVK. The tx's proof + VK are attached later in
     // TxProvingState.getBaseRollupTypeAndInputs from the proven chonk-verifier / kernel / AVM
     // proofs, which are required there and so cannot be silently omitted.
-    const start = performance.now();
+    const timer = new Timer();
     const hints = await insertSideEffectsAndBuildBaseRollupHints(
       tx,
       lastArchive,
@@ -588,7 +589,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       this.proverId.toField(),
       db,
     );
-    this.metrics.recordBaseRollupInputs(performance.now() - start);
+    this.metrics.recordBaseRollupInputs(timer.ms());
 
     const promises = [MerkleTreeId.NOTE_HASH_TREE, MerkleTreeId.NULLIFIER_TREE, MerkleTreeId.PUBLIC_DATA_TREE].map(
       async (id: MerkleTreeId) => {

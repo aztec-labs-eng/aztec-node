@@ -3,6 +3,7 @@ import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { readFieldCompressedString } from '@aztec-labs/aztec.js/utils';
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { TxHash } from '@aztec-labs/stdlib/tx';
@@ -96,7 +97,7 @@ describe('token transfer test', () => {
 
     const sponsor = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress());
     const txs: ProvenTx[] = await Promise.all(
-      Array.from({ length: 20 }, () =>
+      times(20, () =>
         proveInteraction(
           wallet,
           testAccounts.tokenContract.methods.transfer_in_public(defaultAccountAddress, recipient, transferAmount, 0),

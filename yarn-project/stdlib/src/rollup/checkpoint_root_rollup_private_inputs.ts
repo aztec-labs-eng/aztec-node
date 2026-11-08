@@ -1,5 +1,6 @@
 import { BlobAccumulator, FinalBlobBatchingChallenges } from '@aztec-labs/blob-lib/types';
 import { ARCHIVE_HEIGHT, BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, OUT_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
@@ -90,7 +91,7 @@ export class CheckpointRootRollupHints {
       reader.readObject(FinalBlobBatchingChallenges),
       // Below line gives error 'Type instantiation is excessively deep and possibly infinite. ts(2589)'
       // reader.readArray(FIELDS_PER_BLOB, Fr),
-      Array.from({ length: FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT }, () => Fr.fromBuffer(reader)),
+      times(FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT, () => Fr.fromBuffer(reader)),
       reader.readArray(BLOBS_PER_CHECKPOINT, BLS12Point),
       Fr.fromBuffer(reader),
     );

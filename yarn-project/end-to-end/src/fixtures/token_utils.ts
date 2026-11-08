@@ -2,6 +2,7 @@ import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { BatchCall } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { sumBigint } from '@aztec-labs/foundation/bigint';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 
@@ -94,5 +95,5 @@ export async function mintNotes(
     await new BatchCall(wallet, actions).send({ from: minter });
   }
 
-  return noteAmounts.reduce((prev, curr) => prev + curr, 0n);
+  return sumBigint(noteAmounts);
 }

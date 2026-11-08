@@ -1,7 +1,8 @@
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { times } from '@aztec-labs/foundation/collection';
+import { sum, times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { ValidatorStatusInSlot } from '@aztec-labs/stdlib/validators';
 
@@ -186,7 +187,7 @@ describe('sentinel-store', () => {
 
     // Track timing for additions
     const addTimes: number[] = [];
-    const startTime = Date.now();
+    const timer = new Timer();
 
     // Add 2k entries
     for (let i = 1; i <= totalEntries; i++) {
@@ -199,13 +200,13 @@ describe('sentinel-store', () => {
 
       // Log progress every 500 entries
       if (i % 500 === 0) {
-        const avgAddTime = addTimes.slice(-500).reduce((a, b) => a + b, 0) / 500;
+        const avgAddTime = sum(addTimes.slice(-500)) / 500;
         log.info(`Added ${i}/${totalEntries} entries, avg time per entry: ${avgAddTime.toFixed(2)}ms`);
       }
     }
 
-    const totalAddTime = Date.now() - startTime;
-    const avgAddTime = addTimes.reduce((a, b) => a + b, 0) / addTimes.length;
+    const totalAddTime = timer.ms();
+    const avgAddTime = sum(addTimes) / addTimes.length;
 
     log.info(`Added ${totalEntries} entries in ${totalAddTime}ms with avg ${avgAddTime.toFixed(2)}ms per entry`);
 
@@ -230,7 +231,7 @@ describe('sentinel-store', () => {
       expect(performance[performance.length - 1].epoch).toBe(EpochNumber(totalEntries));
     }
 
-    const avgRetrievalTime = retrievalTimes.reduce((a, b) => a + b, 0) / retrievalTimes.length;
+    const avgRetrievalTime = sum(retrievalTimes) / retrievalTimes.length;
     log.info(`Completed ${numRetrievals} retrievals with avg time of ${avgRetrievalTime.toFixed(2)}ms per retrieval`);
   });
 

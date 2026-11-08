@@ -2,8 +2,10 @@ import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { readFieldCompressedString } from '@aztec-labs/aztec.js/utils';
+import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
@@ -86,7 +88,7 @@ describe('reqresp effectiveness under tx drop', () => {
     const sponsor = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress());
     const transferAmount = 1n;
     const txs: ProvenTx[] = await Promise.all(
-      Array.from({ length: TOTAL_TXS }, () =>
+      times(TOTAL_TXS, () =>
         proveInteraction(
           wallet,
           testAccounts.tokenContract.methods.transfer_in_public(
@@ -111,7 +113,7 @@ describe('reqresp effectiveness under tx drop', () => {
     const sends: Array<{ sentAt: number; txHash: TxHash }[]> = [];
     let sentSoFar = 0;
     for (let sec = 0; sec < TEST_DURATION_SECONDS; sec++) {
-      const secondStart = Date.now();
+      const secondTimer = new Timer();
       const batch = txs.splice(0, TARGET_TPS);
       const sentBatch = await Promise.all(
         batch.map(async (tx, i) => {
@@ -122,7 +124,7 @@ describe('reqresp effectiveness under tx drop', () => {
       );
       sends.push(sentBatch);
       sentSoFar += batch.length;
-      const elapsed = Date.now() - secondStart;
+      const elapsed = secondTimer.ms();
       if (elapsed < 1000) {
         await sleep(1000 - elapsed);
       }

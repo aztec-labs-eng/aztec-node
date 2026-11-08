@@ -120,7 +120,7 @@ export class TxProvider implements ITxProvider {
 
   private orderTxs(txs: Tx[], order: TxHash[]): Tx[] {
     const txsMap = new Map(txs.map(tx => [tx.txHash.toString(), tx]));
-    return order.map(hash => txsMap.get(hash.toString())!).filter(tx => tx !== undefined);
+    return compactArray(order.map(hash => txsMap.get(hash.toString())!));
   }
 
   private async getTxsFromAllSources(

@@ -1,4 +1,5 @@
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -65,7 +66,7 @@ function popcount(hex: `0x${string}`): number {
 describe('orderAttestations', () => {
   it('normalizes yParity (v=0/v=1) attester signatures to canonical v', () => {
     // Generate enough signers that both recovery bits (v=27 -> 0 and v=28 -> 1) are exercised.
-    const items = Array.from({ length: 8 }, () => makeSignerAndAttestation());
+    const items = times(8, () => makeSignerAndAttestation());
     const committee = items.map(i => i.address);
     const yParityAttestations = items.map(i => toYParityForm(i.attestation));
 
@@ -82,7 +83,7 @@ describe('orderAttestations', () => {
   });
 
   it('produces an L1-consistent bundle (popcount === signers.length) for yParity signatures', () => {
-    const items = Array.from({ length: 8 }, () => makeSignerAndAttestation());
+    const items = times(8, () => makeSignerAndAttestation());
     const committee = items.map(i => i.address);
     const yParityAttestations = items.map(i => toYParityForm(i.attestation));
 
@@ -100,7 +101,7 @@ describe('orderAttestations', () => {
   });
 
   it('leaves non-signing committee members as empty address-only slots', () => {
-    const items = Array.from({ length: 3 }, () => makeSignerAndAttestation());
+    const items = times(3, () => makeSignerAndAttestation());
     const missing = Secp256k1Signer.random().address;
     const committee = [...items.map(i => i.address), missing];
 
@@ -116,7 +117,7 @@ describe('orderAttestations', () => {
 
 describe('trimAttestations', () => {
   it('returns attestations unchanged when count <= required', () => {
-    const items = Array.from({ length: 3 }, () => makeSignerAndAttestation());
+    const items = times(3, () => makeSignerAndAttestation());
     const proposer = items[0];
 
     const result = trimAttestations(
@@ -130,7 +131,7 @@ describe('trimAttestations', () => {
   });
 
   it('trims to required count', () => {
-    const items = Array.from({ length: 5 }, () => makeSignerAndAttestation());
+    const items = times(5, () => makeSignerAndAttestation());
     const proposer = items[0];
 
     const result = trimAttestations(
@@ -144,7 +145,7 @@ describe('trimAttestations', () => {
   });
 
   it('always keeps proposer attestation', () => {
-    const items = Array.from({ length: 5 }, () => makeSignerAndAttestation());
+    const items = times(5, () => makeSignerAndAttestation());
     // Proposer is the last item in the array
     const proposer = items[4];
 

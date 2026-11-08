@@ -1,5 +1,6 @@
 // Taken from lodestar: https://github.com/ChainSafe/lodestar
 import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { MAX_TX_SIZE_KB, TopicType, getTopicFromString } from '@aztec-labs/stdlib/p2p';
 import type { DataTransform } from '@chainsafe/libp2p-gossipsub/types';
 import type { Message } from '@libp2p/interface';
@@ -39,7 +40,7 @@ const sharedMsgIdBuf = Buffer.alloc(20);
 export function msgIdToStrFn(msgId: Uint8Array): string {
   // This happens serially, no need to reallocate the buffer
   sharedMsgIdBuf.set(msgId);
-  return `0x${sharedMsgIdBuf.toString('hex')}`;
+  return bufferToHex(sharedMsgIdBuf);
 }
 
 /**

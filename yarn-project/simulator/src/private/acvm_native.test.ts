@@ -1,4 +1,6 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { isRetryableError } from '@aztec-labs/foundation/error';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import { jest } from '@jest/globals';
 import { promises as fs } from 'fs';
@@ -17,10 +19,8 @@ type ArtifactWriter = { getArtifactPath(artifact: NoirCompiledCircuitWithName): 
  */
 function holdRenamesUntilAllWritten(participants: number) {
   const rename = fs.rename.bind(fs);
-  let allWritten!: () => void;
-  const written = new Promise<void>(resolve => (allWritten = resolve));
-  let release!: () => void;
-  const released = new Promise<void>(resolve => (release = resolve));
+  const { promise: written, resolve: allWritten } = promiseWithResolvers<void>();
+  const { promise: released, resolve: release } = promiseWithResolvers<void>();
   let arrived = 0;
 
   jest.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
@@ -74,8 +74,8 @@ describe('NativeACVMSimulator', () => {
       // Two prover nodes under one test share a working directory and each build their own simulator, and a
       // single prover builds one simulator per proof invocation, so the per-simulator cache does not dedupe
       // them: all of these write this circuit's artifact concurrently.
-      const simulators = Array.from(
-        { length: 8 },
+      const simulators = times(
+        8,
         () => new NativeACVMSimulator(workingDirectory, 'unused') as unknown as ArtifactWriter,
       );
 

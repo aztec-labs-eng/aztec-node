@@ -1,3 +1,4 @@
+import { sum } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { Registry } from 'prom-client';
@@ -352,7 +353,7 @@ export class OtelAvgMinMax<Labels extends LabelsGeneric = NoLabels> implements I
   }
 
   private observeAvg(result: any): void {
-    this.observeAggregation(result, arr => arr.reduce((sum, val) => sum + val, 0) / arr.length);
+    this.observeAggregation(result, arr => sum(arr) / arr.length);
   }
 
   private observeMin(result: any): void {

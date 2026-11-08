@@ -29,6 +29,7 @@ import { type AztecNode, createAztecNodeClient } from '@aztec-labs/aztec.js/node
 import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
 import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
 import { chunk, compactArray } from '@aztec-labs/foundation/collection';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { getPXEConfig } from '@aztec-labs/pxe/server';
 import { getContractClassFromArtifact, getContractInstanceFromInstantiationParams } from '@aztec-labs/stdlib/contract';
 import { deriveKeys, deriveMasterMessageSigningSecretKey } from '@aztec-labs/stdlib/keys';
@@ -1032,7 +1033,7 @@ class DeploymentRun<C extends Steps> {
     const info = { label: unit.label, kind: unit.kind, account: unit.account };
     this.reporter.onUnitStart?.(info);
     const { fee, onConsumed } = feeSession.next(unit.account);
-    const startedAt = Date.now();
+    const timer = new Timer();
     let result: unknown;
     try {
       result = await unit.send(fee);
@@ -1046,7 +1047,7 @@ class DeploymentRun<C extends Steps> {
       blockNumber: receipt?.blockNumber != null ? Number(receipt.blockNumber) : undefined,
       feePaid: receipt?.transactionFee,
       status: receipt?.status != null ? String(receipt.status) : undefined,
-      durationMs: Date.now() - startedAt,
+      durationMs: timer.ms(),
     });
     onConsumed();
   }

@@ -1,4 +1,4 @@
-import { median } from '@aztec-labs/foundation/collection';
+import { median, times } from '@aztec-labs/foundation/collection';
 import { type GetFeeHistoryReturnType, formatGwei } from 'viem';
 
 import type { ViemClient } from '../../types.js';
@@ -29,7 +29,7 @@ export async function getBlobPriorityFeeHistory(
   const latestBlockNumber = await client.getBlockNumber();
 
   // Fetch multiple blocks in parallel
-  const blockPromises = Array.from({ length: blockCount }, (_, i) =>
+  const blockPromises = times(blockCount, i =>
     client.getBlock({
       blockNumber: latestBlockNumber - BigInt(i),
       includeTransactions: true,

@@ -1,5 +1,6 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import { mockTx } from '@aztec-labs/stdlib/testing';
@@ -297,9 +298,9 @@ describe('SelfHealingChonkVerifier', () => {
     await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
     created[0].failed = true;
 
-    const startedAt = Date.now();
+    const timer = new Timer();
     await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100);
+    expect(timer.ms()).toBeGreaterThanOrEqual(100);
     expect(created).toHaveLength(2);
   });
 

@@ -1,3 +1,4 @@
+import { times } from '../collection/index.js';
 import { FifoMemoryQueue } from './fifo_memory_queue.js';
 
 export interface ISemaphore {
@@ -15,7 +16,7 @@ export class Semaphore {
   private cancelled = false;
 
   constructor(size: number) {
-    new Array(size).fill(true).map(() => this.queue.put(true));
+    times(size, () => this.queue.put(true));
   }
 
   /**

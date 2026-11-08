@@ -1,3 +1,4 @@
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Buffer } from 'buffer';
 
 import type { AbiType } from './abi.js';
@@ -131,9 +132,9 @@ export function parseSignedInt(b: Buffer, width?: number) {
     }
 
     // Add one, then negate it
-    return -(BigInt(`0x${slicedBuf.toString('hex')}`) + 1n);
+    return -(BigInt(bufferToHex(slicedBuf)) + 1n);
   }
 
   // ...otherwise we just return our positive int
-  return BigInt(`0x${slicedBuf.toString('hex')}`);
+  return BigInt(bufferToHex(slicedBuf));
 }

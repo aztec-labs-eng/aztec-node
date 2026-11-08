@@ -1,4 +1,5 @@
 import { Blob, getKzg } from '@aztec-labs/blob-lib';
+import { times } from '@aztec-labs/foundation/collection';
 import {
   type Hex,
   type TransactionSerializableEIP4844,
@@ -65,7 +66,7 @@ describe('blob tx serialization', () => {
     expect(commitments).toHaveLength(2);
     expect(cellProofs).toHaveLength(2 * 128);
 
-    const cellIndices = blobs.flatMap(() => Array.from({ length: 128 }, (_, i) => i));
+    const cellIndices = blobs.flatMap(() => times(128, i => i));
     const cells = blobs.flatMap(blob => getKzg().computeCells(blob));
     const cellCommitments = commitments.flatMap(c => Array(128).fill(hexToBytes(c)));
     expect(

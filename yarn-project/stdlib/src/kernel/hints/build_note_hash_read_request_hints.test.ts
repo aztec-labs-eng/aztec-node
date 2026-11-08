@@ -1,6 +1,7 @@
 import { MAX_NOTE_HASHES_PER_TX, MAX_NOTE_HASH_READ_REQUESTS_PER_TX } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 
@@ -28,7 +29,7 @@ describe('buildNoteHashReadRequestHints', () => {
    * Create fixtures.
    */
   const noteHashes = makeTuple(MAX_NOTE_HASHES_PER_TX, i => makeNoteHash(getNoteHashValue(i)));
-  const futureNoteHashes = Array.from({ length: MAX_NOTE_HASHES_PER_TX }).map((_, i) =>
+  const futureNoteHashes = times(MAX_NOTE_HASHES_PER_TX, i =>
     makeNoteHash(getNoteHashValue(i + MAX_NOTE_HASHES_PER_TX)),
   );
 

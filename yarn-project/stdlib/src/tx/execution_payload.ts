@@ -1,3 +1,5 @@
+import { compactArray } from '@aztec-labs/foundation/collection';
+
 import type { FunctionCall } from '../abi/function_call.js';
 import type { AuthWitness } from '../auth_witness/auth_witness.js';
 import { AztecAddress } from '../aztec-address/index.js';
@@ -41,12 +43,7 @@ export function mergeExecutionPayloads(requests: ExecutionPayload[]): ExecutionP
   const combinedExtraHashedArgs = requests.map(r => r.extraHashedArgs ?? []).flat();
 
   // Collect unique fee payers
-  const uniqueFeePayers = new Set(
-    requests
-      .map(r => r.feePayer)
-      .filter((fp): fp is AztecAddress => fp !== undefined)
-      .map(fp => fp.toString()),
-  );
+  const uniqueFeePayers = new Set(compactArray(requests.map(r => r.feePayer)).map(fp => fp.toString()));
 
   if (uniqueFeePayers.size > 1) {
     throw new Error(

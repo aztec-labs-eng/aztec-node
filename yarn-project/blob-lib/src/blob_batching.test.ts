@@ -1,5 +1,6 @@
 import { BLOBS_PER_CHECKPOINT, DomainSeparator, FIELDS_PER_BLOB } from '@aztec-labs/constants';
 import { fromHex } from '@aztec-labs/foundation/bigint-buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
@@ -24,7 +25,7 @@ const trustedSetup = JSON.parse(
 
 describe('Blob Batching', () => {
   it.each([10, 100, 400])('our BLS library should correctly commit to a blob of %p items', async size => {
-    const blobFields = [new Fr(size)].concat(Array.from({ length: size - 1 }).map((_, i) => new Fr(size + i)));
+    const blobFields = [new Fr(size)].concat(times(size - 1, i => new Fr(size + i)));
     const ourBlob = await Blob.fromFields(blobFields);
 
     const point = BLS12Point.decompress(ourBlob.commitment);
@@ -47,7 +48,7 @@ describe('Blob Batching', () => {
 
   it('should construct and verify 1 blob', async () => {
     // Initialize 400 fields. This test shows that a single blob works with batching methods.
-    const blobFields = Array.from({ length: 400 }, (_, i) => new Fr(i + 123));
+    const blobFields = times(400, i => new Fr(i + 123));
     const blobs = await getBlobsPerL1Block(blobFields);
     expect(blobs.length).toBe(1);
     const onlyBlob = blobs[0];
@@ -134,7 +135,7 @@ describe('Blob Batching', () => {
   ])(
     'should construct and verify a batch of %p blobs in a single checkpoint',
     async (numBlobs, numBlobFields, expectedFinalY, isCheckpointRootTest) => {
-      const blobFields = Array.from({ length: numBlobFields }, (_, i) => new Fr(456 + i));
+      const blobFields = times(numBlobFields, i => new Fr(456 + i));
       if (isCheckpointRootTest) {
         blobFields[numBlobFields - 1] = encodeCheckpointEndMarker({ numBlobFields });
       }
@@ -270,10 +271,10 @@ describe('Blob Batching', () => {
     3, 5, 10,
     // 32 <- NB Full 32 checkpoints currently takes around 30s to fully batch
   ])('should construct and verify a batch of blobs over %p checkpoints', async numCheckpoints => {
-    const blobFieldsPerCheckpoint = Array.from({ length: numCheckpoints }, (_, checkpointIndex) =>
-      Array.from(
-        { length: 1 + randomInt(FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT) },
-        (_, i) => new Fr(i + checkpointIndex * (FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT)),
+    const blobFieldsPerCheckpoint = times(numCheckpoints, checkpointIndex =>
+      times(
+        1 + randomInt(FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT),
+        i => new Fr(i + checkpointIndex * (FIELDS_PER_BLOB * BLOBS_PER_CHECKPOINT)),
       ),
     );
 
@@ -283,7 +284,7 @@ describe('Blob Batching', () => {
   it('binds which checkpoint each blob belongs to', async () => {
     // The same three blobs as the 3-blob case above. Checkpoint k spans the first two and checkpoint k+1 the third; the
     // shifted split proposes the same blobs with k's second blob moved to the front of k+1.
-    const blobFields = Array.from({ length: 2 * FIELDS_PER_BLOB + 123 }, (_, i) => new Fr(456 + i));
+    const blobFields = times(2 * FIELDS_PER_BLOB + 123, i => new Fr(456 + i));
     const honest = [blobFields.slice(0, 2 * FIELDS_PER_BLOB), blobFields.slice(2 * FIELDS_PER_BLOB)];
     const shifted = [blobFields.slice(0, FIELDS_PER_BLOB), blobFields.slice(FIELDS_PER_BLOB)];
 
@@ -312,7 +313,7 @@ describe('Blob Batching', () => {
 
 describe('BatchedBlobAccumulator', () => {
   it('clones correctly', async () => {
-    const blobFields = Array.from({ length: FIELDS_PER_BLOB }, (_, i) => new Fr(i + 999));
+    const blobFields = times(FIELDS_PER_BLOB, i => new Fr(i + 999));
     const original = await BatchedBlobAccumulator.fromBlobFields([blobFields]);
 
     // Correctly clone the original.

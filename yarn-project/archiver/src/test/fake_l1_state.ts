@@ -987,7 +987,7 @@ export class FakeL1State {
 
   private async makeVersionedBlobHashes(checkpoint: Checkpoint): Promise<`0x${string}`[]> {
     return (await getBlobsPerL1Block(checkpoint.toBlobFields())).map(
-      b => `0x${b.getEthVersionedBlobHash().toString('hex')}` as `0x${string}`,
+      b => bufferToHex(b.getEthVersionedBlobHash()) as `0x${string}`,
     );
   }
 

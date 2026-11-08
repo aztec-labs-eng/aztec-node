@@ -3,6 +3,7 @@
 // 2. Parse all Received Tx logs, extracting the timestamp and peer ID
 // 3. Compute the delay for each peer relative to the timestamp of the sent message
 // 4. Print the delays
+import { sum } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import * as fs from 'fs';
 
@@ -134,7 +135,7 @@ function processLogFile(logFilePath: string, outputJsonPath?: string) {
   const delayValues = delays.map(d => d.delay);
   const minDelay = Math.min(...delayValues);
   const maxDelay = Math.max(...delayValues);
-  const sumDelay = delayValues.reduce((sum, val) => sum + val, 0);
+  const sumDelay = sum(delayValues);
   const avgDelay = sumDelay / delayValues.length;
   const sortedDelays = delayValues.slice().sort((a, b) => a - b);
   const medianDelay = sortedDelays[Math.floor(sortedDelays.length / 2)];

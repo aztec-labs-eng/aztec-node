@@ -1,6 +1,7 @@
 import type { Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import type { TxHash, TxReceipt } from '@aztec-labs/stdlib/tx';
 import { SortedTxStatuses, TxStatus } from '@aztec-labs/stdlib/tx';
@@ -61,7 +62,7 @@ export async function waitForTx(node: AztecNode, txHash: TxHash, opts?: WaitOpts
   }
 
   // The grace period for DROPPED receipts starts at the first poll, so the initial delay does not consume it.
-  const startTime = Date.now();
+  const timer = new Timer();
 
   const receipt = await retryUntil(
     async () => {
@@ -74,7 +75,7 @@ export async function waitForTx(node: AztecNode, txHash: TxHash, opts?: WaitOpts
       // We can ignore it at first because the transaction may have been sent to node 1, and now we're asking node 2 for the receipt.
       // If we don't allow a short grace period, we could incorrectly return a TxReceipt with status DROPPED.
       if (txReceipt.isDropped()) {
-        const elapsedSeconds = (Date.now() - startTime) / 1000;
+        const elapsedSeconds = timer.ms() / 1000;
         if (!ignoreDroppedReceiptsFor || elapsedSeconds > ignoreDroppedReceiptsFor) {
           return txReceipt;
         }

@@ -1,4 +1,5 @@
 import { MAX_CHECKPOINTS_PER_EPOCH, MAX_L2_TO_L1_MSGS_PER_TX, OUT_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { sha256Trunc } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -18,7 +19,7 @@ describe('L2 to L1 membership', () => {
   const epochTopTreeDepth = OUT_HASH_TREE_HEIGHT;
 
   const msgHashes = (numMsgs: number) => {
-    return Array.from({ length: numMsgs }, () => Fr.random());
+    return times(numMsgs, () => Fr.random());
   };
 
   const hasher = (left: Buffer, right: Buffer) => sha256Trunc(Buffer.concat([left, right]));
@@ -564,7 +565,7 @@ describe('L2 to L1 membership', () => {
       //    /     /      /           \     \     \     \
       //   c7    c11    c15          c16   c17  c29   c31
 
-      const messagesInEpoch: Fr[][][][] = Array.from({ length: MAX_CHECKPOINTS_PER_EPOCH }, () => [[[]]]);
+      const messagesInEpoch: Fr[][][][] = times(MAX_CHECKPOINTS_PER_EPOCH, () => [[[]]]);
       // Add one message to each of the target checkpoints.
       messagesInEpoch[7] = [[msgHashes(1)]]; // m0
       messagesInEpoch[11] = [[msgHashes(2)]]; // m1, m2
@@ -646,7 +647,7 @@ describe('L2 to L1 membership', () => {
       //   /   \
       // b0   b1
 
-      const blocks = Array.from({ length: 3 }, () => msgHashes(1));
+      const blocks = times(3, () => msgHashes(1));
       const messagesInEpoch = [[blocks]];
       const witnesses = verifyMembershipForMessagesInEpoch(messagesInEpoch);
 
@@ -788,7 +789,7 @@ describe('L2 to L1 membership', () => {
       //  b6    .    b45 b59
       //      /   \
       //    b28  b29
-      const messagesInCheckpoint: Fr[][][] = Array.from({ length: 71 }, () => [[]]);
+      const messagesInCheckpoint: Fr[][][] = times(71, () => [[]]);
       messagesInCheckpoint[6] = [msgHashes(1)]; // m0
       messagesInCheckpoint[28] = [msgHashes(1)]; // m1
       messagesInCheckpoint[29] = [msgHashes(1)]; // m2
@@ -877,7 +878,7 @@ describe('L2 to L1 membership', () => {
     });
 
     it('a complex full epoch, with multiple checkpoints, blocks, txs, and messages', () => {
-      const messagesInEpoch: Fr[][][][] = Array.from({ length: MAX_CHECKPOINTS_PER_EPOCH }, () => [[[]]]);
+      const messagesInEpoch: Fr[][][][] = times(MAX_CHECKPOINTS_PER_EPOCH, () => [[[]]]);
       let totalNumMessages = 0;
       for (let checkpointIndex = 0; checkpointIndex < MAX_CHECKPOINTS_PER_EPOCH; checkpointIndex++) {
         const numBlocks = randomInt(72); // Assumes at most 72 blocks per checkpoint.

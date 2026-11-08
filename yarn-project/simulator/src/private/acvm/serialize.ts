@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Buffer } from 'buffer';
 
@@ -37,7 +38,7 @@ export function toACVMField(
   } else {
     buffer = value.toBuffer();
   }
-  return `0x${adaptBufferSize(buffer).toString('hex')}`;
+  return bufferToHex(adaptBufferSize(buffer));
 }
 
 /**

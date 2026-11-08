@@ -1,3 +1,4 @@
+import { times } from '../collection/index.js';
 import type { Tuple } from '../serialize/index.js';
 
 export type { FieldsOf } from '../types/index.js';
@@ -24,7 +25,7 @@ export function range(n: number, offset = 0) {
  * @returns The array of numbers.
  */
 export function makeTuple<T, N extends number>(length: N, fn: (i: number) => T, offset = 0) {
-  return Array.from({ length }, (_: any, i: number) => fn(i + offset)) as Tuple<T, N>;
+  return times(length, (i: number) => fn(i + offset)) as Tuple<T, N>;
 }
 
 /**
@@ -35,11 +36,7 @@ export function makeTuple<T, N extends number>(length: N, fn: (i: number) => T, 
  * @returns The array of numbers.
  */
 export async function makeTupleAsync<T, N extends number>(length: N, fn: (i: number) => Promise<T>, offset = 0) {
-  return (await Promise.all(
-    Array(length)
-      .fill(0)
-      .map(async (_: any, i: number) => await fn(i + offset)),
-  )) as Tuple<T, N>;
+  return (await Promise.all(times(length, async (i: number) => await fn(i + offset)))) as Tuple<T, N>;
 }
 
 /**

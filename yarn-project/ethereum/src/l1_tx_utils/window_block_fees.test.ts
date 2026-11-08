@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { parseGwei } from 'viem';
 
 import type { ViemClient } from '../types.js';
@@ -38,14 +39,14 @@ describe('captureWindowBlockFees', () => {
         Promise.resolve(args.blockTag === 'latest' ? blocks.get(headNumber) : blocks.get(args.blockNumber!)),
       getFeeHistory: (args: { blockCount: number; blockNumber: bigint; rewardPercentiles: number[] }) => {
         const oldestBlock = args.blockNumber - BigInt(args.blockCount) + 1n;
-        const reward = Array.from({ length: args.blockCount }, (_, i) => {
+        const reward = times(args.blockCount, i => {
           const [min, p75] = rewardsByNumber[Number(oldestBlock) + i] ?? ['0', '0'];
           return [parseGwei(min), parseGwei(p75)];
         });
         return Promise.resolve({
           oldestBlock,
-          baseFeePerGas: Array.from({ length: args.blockCount + 1 }, () => parseGwei('1')),
-          gasUsedRatio: Array.from({ length: args.blockCount }, () => 0.5),
+          baseFeePerGas: times(args.blockCount + 1, () => parseGwei('1')),
+          gasUsedRatio: times(args.blockCount, () => 0.5),
           reward,
         });
       },

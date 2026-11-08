@@ -8,6 +8,7 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { makeMembershipLookup } from '@aztec-labs/epoch-cache/test';
 import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -90,7 +91,7 @@ describe('ValidatorClient HA Integration', () => {
     await pglite.query(INSERT_SCHEMA_VERSION, [SCHEMA_VERSION]);
 
     // Generate validator keys - using 5 validators to test HA coordination at scale
-    validatorPrivateKeys = Array.from({ length: 5 }, () => generatePrivateKey());
+    validatorPrivateKeys = times(5, () => generatePrivateKey());
     validatorAccounts = validatorPrivateKeys.map(privateKey => privateKeyToAccount(privateKey));
 
     // Set up mocks

@@ -1,5 +1,6 @@
 import { Blob, type BlobJson, computeEthVersionedBlobHash } from '@aztec-labs/blob-lib';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { FileStore, ReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
 import { Buffer } from 'buffer';
 
@@ -82,7 +83,7 @@ export class FileStoreBlobClient {
       throw new Error('FileStore is read-only');
     }
 
-    const versionedHash = `0x${computeEthVersionedBlobHash(blob.commitment).toString('hex')}`;
+    const versionedHash = bufferToHex(computeEthVersionedBlobHash(blob.commitment));
 
     if (skipIfExists && (await this.store.exists(this.blobPath(versionedHash)))) {
       this.log.trace(`Blob ${versionedHash} already exists, skipping`);

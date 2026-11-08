@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
@@ -128,9 +129,7 @@ describe('BatchChonkVerifier', () => {
   it('holds a proof past the in-flight cap until bb has a verdict on another, then sends it', async () => {
     let sent = 0;
     const verifier = verifierOver({ chonkBatchVerifierQueue: () => (sent++, Promise.resolve({})) });
-    const inFlight = Array.from({ length: MAX_PROOFS_IN_FLIGHT }, () =>
-      verifier.enqueueProof(0, proofFields).catch(() => {}),
-    );
+    const inFlight = times(MAX_PROOFS_IN_FLIGHT, () => verifier.enqueueProof(0, proofFields).catch(() => {}));
     const waiting = verifier.enqueueProof(0, proofFields);
     await settle();
     expect(sent).toBe(MAX_PROOFS_IN_FLIGHT);
@@ -153,7 +152,7 @@ describe('BatchChonkVerifier', () => {
       chonkBatchVerifierStop: () => (queued.forEach(id => deliverVerdict(verifier, id)), Promise.resolve({})),
       destroy: () => Promise.resolve(),
     });
-    const verifications = Array.from({ length: 4 }, () => verifier.enqueueProof(0, proofFields));
+    const verifications = times(4, () => verifier.enqueueProof(0, proofFields));
 
     await verifier.stop();
 
@@ -163,9 +162,7 @@ describe('BatchChonkVerifier', () => {
 
   it('rejects a proof waiting for room when the verifier fails', async () => {
     const verifier = verifierOver({ chonkBatchVerifierQueue: () => Promise.resolve({}) });
-    const inFlight = Array.from({ length: MAX_PROOFS_IN_FLIGHT }, () =>
-      verifier.enqueueProof(0, proofFields).catch(() => {}),
-    );
+    const inFlight = times(MAX_PROOFS_IN_FLIGHT, () => verifier.enqueueProof(0, proofFields).catch(() => {}));
     const waiting = verifier.enqueueProof(0, proofFields);
     await settle();
 

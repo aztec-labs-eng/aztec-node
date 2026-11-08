@@ -28,6 +28,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { executeTimeout } from '@aztec-labs/foundation/timer';
 import { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
@@ -499,7 +500,7 @@ export class SingleNodeTestContext {
 
   protected getNextPrivateKey(): Hex {
     const key = getPrivateKeyFromIndex(this.nodes.length + this.proverNodes.length + 1);
-    return `0x${key!.toString('hex')}`;
+    return bufferToHex(key!);
   }
 
   /** Waits until the epoch begins (ie until the immediately previous L1 block is mined). */

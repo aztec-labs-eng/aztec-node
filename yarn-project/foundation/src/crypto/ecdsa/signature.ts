@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { mapTuple } from '@aztec-labs/foundation/serialize';
 import { Buffer } from 'buffer';
 
+import { bufferToHex } from '../../string/index.js';
 import type { Signature } from '../signature/index.js';
 
 /**
@@ -77,7 +78,7 @@ export class EcdsaSignature implements Signature {
    * @returns A 65-character string of the form 0x<r><s><v>.
    */
   toString() {
-    return `0x${this.toBuffer().toString('hex')}`;
+    return bufferToHex(this.toBuffer());
   }
 
   /**

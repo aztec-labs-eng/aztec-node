@@ -1,4 +1,5 @@
 import { CONTRACT_CLASS_LOG_LENGTH, CONTRACT_CLASS_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { inspect } from '@aztec-labs/foundation/inspect';
@@ -56,9 +57,7 @@ export class ContractClassLogFields {
     const reader = FieldReader.asReader(fields);
     // Below line gives error 'Type instantiation is excessively deep and possibly infinite. ts(2589)'
     // reader.readFieldArray(CONTRACT_CLASS_LOG_LENGTH);
-    return new ContractClassLogFields(
-      Array.from({ length: CONTRACT_CLASS_LOG_SIZE_IN_FIELDS }, () => reader.readField()),
-    );
+    return new ContractClassLogFields(times(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, () => reader.readField()));
   }
 
   toBuffer(): Buffer;
@@ -74,9 +73,7 @@ export class ContractClassLogFields {
     const reader = BufferReader.asReader(buffer);
     // Below line gives error 'Type instantiation is excessively deep and possibly infinite. ts(2589)'
     // reader.readArray(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, Fr)
-    return new ContractClassLogFields(
-      Array.from({ length: CONTRACT_CLASS_LOG_SIZE_IN_FIELDS }, () => reader.readObject(Fr)),
-    );
+    return new ContractClassLogFields(times(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, () => reader.readObject(Fr)));
   }
 
   equals(other: ContractClassLogFields) {
@@ -103,7 +100,7 @@ export class ContractClassLogFields {
 
   static random(emittedLength = CONTRACT_CLASS_LOG_SIZE_IN_FIELDS) {
     return new ContractClassLogFields(
-      Array.from({ length: emittedLength }, () => Fr.random()).concat(
+      times(emittedLength, () => Fr.random()).concat(
         Array(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - emittedLength).fill(Fr.ZERO),
       ),
     );

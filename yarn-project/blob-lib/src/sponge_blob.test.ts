@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
@@ -37,7 +38,7 @@ describe('SpongeBlob', () => {
 
   it('matches a full sponge hash in noir', async () => {
     const spongeBlob = SpongeBlob.init();
-    const fields = Array.from({ length: SpongeBlob.MAX_FIELDS }).map((_, i) => new Fr(i + 123));
+    const fields = times(SpongeBlob.MAX_FIELDS, i => new Fr(i + 123));
     await spongeBlob.absorb(fields);
     const hash = (await spongeBlob.squeeze()).toString();
 
@@ -85,7 +86,7 @@ describe('Poseidon2Sponge', () => {
       const perField = Poseidon2Sponge.init(new Fr(42));
       let next = 1;
       for (const length of lengths) {
-        const fields = Array.from({ length }, () => new Fr(next++));
+        const fields = times(length, () => new Fr(next++));
         await chunked.absorb(fields);
         await absorbPerField(perField, fields);
         expect(chunked.toFields()).toEqual(perField.toFields());

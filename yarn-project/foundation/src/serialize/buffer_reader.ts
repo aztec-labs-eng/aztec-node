@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 
 import { toBigIntBE } from '../bigint-buffer/index.js';
+import { times } from '../collection/index.js';
 import type { Tuple } from './types.js';
 
 /**
@@ -72,7 +73,7 @@ export class BufferReader {
    * @returns An array of 32-bit unsigned integers.
    */
   public readNumbers<N extends number>(count: N): Tuple<number, N> {
-    const result = Array.from({ length: count }, () => this.readNumber());
+    const result = times(count, () => this.readNumber());
     return result as Tuple<number, N>;
   }
 
@@ -311,7 +312,7 @@ export class BufferReader {
       fromBuffer: (reader: BufferReader) => T;
     },
   ): Tuple<T, N> {
-    const result = Array.from({ length: size }, () => itemDeserializer.fromBuffer(this));
+    const result = times(size, () => itemDeserializer.fromBuffer(this));
     return result as Tuple<T, N>;
   }
 

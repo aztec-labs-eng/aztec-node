@@ -1,8 +1,9 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -49,7 +50,7 @@ describe('FileStoreTxCollection', () => {
   const setFileStoreTxs = (source: MockProxy<FileStoreTxSource>, txs: Tx[]) => {
     source.getTxsByHash.mockImplementation(hashes => {
       return Promise.resolve({
-        validTxs: hashes.map(h => txs.find(tx => tx.getTxHash().equals(h))).filter(tx => tx !== undefined),
+        validTxs: compactArray(hashes.map(h => txs.find(tx => tx.getTxHash().equals(h)))),
         invalidTxHashes: [],
       });
     });
@@ -80,8 +81,8 @@ describe('FileStoreTxCollection', () => {
 
   /** Waits until the total number of getTxsByHash calls across all sources reaches the expected count. */
   const waitForSourceCalls = async (sources: MockProxy<FileStoreTxSource>[], totalCalls: number) => {
-    const start = Date.now();
-    while (Date.now() - start < 60_000) {
+    const elapsedTimer = new Timer();
+    while (elapsedTimer.ms() < 60_000) {
       const total = sources.reduce((sum, s) => sum + s.getTxsByHash.mock.calls.length, 0);
       if (total >= totalCalls) {
         return;

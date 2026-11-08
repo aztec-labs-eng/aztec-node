@@ -21,8 +21,10 @@ import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addre
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
@@ -77,7 +79,7 @@ describe('multi-node/governance/add_rollup', () => {
   let l1TxUtils: L1TxUtils;
   let fundedAccounts: InitialAccountData[];
   // Anvil index-1 account, funded out of the box, used to deploy the new rollup.
-  const deployerPrivateKey = `0x${getPrivateKeyFromIndex(1)!.toString('hex')}` as const;
+  const deployerPrivateKey = bufferToHex(getPrivateKeyFromIndex(1)!);
 
   beforeAll(async () => {
     fundedAccounts = await generateSchnorrAccounts(2);
@@ -208,9 +210,7 @@ describe('multi-node/governance/add_rollup', () => {
 
     logger.info('Creating nodes');
     nodes = await Promise.all(
-      Array.from({ length: NUM_VALIDATORS }, (_, i) =>
-        test.createValidatorNodeAt(i, { governanceProposerPayload: newPayloadAddress }),
-      ),
+      times(NUM_VALIDATORS, i => test.createValidatorNodeAt(i, { governanceProposerPayload: newPayloadAddress })),
     );
 
     // Create a prover node attached to the mock-gossip bus to gather txs and prove the chain.
@@ -349,7 +349,7 @@ describe('multi-node/governance/add_rollup', () => {
               BigInt(l2ToL1MessageWitness.leafIndex),
               l2ToL1MessageWitness.siblingPath
                 .toBufferArray()
-                .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+                .map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
             ],
           }),
         });
@@ -478,9 +478,7 @@ describe('multi-node/governance/add_rollup', () => {
 
     await sleep(4000);
 
-    nodes = await Promise.all(
-      Array.from({ length: NUM_VALIDATORS }, (_, i) => test.createValidatorNodeAt(i, newConfig)),
-    );
+    nodes = await Promise.all(times(NUM_VALIDATORS, i => test.createValidatorNodeAt(i, newConfig)));
 
     logger.warn(`Creating new prover node`);
     proverAztecNode = await test.createProverNode({ rollupVersion: Number(newVersion) });

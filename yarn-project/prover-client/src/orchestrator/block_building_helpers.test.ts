@@ -1,5 +1,6 @@
 import { commitmentToFields, computeBlobFieldsHash, encodeCheckpointEndMarker } from '@aztec-labs/blob-lib';
 import { MAX_U32_VALUE } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
@@ -8,7 +9,7 @@ import { buildBlobHints } from './block-building-helpers.js';
 
 describe('buildBlobHints', () => {
   it('correctly builds hints for 1 blob', async () => {
-    const blobFieldsWithoutEndMarker = Array.from({ length: 5 }, (_, i) => new Fr((i + 123) * MAX_U32_VALUE));
+    const blobFieldsWithoutEndMarker = times(5, i => new Fr((i + 123) * MAX_U32_VALUE));
 
     // The fixtures are used in the checkpoint root rollup tests.
     // It expects the last field to be the checkpoint end marker.

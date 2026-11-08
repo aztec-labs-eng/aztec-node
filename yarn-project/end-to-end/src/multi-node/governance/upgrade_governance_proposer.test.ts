@@ -3,6 +3,7 @@ import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode }
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
+import { times } from '@aztec-labs/foundation/collection';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { getAddress } from 'viem';
 
@@ -76,9 +77,7 @@ describeAcrossL1Forks('multi-node/governance/upgrade_governance_proposer', () =>
     test.logger.info('Creating nodes');
     // Nodes are torn down by test.teardown(); they only need to be running to signal the payload.
     await Promise.all(
-      Array.from({ length: NUM_VALIDATORS }, (_, i) =>
-        test.createValidatorNodeAt(i, { governanceProposerPayload: newPayloadAddress }),
-      ),
+      times(NUM_VALIDATORS, i => test.createValidatorNodeAt(i, { governanceProposerPayload: newPayloadAddress })),
     );
 
     await sleep(4000);

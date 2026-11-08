@@ -8,7 +8,7 @@ import {
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
-import { chunk } from '@aztec-labs/foundation/collection';
+import { chunk, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 
@@ -106,7 +106,7 @@ export function decodeTxBlobData(fields: Fr[] | FieldReader): TxBlobData {
   checkRemainingFields(txStartMarker.numPublicDataWrites * 2, 'public data writes'); // *2 for leaf slot and value
   const publicDataWrites = chunk(reader.readFieldArray(txStartMarker.numPublicDataWrites * 2), 2) as [Fr, Fr][];
 
-  const privateLogs = Array.from({ length: txStartMarker.numPrivateLogs }, () => {
+  const privateLogs = times(txStartMarker.numPrivateLogs, () => {
     const length = reader.readU32();
     checkMaxCount(length, PRIVATE_LOG_SIZE_IN_FIELDS, 'private log fields');
     checkRemainingFields(length, 'private log');

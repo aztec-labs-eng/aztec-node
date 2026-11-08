@@ -7,6 +7,7 @@ import {
   IndexWithinCheckpoint,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
+import { times, unique } from '@aztec-labs/foundation/collection';
 import { sha256Trunc } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
@@ -108,7 +109,7 @@ describe('OutboxTreesResolver lazy roots cache', () => {
     archiver.getBlock.mockResolvedValue(undefined as never);
     archiver.getCheckpointsData.mockResolvedValue([] as never);
 
-    await Promise.all(Array.from({ length: 8 }, () => resolver.getL2ToL1MembershipWitness(txHash, Fr.random())));
+    await Promise.all(times(8, () => resolver.getL2ToL1MembershipWitness(txHash, Fr.random())));
     expect(getRootsCalls).toBe(1);
   });
 });
@@ -247,7 +248,7 @@ function makeFakeStore(): AztecAsyncKVStore {
 }
 
 function makeZeroRoots(): Fr[] {
-  return Array.from({ length: MAX_CHECKPOINTS_PER_EPOCH }, () => Fr.ZERO);
+  return times(MAX_CHECKPOINTS_PER_EPOCH, () => Fr.ZERO);
 }
 
 /**
@@ -337,7 +338,7 @@ function wireArchiver(archiver: MockProxy<OutboxTreesArchiverView>, fixture: Fix
     Promise.resolve(fixture.blocks.find(b => b.number === number) ?? undefined)) as never);
   archiver.getCheckpointsData.mockImplementation((() =>
     Promise.resolve(
-      Array.from(new Set(fixture.blocks.map(b => b.checkpointNumber))).map(checkpointNumber => ({
+      unique(fixture.blocks.map(b => b.checkpointNumber)).map(checkpointNumber => ({
         checkpointNumber,
       })),
     )) as never);

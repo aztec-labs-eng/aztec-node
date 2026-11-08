@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { NoteDao } from '@aztec-labs/stdlib/note';
 
 import { StoredNote } from './stored_note.js';
@@ -26,7 +27,7 @@ describe('StoredNote', () => {
 
     it('round-trips a note carrying many scopes', async () => {
       const noteDao = await NoteDao.random();
-      const scopes = new Set(Array.from({ length: 100 }, (_, i) => `0xscope-${i}`));
+      const scopes = new Set(times(100, i => `0xscope-${i}`));
       const stored = new StoredNote(noteDao, scopes);
 
       const restored = StoredNote.fromBuffer(stored.toBuffer());

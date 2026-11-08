@@ -11,7 +11,7 @@ import {
   IndexWithinCheckpoint,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import type {
@@ -125,7 +125,7 @@ export async function mockBlockWithIndex(
 
 export async function mockEmptyBlock(blockNum: BlockNumber, fork: MerkleTreeWriteOperations) {
   const l2Block = L2Block.empty();
-  const l1ToL2Messages = Array(16).fill(0).map(Fr.zero);
+  const l1ToL2Messages = times(16, () => Fr.zero());
 
   l2Block.header.globalVariables.blockNumber = blockNum;
 

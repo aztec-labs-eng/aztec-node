@@ -1,4 +1,5 @@
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { numToUInt32BE } from '@aztec-labs/foundation/serialize';
 import { Buffer } from 'buffer';
@@ -7,7 +8,7 @@ import { ChonkProof, ChonkProofWithPublicInputs } from './chonk_proof.js';
 
 describe('ChonkProof', () => {
   it('should throw error with incorrect length', () => {
-    const fields = Array.from({ length: CHONK_PROOF_LENGTH + 1 }, () => Fr.random());
+    const fields = times(CHONK_PROOF_LENGTH + 1, () => Fr.random());
     expect(() => new ChonkProof(fields)).toThrow(`Invalid ChonkProof length: ${CHONK_PROOF_LENGTH + 1}`);
   });
 
@@ -102,7 +103,7 @@ describe('ChonkProof', () => {
 
 describe('ChonkProofWithPublicInputs', () => {
   it('constructor should throw error with length less than CHONK_PROOF_LENGTH', () => {
-    const fields = Array.from({ length: CHONK_PROOF_LENGTH - 1 }, () => Fr.random());
+    const fields = times(CHONK_PROOF_LENGTH - 1, () => Fr.random());
     expect(() => new ChonkProofWithPublicInputs(fields)).toThrow(
       `Invalid ChonkProofWithPublicInputs length: ${CHONK_PROOF_LENGTH - 1}`,
     );
@@ -124,7 +125,7 @@ describe('ChonkProofWithPublicInputs', () => {
 
   it('should serialize and deserialize proof with public inputs', () => {
     const baseProof = ChonkProof.random();
-    const publicInputs = Array.from({ length: 5 }, () => Fr.random());
+    const publicInputs = times(5, () => Fr.random());
     const original = baseProof.attachPublicInputs(publicInputs);
     const buffer = original.toBuffer();
     const deserialized = ChonkProofWithPublicInputs.fromBuffer(buffer);
@@ -135,7 +136,7 @@ describe('ChonkProofWithPublicInputs', () => {
 
   it('should be able to remove public inputs', () => {
     const baseProof = ChonkProof.random();
-    const publicInputs = Array.from({ length: 10 }, () => Fr.random());
+    const publicInputs = times(10, () => Fr.random());
     const withPublicInputs = baseProof.attachPublicInputs(publicInputs);
     const removed = withPublicInputs.removePublicInputs();
 

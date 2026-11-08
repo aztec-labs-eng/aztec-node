@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { commands } from 'vitest/browser';
 
@@ -45,7 +46,7 @@ describe('sqlite-opfs stores written by an older sqlite3mc', () => {
     );
 
     const map = store.openMap<number, string>('map');
-    expect(await toArray(map.valuesAsync())).toEqual(Array.from({ length: 100 }, (_, i) => `value-${i}`));
+    expect(await toArray(map.valuesAsync())).toEqual(times(100, i => `value-${i}`));
     expect(await store.openSingleton<string>('singleton').getAsync()).toEqual('singleton');
     expect(await toArray(store.openMultiMap<string, string>('multimap').getValuesAsync('k'))).toEqual(['a', 'b', 'c']);
     expect(await toArray(store.openSet<string>('set').entriesAsync())).toEqual(['x', 'y']);
