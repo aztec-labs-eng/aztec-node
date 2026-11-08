@@ -1,4 +1,4 @@
-import { chunkWrapAround } from '@aztec-labs/foundation/collection';
+import { chunkWrapAround, times } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { FifoMemoryQueue, type ISemaphore, Semaphore } from '@aztec-labs/foundation/queue';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -255,7 +255,7 @@ export class BatchTxRequester {
     };
 
     const workerCount = this.dumbParallelWorkerCount;
-    const workers = Array.from({ length: workerCount }, (_, index) =>
+    const workers = times(workerCount, index =>
       this.dumbWorkerLoop(this.peers.nextDumbPeerToQuery.bind(this.peers), makeRequest, index + 1),
     );
 
@@ -327,7 +327,7 @@ export class BatchTxRequester {
       return { blockRequest, txs };
     };
 
-    const workers = Array.from({ length: this.smartParallelWorkerCount }, (_, index) =>
+    const workers = times(this.smartParallelWorkerCount, index =>
       this.smartWorkerLoop(this.peers.nextSmartPeerToQuery.bind(this.peers), makeRequest, index + 1),
     );
 

@@ -1,4 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
@@ -133,7 +134,7 @@ describe('Data generation for noir tests', () => {
       vk_hash: targetFunction.vkHash.toString(),
       membership_witness: `MembershipWitness {
         leaf_index: ${index},
-        sibling_path: [\n${siblingPath.map(b => `0x${b.toString('hex')}`).join(',\n')}\n],
+        sibling_path: [\n${siblingPath.map(b => bufferToHex(b)).join(',\n')}\n],
     }`,
       /* eslint-enable camelcase */
     };

@@ -7,6 +7,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { encodeArgs, getContractArtifact, prettyPrintJSON } from '@aztec-labs/cli/utils';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { getAllFunctionAbis, getInitializer } from '@aztec-labs/stdlib/abi';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import type { TxStatus } from '@aztec-labs/stdlib/tx';
@@ -72,7 +73,7 @@ export async function deploy(
     skipInstancePublication,
   };
 
-  const localStart = performance.now();
+  const localTimer = new Timer();
   const sim = await deployInteraction.simulate({
     ...deployOpts,
     includeMetadata: true,
@@ -104,14 +105,14 @@ export async function deploy(
     const partialAddress = await deployInteraction.getPartialAddress();
 
     const { txHash } = await deployInteraction.send({ ...deployOpts, wait: NO_WAIT });
-    const localTimeMs = performance.now() - localStart;
+    const localTimeMs = localTimer.ms();
     debugLogger.debug(`Deploy tx sent with hash ${txHash.toString()}`);
     out.hash = txHash;
 
     if (wait) {
-      const nodeStart = performance.now();
+      const nodeTimer = new Timer();
       const receipt = await waitForTx(node, txHash, { timeout, waitForStatus });
-      const nodeTimeMs = performance.now() - nodeStart;
+      const nodeTimeMs = nodeTimer.ms();
 
       if (!json) {
         log(`Contract deployed at ${address.toString()}`);

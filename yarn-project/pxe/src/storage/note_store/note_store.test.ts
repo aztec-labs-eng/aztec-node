@@ -1,4 +1,5 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -597,7 +598,7 @@ describe('NoteStore', () => {
       // This test simulates the scenario in utilityValidateAndStoreEnqueuedNotesAndEvents where
       // multiple validateAndStoreNote calls run concurrently via Promise.all
       const NOTE_COUNT = 100;
-      const noteNullifiers = Array.from({ length: NOTE_COUNT }, () => Fr.random());
+      const noteNullifiers = times(NOTE_COUNT, () => Fr.random());
       const notes = await Promise.all(
         noteNullifiers.map(nullifier =>
           mkNote({ contractAddress: CONTRACT_A, storageSlot: SLOT_X, siloedNullifier: nullifier }),

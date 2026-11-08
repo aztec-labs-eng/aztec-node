@@ -5,7 +5,7 @@ import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { Buffer } from 'buffer';
 import { type Hex, RpcRequestError, encodeFunctionData, getContract, parseEther } from 'viem';
@@ -379,9 +379,9 @@ describeAcrossL1Forks('EthCheatCodes', () => {
 
       it('resumes on the original grid after a pause mid-cycle without making the caller wait', async () => {
         await sleep(1000);
-        const pauseStart = Date.now();
+        const pauseTimer = new Timer();
         await cheatCodes.execWithPausedAnvil(() => sleep(200));
-        expect(Date.now() - pauseStart).toBeLessThan(200 + 150);
+        expect(pauseTimer.ms()).toBeLessThan(200 + 150);
 
         const next = await waitForBlockAfter(first.number);
         expectOnGrid(next, first);

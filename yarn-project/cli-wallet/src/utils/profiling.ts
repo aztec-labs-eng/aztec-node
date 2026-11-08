@@ -1,3 +1,4 @@
+import { sum } from '@aztec-labs/foundation/collection';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import type { PrivateExecutionStep } from '@aztec-labs/stdlib/kernel';
 import type { ProvingStats, ProvingTimings, SimulationStats, SimulationTimings } from '@aztec-labs/stdlib/tx';
@@ -64,7 +65,7 @@ export function printProfileResult(
         const calls = times.length;
         const min = Math.min(...times);
         const max = Math.max(...times);
-        const total = times.reduce((acc, time) => acc + time, 0);
+        const total = sum(times);
         const avg = total / calls;
         log(
           format(
@@ -96,7 +97,7 @@ export function printProfileResult(
     log(format('\nRPC calls:\n'));
     for (const [method, { times }] of Object.entries(stats.nodeRPCCalls.perMethod)) {
       const calls = times.length;
-      const total = times.reduce((acc, time) => acc + time, 0);
+      const total = sum(times);
       const avg = total / calls;
       const min = Math.min(...times);
       const max = Math.max(...times);

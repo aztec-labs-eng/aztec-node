@@ -9,6 +9,7 @@ import {
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
 import { BlockNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -320,7 +321,7 @@ export function mapTupleFromNoir<T, N extends number, M>(
   if (noirArray.length != length) {
     throw new Error(`Expected ${length} items, got ${noirArray.length}`);
   }
-  return Array.from({ length }, (_, idx) => mapper(noirArray[idx])) as Tuple<M, N>;
+  return times(length, idx => mapper(noirArray[idx])) as Tuple<M, N>;
 }
 
 export function mapTupleToNoir<T, M, N extends number>(

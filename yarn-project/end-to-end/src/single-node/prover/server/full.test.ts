@@ -7,7 +7,9 @@ import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { Tx, TxExecutionResult } from '@aztec-labs/aztec.js/tx';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { sumBigint } from '@aztec-labs/foundation/bigint';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { parseBooleanEnv } from '@aztec-labs/foundation/config';
 import { getTestData, isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
 import { updateProtocolCircuitSampleInputs } from '@aztec-labs/foundation/testing/files';
@@ -183,7 +185,7 @@ describe('single-node/prover/full', () => {
       const allBlocks = publishedCheckpoints.flatMap(pc => pc.blocks!);
       const fees = allBlocks.map(b => b.header.totalFees.toBigInt());
 
-      const totalRewards = fees.map(fee => fee + reward).reduce((acc, reward) => acc + reward, 0n);
+      const totalRewards = sumBigint(fees.map(fee => fee + reward));
       const sequencerGain = rewardsAfterCoinbase - rewardsBeforeCoinbase;
       const proverGain = rewardsAfterProver - rewardsBeforeProver;
 
@@ -396,7 +398,7 @@ describe('single-node/prover/full', () => {
       logger.info(`Submitting ${NUM_INVALID_TXS} invalid transactions to simulate a ddos attack`);
       const data = provenTx.data;
 
-      const txTasks = Array.from({ length: NUM_INVALID_TXS }, (_, i) => async () => {
+      const txTasks = times(NUM_INVALID_TXS, i => async () => {
         // Use a random ChonkProof and alter the public tx data to generate a unique invalid tx hash
         const invalidProvenTx = new ProvenTx(
           aztecNode,

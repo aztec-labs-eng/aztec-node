@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 
+import { times } from '../collection/index.js';
 import { Fr } from '../curves/bn254/index.js';
 import { computeBalancedMerkleTreeRoot } from './balanced_merkle_tree_root.js';
 import { shaMerkleHash } from './hasher.js';
@@ -9,7 +10,7 @@ describe('computeUnbalancedMerkleTreeRoot', () => {
   const hasher = shaMerkleHash;
 
   const createLeaves = (numLeaves: number, offset = 1) => {
-    return Array.from({ length: numLeaves }, (_, i) => new Fr(i + offset).toBuffer());
+    return times(numLeaves, i => new Fr(i + offset).toBuffer());
   };
 
   it('0 leaves', () => {

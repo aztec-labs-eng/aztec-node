@@ -28,7 +28,7 @@ export function generatePrivateKeys(startIndex: number, numberOfKeys: number): `
   const privateKeys: `0x${string}`[] = [];
   // Do not start from 0 as it is used during setup
   for (let i = startIndex; i < startIndex + numberOfKeys; i++) {
-    privateKeys.push(`0x${getPrivateKeyFromIndex(i)!.toString('hex')}`);
+    privateKeys.push(bufferToHex(getPrivateKeyFromIndex(i)!));
   }
   return privateKeys;
 }

@@ -5,6 +5,7 @@ import {
   IndexWithinCheckpoint,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { MembershipWitness } from '@aztec-labs/foundation/trees';
 import {
@@ -69,7 +70,7 @@ describe('NodeWorldStateQueries archive membership witnesses', () => {
 
   /** Mirrors the archiver's resolution, including mapping the post-genesis archive root to block 0. */
   const resolve = (query: BlockQuery): BlockData | undefined => {
-    const all = Array.from({ length: TIP + 1 }, (_, n) => blockDataAt(n));
+    const all = times(TIP + 1, n => blockDataAt(n));
     if ('number' in query) {
       return all.find(d => d.header.getBlockNumber() === query.number);
     }

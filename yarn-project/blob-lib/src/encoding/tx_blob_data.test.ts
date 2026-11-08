@@ -8,6 +8,7 @@ import {
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlobDeserializationError } from '../errors.js';
@@ -60,7 +61,7 @@ describe('tx blob data', () => {
     const txBlobData = {
       ...makeTxBlobData(),
       txStartMarker: makeTxStartMarker({ numPrivateLogs: 1, privateLogsLength: length }),
-      privateLogs: [Array.from({ length }, (_, i) => new Fr(i + 1))],
+      privateLogs: [times(length, i => new Fr(i + 1))],
     };
     expect(() => decodeTxBlobData(encodeTxBlobData(txBlobData))).toThrow(BlobDeserializationError);
   });

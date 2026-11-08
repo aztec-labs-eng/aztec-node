@@ -5,12 +5,14 @@ import { RollupStorage } from '@aztec-foundation/l1-artifacts/RollupStorage';
 
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { Buffer } from 'buffer';
 import chunk from 'lodash.chunk';
@@ -1073,7 +1075,7 @@ export class RollupContract {
         address: this.address,
         abi: RollupAbi,
         functionName: 'canProposeAtTime',
-        args: [timeOfNextL1Slot, `0x${archive.toString('hex')}`, who],
+        args: [timeOfNextL1Slot, bufferToHex(archive), who],
         account,
         stateOverride,
       });
@@ -1437,7 +1439,7 @@ export class RollupContract {
     // Count at ts, matching the addresses below; the current count would truncate a shrunk set.
     const attesterSize = await this.getAttesterCountAtTime(ts, { blockNumber });
     const gse = new GSEContract(this.client, await this.getGSE());
-    const indices = Array.from({ length: attesterSize }, (_, i) => BigInt(i));
+    const indices = times(attesterSize, i => BigInt(i));
     const chunks = chunk(indices, 1000);
 
     const results = await Promise.all(

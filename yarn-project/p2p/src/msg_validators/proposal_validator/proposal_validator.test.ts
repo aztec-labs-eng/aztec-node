@@ -541,7 +541,7 @@ describe('ProposalValidator', () => {
           'test',
         );
 
-        const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 3 }, () => TxHash.random()) });
+        const proposal = await makeBlockProposal({ txHashes: times(3, () => TxHash.random()) });
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
       });
@@ -559,13 +559,13 @@ describe('ProposalValidator', () => {
           'test',
         );
 
-        const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 2 }, () => TxHash.random()) });
+        const proposal = await makeBlockProposal({ txHashes: times(2, () => TxHash.random()) });
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'accept' });
       });
 
       it('accepts a small proposal when maxTxsPerBlock is not set', async () => {
-        const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 10 }, () => TxHash.random()) });
+        const proposal = await makeBlockProposal({ txHashes: times(10, () => TxHash.random()) });
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'accept' });
       });

@@ -1,5 +1,5 @@
 import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { times } from '@aztec-labs/foundation/collection';
+import { compactArray, times } from '@aztec-labs/foundation/collection';
 import { getDefaultConfig } from '@aztec-labs/foundation/config';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -68,7 +68,7 @@ describe('TxCollection', () => {
     node.getTxsByHash.mockImplementation(async hashes => {
       await sleep(1);
       return {
-        validTxs: hashes.map(h => txs.find(tx => tx.txHash.equals(h))).filter(tx => tx !== undefined),
+        validTxs: compactArray(hashes.map(h => txs.find(tx => tx.txHash.equals(h)))),
         invalidTxHashes: [],
       };
     });
@@ -554,7 +554,7 @@ describe('TxCollection', () => {
     const setFileStoreTxs = (source: MockProxy<FileStoreTxSource>, txsToReturn: Tx[]) => {
       source.getTxsByHash.mockImplementation(hashes => {
         return Promise.resolve({
-          validTxs: hashes.map(h => txsToReturn.find(tx => tx.txHash.equals(h))).filter(tx => tx !== undefined),
+          validTxs: compactArray(hashes.map(h => txsToReturn.find(tx => tx.txHash.equals(h)))),
           invalidTxHashes: [],
         });
       });

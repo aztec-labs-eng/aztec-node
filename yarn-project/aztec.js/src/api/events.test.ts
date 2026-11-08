@@ -25,7 +25,7 @@ function makeLog(value: number, { blockNumber = 1, logIndexWithinTx = 0 } = {}):
 
 /** A page of `count` logs carrying consecutive values `start, start+1, …`. */
 function page(start: number, count: number): LogResult[] {
-  return Array.from({ length: count }, (_, i) => makeLog(start + i, { logIndexWithinTx: i }));
+  return times(count, i => makeLog(start + i, { logIndexWithinTx: i }));
 }
 
 /** Serves `logs`, as built by {@link page}, the way a node does: one page at a time, resuming after `afterLog`. */

@@ -1,5 +1,6 @@
 import { prettyPrintJSON } from '@aztec-labs/cli/utils';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { times } from '@aztec-labs/foundation/collection';
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
 import { computeBn254G1PublicKeyCompressed } from '@aztec-labs/foundation/crypto/bn254';
@@ -181,7 +182,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
   const summaries: ValidatorSummary[] = [];
 
   const validators = await Promise.all(
-    Array.from({ length: validatorCount }, async (_unused, i) => {
+    times(validatorCount, async i => {
       const addressIndex = baseAddressIndex + i;
       const basePath = blsPath ?? defaultBlsPath;
       const perValidatorPath = withValidatorIndex(basePath, accountIndex, addressIndex);
@@ -203,7 +204,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
         publisherField = publishers.length === 1 ? (publishers[0] as EthPrivateKey) : (publishers as EthPrivateKey[]);
       } else if (publisherCount > 0) {
         const publishersBaseIndex = baseAddressIndex + validatorCount + i * publisherCount;
-        const publisherAccounts = Array.from({ length: publisherCount }, (_unused2, j) => {
+        const publisherAccounts = times(publisherCount, j => {
           const publisherAddressIndex = publishersBaseIndex + j;
           const pubAcct = mnemonicToAccount(mnemonic, {
             accountIndex,

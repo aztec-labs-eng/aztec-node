@@ -1,3 +1,4 @@
+import { times } from '../collection/index.js';
 import { FifoMemoryQueue } from './fifo_memory_queue.js';
 
 /**
@@ -33,7 +34,7 @@ export class SerialQueue {
     if (this.started) {
       return;
     }
-    this.runningPromises = Array.from({ length: numWorkers }, () => this.queue.process(fn => fn()));
+    this.runningPromises = times(numWorkers, () => this.queue.process(fn => fn()));
     this.started = true;
   }
 

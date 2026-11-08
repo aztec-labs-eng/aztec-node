@@ -8,6 +8,7 @@ import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { jest } from '@jest/globals';
 
@@ -357,7 +358,7 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     const maxDelaySeconds = BigInt(t.constants.ethereumSlotDuration) + 2n * BigInt(slotDuration);
 
     await withBackgroundFeeder(async () => {
-      const wallClockAtSend = Date.now();
+      const wallClockAtSend = new Timer();
       const [, secretHash] = await generateClaimSecret();
       const message = { recipient: testContract.address, content: Fr.random(), secretHash };
       const { msgHash, txReceipt } = await sendMessageToL2(message);
@@ -367,7 +368,7 @@ describe('single-node/cross-chain/streaming_inbox', () => {
       // The background feeder drives block production; findInsertingBlock polls the committed tree without
       // sending its own wallet txs (which would race the feeder on the nonce).
       const inserting = await findInsertingBlock(msgHash);
-      const wallClockLatencyMs = Date.now() - wallClockAtSend;
+      const wallClockLatencyMs = wallClockAtSend.ms();
       const insertingBlock = (await aztecNode.getBlock(inserting.blockNumber))!;
       const includingBlockTs = insertingBlock.header.globalVariables.timestamp;
       const delaySeconds = includingBlockTs - messageL1Ts;

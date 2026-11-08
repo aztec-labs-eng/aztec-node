@@ -5,7 +5,7 @@ import { Tx } from '@aztec-labs/aztec.js/tx';
 import { PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { expect, jest } from '@jest/globals';
 
@@ -236,7 +236,7 @@ async function getProposerIndexes(t: P2PNetworkTest, startSlotTimestamp: bigint,
   const startSlot = await rollupContract.getSlotAt(startSlotTimestamp);
 
   const proposers = await Promise.all(
-    Array.from({ length: 3 }, async (_, i) => {
+    times(3, async i => {
       const slot = SlotNumber(startSlot + slotOffset + i);
       const slotTimestamp = await rollupContract.getTimestampForSlot(slot);
       return await rollupContract.getProposerAt(slotTimestamp);
@@ -252,8 +252,6 @@ async function getProposerIndexes(t: P2PNetworkTest, startSlotTimestamp: bigint,
     );
   }
 
-  const nodesToTurnOffTxGossip = Array.from({ length: NUM_VALIDATORS }, (_, i) => i).filter(
-    i => !proposerIndexes.includes(i),
-  );
+  const nodesToTurnOffTxGossip = times(NUM_VALIDATORS, i => i).filter(i => !proposerIndexes.includes(i));
   return { proposerIndexes, nodesToTurnOffTxGossip };
 }

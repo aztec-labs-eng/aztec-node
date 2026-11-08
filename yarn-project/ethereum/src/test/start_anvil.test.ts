@@ -1,6 +1,6 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
@@ -238,9 +238,9 @@ describe.each(BEHAVIOURS)('startAnvil teardown when anvil %s SIGTERM', behaviour
           expect((await probePort(spawn.port)).free).toBe(false);
         }
 
-        const start = Date.now();
+        const elapsedTimer = new Timer();
         await drive(spawn.anvil, pattern);
-        const elapsed = Date.now() - start;
+        const elapsed = elapsedTimer.ms();
 
         // 1. Settles, and within the escalation's budget rather than merely before jest's timeout.
         expect(elapsed).toBeLessThan(SETTLE_BOUND_MS);

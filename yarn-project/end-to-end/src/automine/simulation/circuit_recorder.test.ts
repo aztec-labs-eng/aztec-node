@@ -1,4 +1,5 @@
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
 import fs from 'fs/promises';
 import { tmpdir } from 'os';
@@ -88,7 +89,7 @@ describe('automine/simulation/circuit_recorder', () => {
       // `artifact.name`, which BundleArtifactProvider derives by stripping 'Artifact' from the
       // ClientProtocolArtifact key (e.g. 'PrivateKernelInit3Artifact' → 'PrivateKernelInit3'),
       // so there is no underscore between 'Init' and the digit.
-      const initVariants = Array.from({ length: MAX_APPS_PER_KERNEL }, (_, i) =>
+      const initVariants = times(MAX_APPS_PER_KERNEL, i =>
         i === 0 ? 'PrivateKernelInit' : `PrivateKernelInit${i + 1}`,
       );
 

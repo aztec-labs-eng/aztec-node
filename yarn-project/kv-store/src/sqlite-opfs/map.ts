@@ -1,5 +1,6 @@
 import { Encoder } from '#msgpackr';
 import { fromBufferKey, toBufferKey } from '#ordered-binary';
+import { unique } from '@aztec-labs/foundation/collection';
 import { Buffer } from 'buffer';
 import { hash } from 'ohash';
 
@@ -34,7 +35,7 @@ export class SQLiteOPFSAztecMap<K extends Key, V extends Value> implements Aztec
   /** Reads keys in bounded SQL batches, preserving input order and missing entries. */
   async getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
     const slots = keys.map(key => this.slot(key));
-    const uniqueSlots = [...new Set(slots)];
+    const uniqueSlots = unique(slots);
     const values = new Map<string, V>();
     // Stay below SQLite's host-parameter limit, including builds with the legacy 999 limit.
     const batchSize = 100;

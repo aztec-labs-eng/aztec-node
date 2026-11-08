@@ -17,6 +17,7 @@ import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { type AztecNodeDebug, createAztecNodeDebugClient } from '@aztec-labs/stdlib/interfaces/client';
 import type { Hex } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
@@ -129,8 +130,8 @@ export async function waitForL1ToL2Message(params: WaitForClaimParams): Promise<
   }
 
   const timeoutMs = params.timeoutMs ?? 30 * 60_000;
-  const startedAt = Date.now();
-  let lastLog = startedAt;
+  const timer = new Timer();
+  let lastLog = Date.now();
   await retryUntil(
     async () => {
       if (await isL1ToL2MessageReady(node, messageHash)) {
@@ -140,7 +141,7 @@ export async function waitForL1ToL2Message(params: WaitForClaimParams): Promise<
         lastLog = Date.now();
         logger.info('Still waiting for L1→L2 message to become available', {
           messageHash: messageHash.toString(),
-          elapsedMs: Date.now() - startedAt,
+          elapsedMs: timer.ms(),
           timeoutMs,
         });
       }

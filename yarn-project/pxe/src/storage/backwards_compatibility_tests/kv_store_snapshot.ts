@@ -1,3 +1,4 @@
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import type { AztecAsyncArray, AztecAsyncMap, AztecAsyncSingleton, Key } from '@aztec-labs/kv-store';
 import { Buffer } from 'buffer';
 
@@ -76,10 +77,10 @@ function keyToString(k: unknown): string {
     return `num:${k}`;
   }
   if (Buffer.isBuffer(k)) {
-    return `0x${k.toString('hex')}`;
+    return bufferToHex(k);
   }
   if (k instanceof Uint8Array) {
-    return `0x${Buffer.from(k).toString('hex')}`;
+    return bufferToHex(Buffer.from(k));
   }
   if (Array.isArray(k)) {
     return `[${k.map(keyToString).join(',')}]`;

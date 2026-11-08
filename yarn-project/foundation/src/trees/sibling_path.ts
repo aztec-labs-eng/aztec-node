@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { makeTuple } from '../array/array.js';
+import { times } from '../collection/index.js';
 import { Fr } from '../curves/bn254/index.js';
 import { schemas } from '../schemas/index.js';
 import { BufferReader, type Tuple, assertLength, serializeArrayOfBufferableToVector } from '../serialize/index.js';
@@ -79,7 +80,7 @@ export class SiblingPath<N extends number> {
   }
 
   static random<N extends number>(number: N) {
-    const data = Array.from({ length: number }, () => Fr.random().toBuffer());
+    const data = times(number, () => Fr.random().toBuffer());
     return new SiblingPath(number, data);
   }
 

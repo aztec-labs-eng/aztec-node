@@ -5,6 +5,7 @@ import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import type { DeployAccountOptions } from '@aztec-labs/aztec.js/wallet';
 import { prettyPrintJSON } from '@aztec-labs/cli/cli-utils';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import type { TxHash, TxReceipt, TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { DEFAULT_TX_TIMEOUT_S } from '../utils/cli_wallet_and_node_wrapper.js';
@@ -64,7 +65,7 @@ export async function deployAccount(
     fee: { paymentMethod, gasSettings },
   };
 
-  const localStart = performance.now();
+  const localTimer = new Timer();
   const deployMethod = await account.getDeployMethod();
   const sim = await deployMethod.simulate({
     ...deployAccountOpts,
@@ -106,12 +107,12 @@ export async function deployAccount(
     };
 
     ({ txHash } = await deployMethod.send({ ...sendOpts, wait: NO_WAIT }));
-    const localTimeMs = performance.now() - localStart;
+    const localTimeMs = localTimer.ms();
 
     if (wait) {
-      const nodeStart = performance.now();
+      const nodeTimer = new Timer();
       txReceipt = await waitForTx(aztecNode, txHash, { timeout: DEFAULT_TX_TIMEOUT_S, waitForStatus });
-      const nodeTimeMs = performance.now() - nodeStart;
+      const nodeTimeMs = nodeTimer.ms();
 
       out.txReceipt = {
         status: txReceipt.status,

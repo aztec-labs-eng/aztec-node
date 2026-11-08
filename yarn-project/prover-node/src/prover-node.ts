@@ -2,7 +2,7 @@ import type { Archiver } from '@aztec-labs/archiver';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { assertRequired, compact, pick } from '@aztec-labs/foundation/collection';
+import { assertRequired, compact, pick, unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -447,9 +447,9 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       return;
     }
     const l1Constants = await this.getL1Constants();
-    const affectedEpochs = Array.from(
-      new Set(affected.map(p => Number(getEpochAtSlot(p.slotNumber, l1Constants)))),
-    ).map(n => EpochNumber(n));
+    const affectedEpochs = unique(affected.map(p => Number(getEpochAtSlot(p.slotNumber, l1Constants)))).map(n =>
+      EpochNumber(n),
+    );
     // The session manager cancels every affected session, which in turn calls
     // publishingService.withdraw(uuid) for each candidate; no separate notification to the
     // publishing service is needed.

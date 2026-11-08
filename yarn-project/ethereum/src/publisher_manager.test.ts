@@ -52,7 +52,7 @@ describe('PublisherManager', () => {
   describe('get available publisher', () => {
     let addresses: EthAddress[];
     beforeEach(() => {
-      addresses = Array.from({ length: 3 }, () => EthAddress.random());
+      addresses = times(3, () => EthAddress.random());
       mockPublishers = createMockPublishers(3, addresses);
       publisherManager = new PublisherManager(mockPublishers, {});
     });
@@ -207,7 +207,7 @@ describe('PublisherManager', () => {
     });
 
     it('should prioritise same state publishers based on balance and then least recently used', async () => {
-      const ethAddresses = Array.from({ length: 5 }, () => EthAddress.random());
+      const ethAddresses = times(5, () => EthAddress.random());
       mockPublishers = createMockPublishers(5, ethAddresses);
       publisherManager = new PublisherManager(mockPublishers, {});
 

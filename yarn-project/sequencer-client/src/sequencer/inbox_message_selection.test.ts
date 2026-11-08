@@ -1,5 +1,6 @@
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -20,7 +21,7 @@ describe('resolveEndpoint', () => {
   let inbox: MockProxy<InboxContract>;
   let streamingInbox: MockStreamingInbox;
 
-  const leaves = (count: number) => Array.from({ length: count }, (_, i) => new Fr(i + 1));
+  const leaves = (count: number) => times(count, i => new Fr(i + 1));
 
   beforeEach(() => {
     messageSource = mock<L1ToL2MessageSource>();
@@ -128,7 +129,7 @@ describe('local selection against the final block that has to land on a bucket b
     const streamingInbox = mockStreamingInbox(messageSource, inbox);
     // Cursor at the checkpoint start, 400 messages observed, live buckets ending at 200 and 400.
     streamingInbox.set(
-      Array.from({ length: 400 }, (_, i) => new Fr(i + 1)),
+      times(400, i => new Fr(i + 1)),
       [200n, 400n],
     );
     const selection = { cursorCount: 0n, localSyncedCount: 400n, checkpointStartCount: 0n, caps };

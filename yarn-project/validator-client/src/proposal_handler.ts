@@ -15,7 +15,7 @@ import {
   type CheckpointProposalHash,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
-import { pick } from '@aztec-labs/foundation/collection';
+import { LruMap, pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -603,17 +603,22 @@ export class ProposalHandler {
    * Signed-payload hashes of CHECKPOINT proposals validated as slashably invalid, per slot. Kept
    * separate from slotsWithInvalidProposals (which also flags invalid BLOCK proposals) because an
    * invalid block must not make checkpoint attesters slashable: the watcher slashes only attesters
-   * whose signed payload matches one of these hashes. Bounded like slotsWithInvalidProposals (oldest
-   * slot evicted).
+   * whose signed payload matches one of these hashes. Bounded to as many slots as slotsWithInvalidProposals (least
+   * recently used slot evicted).
    */
-  private readonly invalidCheckpointProposalHashesBySlot = new Map<SlotNumber, Set<CheckpointProposalHash>>();
+  private readonly invalidCheckpointProposalHashesBySlot = new LruMap<SlotNumber, Set<CheckpointProposalHash>>(
+    MAX_TRACKED_INVALID_PROPOSAL_SLOTS,
+  );
 
   /**
    * Per-proposal verdicts for block proposals this node rejected for a payload-committing reason, per slot. Read when
    * a checkpoint bails at last_block_not_found, to decide whether it commits to one of those rejected blocks (see
-   * checkpointCommitsToRejectedBlock). Bounded like invalidCheckpointProposalHashesBySlot (oldest slot evicted).
+   * checkpointCommitsToRejectedBlock). Bounded like invalidCheckpointProposalHashesBySlot (least recently used slot
+   * evicted).
    */
-  private readonly invalidBlockVerdictsBySlot = new Map<SlotNumber, InvalidBlockVerdict[]>();
+  private readonly invalidBlockVerdictsBySlot = new LruMap<SlotNumber, InvalidBlockVerdict[]>(
+    MAX_TRACKED_INVALID_PROPOSAL_SLOTS,
+  );
 
   constructor(
     private checkpointsBuilder: FullNodeCheckpointsBuilder,
@@ -742,13 +747,6 @@ export class ProposalHandler {
     if (!hashes) {
       hashes = new Set<CheckpointProposalHash>();
       this.invalidCheckpointProposalHashesBySlot.set(slotNumber, hashes);
-      while (this.invalidCheckpointProposalHashesBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
-        const oldest = this.invalidCheckpointProposalHashesBySlot.keys().next().value;
-        if (oldest === undefined) {
-          break;
-        }
-        this.invalidCheckpointProposalHashesBySlot.delete(oldest);
-      }
     }
     hashes.add(payloadHash);
   }
@@ -762,20 +760,13 @@ export class ProposalHandler {
    * Records a per-block verdict for a block proposal this node rejected for a reason that invalidates the block's
    * signed header on its own (a header mismatch), or whose re-executed header matched but whose claimed resulting
    * archive did not (an archive-only mismatch), so a checkpoint that commits to the block can later be bound to it.
-   * Bounded like the other per-slot stores (oldest slot evicted).
+   * Bounded like the other per-slot stores (least recently used slot evicted).
    */
   private recordInvalidBlockVerdict(slotNumber: SlotNumber, verdict: InvalidBlockVerdict): void {
     let verdicts = this.invalidBlockVerdictsBySlot.get(slotNumber);
     if (!verdicts) {
       verdicts = [];
       this.invalidBlockVerdictsBySlot.set(slotNumber, verdicts);
-      while (this.invalidBlockVerdictsBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
-        const oldest = this.invalidBlockVerdictsBySlot.keys().next().value;
-        if (oldest === undefined) {
-          break;
-        }
-        this.invalidBlockVerdictsBySlot.delete(oldest);
-      }
     }
     verdicts.push(verdict);
   }

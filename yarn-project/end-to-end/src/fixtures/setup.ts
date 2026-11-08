@@ -36,6 +36,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { tryRmDir } from '@aztec-labs/foundation/fs';
 import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -471,7 +472,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       publisherHdAccount = mnemonicToAccount(MNEMONIC, { addressIndex: 0 });
       const publisherPrivKeyRaw = publisherHdAccount.getHdKey().privateKey;
       const publisherPrivKey = publisherPrivKeyRaw === null ? null : Buffer.from(publisherPrivKeyRaw);
-      publisherPrivKeyHex = `0x${publisherPrivKey!.toString('hex')}` as const;
+      publisherPrivKeyHex = bufferToHex(publisherPrivKey!);
       config.sequencerPublisherPrivateKeys = [new SecretValue(publisherPrivKeyHex)];
     }
 
@@ -681,7 +682,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
     if (opts.startProverNode) {
       logger.verbose('Creating and syncing a simulated prover node...');
       const proverNodePrivateKey = getPrivateKeyFromIndex(2);
-      const proverNodePrivateKeyHex: Hex = `0x${proverNodePrivateKey!.toString('hex')}`;
+      const proverNodePrivateKeyHex: Hex = bufferToHex(proverNodePrivateKey!);
       const proverNodeDataDirectory = path.join(directoryToCleanup, randomBytes(8).toString('hex'));
 
       const p2pClientDeps: Partial<P2PClientDeps> = {

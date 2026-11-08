@@ -4,6 +4,7 @@ import {
   PUBLIC_LOG_HEADER_LENGTH,
 } from '@aztec-labs/constants';
 import type { FieldsOf } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { inspect } from '@aztec-labs/foundation/inspect';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
@@ -190,7 +191,7 @@ export class PublicLog {
   static async random() {
     return new PublicLog(
       await AztecAddress.random(),
-      Array.from({ length: 10 }, () => Fr.random()),
+      times(10, () => Fr.random()),
     );
   }
 

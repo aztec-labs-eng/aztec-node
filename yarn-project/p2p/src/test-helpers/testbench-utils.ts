@@ -1,6 +1,7 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import type { BlockProposalHash, CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { L2Block, L2BlockId } from '@aztec-labs/stdlib/block';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
@@ -145,7 +146,7 @@ export class InMemoryTxPool extends EventEmitter implements TxPoolV2 {
 
   getTxsByHash(hashes: TxHash[]): Promise<(Tx | undefined)[]> {
     const result = hashes.map(h => this.txsByHash.get(h.toString()));
-    const found = result.filter(tx => tx !== undefined).length;
+    const found = compactArray(result).length;
     this.logger?.debug(`[TxPool] getTxsByHash: requested ${hashes.length}, found ${found}`);
     return Promise.resolve(result);
   }

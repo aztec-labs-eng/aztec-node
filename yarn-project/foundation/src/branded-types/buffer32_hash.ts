@@ -1,3 +1,4 @@
+import { bufferToHex } from '../string/index.js';
 import type { Branded } from './types.js';
 
 /**
@@ -16,7 +17,7 @@ export function CheckpointProposalHash(s: `0x${string}`): CheckpointProposalHash
 
 /** Constructs a CheckpointProposalHash from a raw 32-byte hash buffer. */
 CheckpointProposalHash.fromBuffer = function (buf: Buffer): CheckpointProposalHash {
-  return `0x${buf.toString('hex')}` as CheckpointProposalHash;
+  return bufferToHex(buf) as CheckpointProposalHash;
 };
 
 /**
@@ -34,5 +35,5 @@ export function BlockProposalHash(s: `0x${string}`): BlockProposalHash {
 
 /** Constructs a BlockProposalHash from a raw 32-byte hash buffer. */
 BlockProposalHash.fromBuffer = function (buf: Buffer): BlockProposalHash {
-  return `0x${buf.toString('hex')}` as BlockProposalHash;
+  return bufferToHex(buf) as BlockProposalHash;
 };

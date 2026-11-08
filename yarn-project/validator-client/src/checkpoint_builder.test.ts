@@ -9,6 +9,7 @@ import {
   TX_DA_GAS_OVERHEAD,
 } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { sum, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
@@ -89,7 +90,7 @@ describe('CheckpointBuilder', () => {
         txEffects: opts.txBlobFields.map(n => ({ getNumBlobFields: () => n })),
       },
       toBlobFields: () => new Array(opts.blockBlobFieldCount).fill(Fr.ZERO),
-      computeDAGasUsed: () => opts.txBlobFields.reduce((total, n) => total + n, 0) * DA_GAS_PER_FIELD,
+      computeDAGasUsed: () => sum(opts.txBlobFields) * DA_GAS_PER_FIELD,
     } as unknown as L2Block;
   }
 
@@ -628,7 +629,7 @@ describe('CheckpointBuilder', () => {
       // Build 5 blocks. Each block uses 200k mana (its even share).
       for (let i = 0; i < maxBlocks; i++) {
         // Set up prior blocks (each used 200k mana)
-        const priorBlocks = Array.from({ length: i }, () =>
+        const priorBlocks = times(i, () =>
           createMockBlock({ manaUsed: 200_000, txBlobFields: [10], blockBlobFieldCount: 20 }),
         );
         lightweightCheckpointBuilder.getBlocks.mockReturnValue(priorBlocks);
@@ -662,7 +663,7 @@ describe('CheckpointBuilder', () => {
       const manaUsedPerBlock = [300_000, 300_000, 0, 0, 0]; // only first 2 are "used" as prior blocks
 
       for (let i = 0; i < maxBlocks; i++) {
-        const priorBlocks = Array.from({ length: i }, (_, j) =>
+        const priorBlocks = times(i, j =>
           createMockBlock({ manaUsed: manaUsedPerBlock[j], txBlobFields: [10], blockBlobFieldCount: 20 }),
         );
         lightweightCheckpointBuilder.getBlocks.mockReturnValue(priorBlocks);

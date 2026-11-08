@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { PeerId, Stream } from '@libp2p/interface';
@@ -198,7 +199,7 @@ describe('ConnectionSampler', () => {
       await sampler.stop();
 
       // Create test peers
-      peers = await Promise.all(new Array(5).fill(0).map(() => createSecp256k1PeerId()));
+      peers = await Promise.all(times(5, () => createSecp256k1PeerId()));
 
       // Mock libp2p
       mockLibp2p = {

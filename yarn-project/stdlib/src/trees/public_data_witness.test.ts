@@ -1,5 +1,6 @@
 import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec-labs/constants';
 import { toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
+import { times } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
 
@@ -24,7 +25,7 @@ function makePublicDataWitness(seed: number): PublicDataWitness {
   const leafPreimage = makePublicDataTreeLeafPreimage(seed);
   const siblingPath = new SiblingPath(
     PUBLIC_DATA_TREE_HEIGHT,
-    Array.from({ length: PUBLIC_DATA_TREE_HEIGHT }, (_, i) => toBufferBE(BigInt(seed + i + 6), 32)),
+    times(PUBLIC_DATA_TREE_HEIGHT, i => toBufferBE(BigInt(seed + i + 6), 32)),
   );
 
   return new PublicDataWitness(BigInt(seed + 5), leafPreimage, siblingPath);

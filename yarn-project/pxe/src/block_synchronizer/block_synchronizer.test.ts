@@ -1,5 +1,6 @@
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
@@ -175,10 +176,7 @@ describe('BlockSynchronizer', () => {
     });
 
     it('waits for in-progress sync to complete', async () => {
-      let resolveSync!: () => void;
-      const syncBlocker = new Promise<void>(resolve => {
-        resolveSync = resolve;
-      });
+      const { promise: syncBlocker, resolve: resolveSync } = promiseWithResolvers<void>();
       blockStream.sync.mockReturnValue(syncBlocker);
       const genesisBlock = await L2Block.random(BlockNumber(0));
       const genesisBlockData: BlockData = {

@@ -16,6 +16,7 @@ import { extractEvent } from '@aztec-labs/ethereum/utils';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { UniswapContract } from '@aztec-labs/noir-contracts.js/Uniswap';
 import { computeL2ToL1MessageHash } from '@aztec-labs/stdlib/hash';
 import { jest } from '@jest/globals';
@@ -288,9 +289,7 @@ export const uniswapL1L2TestSuite = (
         _epoch: BigInt(epoch),
         _numCheckpointsInEpoch: BigInt(withdrawResult.numCheckpointsInEpoch),
         _leafIndex: BigInt(withdrawL2MessageIndex),
-        _path: withdrawSiblingPath
-          .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+        _path: withdrawSiblingPath.toBufferArray().map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       const swapPrivateMessageMetadata = {
@@ -299,7 +298,7 @@ export const uniswapL1L2TestSuite = (
         _leafIndex: BigInt(swapPrivateL2MessageIndex),
         _path: swapPrivateSiblingPath
           .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+          .map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       const swapArgs = [
@@ -888,9 +887,7 @@ export const uniswapL1L2TestSuite = (
         _epoch: BigInt(epoch),
         _numCheckpointsInEpoch: BigInt(withdrawResult.numCheckpointsInEpoch),
         _leafIndex: BigInt(withdrawL2MessageIndex),
-        _path: withdrawSiblingPath
-          .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+        _path: withdrawSiblingPath.toBufferArray().map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       const swapPrivateMessageMetadata = {
@@ -899,7 +896,7 @@ export const uniswapL1L2TestSuite = (
         _leafIndex: BigInt(swapPrivateL2MessageIndex),
         _path: swapPrivateSiblingPath
           .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+          .map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       // On L1 call swap_public!
@@ -1037,18 +1034,14 @@ export const uniswapL1L2TestSuite = (
         _epoch: BigInt(epoch),
         _numCheckpointsInEpoch: BigInt(withdrawResult.numCheckpointsInEpoch),
         _leafIndex: BigInt(withdrawL2MessageIndex),
-        _path: withdrawSiblingPath
-          .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+        _path: withdrawSiblingPath.toBufferArray().map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       const swapPublicMessageMetadata = {
         _epoch: BigInt(epoch),
         _numCheckpointsInEpoch: BigInt(numCheckpointsInEpoch),
         _leafIndex: BigInt(swapPublicL2MessageIndex),
-        _path: swapPublicSiblingPath
-          .toBufferArray()
-          .map((buf: Buffer) => `0x${buf.toString('hex')}`) as readonly `0x${string}`[],
+        _path: swapPublicSiblingPath.toBufferArray().map((buf: Buffer) => bufferToHex(buf)) as readonly `0x${string}`[],
       };
 
       // Call swap_private on L1

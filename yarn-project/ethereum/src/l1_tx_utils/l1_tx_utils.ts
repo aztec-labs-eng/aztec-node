@@ -2,7 +2,7 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
-import { merge, pick } from '@aztec-labs/foundation/collection';
+import { compactArray, merge, pick } from '@aztec-labs/foundation/collection';
 import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
@@ -105,7 +105,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   }
 
   public get lastMinedAtBlockNumber() {
-    const minedBlockNumbers = this.txs.map(tx => tx.receipt?.blockNumber).filter(bn => bn !== undefined);
+    const minedBlockNumbers = compactArray(this.txs.map(tx => tx.receipt?.blockNumber));
     return minedBlockNumbers.length === 0 ? undefined : maxBigint(...minedBlockNumbers);
   }
 

@@ -14,6 +14,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { inspect } from '@aztec-labs/foundation/inspect';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
@@ -484,7 +485,7 @@ export class ProverNodePublisher {
     provenPrefixLength: number,
   ) {
     // Returns arguments for EpochProofLib.sol -> submitEpochRootProof()
-    const proofHex: Hex = `0x${args.proof.withoutPublicInputs().toString('hex')}`;
+    const proofHex: Hex = bufferToHex(args.proof.withoutPublicInputs());
     const argsArray = this.getEpochProofPublicInputsArgs(args);
     return {
       start: argsArray[0],

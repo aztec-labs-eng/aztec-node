@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 import { Fr } from '@aztec-labs/aztec.js/fields';
+import { times } from '@aztec-labs/foundation/collection';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
 import { getSchnorrInitializerlessAccountContractAddress } from '../schnorr/initializerless/index.js';
@@ -59,7 +60,7 @@ export async function generateSchnorrAccounts(
   numberOfAccounts: number,
   type: InitialAccountType = 'schnorr_initializerless',
 ): Promise<InitialAccountData[]> {
-  const signingKeys = Array.from({ length: numberOfAccounts }, () => GrumpkinScalar.random());
+  const signingKeys = times(numberOfAccounts, () => GrumpkinScalar.random());
   return await Promise.all(
     signingKeys.map(async signingKey => {
       const salt = Fr.random();

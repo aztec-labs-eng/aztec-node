@@ -1,3 +1,4 @@
+import { sum } from '@aztec-labs/foundation/collection';
 import { appendFileSync } from 'node:fs';
 import { type EventLoopUtilization, type IntervalHistogram, monitorEventLoopDelay, performance } from 'node:perf_hooks';
 
@@ -104,7 +105,7 @@ export class EluMonitor {
       return;
     }
 
-    const mean = this.eluSamples.reduce((a, b) => a + b, 0) / this.eluSamples.length;
+    const mean = sum(this.eluSamples) / this.eluSamples.length;
     const maxElu = Math.max(...this.eluSamples);
     const sorted = [...this.eluSamples].sort((a, b) => a - b);
     const p90Elu = sorted[Math.floor(sorted.length * 0.9)] ?? maxElu;

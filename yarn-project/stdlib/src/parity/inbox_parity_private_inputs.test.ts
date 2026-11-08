@@ -7,6 +7,7 @@ import {
   MAX_L1_TO_L2_MSGS_PER_BLOCK,
   MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
 } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { describe, expect, it } from '@jest/globals';
 
@@ -56,7 +57,7 @@ describe('InboxParity size dispatch', () => {
 });
 
 describe('InboxParityPrivateInputs.fromMessages', () => {
-  const messages = (count: number) => Array.from({ length: count }, (_, i) => new Fr(i + 1));
+  const messages = (count: number) => times(count, i => new Fr(i + 1));
   const startRollingHash = new Fr(7);
   const proverId = new Fr(11);
 

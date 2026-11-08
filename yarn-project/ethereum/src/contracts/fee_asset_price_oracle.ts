@@ -1,3 +1,4 @@
+import { sumBigint } from '@aztec-labs/foundation/bigint';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -304,7 +305,7 @@ class UniswapPriceOracle {
       throw new Error('Failed to get any price samples from Uniswap oracle');
     }
 
-    const mean = filteredPrices.reduce((a, b) => a + b, 0n) / BigInt(filteredPrices.length);
+    const mean = sumBigint(filteredPrices) / BigInt(filteredPrices.length);
     return mean;
   }
 }

@@ -1,6 +1,7 @@
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Comparator } from '@aztec-labs/aztec.js/note';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { times } from '@aztec-labs/foundation/collection';
 import { NoteGetterContract } from '@aztec-labs/noir-test-contracts.js/NoteGetter';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 
@@ -45,11 +46,7 @@ describe('automine/effects/note_getter', () => {
     // Inserts 10 notes (0-9) plus a duplicate 5. Runs all 6 comparator queries in parallel and
     // asserts each returns the expected set of values.
     it('inserts notes from 0-9, then makes multiple queries specifying the total suite of comparators', async () => {
-      await Promise.all(
-        Array(10)
-          .fill(0)
-          .map((_, i) => contract.methods.insert_note(i).send({ from: defaultAddress })),
-      );
+      await Promise.all(times(10, i => contract.methods.insert_note(i).send({ from: defaultAddress })));
 
       // We insert a note with value 5 twice to better test the comparators
       await contract.methods.insert_note(5).send({ from: defaultAddress });

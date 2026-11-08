@@ -1,6 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { times } from '@aztec-labs/foundation/collection';
+import { compactArray, times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -152,7 +152,7 @@ describe('p2p client integration block txs protocol ', () => {
 
   it('responds with an empty, block-less response when peer does not have the requested block proposal', async () => {
     attestationPool.getBlockProposalByArchive.mockResolvedValue(undefined);
-    const missing = new TxHashArray(...Array.from({ length: 4 }, () => TxHash.random()));
+    const missing = new TxHashArray(...times(4, () => TxHash.random()));
 
     const blockProposal = await createBlockProposal(blockNumber, Fr.random(), missing);
     const response = await sendBlockTxsRequest(blockProposal, missing);
@@ -336,7 +336,7 @@ describe('p2p client integration block txs protocol ', () => {
     const hashToTx = new Map(availableTxs.map((tx, i) => [availableHashes[i].toString(), tx]));
 
     txPool.getTxsByHash.mockImplementation((hashes: TxHash[]) => {
-      return Promise.resolve(hashes.map(hash => hashToTx.get(hash.toString())).filter(tx => tx !== undefined));
+      return Promise.resolve(compactArray(hashes.map(hash => hashToTx.get(hash.toString()))));
     });
 
     const requestedHashes = [txHashes[1], txHashes[3], txHashes[4]]; // Request 3, but only 2 available
@@ -364,9 +364,7 @@ describe('p2p client integration block txs protocol ', () => {
     const availableHash = txHashes[2];
 
     txPool.getTxsByHash.mockImplementation((hashes: TxHash[]) => {
-      return Promise.resolve(
-        hashes.map(hash => (hash.equals(availableHash) ? availableTx : undefined)).filter(tx => tx !== undefined),
-      );
+      return Promise.resolve(compactArray(hashes.map(hash => (hash.equals(availableHash) ? availableTx : undefined))));
     });
 
     const requestedHashes = [txHashes[0], txHashes[2], txHashes[4]]; // Request 3, only 1 available

@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
@@ -14,12 +15,12 @@ function wire<T>(value: T): unknown {
 
 describe('PrivateLogsQuerySchema', () => {
   it('accepts a tags array of exactly MAX_RPC_LEN entries', () => {
-    const tags = Array.from({ length: MAX_RPC_LEN }, () => SiloedTag.random());
+    const tags = times(MAX_RPC_LEN, () => SiloedTag.random());
     expect(() => PrivateLogsQuerySchema.parse(wire({ tags }))).not.toThrow();
   });
 
   it('rejects a tags array longer than MAX_RPC_LEN', () => {
-    const tags = Array.from({ length: MAX_RPC_LEN + 1 }, () => SiloedTag.random());
+    const tags = times(MAX_RPC_LEN + 1, () => SiloedTag.random());
     expect(() => PrivateLogsQuerySchema.parse(wire({ tags }))).toThrow(/at most/);
   });
 
@@ -31,13 +32,13 @@ describe('PrivateLogsQuerySchema', () => {
 describe('PublicLogsQuerySchema', () => {
   it('accepts a tags array of exactly MAX_RPC_LEN entries', async () => {
     const contractAddress = await AztecAddress.random();
-    const tags = Array.from({ length: MAX_RPC_LEN }, () => Tag.random());
+    const tags = times(MAX_RPC_LEN, () => Tag.random());
     expect(() => PublicLogsQuerySchema.parse(wire({ contractAddress, tags }))).not.toThrow();
   });
 
   it('rejects a tags array longer than MAX_RPC_LEN', async () => {
     const contractAddress = await AztecAddress.random();
-    const tags = Array.from({ length: MAX_RPC_LEN + 1 }, () => Tag.random());
+    const tags = times(MAX_RPC_LEN + 1, () => Tag.random());
     expect(() => PublicLogsQuerySchema.parse(wire({ contractAddress, tags }))).toThrow(/at most/);
   });
 
