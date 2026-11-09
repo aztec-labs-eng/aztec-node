@@ -2,10 +2,13 @@ import { Blob, type BlobJson, computeEthVersionedBlobHash } from '@aztec-labs/bl
 import { shuffle } from '@aztec-labs/foundation/array';
 import { compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { Buffer } from 'buffer';
 import { mainnet, sepolia } from 'viem/chains';
 import { z } from 'zod';
@@ -15,6 +18,7 @@ import type { BlobArchiveClient } from '../archive/interface.js';
 import type { FileStoreBlobClient } from '../filestore/filestore_blob_client.js';
 import { DEFAULT_HEALTHCHECK_UPLOAD_INTERVAL_MINUTES } from '../filestore/healthcheck.js';
 import { type BlobClientConfig, getBlobClientConfigFromEnv } from './config.js';
+import { BlobClientInstrumentation, type BlobUploadType } from './instrumentation.js';
 import type { BlobClientInterface, GetBlobSidecarOptions } from './interface.js';
 
 /** How often consensus hosts that failed the startup probe are probed again. */
@@ -65,8 +69,9 @@ export class HttpBlobClient implements BlobClientInterface {
   protected readonly fileStoreClients: FileStoreBlobClient[];
   protected readonly fileStoreUploadClient: FileStoreBlobClient | undefined;
 
+  private readonly instrumentation: BlobClientInstrumentation;
   private disabled = false;
-  private healthcheckUploadIntervalId?: NodeJS.Timeout;
+  private healthcheckUpload?: RunningPromise;
 
   /** Beacon genesis time (seconds since Unix epoch), discovered at startup for custom devnets. */
   private beaconGenesisTime?: bigint;
@@ -86,8 +91,9 @@ export class HttpBlobClient implements BlobClientInterface {
       archiveClient?: BlobArchiveClient;
       fileStoreClients?: FileStoreBlobClient[];
       fileStoreUploadClient?: FileStoreBlobClient;
+      telemetry?: TelemetryClient;
       /** Callback fired when blobs are successfully fetched from any source */
-      onBlobsFetched?: (blobs: Blob[]) => void;
+      onBlobsFetched?: (blobs: Blob[]) => void | Promise<void>;
       /** Overrides how often consensus hosts that failed the startup probe are probed again. */
       consensusHostReprobeIntervalMs?: number;
     } = {},
@@ -102,10 +108,11 @@ export class HttpBlobClient implements BlobClientInterface {
     this.log = opts.logger ?? createLogger('blob-client:client');
     this.fileStoreClients = opts.fileStoreClients ?? [];
     this.fileStoreUploadClient = opts.fileStoreUploadClient;
+    this.instrumentation = new BlobClientInstrumentation(opts.telemetry ?? getTelemetryClient());
 
     if (this.fileStoreUploadClient && !opts.onBlobsFetched) {
-      this.opts.onBlobsFetched = blobs => {
-        this.uploadBlobsToFileStore(blobs);
+      this.opts.onBlobsFetched = async blobs => {
+        await this.sendBlobsToFilestore(blobs);
       };
     }
 
@@ -121,18 +128,40 @@ export class HttpBlobClient implements BlobClientInterface {
     };
   }
 
-  /**
-   * Upload fetched blobs to filestore (fire-and-forget).
-   * Called automatically when blobs are fetched from any source.
-   */
-  private uploadBlobsToFileStore(blobs: Blob[]): void {
-    if (!this.fileStoreUploadClient) {
-      return;
+  private async uploadWithRetry(
+    uploadType: BlobUploadType,
+    upload: () => Promise<void>,
+    context: { blobHashes?: string[] } = {},
+  ): Promise<boolean> {
+    const timer = new Timer();
+    let success = false;
+    let attempt = 0;
+    try {
+      await retry(
+        async () => {
+          attempt++;
+          try {
+            await upload();
+            this.instrumentation.recordAttempt(uploadType, true);
+          } catch (err) {
+            this.instrumentation.recordAttempt(uploadType, false);
+            this.log.warn('Blob filestore upload attempt failed', { err, uploadType, attempt, ...context });
+            throw err;
+          }
+        },
+        `Uploading ${uploadType} to filestore`,
+        makeBackoff([1, 2, 4, 8, 16]),
+        this.log,
+        true,
+      );
+      success = true;
+      return true;
+    } catch (err) {
+      this.log.error('Blob filestore upload failed after retries', { err, uploadType, attempt, ...context });
+      return false;
+    } finally {
+      this.instrumentation.recordUpload(uploadType, success, timer.ms());
     }
-
-    void this.fileStoreUploadClient.saveBlobs(blobs, true).catch(err => {
-      this.log.warn(`Failed to upload ${blobs.length} blobs to filestore`, err);
-    });
   }
 
   /**
@@ -314,19 +343,15 @@ export class HttpBlobClient implements BlobClientInterface {
       return false;
     }
 
-    if (!this.fileStoreUploadClient) {
+    const uploadClient = this.fileStoreUploadClient;
+    if (!uploadClient) {
       this.log.verbose('No filestore upload configured');
       return false;
     }
 
-    this.log.verbose(`Uploading ${blobs.length} blobs to filestore`);
-    try {
-      await this.fileStoreUploadClient.saveBlobs(blobs, true);
-      return true;
-    } catch (err) {
-      this.log.error('Failed to upload blobs to filestore', err);
-      return false;
-    }
+    const blobHashes = blobs.map(blob => bufferToHex(blob.getEthVersionedBlobHash()));
+    this.log.verbose('Uploading blobs to filestore', { blobHashes, blobCount: blobs.length });
+    return await this.uploadWithRetry('blobs', () => uploadClient.saveBlobs(blobs, true), { blobHashes });
   }
 
   /**
@@ -377,7 +402,11 @@ export class HttpBlobClient implements BlobClientInterface {
     // Fire callback when returning blobs (fire-and-forget)
     const returnWithCallback = (blobs: Blob[]): Blob[] => {
       if (blobs.length > 0 && this.opts.onBlobsFetched) {
-        void Promise.resolve().then(() => this.opts.onBlobsFetched!(blobs));
+        void Promise.resolve()
+          .then(() => this.opts.onBlobsFetched!(blobs))
+          .catch(err => {
+            this.log.warn('Blob fetch callback failed', { err, blockHash, blobHashes: blobHashes.map(bufferToHex) });
+          });
       }
       return blobs;
     };
@@ -702,36 +731,37 @@ export class HttpBlobClient implements BlobClientInterface {
   /**
    * Start the blob client.
    * Discovers beacon configuration for custom devnets,
-   * then uploads the initial healthcheck file (awaited) and starts periodic uploads.
+   * then attempts the initial healthcheck upload and starts periodic uploads even if storage is unavailable.
    */
   public async start(): Promise<void> {
     if (this.beaconGenesisTime === undefined) {
       await this.fetchBeaconConfig();
     }
 
-    if (!this.fileStoreUploadClient) {
+    if (!this.fileStoreUploadClient || this.healthcheckUpload) {
       return;
     }
 
-    await this.fileStoreUploadClient.uploadHealthcheck();
-    this.log.debug('Initial healthcheck file uploaded');
-
-    this.startPeriodicHealthcheckUpload();
+    await this.startPeriodicHealthcheckUpload();
   }
 
   /**
    * Start periodic healthcheck upload to the file store to ensure it remains available even if accidentally deleted.
    */
-  private startPeriodicHealthcheckUpload(): void {
+  private async startPeriodicHealthcheckUpload(): Promise<void> {
     const intervalMs =
       (this.config.blobHealthcheckUploadIntervalMinutes ?? DEFAULT_HEALTHCHECK_UPLOAD_INTERVAL_MINUTES) * 60 * 1000;
-
-    // eslint-disable-next-line aztec-custom/prefer-running-promise
-    this.healthcheckUploadIntervalId = setInterval(() => {
-      void this.fileStoreUploadClient!.uploadHealthcheck().catch(err => {
-        this.log.warn('Failed to upload periodic healthcheck file', err);
-      });
-    }, intervalMs);
+    const initialUpload = promiseWithResolvers<void>();
+    this.healthcheckUpload = new RunningPromise(
+      async () => {
+        await this.uploadWithRetry('healthcheck', () => this.fileStoreUploadClient!.uploadHealthcheck());
+        initialUpload.resolve();
+      },
+      this.log,
+      intervalMs,
+    );
+    this.healthcheckUpload.start();
+    await initialUpload.promise;
   }
 
   /**
@@ -790,10 +820,7 @@ export class HttpBlobClient implements BlobClientInterface {
    */
   public stop(): void {
     void this.consensusHostReprobe?.stop();
-    if (this.healthcheckUploadIntervalId) {
-      clearInterval(this.healthcheckUploadIntervalId);
-      this.healthcheckUploadIntervalId = undefined;
-    }
+    void this.healthcheckUpload?.stop();
   }
 }
 

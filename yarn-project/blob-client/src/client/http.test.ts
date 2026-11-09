@@ -894,7 +894,7 @@ describe('HttpBlobClient FileStore Integration', () => {
       const mockFileStore = new MockFileStoreBlobClient();
       testBlobs.forEach(b => mockFileStore.addBlob(b));
 
-      const onBlobsFetched = jest.fn();
+      const onBlobsFetched = jest.fn<(blobs: Blob[]) => void>();
       const client = new HttpBlobClient(
         {},
         {
