@@ -86,7 +86,7 @@ Runs:
 
 Operates on `TxMetaData` (pre-built by the pool) rather than full `Tx` objects.
 
-The `AllowedSetupCallsMetaValidator` checks a precomputed boolean flag (`TxMetaData.allowedSetupCalls`) rather than re-running the full `PhasesTxValidator`. This flag is computed by `createCheckAllowedSetupCalls` when the tx first enters the pool (via `addProtectedTxs` or startup hydration), so the pool migration validator can reject txs with disallowed setup calls without needing the full `Tx` object or its dependencies.
+The `AllowedSetupCallsMetaValidator` checks a precomputed boolean flag (`TxMetaData.allowedSetupCalls`) rather than re-running the full `PhasesTxValidator`. This flag is computed by `createCheckAllowedSetupCalls` when the tx first enters the pool (via `addProtectedTxs` or startup hydration), so the pool migration validator can reject txs whose setup calls fail the allow list checks without needing the full `Tx` object or its dependencies.
 
 ## Individual Validators
 
@@ -103,7 +103,7 @@ The `AllowedSetupCallsMetaValidator` checks a precomputed boolean flag (`TxMetaD
 | `MinGasLimitsValidator` | Gas limits are >= the fixed protocol overheads. Applies on every entry point, with no exemptions | 3–10 us |
 | `MaxGasLimitsValidator` | Gas limits are <= AVM max processable L2 gas (optionally clamped further by network admission limits). Exempted on the gas estimation path | 3–10 us |
 | `MaxFeePerGasValidator` | Max fee per gas >= current block gas fees on both dimensions (DA and L2). Used standalone in pool migration and in gossip; also called internally by `GasTxValidator` | 3–10 us |
-| `PhasesTxValidator` | Public function calls in setup phase are on the allow list | 10.12–13.12 us |
+| `PhasesTxValidator` | Every setup-phase public call is non-static, targets a function on the allow list and meets that entry's constraints, and the tx's gas limits leave setup at least the summed `minGas` of the matched entries | 10.12–13.12 us |
 | `AllowedSetupCallsMetaValidator` | Checks the precomputed `allowedSetupCalls` flag on `TxMetaData`. Used in pool migration instead of the full `PhasesTxValidator` | — |
 | `BlockHeaderTxValidator` | Transaction's anchor block hash exists in the archive tree | 98.88 us |
 | `TxProofValidator` | Client proof verifies correctly | ~250ms |
