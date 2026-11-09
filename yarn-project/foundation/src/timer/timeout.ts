@@ -74,7 +74,8 @@ export class TimeoutTask<T> {
  * Executes a function with a timeout. Use this instead of `Promise.race` against a `setTimeout` promise.
  *
  * On timeout the returned promise rejects, but `fn` keeps running unless it honours the `AbortSignal` it receives, so
- * pass the signal on to anything that accepts one (e.g. `fetch`).
+ * pass the signal on to anything that accepts one (e.g. `fetch`). Once `fn` settles, the timeout has no further effect:
+ * the signal never aborts, and neither `onAbort` nor the error factory runs.
  *
  * @param fn - The function to execute, accepts AbortSignal and returns a Promise.
  * @param timeout - The maximum time in milliseconds to allow the function to run.
@@ -108,7 +109,8 @@ function defaultSignalError(signal: AbortSignal) {
 
 /**
  * Executes a function until it completes or the given signal aborts. On abort, rejects with the error from `errorFn`, or
- * with what `errorFn` throws, even when `fn` itself rejects from its own abort handler.
+ * with what `errorFn` throws. That error wins over a rejection from an abort handler that `fn` adds to `signal`, since
+ * those handlers run after this function's own.
  */
 export async function execWithSignal<T>(
   fn: (signal: AbortSignal) => Promise<T>,
@@ -120,7 +122,6 @@ export async function execWithSignal<T>(
   }
 
   const abortPromise = promiseWithResolvers<never>();
-  // Registered before `fn` gets the signal, so it runs before any abort handler of `fn`'s.
   const abortListener = () => {
     try {
       abortPromise.reject(errorFn(signal));
@@ -133,9 +134,7 @@ export async function execWithSignal<T>(
   try {
     return await Promise.race<T>([fn(signal), abortPromise.promise]);
   } finally {
-    if (abortListener) {
-      signal.removeEventListener('abort', abortListener);
-    }
+    signal.removeEventListener('abort', abortListener);
   }
 }
 
