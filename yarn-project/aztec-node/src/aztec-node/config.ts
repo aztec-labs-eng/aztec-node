@@ -78,6 +78,26 @@ export type AztecNodeConfig = ArchiverConfig &
     automineEnableProveEpoch?: boolean;
   };
 
+/** Rejects rolling world-state retention that cannot cover the prover's full proof submission window. */
+export function validateProverWorldStateRetention(
+  config: Pick<AztecNodeConfig, 'enableProverNode' | 'worldStateHistoryRetention'>,
+  proofSubmissionEpochs: number,
+  epochDuration: number,
+): void {
+  const policy = config.worldStateHistoryRetention;
+  if (!config.enableProverNode || policy.type !== 'rolling') {
+    return;
+  }
+  const minimumCheckpoints = (proofSubmissionEpochs + 1) * epochDuration;
+  if (policy.checkpoints < minimumCheckpoints) {
+    throw new Error(
+      `WS_HISTORY_RETENTION=rolling:${policy.checkpoints} is insufficient for a prover node. ` +
+        `Set WS_HISTORY_RETENTION=rolling:${minimumCheckpoints} or greater, or use archive or pinned retention, ` +
+        `to retain checkpoints for the full proof submission window.`,
+    );
+  }
+}
+
 export const aztecNodeConfigMappings: ConfigMappingsType<AztecNodeConfig> = {
   ...dataConfigMappings,
   ...keyStoreConfigMappings,

@@ -7,7 +7,29 @@ import type { ValidatorClientConfig } from '@aztec-labs/validator-client/config'
 import type { Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 
-import { createKeyStoreForValidator } from './config.js';
+import { createKeyStoreForValidator, validateProverWorldStateRetention } from './config.js';
+
+describe('validateProverWorldStateRetention', () => {
+  it('rejects retention shorter than the entire proof submission window', () => {
+    expect(() =>
+      validateProverWorldStateRetention(
+        { enableProverNode: true, worldStateHistoryRetention: { type: 'rolling', checkpoints: 95 } },
+        2,
+        32,
+      ),
+    ).toThrow(/WS_HISTORY_RETENTION.*96/);
+  });
+
+  it.each([96, 128])('accepts retention of %i checkpoints covering the submission window', checkpoints => {
+    expect(() =>
+      validateProverWorldStateRetention(
+        { enableProverNode: true, worldStateHistoryRetention: { type: 'rolling', checkpoints } },
+        2,
+        32,
+      ),
+    ).not.toThrow();
+  });
+});
 
 function privateKeyToEthAddress(privateKey: Hex): EthAddress {
   return EthAddress.fromString(privateKeyToAddress(privateKey));

@@ -60,7 +60,11 @@ import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer
 import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
 import { createPublicClient } from 'viem';
 
-import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
+import {
+  type AztecNodeConfig,
+  createKeyStoreForValidator,
+  validateProverWorldStateRetention,
+} from './aztec-node/config.js';
 import { AdmissionMinFeesProvider, NextBlockFeeCache, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
@@ -226,6 +230,11 @@ export async function createAztecNodeService(
       );
     }
 
+    const proofSubmissionEpochs = config.enableProverNode ? await rollupContract.getProofSubmissionEpochs() : undefined;
+    if (proofSubmissionEpochs !== undefined) {
+      validateProverWorldStateRetention(config, proofSubmissionEpochs, Number(epochDuration));
+    }
+
     const blobClient = await createBlobClientWithFileStores(config, log.createChild('blob-client'));
 
     // attempt snapshot sync if possible
@@ -347,8 +356,7 @@ export async function createAztecNodeService(
     // submission window spans (proofSubmissionEpochs + 1) epochs, so its tx pool must keep finalized txs
     // for at least that long to re-fetch them for proving and failure upload. Operators may configure a
     // larger margin but not a smaller one.
-    if (config.enableProverNode) {
-      const proofSubmissionEpochs = await rollupContract.getProofSubmissionEpochs();
+    if (proofSubmissionEpochs !== undefined) {
       const proverRetentionFloorSlots = (proofSubmissionEpochs + 1) * Number(epochDuration);
       const configuredSlots = config.keepFinalizedTxsForSlots ?? 0;
       if (proverRetentionFloorSlots > configuredSlots) {
