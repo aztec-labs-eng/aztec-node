@@ -1,10 +1,13 @@
+import { sleep } from '../sleep/index.js';
 import { FifoMemoryQueue } from './fifo_memory_queue.js';
 import { PriorityMemoryQueue } from './priority_memory_queue.js';
 
-describe.each([
+const queueFactories = [
   ['FIFO', () => new FifoMemoryQueue<number>()],
   ['priority', () => new PriorityMemoryQueue<number>((a, b) => a - b)],
-] as const)('%s queue clear', (_name, createQueue) => {
+] as const;
+
+describe.each(queueFactories)('%s queue clear', (_name, createQueue) => {
   it('discards pending items and accepts new items', async () => {
     const queue = createQueue();
     queue.put(1);
@@ -34,10 +37,7 @@ describe.each([
   });
 });
 
-describe.each([
-  ['FIFO', () => new FifoMemoryQueue<number>()],
-  ['priority', () => new PriorityMemoryQueue<number>((a, b) => a - b)],
-] as const)('%s queue process', (_name, createQueue) => {
+describe.each(queueFactories)('%s queue process', (_name, createQueue) => {
   it('keeps consuming items after the handler throws', async () => {
     const queue = createQueue();
     queue.put(1);
@@ -52,6 +52,25 @@ describe.each([
         throw new Error('handler failure');
       }
     });
+
+    expect(seen).toEqual([1, 2, 3]);
+  });
+
+  it('keeps waiting for new items after an async handler rejects', async () => {
+    const queue = createQueue();
+    const seen: number[] = [];
+    const processing = queue.process(item => {
+      seen.push(item);
+      return item === 1 ? Promise.reject(new Error('handler failure')) : Promise.resolve();
+    });
+
+    queue.put(1);
+    // Let the rejection settle so the consumer is back to waiting before the next item arrives.
+    await sleep(0);
+    queue.put(2);
+    queue.put(3);
+    queue.end();
+    await processing;
 
     expect(seen).toEqual([1, 2, 3]);
   });
