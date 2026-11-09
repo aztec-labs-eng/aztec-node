@@ -40,25 +40,19 @@ export class TimeoutTask<T> {
     }
 
     const controller = new AbortController();
-    const interrupt = promiseWithResolvers<never>();
-    // Reject before aborting `fn`, so that a rejection from `fn`'s own abort handlers cannot win the race.
-    const onTimeout = () => {
-      try {
-        this.onAbort?.();
-        interrupt.reject(this.errorFn());
-      } catch (err) {
-        interrupt.reject(err);
-      } finally {
-        controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
-      }
-    };
-    const timer = setTimeout(onTimeout, this.timeout);
+    const timer = setTimeout(
+      () => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+      this.timeout,
+    );
     // Like `AbortSignal.timeout`, a pending timeout does not keep a Node process alive. Browsers have no `unref`.
     timer.unref?.();
 
     const executionTimer = new Timer();
     try {
-      return await Promise.race<T>([this.fn(controller.signal), interrupt.promise]);
+      return await execWithSignal(this.fn, controller.signal, () => {
+        this.onAbort?.();
+        return this.errorFn();
+      });
     } finally {
       clearTimeout(timer);
       this.totalTime = executionTimer.ms();
@@ -112,7 +106,10 @@ function defaultSignalError(signal: AbortSignal) {
   return new Error(signal.reason ? String(signal.reason) : 'Operation aborted');
 }
 
-/** Executes a function until it completes or the given signal aborts. */
+/**
+ * Executes a function until it completes or the given signal aborts. On abort, rejects with the error from `errorFn`, or
+ * with what `errorFn` throws, even when `fn` itself rejects from its own abort handler.
+ */
 export async function execWithSignal<T>(
   fn: (signal: AbortSignal) => Promise<T>,
   signal: AbortSignal,
@@ -123,7 +120,14 @@ export async function execWithSignal<T>(
   }
 
   const abortPromise = promiseWithResolvers<never>();
-  const abortListener = () => abortPromise.reject(errorFn(signal));
+  // Registered before `fn` gets the signal, so it runs before any abort handler of `fn`'s.
+  const abortListener = () => {
+    try {
+      abortPromise.reject(errorFn(signal));
+    } catch (err) {
+      abortPromise.reject(err);
+    }
+  };
   signal.addEventListener('abort', abortListener, { once: true });
 
   try {

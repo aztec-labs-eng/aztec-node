@@ -121,6 +121,21 @@ describe('timeout', () => {
     await expect(promise).rejects.toThrow('Aborted!');
   });
 
+  it('rejects with the error thrown by the error factory when the signal aborts', async () => {
+    const controller = new AbortController();
+    const promise = execWithSignal(
+      () => sleep(500),
+      controller.signal,
+      () => {
+        throw new Error('Factory failed');
+      },
+    );
+
+    controller.abort();
+
+    await expect(promise).rejects.toThrow('Factory failed');
+  });
+
   it('execs with AbortSignal.timeout', async () => {
     await expect(
       execWithSignal(
