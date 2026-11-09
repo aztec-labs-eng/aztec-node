@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { sleep } from '../sleep/index.js';
-import { execWithSignal, executeTimeout } from './timeout.js';
+import { TimeoutTask, execWithSignal, executeTimeout } from './timeout.js';
 
 describe('timeout', () => {
   it('execs within timeout', async () => {
@@ -42,6 +42,55 @@ describe('timeout', () => {
     expect(signal?.aborted).toBe(false);
     expect(abortCallbackRan).toBe(false);
     expect(errorCreated).toBe(false);
+  });
+
+  it('rejects with the custom error when the function rejects as soon as it is aborted', async () => {
+    const order: string[] = [];
+    const task = (signal: AbortSignal) =>
+      new Promise<string>((_, reject) =>
+        signal.addEventListener('abort', () => {
+          order.push('function');
+          reject(new Error('Aborted by function'));
+        }),
+      );
+    await expect(executeTimeout(task, 20, 'Timed out!', () => order.push('onAbort'))).rejects.toThrow('Timed out!');
+    expect(order).toEqual(['onAbort', 'function']);
+  });
+
+  it('rejects with the error thrown by the error factory', async () => {
+    const errorFn = () => {
+      throw new Error('Factory failed');
+    };
+    await expect(executeTimeout(() => sleep(500), 20, errorFn)).rejects.toThrow('Factory failed');
+  });
+
+  it('rejects with the error thrown by onAbort and still aborts the function', async () => {
+    const task = jest.fn<(signal: AbortSignal) => Promise<void>>(() => sleep(500));
+    const onAbort = () => {
+      throw new Error('onAbort failed');
+    };
+    await expect(executeTimeout(task, 20, 'Timed out!', onAbort)).rejects.toThrow('onAbort failed');
+    expect(task.mock.calls[0][0].aborted).toBe(true);
+  });
+
+  it('records the execution time when the function throws', async () => {
+    const task = new TimeoutTask(
+      () => sleep(50).then(() => Promise.reject(new Error('Failed'))),
+      1000,
+      () => new Error('Timed out!'),
+    );
+    await expect(task.exec()).rejects.toThrow('Failed');
+    expect(task.getTime()).toBeGreaterThanOrEqual(40);
+  });
+
+  it('records the execution time when the function times out', async () => {
+    const task = new TimeoutTask(
+      () => sleep(500),
+      50,
+      () => new Error('Timed out!'),
+    );
+    await expect(task.exec()).rejects.toThrow('Timed out!');
+    expect(task.getTime()).toBeGreaterThanOrEqual(40);
   });
 
   it('rejects if timeout is zero', async () => {
