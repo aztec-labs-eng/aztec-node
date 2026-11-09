@@ -89,16 +89,19 @@ describe('invalidate blocks test', () => {
   });
 
   /** Waits for a CheckpointProposed event */
-  const waitForCheckpointInvalidated = (timeoutSeconds: number) => {
+  const waitForCheckpointInvalidated = async (timeoutSeconds: number) => {
     logger.warn(`Waiting until a checkpoint is invalidated`);
     const promise = promiseWithResolvers<{ checkpointNumber: bigint }>();
     const unsubscribe = rollup.listenToCheckpointInvalidated(data => {
       logger.warn(`Checkpoint ${data.checkpointNumber} has been invalidated`, data);
-      unsubscribe();
       promise.resolve({ checkpointNumber: BigInt(data.checkpointNumber) });
     });
 
-    return withTimeout(promise.promise, timeoutSeconds * 1000);
+    try {
+      return await withTimeout(promise.promise, timeoutSeconds * 1000);
+    } finally {
+      unsubscribe();
+    }
   };
 
   it('posts an invalid block and next proposer invalidates it', async () => {

@@ -111,7 +111,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   });
 
   /** Resolves on the next CheckpointInvalidated event, ignoring any mined at or before the `after` event's block. */
-  function awaitCheckpointInvalidationEvent(
+  async function awaitCheckpointInvalidationEvent(
     waitSlots = 8,
     after?: Log,
   ): Promise<{ checkpointNumber: CheckpointNumber; event: Log }> {
@@ -120,15 +120,18 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       if (after !== undefined && event.blockNumber! <= after.blockNumber!) {
         return;
       }
-      unwatch();
       logger.warn(`Checkpoint ${checkpointNumber} has been invalidated`);
       promise.resolve({ checkpointNumber, event });
     });
-    return withTimeout(
-      promise.promise,
-      test.L2_SLOT_DURATION_IN_S * waitSlots * 1000,
-      'Waiting for CheckpointInvalidated event',
-    );
+    try {
+      return await withTimeout(
+        promise.promise,
+        test.L2_SLOT_DURATION_IN_S * waitSlots * 1000,
+        'Waiting for CheckpointInvalidated event',
+      );
+    } finally {
+      unwatch();
+    }
   }
 
   /**
@@ -270,14 +273,17 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       } else {
         expect(data.checkpointNumber).toEqual(lastInvalidatedCheckpointNumber);
         invalidatePromise.resolve();
-        unsubscribe();
       }
     });
-    await withTimeout(
-      invalidatePromise.promise,
-      1000 * test.L2_SLOT_DURATION_IN_S * 8,
-      'Waiting for two checkpoint invalidations',
-    );
+    try {
+      await withTimeout(
+        invalidatePromise.promise,
+        1000 * test.L2_SLOT_DURATION_IN_S * 8,
+        'Waiting for two checkpoint invalidations',
+      );
+    } finally {
+      unsubscribe();
+    }
 
     sequencers.forEach(sequencer => {
       sequencer.updateConfig(opts.disableConfig);

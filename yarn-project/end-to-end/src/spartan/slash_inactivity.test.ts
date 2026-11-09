@@ -96,7 +96,7 @@ describe('slash inactivity test', () => {
     // Log every slash vote event
     const proposer = await rollup.getSlashingProposer();
     assert(proposer, 'Expected slashing proposer');
-    proposer!.listenToVoteCast(
+    const unwatchVotes = proposer!.listenToVoteCast(
       args =>
         void (async () => {
           const vote = await proposer!.getLastVote(args.round).catch(() => undefined);
@@ -106,17 +106,21 @@ describe('slash inactivity test', () => {
 
     // Wait for a slash event for the given validator
     const promise = promiseWithResolvers<{ amount: bigint; attester: EthAddress }>();
-    const unsubscribe = rollup.listenToSlash(data => {
+    const unwatchSlashes = rollup.listenToSlash(data => {
       if (data.attester.equals(who)) {
         logger.warn(`Validator ${who.toString()} has been slashed for ${data.amount}`, data);
-        unsubscribe();
         promise.resolve(data);
       } else {
         logger.info(`Received slash event for other validator ${data.attester.toString()}`, data);
       }
     });
 
-    return withTimeout(promise.promise, timeoutSeconds * 1000);
+    try {
+      return await withTimeout(promise.promise, timeoutSeconds * 1000);
+    } finally {
+      unwatchVotes();
+      unwatchSlashes();
+    }
   };
 
   /** Computes total number of seconds to wait until a slash happens (considers slash offset, execution delay, and a +1 for good measure) */
