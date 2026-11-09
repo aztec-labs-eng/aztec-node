@@ -11,39 +11,59 @@ import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { buildSnapshotMetadata } from './build-snapshot-metadata.js';
 import { createBackups } from './create-backups.js';
 
 export type UploadSnapshotConfig = Pick<ChainConfig, 'l1ChainId' | 'rollupVersion'> &
   Pick<DataStoreConfig, 'dataDirectory'>;
 
-/**
- * Pauses the archiver and world state sync, creates backups of the archiver and world state lmdb environments,
- * and uploads them to the specified location. Location must be a URL supported by our file store (eg `gs://bucketname/path`).
- */
+/** Local database copies and frozen metadata, owned until asynchronous disposal removes the temporary files. */
+export interface CapturedSnapshot extends AsyncDisposable {
+  /** Publishes the captured data and its index entry to a URL supported by the file store. */
+  upload(location: string): Promise<void>;
+}
+
+/** Captures consistent database copies and metadata, resuming syncing before returning. Use with `await using`. */
+export async function captureSnapshot(
+  archiver: Archiver,
+  worldState: WorldStateSynchronizer,
+  config: UploadSnapshotConfig,
+  log: Logger,
+): Promise<CapturedSnapshot> {
+  const backupDir = await mkdtemp(join(config.dataDirectory ?? tmpdir(), 'snapshot-'));
+  const cleanup = async () => {
+    log.info(`Cleaning up backup dir ${backupDir}`, { backupDir });
+    await tryRmDir(backupDir, log);
+  };
+
+  try {
+    const { paths, metadata } = await createBackups(backupDir, archiver, worldState, config, log);
+    const versions = { archiver: ARCHIVER_DB_VERSION, worldState: WORLD_STATE_DB_VERSION };
+    return {
+      async upload(location: string): Promise<void> {
+        const store = await createFileStore(location);
+        if (!store) {
+          throw new Error(`Failed to create file store for snapshot upload for location ${location}.`);
+        }
+        log.info(`Uploading snapshot to ${location}`, { snapshot: metadata });
+        const snapshot = await uploadSnapshotToIndex(paths, versions, metadata, store);
+        log.info(`Snapshot uploaded successfully`, { snapshot });
+      },
+      [Symbol.asyncDispose]: cleanup,
+    };
+  } catch (err) {
+    await cleanup();
+    throw err;
+  }
+}
+
+/** Captures and publishes a snapshot, removing local copies on success or failure. */
 export async function uploadSnapshot(
   location: string,
   archiver: Archiver,
   worldState: WorldStateSynchronizer,
   config: UploadSnapshotConfig,
   log: Logger,
-) {
-  const store = await createFileStore(location);
-  if (!store) {
-    throw new Error(`Failed to create file store for snapshot upload for location ${location}.`);
-  }
-
-  const backupDir = await mkdtemp(join(config.dataDirectory ?? tmpdir(), 'snapshot-'));
-
-  try {
-    const paths = await createBackups(backupDir, archiver, worldState, log);
-    const versions = { archiver: ARCHIVER_DB_VERSION, worldState: WORLD_STATE_DB_VERSION };
-    const metadata = await buildSnapshotMetadata(archiver, config);
-    log.info(`Uploading snapshot to ${location}`, { snapshot: metadata });
-    const snapshot = await uploadSnapshotToIndex(paths, versions, metadata, store);
-    log.info(`Snapshot uploaded successfully`, { snapshot });
-  } finally {
-    log.info(`Cleaning up backup dir ${backupDir}`);
-    await tryRmDir(backupDir, log);
-  }
+): Promise<void> {
+  await using snapshot = await captureSnapshot(archiver, worldState, config, log);
+  await snapshot.upload(location);
 }

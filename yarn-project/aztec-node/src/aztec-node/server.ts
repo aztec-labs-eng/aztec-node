@@ -24,7 +24,7 @@ import { count } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
-import { uploadSnapshot } from '@aztec-labs/node-lib/actions';
+import { captureSnapshot } from '@aztec-labs/node-lib/actions';
 import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getSetupAllowList } from '@aztec-labs/p2p';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import type { ProverNode } from '@aztec-labs/prover-node';
@@ -75,6 +75,7 @@ import type {
   GetTxByHashOptions,
   PeerInfo,
   ProposalsForSlot,
+  SnapshotUploadStatus,
 } from '@aztec-labs/stdlib/interfaces/client';
 import { AztecNodeAdminConfigSchema } from '@aztec-labs/stdlib/interfaces/client';
 import {
@@ -115,6 +116,7 @@ import {
   trackSpan,
 } from '@aztec-labs/telemetry-client';
 import { NodeKeystoreAdapter, ValidatorClient } from '@aztec-labs/validator-client';
+import { randomUUID } from 'node:crypto';
 
 import { NodeBlockProvider } from '../modules/node_block_provider.js';
 import { NodeLogsProvider } from '../modules/node_logs_provider.js';
@@ -126,6 +128,7 @@ import type { AztecNodeConfig } from './config.js';
 import { type NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { NodeMetrics } from './node_metrics.js';
 import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
+import { SnapshotUploads } from './snapshot_uploads.js';
 
 /**
  * Fully-constructed collaborators and settings an {@link AztecNodeService} owns. Built by `createAztecNodeService`
@@ -175,8 +178,7 @@ export interface AztecNodeServiceDeps {
  */
 export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDebug, Traceable {
   private metrics: NodeMetrics;
-  // Prevent two snapshot operations to happen simultaneously
-  private isUploadingSnapshot = false;
+  private readonly snapshotUploads = new SnapshotUploads();
   // Saved minTxsPerBlock used by `pauseSequencer` to restore production-sequencer config on resume.
   private sequencerPausedMinTxsPerBlock: number | undefined;
   private readonly nodePublicCallsSimulator: NodePublicCallsSimulator;
@@ -975,7 +977,14 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     );
   }
 
-  public async startSnapshotUpload(location: string): Promise<void> {
+  public getSnapshotUploadStatus(operationId: string): Promise<SnapshotUploadStatus> {
+    return Promise.resolve(this.snapshotUploads.get(operationId));
+  }
+
+  public async startSnapshotUpload(location: string, operationId = randomUUID()): Promise<void> {
+    if (this.snapshotUploads.has(operationId, location)) {
+      return;
+    }
     // Note that we are forcefully casting the blocksource as an archiver
     // We break support for archiver running remotely to the node
     const archiver = this.blockSource as Archiver;
@@ -997,26 +1006,24 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
       throw new Error(`Archiver has no latest L2 block hash downloaded. Cannot start snapshot.`);
     }
 
-    if (this.isUploadingSnapshot) {
-      this.metrics.recordSnapshotError();
-      throw new Error(`Snapshot upload already in progress. Cannot start another one until complete.`);
-    }
-
-    // Do not wait for the upload to be complete to return to the caller, but flag that an operation is in progress
-    this.isUploadingSnapshot = true;
-    const timer = new Timer();
-    void uploadSnapshot(location, this.blockSource as Archiver, this.worldStateSynchronizer, this.config, this.log)
-      .then(() => {
-        this.isUploadingSnapshot = false;
+    try {
+      this.snapshotUploads.start(operationId, location, async () => {
+        const timer = new Timer();
+        try {
+          await using snapshot = await captureSnapshot(archiver, this.worldStateSynchronizer, this.config, this.log);
+          this.snapshotUploads.markUploading(operationId);
+          await snapshot.upload(location);
+        } catch (err) {
+          this.metrics.recordSnapshotError();
+          this.log.error('Error uploading snapshot', { operationId, location, err });
+          throw err;
+        }
         this.metrics.recordSnapshot(timer.ms());
-      })
-      .catch(err => {
-        this.isUploadingSnapshot = false;
-        this.metrics.recordSnapshotError();
-        this.log.error(`Error uploading snapshot: ${err}`);
       });
-
-    return Promise.resolve();
+    } catch (err) {
+      this.metrics.recordSnapshotError();
+      throw err;
+    }
   }
 
   public async rollbackTo(targetBlock: BlockNumber, force?: boolean, resumeSync = true): Promise<void> {
