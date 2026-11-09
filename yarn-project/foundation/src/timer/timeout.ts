@@ -2,6 +2,9 @@ import { TimeoutError } from '../error/index.js';
 import { promiseWithResolvers } from '../promise/utils.js';
 import { Timer } from './timer.js';
 
+/** Longest delay `setTimeout` honours; it fires larger ones almost at once. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
 /**
  * TimeoutTask class creates an instance for managing and executing a given asynchronous function with a specified timeout duration.
  * The task will be automatically interrupted if it exceeds the given timeout duration, and will throw a custom error message.
@@ -30,8 +33,12 @@ export class TimeoutTask<T> {
    * @throws An error with a message indicating the function was interrupted due to exceeding the specified timeout.
    */
   public async exec() {
-    const timeoutSignal = AbortSignal.timeout(this.timeout);
-    // `fn` gets its own signal so that the timeout firing after `fn` settles cannot abort it.
+    if (!Number.isInteger(this.timeout) || this.timeout < 0 || this.timeout > MAX_TIMEOUT_MS) {
+      throw new RangeError(
+        `The value of "timeout" is out of range. It must be an integer >= 0 && <= ${MAX_TIMEOUT_MS}. Received ${this.timeout}`,
+      );
+    }
+
     const controller = new AbortController();
     const interrupt = promiseWithResolvers<never>();
     // Reject before aborting `fn`, so that a rejection from `fn`'s own abort handlers cannot win the race.
@@ -42,16 +49,18 @@ export class TimeoutTask<T> {
       } catch (err) {
         interrupt.reject(err);
       } finally {
-        controller.abort(timeoutSignal.reason);
+        controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
       }
     };
-    timeoutSignal.addEventListener('abort', onTimeout, { once: true });
+    const timer = setTimeout(onTimeout, this.timeout);
+    // Like `AbortSignal.timeout`, a pending timeout does not keep a Node process alive. Browsers have no `unref`.
+    timer.unref?.();
 
     const executionTimer = new Timer();
     try {
       return await Promise.race<T>([this.fn(controller.signal), interrupt.promise]);
     } finally {
-      timeoutSignal.removeEventListener('abort', onTimeout);
+      clearTimeout(timer);
       this.totalTime = executionTimer.ms();
     }
   }
