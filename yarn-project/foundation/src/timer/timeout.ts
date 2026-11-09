@@ -11,7 +11,6 @@ import { Timer } from './timer.js';
  */
 export class TimeoutTask<T> {
   private totalTime = 0;
-  private timeoutPromise: Promise<never> | undefined;
 
   constructor(
     private fn: (signal: AbortSignal) => Promise<T>,
@@ -47,7 +46,6 @@ export class TimeoutTask<T> {
       }
     };
     timeoutSignal.addEventListener('abort', onTimeout, { once: true });
-    this.timeoutPromise = interrupt.promise;
 
     const executionTimer = new Timer();
     try {
@@ -56,17 +54,6 @@ export class TimeoutTask<T> {
       timeoutSignal.removeEventListener('abort', onTimeout);
       this.totalTime = executionTimer.ms();
     }
-  }
-
-  /**
-   * Returns the interrupt promise associated with the TimeoutTask instance.
-   * The interrupt promise is used internally to reject the task when a timeout occurs.
-   * This method can be helpful when debugging or tracking the state of the task.
-   *
-   * @returns The interrupt promise associated with the task.
-   */
-  public getInterruptPromise() {
-    return this.timeoutPromise;
   }
 
   /**
