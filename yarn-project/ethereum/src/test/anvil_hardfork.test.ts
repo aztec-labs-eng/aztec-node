@@ -21,7 +21,7 @@ describe('anvil_hardfork', () => {
     });
 
     it('fails instead of skipping when the installed anvil cannot run the hardfork', async () => {
-      await expect(assertAnvilSupportsHardfork('not-a-hardfork')).rejects.toThrow(/foundry >= 1\.8\.5 is required/);
+      await expect(assertAnvilSupportsHardfork('not-a-hardfork')).rejects.toThrow(/foundry >= 1\.9\.0 is required/);
     }, 60_000);
   });
 

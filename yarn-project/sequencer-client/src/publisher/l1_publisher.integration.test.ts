@@ -145,17 +145,9 @@ const numberOfConsecutiveBlocks = 3;
 
 jest.setTimeout(1000000);
 
-/**
- * Asserts a sent tx's gas limit stays within the affordability gas constant, except on Amsterdam anvil. Anvil 1.8.5
- * prices storage writes under `--hardfork amsterdam` with the Amsterdam repricing in `eth_simulateV1` only, while
- * `eth_estimateGas` and execution charge the pre-fork cost, so the limit the bundle simulator derives is several
- * times the gas the receipt reports (ten fresh SSTOREs simulate at 1.1M gas and mine at 242k). The gas used
- * assertions still apply on both forks.
- */
+/** Asserts a sent tx's gas limit stays within the affordability gas constant, on both L1 forks. */
 function expectGasLimitWithin(gasLimit: bigint, max: bigint) {
-  if (!isAmsterdamTestRun()) {
-    expect(gasLimit).toBeLessThanOrEqual(max);
-  }
+  expect(gasLimit).toBeLessThanOrEqual(max);
 }
 
 /** A lookup's committee, or undefined when it has no members. */
