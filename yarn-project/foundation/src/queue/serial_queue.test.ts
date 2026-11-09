@@ -71,17 +71,28 @@ describe('SerialQueue cancel', () => {
   it('lets the running function finish and rejects the ones that had not started', async () => {
     const queue = new SerialQueue();
     queue.start();
+    const started = promiseWithResolvers<void>();
     const release = promiseWithResolvers<void>();
-    const running = queue.put(() => release.promise.then(() => 'done'));
-    const queued = queue.put(() => 'never runs');
+    const running = queue.put(async () => {
+      started.resolve();
+      await release.promise;
+      return 'done';
+    });
+    let queuedRan = false;
+    const queued = queue.put(() => {
+      queuedRan = true;
+    });
+    await started.promise;
 
     const cancelled = queue.cancel();
-    release.resolve();
-
-    await expect(running).resolves.toEqual('done');
     await expect(settlement(queued)).resolves.toEqual('rejected');
     await expect(queued).rejects.toThrow(AbortError);
+    await expect(settlement(cancelled)).resolves.toEqual('pending');
+
+    release.resolve();
+    await expect(running).resolves.toEqual('done');
     await cancelled;
+    expect(queuedRan).toBe(false);
   });
 
   it('rejects functions put before the queue was started', async () => {
