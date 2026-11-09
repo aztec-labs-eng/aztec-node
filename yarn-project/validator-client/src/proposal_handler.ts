@@ -1181,8 +1181,9 @@ export class ProposalHandler {
     const l1ToL2Messages = bundle.bundle;
     const { txs, missingTxs } = collected;
 
-    // Record the tx-collection outcome on the re-execution tracker
-    this.reexecutionTracker.recordTxsCollected(slotNumber, proposal.indexWithinCheckpoint, missingTxs.length === 0);
+    if (missingTxs.length === 0) {
+      this.reexecutionTracker.recordTxsCollected(slotNumber, proposal.txHashes);
+    }
 
     // If reexecution is disabled, bail. We were just interested in triggering tx collection.
     if (!shouldReexecute) {
