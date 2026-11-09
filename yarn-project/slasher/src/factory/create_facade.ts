@@ -44,6 +44,9 @@ export async function createSlasherFacade(
   const cacheKey = `registeredSlot:${l1Contracts.rollupAddress}`;
   let rollupRegisteredAtL2Slot = (await settingsMap.getAsync(cacheKey)) as SlotNumber | undefined;
 
+  // The registration slot anchors the upgrade grace period. This lookup requires Registry logs from Rollup deployment
+  // even after restoring an archiver snapshot. A missing event currently falls back to slot zero, including when an RPC
+  // silently returns empty logs for pruned history.
   if (rollupRegisteredAtL2Slot === undefined) {
     const registry = new RegistryContract(l1Client, l1Contracts.registryAddress);
     const l1StartBlock = await rollup.getL1StartBlock();
