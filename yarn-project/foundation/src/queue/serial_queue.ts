@@ -13,9 +13,9 @@ type QueuedFn = {
  *
  * Use this to keep async operations from interleaving (e.g. a read-modify-write on shared state) instead of a hand-rolled
  * `isRunning` flag or promise chain. `put(fn)` resolves or rejects with `fn`'s own result. Functions put before `start()`
- * wait in the queue until it is called. `end()` drains the queue, while `cancel()` drops whatever has not started and
- * rejects those callers' `put` promises with an `AbortError`; both wait for the function in flight. For a bounded queue
- * that applies backpressure, see `BoundedSerialQueue`; to cap concurrency at more than one, see `Semaphore`.
+ * wait in the queue until it is called. `end()` drains the queue, while `cancel()` drops whatever is still queued and
+ * rejects those callers' `put` promises with an `AbortError`; both wait for the functions in flight. For a bounded
+ * queue that applies backpressure, see `BoundedSerialQueue`; to cap concurrency at more than one, see `Semaphore`.
  *
  * @example
  * private readonly queue = new SerialQueue();
@@ -56,22 +56,19 @@ export class SerialQueue {
   }
 
   /**
-   * Cancels the processing of the remaining functions in the serial queue. Functions that are already running are
-   * left to finish. Enqueued functions that have not started are discarded, and the promises returned by their `put`
-   * calls reject with an {@link AbortError}. The queue accepts no new functions after cancellation: later `put` calls
-   * reject.
+   * Cancels the processing of the remaining functions in the serial queue. Functions already handed to a worker are
+   * left to finish. That includes a function put while a worker was idle: the worker takes it at once, so it runs even
+   * if it has not started by the time `cancel()` is called. Functions still waiting in the queue are discarded, and the
+   * promises returned by their `put` calls reject with an {@link AbortError}. The queue accepts no new functions after
+   * cancellation: later `put` calls reject.
    *
-   * @returns A promise which resolves when the functions running at the time of cancellation (if any) complete.
+   * @returns A promise which resolves when the functions handed to a worker before cancellation (if any) complete.
    */
   public cancel() {
-    const discarded: QueuedFn[] = [];
     for (let fn = this.queue.getImmediate(); fn !== undefined; fn = this.queue.getImmediate()) {
-      discarded.push(fn);
-    }
-    this.queue.cancel();
-    for (const fn of discarded) {
       fn.reject(new AbortError('Serial queue was cancelled before the function ran'));
     }
+    this.queue.cancel();
     return Promise.all(this.runningPromises).then(() => {});
   }
 
@@ -91,7 +88,7 @@ export class SerialQueue {
    * Returns the result of the function after execution.
    * @param fn - The function to enqueue.
    * @returns A resolution promise. Rejects if the function does, if the function could not be enqueued, or with an
-   * {@link AbortError} if the queue is cancelled before the function starts.
+   * {@link AbortError} if the queue is cancelled while the function is still waiting in it.
    */
   public put<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
     return new Promise((resolve, reject) => {
