@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Prover nodes reject insufficient rolling `WS_HISTORY_RETENTION`
+
+Prover nodes previously accepted rolling world-state retention shorter than the proof submission window, which could prune checkpoints still needed for proving after another prover's proof finalized. Startup now rejects `rolling:N` when N is less than `(proofSubmissionEpochs + 1) * epochDuration`, using the rollup's on-chain parameters. Non-prover nodes and archive or pinned retention are unchanged.
+
+**Migration**: if startup rejects your retention setting, increase `WS_HISTORY_RETENTION` to the minimum printed in the error or use `archive`. This also applies to rolling retention configured through the deprecated `WS_NUM_HISTORIC_CHECKPOINTS` and `WS_NUM_HISTORIC_BLOCKS` variables. Increasing retention does not restore history already pruned; rebuild the world-state database if required checkpoints are missing.
+
 ### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 
 A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
