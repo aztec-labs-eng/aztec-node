@@ -13,30 +13,41 @@ describe('timeout', () => {
   it('rejects with custom error on timeout', async () => {
     const task = jest.fn<(signal: AbortSignal) => Promise<string>>(() => sleep(500).then(() => 'ok'));
     await expect(executeTimeout(task, 200, 'Timed out!')).rejects.toThrow('Timed out!');
-    expect(task.mock.calls[0][0].aborted).toEqual(true);
+    const signal = task.mock.calls[0][0];
+    expect(signal.aborted).toEqual(true);
+    expect(signal.reason.name).toEqual('TimeoutError');
   });
 
-  it('has no effect once the function has settled', async () => {
+  it.each<{ name: string; settle: () => Promise<string>; outcome: string }>([
+    { name: 'resolves', settle: () => Promise.resolve('ok'), outcome: 'ok' },
+    { name: 'rejects', settle: () => Promise.reject(new Error('Failed')), outcome: 'Failed' },
+    {
+      name: 'throws synchronously',
+      settle: () => {
+        throw new Error('Failed');
+      },
+      outcome: 'Failed',
+    },
+  ])('has no effect once the function $name', async ({ settle, outcome }) => {
     let signal: AbortSignal | undefined;
     let abortCallbackRan = false;
     let errorCreated = false;
 
-    await expect(
-      executeTimeout(
-        s => {
-          signal = s;
-          return Promise.resolve('ok');
-        },
-        50,
-        () => {
-          errorCreated = true;
-          return new Error('Timed out!');
-        },
-        () => {
-          abortCallbackRan = true;
-        },
-      ),
-    ).resolves.toEqual('ok');
+    const result = await executeTimeout(
+      s => {
+        signal = s;
+        return settle();
+      },
+      50,
+      () => {
+        errorCreated = true;
+        return new Error('Timed out!');
+      },
+      () => {
+        abortCallbackRan = true;
+      },
+    ).catch((err: Error) => err.message);
+    expect(result).toEqual(outcome);
 
     await sleep(150);
     expect(signal?.aborted).toBe(false);
@@ -65,12 +76,19 @@ describe('timeout', () => {
   });
 
   it('rejects with the error thrown by onAbort and still aborts the function', async () => {
-    const task = jest.fn<(signal: AbortSignal) => Promise<void>>(() => sleep(500));
+    let functionAborted = false;
+    const task = (signal: AbortSignal) =>
+      new Promise<void>(resolve =>
+        signal.addEventListener('abort', () => {
+          functionAborted = true;
+          resolve();
+        }),
+      );
     const onAbort = () => {
       throw new Error('onAbort failed');
     };
     await expect(executeTimeout(task, 20, 'Timed out!', onAbort)).rejects.toThrow('onAbort failed');
-    expect(task.mock.calls[0][0].aborted).toBe(true);
+    expect(functionAborted).toBe(true);
   });
 
   it('records the execution time when the function throws', async () => {
