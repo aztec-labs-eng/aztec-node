@@ -35,10 +35,11 @@ export class TimeoutTask<T> {
     // `fn` gets its own signal so that the timeout firing after `fn` settles cannot abort it.
     const controller = new AbortController();
     const interrupt = promiseWithResolvers<never>();
+    // Reject before aborting `fn`, so that a rejection from `fn`'s own abort handlers cannot win the race.
     const onTimeout = () => {
-      controller.abort(timeoutSignal.reason);
       this.onAbort?.();
       interrupt.reject(this.errorFn());
+      controller.abort(timeoutSignal.reason);
     };
     timeoutSignal.addEventListener('abort', onTimeout, { once: true });
     this.timeoutPromise = interrupt.promise;
