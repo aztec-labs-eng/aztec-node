@@ -197,6 +197,8 @@ export class ArchiverDataStoreUpdater {
    * @param pendingChainValidationStatus - Optional validation status to set.
    * @param promoteProposed - Optional proposed checkpoint to promote, published with the L1 data and attestations L1
    * carries for it (fast path when blocks are already local).
+   * @param evictProposedFrom - First divergent proposed checkpoint to evict. Blocks beyond the surviving checkpoint
+   * frontier are pruned along with their logs and contract data.
    * @returns Result with information about any pruned blocks.
    */
   public async addCheckpoints(
@@ -218,7 +220,8 @@ export class ArchiverDataStoreUpdater {
     await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));
     const result = await this.stores.db.transactionAsync(async () => {
       // Before adding checkpoints, check for conflicts with local blocks if any
-      const { prunedBlocks, lastAlreadyInsertedBlockNumber } = await this.pruneMismatchingLocalBlocks(checkpoints);
+      const reconciliation = await this.pruneMismatchingLocalBlocks(checkpoints);
+      const { lastAlreadyInsertedBlockNumber } = reconciliation;
 
       const insertedCheckpoints = await this.stores.blocks.addCheckpoints(checkpoints);
 
@@ -246,13 +249,19 @@ export class ArchiverDataStoreUpdater {
               promoteProposed.checkpoint.archive.root,
             )
           : undefined,
-        // Evict pending checkpoints that diverged from what L1 mined
-        evictProposedFrom !== undefined
-          ? this.stores.blocks.evictProposedCheckpointsFrom(evictProposedFrom)
-          : undefined,
       ]);
 
-      return { prunedBlocks, lastAlreadyInsertedBlockNumber };
+      // Evict pending checkpoints that diverged from what L1 mined
+      if (evictProposedFrom !== undefined) {
+        await this.stores.blocks.evictProposedCheckpointsFrom(evictProposedFrom);
+        const lastCheckpointBlockNumber = await this.stores.blocks.getProposedCheckpointL2BlockNumber();
+        const evictedBlocks = await this.removeBlocksAfter(lastCheckpointBlockNumber);
+        if (evictedBlocks.length > 0) {
+          reconciliation.prunedBlocks = [...(reconciliation.prunedBlocks ?? []), ...evictedBlocks];
+        }
+      }
+
+      return reconciliation;
     });
     await this.l2FrontierCache?.refresh();
     return result;
