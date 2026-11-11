@@ -89,11 +89,15 @@ type PruneAbandonedBlocksRequest = {
 };
 
 export type ArchiverDeps = {
+  /** The process's shared L1 public client, used for every L1 read. */
+  l1Client: ViemPublicClient;
+  /** Client for debug and trace calls: one over the debug RPC URLs when there are any, else `l1Client` itself. */
+  l1DebugClient: ViemPublicDebugClient;
   telemetry?: TelemetryClient;
   blobClient: BlobClientInterface;
   /** Live rollup fee settings, for the mana limit checkpoints synced from L1 are checked against. */
   feeConfigProvider: RollupFeeConfigProvider;
-  epochCache?: EpochCache;
+  epochCache: EpochCache;
   dateProvider?: DateProvider;
 };
 
