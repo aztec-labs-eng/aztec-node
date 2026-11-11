@@ -160,6 +160,20 @@ describe('BatchChonkVerifier', () => {
     expect(results.map(r => r.valid)).toEqual([true, true, true, true]);
   });
 
+  it('stops, rejecting the proofs in flight, when bb never answers the stop request', async () => {
+    const verifier = verifierOver({
+      chonkBatchVerifierQueue: () => Promise.resolve({}),
+      chonkBatchVerifierStop: () => new Promise(() => {}),
+      destroy: () => Promise.resolve(),
+    });
+    const verification = verifier.enqueueProof(0, proofFields);
+    const rejection = expect(verification).rejects.toThrow(/BatchChonkVerifier chonkBatchVerifierStop timed out/);
+
+    await verifier.stop();
+
+    await rejection;
+  }, 20_000);
+
   it('rejects a proof waiting for room when the verifier fails', async () => {
     const verifier = verifierOver({ chonkBatchVerifierQueue: () => Promise.resolve({}) });
     const inFlight = times(MAX_PROOFS_IN_FLIGHT, () => verifier.enqueueProof(0, proofFields).catch(() => {}));
