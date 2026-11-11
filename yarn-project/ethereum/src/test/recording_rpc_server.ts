@@ -14,8 +14,9 @@ export type RecordingRpcServer = {
 /**
  * Starts a JSON-RPC server that records the method of every request it receives, so tests can assert on what a
  * client actually put on the wire. Requests are forwarded to `forwardTo` when given. Otherwise, when `answer` is
- * given, its return value is sent as the `result` of each request (`null` included). Without either, the server
- * answers `eth_chainId` with the anvil chain id and rejects anything else.
+ * given, its return value (awaited) is sent as the `result` of each request (`null` included), and an error it throws
+ * is sent as a JSON-RPC error. Without either, the server answers `eth_chainId` with the anvil chain id and rejects
+ * anything else.
  */
 export async function startRecordingRpcServer(
   opts: { forwardTo?: string; answer?: (method: string) => unknown } = {},
@@ -49,11 +50,19 @@ export async function startRecordingRpcServer(
         }
 
         const id = (requests[0] as { id?: number } | undefined)?.id ?? 1;
-        const result = opts.answer
-          ? { jsonrpc: '2.0', id, result: opts.answer(methods[methods.length - 1]) ?? null }
-          : methods[methods.length - 1] === 'eth_chainId'
-            ? { jsonrpc: '2.0', id, result: '0x7a69' }
-            : { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not handled by test server' } };
+        const method = (requests[0] as { method?: string } | undefined)?.method ?? '';
+        let result: object;
+        if (opts.answer) {
+          try {
+            result = { jsonrpc: '2.0', id, result: (await opts.answer(method)) ?? null };
+          } catch (err) {
+            result = { jsonrpc: '2.0', id, error: { code: -32000, message: String(err) } };
+          }
+        } else if (method === 'eth_chainId') {
+          result = { jsonrpc: '2.0', id, result: '0x7a69' };
+        } else {
+          result = { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not handled by test server' } };
+        }
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(result));
       })();

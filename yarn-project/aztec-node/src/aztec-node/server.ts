@@ -149,6 +149,8 @@ export interface AztecNodeServiceDeps {
   slasherClient: SlasherClientInterface | undefined;
   validatorsSentinel: Sentinel | undefined;
   stopStartedWatchers: () => Promise<void>;
+  /** Graders of the node's L1 RPC URLs and L1 debug RPC URLs, for the lists that run one. Stopped with the node. */
+  l1RpcGraders?: { stop(): Promise<void> }[];
   l1ChainId: number;
   version: number;
   globalVariableBuilder: GlobalVariableBuilderInterface;
@@ -203,6 +205,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   protected readonly slasherClient: SlasherClientInterface | undefined;
   protected readonly validatorsSentinel: Sentinel | undefined;
   private readonly stopStartedWatchers: () => Promise<void>;
+  private readonly l1RpcGraders: { stop(): Promise<void> }[];
   protected readonly l1ChainId: number;
   protected readonly version: number;
   protected readonly globalVariableBuilder: GlobalVariableBuilderInterface;
@@ -236,6 +239,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.slasherClient = deps.slasherClient;
     this.validatorsSentinel = deps.validatorsSentinel;
     this.stopStartedWatchers = deps.stopStartedWatchers;
+    this.l1RpcGraders = deps.l1RpcGraders ?? [];
     this.l1ChainId = deps.l1ChainId;
     this.version = deps.version;
     this.globalVariableBuilder = deps.globalVariableBuilder;
@@ -659,6 +663,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     await tryStop(this.worldStateSynchronizer);
     await tryStop(this.blockSource);
     await tryStop(this.blobClient);
+    for (const grader of this.l1RpcGraders) {
+      await tryStop(grader);
+    }
     await tryStop(this.telemetry);
     this.log.info(`Stopped Aztec Node`);
   }
