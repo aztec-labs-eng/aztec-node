@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### Snapshot upload status through the admin API
+### Snapshot upload status through the admin API (`aztecAdmin_getSnapshotUploadStatus`) ([#713](https://github.com/aztec-labs-eng/aztec-node/pull/713))
 
 `aztecAdmin_startSnapshotUpload(location, operationId?)` now accepts an optional caller-generated UUID.
 Poll `aztecAdmin_getSnapshotUploadStatus(operationId)` for `capturing`, `uploading`, `succeeded`, or `failed`
