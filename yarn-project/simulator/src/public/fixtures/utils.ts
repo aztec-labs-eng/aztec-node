@@ -222,10 +222,15 @@ export async function addNewContractClassToTx(
   tx.contractClassLogFields.push(logFields);
 }
 
+/**
+ * Publishes a contract instance in the tx. A tx with public calls gets it in its revertible half unless `revertible` is
+ * false.
+ */
 export async function addNewContractInstanceToTx(
   tx: Tx,
   contractInstance: ContractInstanceWithAddress,
   skipNullifierInsertion = false,
+  revertible = true,
 ) {
   // Only ivpk_m is broadcast as a point (x, y); the other five keys are hashes.
   const publicKeysAsFields = [
@@ -258,7 +263,11 @@ export async function addNewContractInstanceToTx(
     contractInstance.address.toField(),
   );
 
-  const accumulatedData = tx.data.forPublic ? tx.data.forPublic!.revertibleAccumulatedData : tx.data.forRollup!.end;
+  const accumulatedData = tx.data.forPublic
+    ? revertible
+      ? tx.data.forPublic.revertibleAccumulatedData
+      : tx.data.forPublic.nonRevertibleAccumulatedData
+    : tx.data.forRollup!.end;
   if (!skipNullifierInsertion) {
     const nextNullifierIndex = countAccumulatedItems(accumulatedData.nullifiers);
     accumulatedData.nullifiers[nextNullifierIndex] = contractAddressNullifier;
