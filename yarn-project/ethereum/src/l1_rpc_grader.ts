@@ -1,3 +1,4 @@
+import { partition } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { executeTimeout } from '@aztec-labs/foundation/timer';
@@ -6,10 +7,10 @@ import type { L1RpcGraderConfig } from './l1_reader.js';
 
 /** Queries the grader sends to a single L1 RPC URL, identified by its index in the configured list. */
 export type L1RpcProbes = {
-  /** Returns the latest block number the URL reports. */
-  getBlockNumber(index: number): Promise<bigint>;
-  /** Returns the chain id the URL reports. */
-  getChainId(index: number): Promise<number>;
+  /** Returns the latest block number the URL reports. The signal aborts the request when the probe times out. */
+  getBlockNumber(index: number, signal: AbortSignal): Promise<bigint>;
+  /** Returns the chain id the URL reports. The signal aborts the request when the probe times out. */
+  getChainId(index: number, signal: AbortSignal): Promise<number>;
 };
 
 /** Options for {@link L1RpcGrader}. */
@@ -62,7 +63,7 @@ class SampleWindow {
 
 type UrlState = {
   /** Whether the URL reported the expected chain id. Checked until a probe succeeds, then never again. */
-  chain: 'unchecked' | 'ok' | 'mismatch';
+  chain: 'unchecked' | 'ok' | 'wrong-chain';
   /** Recent samples, where both lagging and failed probes count as bad. */
   samples: SampleWindow;
   /** Blocks behind the head in the URL's last successful probe. A failed probe leaves it as it was. */
@@ -90,7 +91,7 @@ export class L1RpcGrader {
   private readonly states: UrlState[];
   private order: readonly number[];
   private readonly loop: RunningPromise;
-  private allDemoted = false;
+  private wasNoneEligible = false;
   private head = -1n;
   private readonly log: Logger;
 
@@ -178,15 +179,15 @@ export class L1RpcGrader {
 
   private async probe(index: number): Promise<ProbeResult> {
     const state = this.states[index];
-    if (state.chain === 'mismatch') {
+    if (state.chain === 'wrong-chain') {
       return { type: 'wrong-chain' };
     }
     const timeout = this.opts.config.l1RpcGraderProbeTimeoutMS;
     try {
       if (state.chain === 'unchecked') {
-        const chainId = await executeTimeout(() => this.probes.getChainId(index), timeout);
+        const chainId = await executeTimeout(signal => this.probes.getChainId(index, signal), timeout);
         if (chainId !== this.opts.chainId) {
-          state.chain = 'mismatch';
+          state.chain = 'wrong-chain';
           this.log.error(`L1 RPC URL ${this.describe(index)} is on the wrong chain and will not be used`, {
             url: this.describe(index),
             chainId,
@@ -196,7 +197,10 @@ export class L1RpcGrader {
         }
         state.chain = 'ok';
       }
-      return { type: 'ok', blockNumber: await executeTimeout(() => this.probes.getBlockNumber(index), timeout) };
+      return {
+        type: 'ok',
+        blockNumber: await executeTimeout(signal => this.probes.getBlockNumber(index, signal), timeout),
+      };
     } catch {
       // Probe errors are not logged: viem includes the full URL, API key and all, in its error messages.
       return { type: 'unreachable' };
@@ -209,14 +213,13 @@ export class L1RpcGrader {
 
   private updateOrder(): void {
     const all = this.urls.map((_, index) => index);
-    const usable = all.filter(index => this.states[index].chain !== 'mismatch');
-    const healthy = usable.filter(index => !this.isDemoted(index));
-    const demoted = usable.filter(index => this.isDemoted(index));
+    const usable = all.filter(index => this.states[index].chain !== 'wrong-chain');
+    const [demoted, healthy] = partition(usable, index => this.isDemoted(index));
     const eligible = this.opts.config.l1RpcGraderKeepDemoted ? [...healthy, ...demoted] : healthy;
 
-    const allDemoted = eligible.length === 0;
-    const order = allDemoted ? usable : eligible;
-    if (allDemoted && !this.allDemoted) {
+    const noneEligible = eligible.length === 0;
+    const order = noneEligible ? usable : eligible;
+    if (noneEligible && !this.wasNoneEligible) {
       if (usable.length === 0) {
         this.log.error('Every L1 RPC URL is on the wrong chain, so L1 requests will fail', {
           expectedChainId: this.opts.chainId,
@@ -227,7 +230,7 @@ export class L1RpcGrader {
         });
       }
     }
-    this.allDemoted = allDemoted;
+    this.wasNoneEligible = noneEligible;
 
     if (order.length === this.order.length && order.every((index, i) => index === this.order[i])) {
       return;

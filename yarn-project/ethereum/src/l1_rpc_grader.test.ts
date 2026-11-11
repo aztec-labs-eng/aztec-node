@@ -119,6 +119,23 @@ describe('L1RpcGrader', () => {
     expect(grader.getOrder()).toEqual([1]);
   });
 
+  it('aborts the request of a probe that times out', async () => {
+    const signals: AbortSignal[] = [];
+    const grader = new L1RpcGrader(
+      urls.slice(0, 2),
+      {
+        getBlockNumber: (index, signal) => {
+          signals[index] = signal;
+          return index === 0 ? new Promise<bigint>(() => {}) : Promise.resolve(100n);
+        },
+        getChainId: () => Promise.resolve(CHAIN_ID),
+      },
+      { config: { ...defaults, l1RpcGraderProbeTimeoutMS: 10 }, chainId: CHAIN_ID },
+    );
+    await grader.probeAll();
+    expect(signals[0].aborted).toBe(true);
+  });
+
   it('keeps a lagging URL out when its probes fail before it catches up', async () => {
     const grader = makeGrader();
     answers = [90n, 100n, 100n];

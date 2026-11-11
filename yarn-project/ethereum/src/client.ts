@@ -161,8 +161,8 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
   const probeTransports = transports.map(transport =>
     transport({ retryCount: 0, timeout: config.l1RpcGraderProbeTimeoutMS }),
   );
-  const probeHex = async (index: number, method: 'eth_blockNumber' | 'eth_chainId') => {
-    const result = await probeTransports[index].request({ method });
+  const probeHex = async (index: number, method: 'eth_blockNumber' | 'eth_chainId', signal: AbortSignal) => {
+    const result = await probeTransports[index].request({ method }, { signal });
     if (!isHex(result)) {
       throw new Error(`L1 RPC returned a non-hex result for ${method}`);
     }
@@ -176,8 +176,8 @@ export function makeL1HttpTransport(rpcUrls: string[], opts?: L1HttpTransportOpt
   const grader = new L1RpcGrader(
     rpcUrls,
     {
-      getBlockNumber: async index => hexToBigInt(await probeHex(index, 'eth_blockNumber')),
-      getChainId: async index => hexToNumber(await probeHex(index, 'eth_chainId')),
+      getBlockNumber: async (index, signal) => hexToBigInt(await probeHex(index, 'eth_blockNumber', signal)),
+      getChainId: async (index, signal) => hexToNumber(await probeHex(index, 'eth_chainId', signal)),
     },
     {
       config,
