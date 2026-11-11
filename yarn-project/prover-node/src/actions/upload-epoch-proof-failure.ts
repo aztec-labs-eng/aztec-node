@@ -3,7 +3,7 @@ import { tryRmDir } from '@aztec-labs/foundation/fs';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { isoDate } from '@aztec-labs/foundation/string';
-import { buildSnapshotMetadata, createBackups } from '@aztec-labs/node-lib/actions';
+import { createBackups } from '@aztec-labs/node-lib/actions';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import { type FileStore, createFileStore } from '@aztec-labs/stdlib/file-store';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
@@ -47,8 +47,7 @@ export async function uploadEpochProofFailure(
 
   try {
     const versions = { archiver: ARCHIVER_DB_VERSION, worldState: WORLD_STATE_DB_VERSION };
-    const uploadMetadata = await buildSnapshotMetadata(archiver, config);
-    const paths = await createBackups(backupDir, archiver, worldState, log);
+    const { paths, metadata: uploadMetadata } = await createBackups(backupDir, archiver, worldState, config, log);
 
     const basePath = `${getBasePath(uploadMetadata)}/${epochNumber}-${isoDate()}-${jobId}`;
     const pathFor = (key: string) => `${basePath}/${key}.db`;
