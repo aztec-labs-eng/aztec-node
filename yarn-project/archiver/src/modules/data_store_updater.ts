@@ -52,7 +52,10 @@ export function blockLeafCount(block: Pick<L2Block, 'header'> | BlockData): bigi
 
 /** Result of adding checkpoints with information about any pruned blocks. */
 type ReconcileCheckpointsResult = {
-  /** Blocks that were pruned due to conflict with L1 checkpoints. */
+  /**
+   * Local blocks pruned while reconciling with L1: blocks that conflict with an L1 checkpoint, and blocks built on a
+   * proposed checkpoint evicted because it diverged from L1.
+   */
   prunedBlocks: L2Block[] | undefined;
   /** Last block number that was already inserted locally, or undefined if none. */
   lastAlreadyInsertedBlockNumber: BlockNumber | undefined;
