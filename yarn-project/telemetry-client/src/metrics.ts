@@ -73,6 +73,23 @@ export const JSON_RPC_SERVER_BATCH_SIZE: MetricDefinition = {
   valueType: ValueType.INT,
 };
 
+export const BLOB_CLIENT_UPLOAD_ATTEMPT_COUNT: MetricDefinition = {
+  name: 'aztec.blob_client.upload_attempt_count',
+  description: 'Number of blob filestore upload attempts, by upload type and attempt outcome',
+  valueType: ValueType.INT,
+};
+export const BLOB_CLIENT_UPLOAD_REQUEST_COUNT: MetricDefinition = {
+  name: 'aztec.blob_client.upload_request_count',
+  description: 'Number of blob filestore upload requests, by upload type and final outcome after retries',
+  valueType: ValueType.INT,
+};
+export const BLOB_CLIENT_UPLOAD_DURATION: MetricDefinition = {
+  name: 'aztec.blob_client.upload_duration',
+  description: 'Duration of blob filestore upload requests including retries, by upload type and final outcome',
+  unit: 'ms',
+  valueType: ValueType.DOUBLE,
+};
+
 export const BLOB_SINK_STORE_REQUESTS: MetricDefinition = {
   name: 'aztec.blob_sink.store_request_count',
   description: 'Number of blob store requests',
