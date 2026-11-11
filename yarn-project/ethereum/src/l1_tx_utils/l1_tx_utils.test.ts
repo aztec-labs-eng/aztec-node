@@ -25,13 +25,16 @@ import {
   encodeErrorResult,
   encodeFunctionData,
   http,
+  toHex,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
+import { computeSignedTransactionHash } from '../blob_tx.js';
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
 import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
+import { type RecordingRpcServer, RpcErrorAnswer, startRecordingRpcServer } from '../test/recording_rpc_server.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
@@ -235,6 +238,233 @@ describeAcrossL1Forks('L1TxUtils', () => {
       expect(state.nonce).toBe(expectedNonce);
       expect((await l1Client.getTransaction({ hash: txHash })).nonce).toBe(expectedNonce);
     }, 30_000);
+
+    describe('tracking sent txs by their own hash', () => {
+      const makeBlobInputs = () => ({
+        blobs: [new Uint8Array(131072).fill(1)],
+        kzg: Blob.getViemKzgInstance(),
+        maxFeePerBlobGas: 10n * WEI_CONST,
+      });
+      const txKinds = [
+        ['regular', () => undefined],
+        ['blob', makeBlobInputs],
+      ] as const;
+
+      let proxies: RecordingRpcServer[] = [];
+      let proxiedUtils: TestL1TxUtils[] = [];
+
+      afterEach(async () => {
+        for (const utils of proxiedUtils) {
+          utils.interrupt();
+          await utils.waitMonitoringStopped(1);
+        }
+        await Promise.all(proxies.map(proxy => proxy.close()));
+        proxies = [];
+        proxiedUtils = [];
+      });
+
+      /** Starts a proxy to anvil that answers eth_sendRawTransaction with `onSend` and forwards everything else. */
+      const startProxy = async (onSend: (forward: () => Promise<unknown>) => unknown) => {
+        const proxy = await startRecordingRpcServer({
+          forwardTo: rpcUrl,
+          answer: (method, forward) => (method === 'eth_sendRawTransaction' ? onSend(forward) : forward()),
+        });
+        proxies.push(proxy);
+        return proxy;
+      };
+
+      /** Creates an L1TxUtils for the same account whose client sends every request through the given URLs. */
+      const makeProxiedL1TxUtils = (urls: string[]) => {
+        const client = createExtendedL1Client(urls, MNEMONIC, foundry);
+        const utils = new TestL1TxUtils(
+          client,
+          EthAddress.fromString(client.account.address),
+          createViemSigner(client),
+          logger,
+          dateProvider,
+          config,
+          undefined,
+          undefined,
+          metrics,
+          Blob.getViemKzgInstance(),
+        );
+        proxiedUtils.push(utils);
+        return utils;
+      };
+
+      it.each(txKinds)(
+        'computes the same hash for a %s tx as the node',
+        async (_, blobInputs) => {
+          const { txHash, state } = await gasUtils.sendTransaction(request, undefined, blobInputs());
+
+          expect(state.txHashes).toEqual([txHash]);
+          await expect(gasUtils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
+        },
+        30_000,
+      );
+
+      it('fails a send when the node returns a different hash', async () => {
+        const wrongHash = toHex(randomBytes(32));
+        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockResolvedValue(wrongHash);
+
+        await expect(gasUtils.sendTransaction(request)).rejects.toThrow(wrongHash);
+      }, 30_000);
+
+      it('sends a tx again when the only node rate-limits the first attempt', async () => {
+        let sends = 0;
+        const limited = await startProxy(forward => {
+          if (sends++ === 0) {
+            throw new RpcErrorAnswer(-32005, 'request rate limit exceeded');
+          }
+          return forward();
+        });
+        const utils = makeProxiedL1TxUtils([limited.url]);
+
+        const { txHash, state } = await utils.sendTransaction(request);
+
+        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: state.nonce });
+        await expect(utils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
+      }, 30_000);
+
+      it('treats a tx as sent when the first node already knows it and the next one fails it', async () => {
+        const knowing = await startProxy(async forward => {
+          await forward();
+          throw new RpcErrorAnswer(-32000, 'already known');
+        });
+        const failing = await startProxy(() => {
+          throw new RpcErrorAnswer(-32601, 'method not found');
+        });
+        const utils = makeProxiedL1TxUtils([knowing.url, failing.url]);
+
+        const { txHash, state } = await utils.sendTransaction(request);
+
+        expect(failing.methods).not.toContain('eth_sendRawTransaction');
+        expect(await l1Client.getTransaction({ hash: txHash })).toMatchObject({ nonce: state.nonce });
+        await expect(utils.monitorTransaction(state)).resolves.toMatchObject({ transactionHash: txHash });
+      }, 30_000);
+
+      it.each(txKinds)(
+        'treats a %s tx the node already knows as sent',
+        async (_, blobInputs) => {
+          // Mining stays off until both copies are sent, so the node still holds the tx in its pool when it gets the copy.
+          await cheatCodes.setIntervalMining(0);
+          await cheatCodes.setAutomine(false);
+          const expectedNonce = await l1Client.getTransactionCount({
+            blockTag: 'pending',
+            address: l1Client.account.address,
+          });
+
+          // The node accepts the tx but the reply is lost, so the tx is sent again and the node rejects the copy.
+          const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+          const anvilHashes: Hex[] = [];
+          using _sendSpy = jest
+            .spyOn(l1Client, 'sendRawTransaction')
+            .mockImplementationOnce(async args => {
+              anvilHashes.push(await originalSendRawTransaction(args));
+              return originalSendRawTransaction(args);
+            })
+            .mockImplementation(originalSendRawTransaction);
+
+          const { txHash, state } = await gasUtils.sendTransaction(request, undefined, blobInputs());
+
+          expect(txHash).toEqual(anvilHashes[0]);
+          expect(state).toMatchObject({ nonce: expectedNonce, txHashes: [txHash], status: TxUtilsState.SENT });
+          expect(gasUtils.txs.at(-1)).toBe(state);
+
+          // A node that reports a stale pending nonce does not make the next send reuse the one just sent.
+          const originalGetTransactionCount = l1Client.getTransactionCount.bind(l1Client);
+          using _countSpy = jest
+            .spyOn(l1Client, 'getTransactionCount')
+            .mockImplementationOnce(() => Promise.resolve(expectedNonce))
+            .mockImplementation(originalGetTransactionCount);
+          const { state: nextState } = await gasUtils.sendTransaction(request);
+          expect(nextState.nonce).toBe(expectedNonce + 1);
+
+          await cheatCodes.evmMine();
+          await expect(gasUtils.monitorTransaction(state)).resolves.toMatchObject({
+            transactionHash: txHash,
+            status: 'success',
+          });
+        },
+        30_000,
+      );
+
+      it('rejects a send the node reports as nonce too low', async () => {
+        // The tx is mined before it is sent again, so the copy reuses a nonce the chain has moved past.
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        using _sendSpy = jest
+          .spyOn(l1Client, 'sendRawTransaction')
+          .mockImplementationOnce(async args => {
+            await originalSendRawTransaction(args);
+            await cheatCodes.evmMine();
+            return originalSendRawTransaction(args);
+          })
+          .mockImplementation(originalSendRawTransaction);
+
+        const err = await gasUtils.sendTransaction(request).catch(err => err);
+        expect(getErrorCause(err, RpcRequestError)?.details).toMatch(/nonce too low/i);
+      }, 30_000);
+
+      it('tracks a speed-up tx by the hash the node reports for it', async () => {
+        await cheatCodes.setAutomine(false);
+        await cheatCodes.setIntervalMining(0);
+        await cheatCodes.setBlockInterval(12);
+        gasUtils.updateConfig({ maxSpeedUpAttempts: 1 });
+
+        const { state } = await gasUtils.sendTransaction(request);
+
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        const anvilHashes: Hex[] = [];
+        using _spy = jest.spyOn(l1Client, 'sendRawTransaction').mockImplementation(async args => {
+          const hash = await originalSendRawTransaction(args);
+          anvilHashes.push(hash);
+          return hash;
+        });
+
+        const monitorPromise = gasUtils.monitorTransaction(state);
+        await cheatCodes.mineEmptyBlock();
+        await retryUntil(() => state.txHashes.length > 1, 'waiting for speed-up', 20, 0.05);
+        await cheatCodes.evmMine();
+
+        const receipt = await monitorPromise;
+        expect(state.txHashes.slice(1)).toEqual(anvilHashes);
+        expect(receipt.transactionHash).toEqual(anvilHashes[0]);
+      }, 30_000);
+
+      it('treats a cancellation tx the node already knows as sent', async () => {
+        await cheatCodes.setIntervalMining(0);
+        await cheatCodes.setAutomine(false);
+        await cheatCodes.setBlockInterval(1);
+
+        const { state } = await gasUtils.sendTransaction(request);
+
+        const originalSendRawTransaction = l1Client.sendRawTransaction.bind(l1Client);
+        const anvilHashes: Hex[] = [];
+        using _sendSpy = jest
+          .spyOn(l1Client, 'sendRawTransaction')
+          .mockImplementationOnce(async args => {
+            anvilHashes.push(await originalSendRawTransaction(args));
+            return originalSendRawTransaction(args);
+          })
+          .mockImplementation(originalSendRawTransaction);
+
+        const testState: L1TxState = { ...state, txConfigOverrides: { ...state.txConfigOverrides, txTimeoutMs: 100 } };
+        const monitorPromise = gasUtils.monitorTransaction(testState).catch(err => err);
+        await cheatCodes.mineEmptyBlock();
+        await expect(monitorPromise).resolves.toBeInstanceOf(TimeoutError);
+
+        await retryUntil(
+          () => [TxUtilsState.CANCELLED, TxUtilsState.NOT_MINED].includes(testState.status),
+          'waiting for cancellation',
+          10,
+          0.05,
+        );
+        expect(testState.status).toBe(TxUtilsState.CANCELLED);
+        expect(testState.cancelTxHashes).toEqual(anvilHashes);
+        const pendingBlock = await l1Client.getBlock({ blockTag: 'pending' });
+        expect(pendingBlock.transactions).toEqual(anvilHashes);
+      }, 30_000);
+    });
 
     it('concurrent sendTransaction calls use sequential nonces (A-810 nonce race fix)', async () => {
       // Fire two sends concurrently on the same L1TxUtils. Without the mutex, both could read
@@ -1188,10 +1418,10 @@ describeAcrossL1Forks('L1TxUtils', () => {
           sentTxs.set(hash, sentTx);
           return hash;
         })
-        .mockImplementation(_arg => {
+        .mockImplementation(arg => {
           // Do nothing, there are any/all cancellations
           const sentTx = txBeingSigned!;
-          const hash = randomBytes(32).toString('hex') as Hex;
+          const hash = computeSignedTransactionHash(arg.serializedTransaction);
           sentTxs.set(hash, sentTx);
           cancellationSent = true;
           return Promise.resolve(hash);

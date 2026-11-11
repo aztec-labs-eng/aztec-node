@@ -3,7 +3,16 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { type Server, createServer } from 'node:http';
-import { BlockNotFoundError, TransactionReceiptNotFoundError, createPublicClient, toHex } from 'viem';
+import {
+  BlockNotFoundError,
+  HttpRequestError,
+  RpcRequestError,
+  TimeoutError,
+  TransactionReceiptNotFoundError,
+  UnknownRpcError,
+  createPublicClient,
+  toHex,
+} from 'viem';
 import { foundry, sepolia } from 'viem/chains';
 
 import {
@@ -13,12 +22,14 @@ import {
   getL1RpcErrorCode,
   getL1RpcHttpStatus,
   getRpcUrlsFromClient,
+  isAlreadyKnownTxError,
   isL1RpcHttpStatus,
+  isTransientL1RpcError,
   makeL1HttpTransport,
 } from './client.js';
 import type { L1RpcGraderConfig } from './l1_reader.js';
 import type { L1RpcGrader } from './l1_rpc_grader.js';
-import { type RecordingRpcServer, startRecordingRpcServer } from './test/recording_rpc_server.js';
+import { type RecordingRpcServer, RpcErrorAnswer, startRecordingRpcServer } from './test/recording_rpc_server.js';
 
 describe('createExtendedL1Client polling', () => {
   const originalPollingInterval = process.env.L1_VIEM_POLLING_INTERVAL_MS;
@@ -241,6 +252,31 @@ describe('makeL1HttpTransport with an RPC that answers null', () => {
   });
 });
 
+describe('makeL1HttpTransport with a node that already knows a sent tx', () => {
+  let servers: RecordingRpcServer[] = [];
+
+  afterEach(async () => {
+    await Promise.all(servers.map(server => server.close()));
+    servers = [];
+  });
+
+  it('stops at that URL when the next one fails the send differently', async () => {
+    const knows = await startRecordingRpcServer({
+      answer: () => Promise.reject(new RpcErrorAnswer(-32000, 'already known')),
+    });
+    const other = await startRecordingRpcServer({
+      answer: () => Promise.reject(new RpcErrorAnswer(-32601, 'method not found')),
+    });
+    servers.push(knows, other);
+    const client = createPublicClient({ chain: foundry, transport: makeL1HttpTransport([knows.url, other.url]) });
+
+    const error = await client.request({ method: 'eth_sendRawTransaction', params: ['0x02'] }).catch(err => err);
+
+    expect(isAlreadyKnownTxError(error)).toBe(true);
+    expect(other.methods).toEqual([]);
+  });
+});
+
 describe('makeL1HttpTransport with a grader', () => {
   const graderConfig: L1RpcGraderConfig = {
     l1RpcGraderIntervalMS: 60_000,
@@ -268,6 +304,7 @@ describe('makeL1HttpTransport with a grader', () => {
     balance?: bigint;
     onBalance?: () => Promise<void>;
     onBlockNumber?: () => Promise<void>;
+    sendError?: string;
   };
 
   const startServer = async (node: FakeNode) => {
@@ -285,6 +322,8 @@ describe('makeL1HttpTransport with a grader', () => {
               throw new Error('balance not available');
             }
             return toHex(node.balance);
+          case 'eth_sendRawTransaction':
+            throw new RpcErrorAnswer(-32000, node.sendError ?? 'send not available');
           default:
             throw new Error(`unexpected method ${method}`);
         }
@@ -401,6 +440,20 @@ describe('makeL1HttpTransport with a grader', () => {
     expect(balanceRequests(first) + balanceRequests(second)).toBe(0);
   });
 
+  it('stops at a graded URL that already knows a sent tx', async () => {
+    const lagging = await startServer({ height: 10n });
+    const knows = await startServer({ height: 100n, sendError: 'already known' });
+    const other = await startServer({ height: 100n, sendError: 'transaction type not supported' });
+    const { client, grader } = await makeClient([lagging.url, knows.url, other.url]);
+    await grader!.probeAll();
+
+    const error = await client.request({ method: 'eth_sendRawTransaction', params: ['0x02'] }).catch(err => err);
+
+    expect(isAlreadyKnownTxError(error)).toBe(true);
+    expect(knows.methods).toContain('eth_sendRawTransaction');
+    expect([...lagging.methods, ...other.methods]).not.toContain('eth_sendRawTransaction');
+  });
+
   it('keeps the order a request started with when the order changes mid-request', async () => {
     const reached = promiseWithResolvers<void>();
     const release = promiseWithResolvers<void>();
@@ -425,5 +478,64 @@ describe('makeL1HttpTransport with a grader', () => {
     await expect(balance).resolves.toBe(2n);
     expect(balanceRequests(firstServer)).toBe(1);
     expect(balanceRequests(secondServer)).toBe(1);
+  });
+});
+
+/** Builds an error shaped like the one a send gets when the node answers with a JSON-RPC error. */
+function makeSendError(message: string, code = -32000) {
+  const rpcError = new RpcRequestError({
+    body: { method: 'eth_sendRawTransaction', params: ['0x02'] },
+    error: { code, message },
+    url: 'http://localhost:8545',
+  });
+  return new UnknownRpcError(new L1RpcError('L1 RPC request failed', { cause: rpcError }));
+}
+
+describe('isAlreadyKnownTxError', () => {
+  it.each([
+    ['geth, reth and nethermind', 'already known'],
+    ['besu', 'Known transaction'],
+    ['erigon', 'ALREADY_EXISTS: already known'],
+    ['anvil', 'transaction already imported'],
+  ])('matches the error %s return for a tx already in their pool', (_, message) => {
+    expect(isAlreadyKnownTxError(makeSendError(message))).toBe(true);
+  });
+
+  it.each([
+    'nonce too low: next nonce 1, tx nonce 0',
+    'replacement transaction underpriced',
+    'unknown transaction',
+    'insufficient funds for gas * price + value',
+  ])('does not match %s', message => {
+    expect(isAlreadyKnownTxError(makeSendError(message))).toBe(false);
+  });
+
+  it('matches through a cause chain deeper than the transport error', () => {
+    const err = new Error('Failed to send L1 transaction', { cause: makeSendError('already known') });
+    expect(isAlreadyKnownTxError(err)).toBe(true);
+  });
+});
+
+describe('isTransientL1RpcError', () => {
+  const wrap = (cause: Error) => new L1RpcError('L1 RPC request failed', { cause });
+  const httpError = (status?: number) =>
+    wrap(new HttpRequestError({ url: 'http://localhost:8545', status, body: { method: 'eth_sendRawTransaction' } }));
+
+  it.each([
+    ['a timeout', wrap(new TimeoutError({ body: {}, url: 'http://localhost:8545' }))],
+    ['a network failure', httpError(undefined)],
+    ['an HTTP 429', httpError(429)],
+    ['an HTTP 503', httpError(503)],
+    ['a JSON-RPC rate limit', makeSendError('request rate limit exceeded', -32005)],
+  ])('treats %s as transient', (_, err) => {
+    expect(isTransientL1RpcError(err)).toBe(true);
+  });
+
+  it.each([
+    ['an HTTP 400', httpError(400)],
+    ['a rejected tx', makeSendError('nonce too low: next nonce 1, tx nonce 0')],
+    ['a null answer', wrap(new L1RpcNullResultError('eth_sendRawTransaction'))],
+  ])('treats %s as definitive', (_, err) => {
+    expect(isTransientL1RpcError(err)).toBe(false);
   });
 });
