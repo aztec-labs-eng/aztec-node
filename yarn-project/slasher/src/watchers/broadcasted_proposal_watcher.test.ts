@@ -647,6 +647,18 @@ describe('BroadcastedProposalWatcher', () => {
         expect(l2BlockSource.getCheckpoint).toHaveBeenCalledTimes(1);
       });
 
+      it('compares each gossiped block with the L1 block at its index when the archiver omits an earlier block', async () => {
+        const proposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(2);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(proposer.address);
+        mockProposals(slot, await Promise.all(checkpoint.blocks.map(block => proposeBlock(proposer, block))), []);
+        checkpoint.blocks = [checkpoint.blocks[1]];
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
       it('does not compare against L1 blocks from another slot', async () => {
         const proposer = Secp256k1Signer.random();
         await publishCheckpoint(1, SlotNumber(slot + 1));
