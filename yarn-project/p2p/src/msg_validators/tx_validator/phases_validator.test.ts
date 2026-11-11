@@ -1,9 +1,10 @@
 import { NULL_MSG_SENDER_CONTRACT_ADDRESS, PUBLIC_TX_L2_GAS_OVERHEAD, TX_DA_GAS_OVERHEAD } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { addNewContractInstanceToTx } from '@aztec-labs/simulator/public/fixtures';
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry';
 import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { type ContractDataSource, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 import { Gas } from '@aztec-labs/stdlib/gas';
 import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 import { makeAztecAddress, makeSelector, mockTx } from '@aztec-labs/stdlib/testing';
@@ -197,6 +198,33 @@ describe('PhasesTxValidator', () => {
     });
 
     await expectInvalid(tx, TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT);
+  });
+
+  describe('contracts published by the tx', () => {
+    const makeTxPublishingCallee = async (revertible: boolean) => {
+      const tx = await mockTx(1, { numberOfNonRevertiblePublicCallRequests: 1 });
+      const address = await patchNonRevertibleFn(tx, 0, { selector: allowedSetupSelector1 });
+      const instance = await SerializableContractInstance.random({ currentContractClassId: allowedContractClass });
+      await addNewContractInstanceToTx(
+        tx,
+        instance.withAddress(address),
+        /*skipNullifierInsertion=*/ false,
+        revertible,
+      );
+      return tx;
+    };
+
+    beforeEach(() => {
+      contractDataSource.getContract.mockResolvedValue(undefined);
+    });
+
+    it('allows a setup call to a contract the tx publishes in its non-revertible half', async () => {
+      await expectValid(await makeTxPublishingCallee(false));
+    });
+
+    it('rejects a setup call to a contract the tx publishes in its revertible half', async () => {
+      await expectInvalid(await makeTxPublishingCallee(true), TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT);
+    });
   });
 
   it('does not fetch contract instance when matching by address', async () => {

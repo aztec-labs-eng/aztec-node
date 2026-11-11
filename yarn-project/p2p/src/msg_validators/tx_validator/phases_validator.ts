@@ -46,11 +46,9 @@ export class PhasesTxValidator implements TxValidator<Tx> {
   async validateTx(tx: Tx): Promise<TxValidationResult> {
     this.contractsDB.createCheckpoint();
     try {
-      // TODO(@spalladino): We add this just to handle public authwit-check calls during setup
-      // which are needed for public FPC flows, but fail if the account contract hasnt been deployed yet,
-      // which is what we're trying to do as part of the current txs.
-      // We only need to create/revert checkpoint here because of this addNewContracts call.
-      this.contractsDB.addNewContracts(tx);
+      // Setup calls can target contracts the tx publishes, but only in its non-revertible half: the AVM adds the
+      // revertible half after setup. The checkpoint discards these contracts once the tx is validated.
+      this.contractsDB.addNewNonRevertibleContracts(tx);
 
       if (!tx.data.forPublic) {
         this.#log.debug(
