@@ -209,7 +209,6 @@ export default [
       '**/mocks.ts',
       '**/fixtures/**',
       '**/avm_proving_tests/**',
-      '**/src/jest/**',
     ],
     rules: {
       'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
