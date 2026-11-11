@@ -1,34 +1,60 @@
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { EthPrivateKey } from '@aztec-labs/node-keystore';
 import type { SharedNodeConfig } from '@aztec-labs/node-lib/config';
 import type { SequencerClientConfig, SequencerTxSenderConfig } from '@aztec-labs/sequencer-client/config';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { ValidatorClientConfig } from '@aztec-labs/validator-client/config';
+import type { WorldStateHistoryRetention } from '@aztec-labs/world-state/config';
 import type { Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 
-import { createKeyStoreForValidator, validateProverWorldStateRetention } from './config.js';
+import { createKeyStoreForValidator, resolveNodeWorldStateHistoryRetention } from './config.js';
 
-describe('validateProverWorldStateRetention', () => {
-  it('rejects retention shorter than the entire proof submission window', () => {
-    expect(() =>
-      validateProverWorldStateRetention(
-        { enableProverNode: true, worldStateHistoryRetention: { type: 'rolling', checkpoints: 95 } },
-        2,
-        32,
-      ),
-    ).toThrow(/WS_HISTORY_RETENTION.*96/);
+describe('resolveNodeWorldStateHistoryRetention', () => {
+  // Proof submission window of (2 + 1) * 32 = 96 checkpoints, as in the bench-10tps environment.
+  const benchWindow = { proofSubmissionEpochs: 2, epochDuration: 32 };
+
+  it('keeps 64 checkpoints by default on a prover whose window is smaller', () => {
+    expect(resolveNodeWorldStateHistoryRetention(undefined, { proofSubmissionEpochs: 1, epochDuration: 8 })).toEqual({
+      type: 'rolling',
+      checkpoints: 64,
+    });
   });
 
-  it.each([96, 128])('accepts retention of %i checkpoints covering the submission window', checkpoints => {
-    expect(() =>
-      validateProverWorldStateRetention(
-        { enableProverNode: true, worldStateHistoryRetention: { type: 'rolling', checkpoints } },
-        2,
-        32,
-      ),
-    ).not.toThrow();
+  it.each([
+    [benchWindow, 96],
+    [{ proofSubmissionEpochs: 100, epochDuration: 8 }, 808],
+  ])('defaults a prover to its proof submission window %o', (window, checkpoints) => {
+    expect(resolveNodeWorldStateHistoryRetention(undefined, window)).toEqual({ type: 'rolling', checkpoints });
   });
+
+  it('keeps 64 checkpoints by default on a non-prover', () => {
+    expect(resolveNodeWorldStateHistoryRetention(undefined, undefined)).toEqual({ type: 'rolling', checkpoints: 64 });
+  });
+
+  it('rejects a configured rolling window shorter than the proof submission window', () => {
+    expect(() => resolveNodeWorldStateHistoryRetention({ type: 'rolling', checkpoints: 95 }, benchWindow)).toThrow(
+      /WS_HISTORY_RETENTION.*96/,
+    );
+  });
+
+  it.each([96, 128])('keeps a configured rolling window of %i checkpoints on a prover', checkpoints => {
+    const configured: WorldStateHistoryRetention = { type: 'rolling', checkpoints };
+    expect(resolveNodeWorldStateHistoryRetention(configured, benchWindow)).toEqual(configured);
+  });
+
+  it('keeps a configured short rolling window on a non-prover', () => {
+    const configured: WorldStateHistoryRetention = { type: 'rolling', checkpoints: 2 };
+    expect(resolveNodeWorldStateHistoryRetention(configured, undefined)).toEqual(configured);
+  });
+
+  it.each<WorldStateHistoryRetention>([{ type: 'archive' }, { type: 'pinned', checkpoint: CheckpointNumber(7) }])(
+    'keeps configured $type retention on a prover',
+    configured => {
+      expect(resolveNodeWorldStateHistoryRetention(configured, benchWindow)).toEqual(configured);
+    },
+  );
 });
 
 function privateKeyToEthAddress(privateKey: Hex): EthAddress {

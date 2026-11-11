@@ -62,7 +62,7 @@ import { createPublicClient } from 'viem';
 import {
   type AztecNodeConfig,
   createKeyStoreForValidator,
-  validateProverWorldStateRetention,
+  resolveNodeWorldStateHistoryRetention,
 } from './aztec-node/config.js';
 import { AdmissionMinFeesProvider, NextBlockFeeCache, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
@@ -206,8 +206,18 @@ export async function createAztecNodeService(
   }
 
   const proofSubmissionEpochs = config.enableProverNode ? await rollupContract.getProofSubmissionEpochs() : undefined;
-  if (proofSubmissionEpochs !== undefined) {
-    validateProverWorldStateRetention(config, proofSubmissionEpochs, Number(epochDuration));
+  // Snapshot sync and world-state creation below read the resolved policy, so this must run before either.
+  const configuredHistoryRetention = config.worldStateHistoryRetention;
+  config.worldStateHistoryRetention = resolveNodeWorldStateHistoryRetention(
+    configuredHistoryRetention,
+    proofSubmissionEpochs === undefined ? undefined : { proofSubmissionEpochs, epochDuration: Number(epochDuration) },
+  );
+  if (configuredHistoryRetention === undefined && proofSubmissionEpochs !== undefined) {
+    log.info('Derived world-state history retention from the proof submission window', {
+      historyRetention: config.worldStateHistoryRetention,
+      proofSubmissionEpochs,
+      epochDuration: Number(epochDuration),
+    });
   }
 
   const blobClient = await createBlobClientWithFileStores(config, log.createChild('blob-client'));

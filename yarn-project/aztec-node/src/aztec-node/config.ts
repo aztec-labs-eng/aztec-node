@@ -27,7 +27,12 @@ import { type NodeRPCConfig, nodeRpcConfigMappings } from '@aztec-labs/stdlib/co
 import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 import { type ValidatorClientConfig, validatorClientConfigMappings } from '@aztec-labs/validator-client/config';
-import { type WorldStateConfig, worldStateConfigMappings } from '@aztec-labs/world-state/config';
+import {
+  type WorldStateConfig,
+  type WorldStateHistoryRetention,
+  resolveWorldStateHistoryRetention,
+  worldStateConfigMappings,
+} from '@aztec-labs/world-state/config';
 import { privateKeyToAddress } from 'viem/accounts';
 
 import { type SentinelConfig, sentinelConfigMappings } from '../sentinel/config.js';
@@ -76,24 +81,23 @@ export type AztecNodeConfig = ArchiverConfig &
     automineEnableProveEpoch?: boolean;
   };
 
-/** Rejects rolling world-state retention that cannot cover the prover's full proof submission window. */
-export function validateProverWorldStateRetention(
-  config: Pick<AztecNodeConfig, 'enableProverNode' | 'worldStateHistoryRetention'>,
-  proofSubmissionEpochs: number,
-  epochDuration: number,
-): void {
-  const policy = config.worldStateHistoryRetention;
-  if (!config.enableProverNode || policy.type !== 'rolling') {
-    return;
+/**
+ * Returns the node's effective world-state history retention. A prover node, identified by its rollup's proof
+ * submission window, must retain checkpoints for that whole window of (proofSubmissionEpochs + 1) epochs: unset
+ * retention widens to cover it, and a shorter configured rolling window is rejected.
+ */
+export function resolveNodeWorldStateHistoryRetention(
+  configured: WorldStateHistoryRetention | undefined,
+  proofSubmissionWindow: { proofSubmissionEpochs: number; epochDuration: number } | undefined,
+): WorldStateHistoryRetention {
+  if (proofSubmissionWindow === undefined) {
+    return resolveWorldStateHistoryRetention(configured);
   }
-  const minimumCheckpoints = (proofSubmissionEpochs + 1) * epochDuration;
-  if (policy.checkpoints < minimumCheckpoints) {
-    throw new Error(
-      `WS_HISTORY_RETENTION=rolling:${policy.checkpoints} is insufficient for a prover node. ` +
-        `Set WS_HISTORY_RETENTION=rolling:${minimumCheckpoints} or greater, or use archive or pinned retention, ` +
-        `to retain checkpoints for the full proof submission window.`,
-    );
-  }
+  const { proofSubmissionEpochs, epochDuration } = proofSubmissionWindow;
+  return resolveWorldStateHistoryRetention(configured, {
+    checkpoints: (proofSubmissionEpochs + 1) * epochDuration,
+    purpose: "a prover node's proof submission window",
+  });
 }
 
 export const aztecNodeConfigMappings: ConfigMappingsType<AztecNodeConfig> = {

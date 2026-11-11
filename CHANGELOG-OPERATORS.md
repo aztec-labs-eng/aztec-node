@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Prover nodes derive the default `WS_HISTORY_RETENTION` from the proof submission window
+
+A node that leaves `WS_HISTORY_RETENTION` unset, along with the deprecated `WS_NUM_HISTORIC_CHECKPOINTS` and `WS_NUM_HISTORIC_BLOCKS`, used to keep `rolling:64` whatever its role. A prover node now keeps `rolling:max(64, (proofSubmissionEpochs + 1) * epochDuration)` instead, read from the rollup at startup, and logs the derived value at info. Other nodes still default to `rolling:64`. A prover configured with an explicit `rolling:N` below its proof submission window still fails at startup, and `archive` and `pinned` retention are unchanged.
+
+**Migration**: none. A prover that set `WS_HISTORY_RETENTION` only to satisfy the startup check can unset it to follow the rollup's window.
+
 ### Prover nodes reject insufficient rolling `WS_HISTORY_RETENTION`
 
 Prover nodes previously accepted rolling world-state retention shorter than the proof submission window, which could prune checkpoints still needed for proving after another prover's proof finalized. Startup now rejects `rolling:N` when N is less than `(proofSubmissionEpochs + 1) * epochDuration`, using the rollup's on-chain parameters. Non-prover nodes and archive or pinned retention are unchanged.
