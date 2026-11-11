@@ -1,4 +1,4 @@
-import config from '@aztec-labs/foundation/eslint';
+import config, { noExtraneousDependenciesOptions } from '@aztec-labs/foundation/eslint';
 
 export default [
   ...config,
@@ -7,7 +7,7 @@ export default [
     // a devDependency.
     files: ['src/drift.ts'],
     rules: {
-      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
+      'import-x/no-extraneous-dependencies': ['error', { ...noExtraneousDependenciesOptions, devDependencies: true }],
     },
   },
 ];

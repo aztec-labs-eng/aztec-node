@@ -1,4 +1,4 @@
-import base from '@aztec-labs/foundation/eslint';
+import base, { noExtraneousDependenciesOptions } from '@aztec-labs/foundation/eslint';
 import { globalIgnores } from 'eslint/config';
 import globals from 'globals';
 
@@ -13,7 +13,7 @@ export default [
     // A private package, so its imports may resolve through devDependencies.
     rules: {
       'no-restricted-properties': 'off',
-      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
+      'import-x/no-extraneous-dependencies': ['error', { ...noExtraneousDependenciesOptions, devDependencies: true }],
     },
   },
   {

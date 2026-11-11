@@ -25,6 +25,12 @@ import preferTimer from './eslint-rules/prefer-timer.js';
 import preferTimes from './eslint-rules/prefer-times.js';
 import preferUnique from './eslint-rules/prefer-unique.js';
 
+/**
+ * Options for `import-x/no-extraneous-dependencies`. A config that allows devDependencies spreads them and sets
+ * `devDependencies: true`, since a later config that sets a rule's options replaces the earlier ones outright.
+ */
+export const noExtraneousDependenciesOptions = { peerDependencies: false, devDependencies: false };
+
 export default [
   globalIgnores([
     '**/node_modules/**',
@@ -162,13 +168,7 @@ export default [
           ],
         },
       ],
-      'import-x/no-extraneous-dependencies': [
-        'error',
-        {
-          peerDependencies: false,
-          devDependencies: false,
-        },
-      ],
+      'import-x/no-extraneous-dependencies': ['error', noExtraneousDependenciesOptions],
       // this unfortunately doesn't block `fit` and `fdescribe`
       'no-only-tests/no-only-tests': ['error'],
       'aztec-custom/no-async-dispose': 'error',
@@ -211,7 +211,7 @@ export default [
       '**/avm_proving_tests/**',
     ],
     rules: {
-      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
+      'import-x/no-extraneous-dependencies': ['error', { ...noExtraneousDependenciesOptions, devDependencies: true }],
     },
   },
 ];
