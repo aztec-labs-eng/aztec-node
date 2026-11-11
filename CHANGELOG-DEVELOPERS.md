@@ -45,6 +45,22 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Breaking changes
 
+- **`compute_secret_hash` is renamed `compute_private_content_hash`, and it returns a different hash** ([#689](https://github.com/aztec-labs-eng/aztec-node/pull/689)). The two application fields of an L1-to-L2 message are renamed for what they are: `content` is the message's public content hash, and its secret hash is its private content hash. The preimage a contract reveals to consume the message is its private content, which the application defines: a single claim secret, as in the fee juice and token bridges, or something richer. The hash now uses the `DOM_SEP__PRIVATE_CONTENT_HASH` domain separator, so a contract built with this version cannot consume a message whose hash was computed the old way: claim pending messages before upgrading, or send them again afterwards. `consume_l1_to_l2_message`, `compute_l1_to_l2_message_hash` and `compute_l1_to_l2_message_nullifier` keep their arguments in the same order, under the new names.
+
+  ```diff
+  - use aztec::hash::compute_secret_hash;
+  - let secret_hash = compute_secret_hash([secret]);
+  + use aztec::hash::compute_private_content_hash;
+  + let private_content_hash = compute_private_content_hash([secret]);
+  ```
+
+- **`TestEnvironment::send_l1_to_l2_message` takes the message's private content as an array** ([#689](https://github.com/aztec-labs-eng/aztec-node/pull/689)), the same array the contract passes to `consume_l1_to_l2_message`. `send_l1_to_l2_message_from_secret_hash` is renamed `send_l1_to_l2_message_from_private_content_hash`.
+
+  ```diff
+  - env.send_l1_to_l2_message(content, secret, sender, recipient);
+  + env.send_l1_to_l2_message(public_content_hash, [secret], sender, recipient);
+  ```
+
 - **The `MessageEncryption` trait and the `AES128` type are removed** ([#662](https://github.com/aztec-labs-eng/aztec-node/pull/662)). Their operations are free functions in `aztec::messages::encryption::aes128`, so code that imports the trait no longer compiles.
 
   ```diff
@@ -151,6 +167,14 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Breaking changes
 
+- **`computePrivateContentHash` replaces `computeSecretHash`, takes an array, and returns a different hash** ([#689](https://github.com/aztec-labs-eng/aztec-node/pull/689)). It matches Aztec.nr's `compute_private_content_hash`, so a hash from the old helper no longer matches what contracts built with this version consume. `generateClaimSecret` is removed. `L1ToL2Message.content` and `L1ToL2Message.secretHash` are renamed `publicContentHash` and `privateContentHash`. `L2Claim.claimSecret` and `L2Claim.claimSecretHash` keep their names, and the hash is computed the new way. The L1 `Inbox` and `FeeJuicePortal` ABIs of this release rename the same fields, so code that reads `MessageSent` or `DepositToAztecPublic` logs by field name must read `publicContentHash` and `privateContentHash`.
+
+  ```diff
+  - const [secret, secretHash] = await generateClaimSecret();
+  + const secret = Fr.random();
+  + const secretHash = await computePrivateContentHash([secret]);
+  ```
+
 - **The packages require Node.js 24** ([#673](https://github.com/aztec-labs-eng/aztec-node/pull/673)). Every package's `engines.node` is now `>=24`, up from `>=20.16`.
 - **An app on this version cannot parse `simulateTx` results that carry tagged logs from a wallet on an earlier version** ([#620](https://github.com/aztec-labs-eng/aztec-node/pull/620)). The `AppTaggingSecret` in those results now requires a `deliveryMode` field, which earlier versions write as `kind`.
 - **`L1RollupConstants` no longer has `rollupManaLimit`** ([#546](https://github.com/aztec-labs-eng/aztec-node/pull/546)). Governance can raise the limit on L1 at any time, so read it with `RollupContract.getManaLimit()`. The node's `getL1Constants` still returns the field, filled with the live value, but it is deprecated and no longer part of the response type.
@@ -168,6 +192,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 #### New features
 
 #### Breaking changes
+
+- **`aztec get-l1-to-l2-message-witness` takes `--private-content` in place of `--secret`** ([#689](https://github.com/aztec-labs-eng/aztec-node/pull/689)). The flag takes one or more fields, the message's private content. For a fee juice or token bridge claim, that is the claim secret. A script that still passes `--secret` fails.
 
 #### Deprecations
 

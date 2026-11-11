@@ -20,7 +20,7 @@ import { getSendInteractionOptions } from './utils.js';
 export interface InboxConsumptionRequest {
   /** L2 domain to consume through. */
   mode: InboxBotMode;
-  content: Fr;
+  publicContentHash: Fr;
   secret: Fr;
   /** L1 address the Inbox recorded as the sender, which for a batched send is the Multicall3 contract. */
   sender: EthAddress;
@@ -65,10 +65,15 @@ export class WalletInboxL2Consumer implements InboxL2Consumer {
   }
 
   private interactionFor(request: InboxConsumptionRequest) {
-    const { content, secret, sender, leafIndex } = request;
+    const { publicContentHash, secret, sender, leafIndex } = request;
     return request.mode === 'public'
-      ? this.contract.methods.consume_message_from_arbitrary_sender_public(content, secret, sender, leafIndex)
-      : this.contract.methods.consume_message_from_arbitrary_sender_private(content, secret, sender, leafIndex);
+      ? this.contract.methods.consume_message_from_arbitrary_sender_public(publicContentHash, secret, sender, leafIndex)
+      : this.contract.methods.consume_message_from_arbitrary_sender_private(
+          publicContentHash,
+          secret,
+          sender,
+          leafIndex,
+        );
   }
 }
 

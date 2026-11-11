@@ -2,7 +2,7 @@ import { InboxAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { Archiver } from '@aztec-labs/archiver';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
@@ -185,9 +185,11 @@ describe('multi-node/block-production/cross_chain_messages', () => {
     // Seed all L1→L2 messages at the beginning
     logger.warn(`Seeding ${L1_TO_L2_COUNT} L1→L2 messages`);
     const l1ToL2Messages = await timesAsync(L1_TO_L2_COUNT, async i => {
-      const [secret, secretHash] = await generateClaimSecret();
-      const content = Fr.random();
-      const message = { recipient: crossChainContract.address, content, secretHash };
+      const secret = Fr.random();
+      const privateContent = [secret];
+      const privateContentHash = await computePrivateContentHash(privateContent);
+      const publicContentHash = Fr.random();
+      const message = { recipient: crossChainContract.address, publicContentHash, privateContentHash };
 
       const { msgHash, globalLeafIndex } = await sendL1ToL2Message(message, {
         l1Client: context.deployL1ContractsValues.l1Client,
@@ -195,7 +197,7 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       });
       logger.warn(`L1→L2 message ${i + 1} sent with hash ${msgHash} and index ${globalLeafIndex}`);
 
-      return { content, secret, msgHash, globalLeafIndex };
+      return { publicContentHash, secret, msgHash, globalLeafIndex };
     });
     logger.warn(`Seeded ${l1ToL2Messages.length} L1→L2 messages`);
 
@@ -235,9 +237,9 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       wallet,
       l1ToL2Messages.length,
       i => {
-        const { content, secret, globalLeafIndex } = l1ToL2Messages[i];
+        const { publicContentHash, secret, globalLeafIndex } = l1ToL2Messages[i];
         return crossChainContract.methods.consume_message_from_arbitrary_sender_public(
-          content,
+          publicContentHash,
           secret,
           ethAccount,
           globalLeafIndex,
@@ -268,20 +270,24 @@ describe('multi-node/block-production/cross_chain_messages', () => {
     /** The `sendL2Message` call for one message, so a reorg can insert it without a live sender. */
     const prepareMessage = async () => {
       const recipient = await AztecAddress.random();
-      const content = Fr.random();
-      const secretHash = Fr.random();
+      const publicContentHash = Fr.random();
+      const privateContentHash = Fr.random();
       const version = BigInt(await rollup.getVersion());
       return {
         recipient,
-        content,
-        secretHash,
+        publicContentHash,
+        privateContentHash,
         call: {
           to: inboxAddress as Hex,
           from: messageSender.account.address,
           input: encodeFunctionData({
             abi: InboxAbi,
             functionName: 'sendL2Message',
-            args: [{ actor: recipient.toString(), version }, content.toString(), secretHash.toString()],
+            args: [
+              { actor: recipient.toString(), version },
+              publicContentHash.toString(),
+              privateContentHash.toString(),
+            ],
           }),
           // Estimated against the pre-reorg chain the bucket is warm; inserted after the rollback it is opened cold
           // and costs far more, so an estimated limit runs out of gas and the message is never emitted.
@@ -351,7 +357,11 @@ describe('multi-node/block-production/cross_chain_messages', () => {
 
     try {
       const originalSend = await sendL1ToL2Message(
-        { recipient: original.recipient, content: original.content, secretHash: original.secretHash },
+        {
+          recipient: original.recipient,
+          publicContentHash: original.publicContentHash,
+          privateContentHash: original.privateContentHash,
+        },
         { l1Client: messageSender, l1ContractAddresses },
       );
       expect(originalSend.globalLeafIndex.toBigInt()).toEqual(replacedIndex);

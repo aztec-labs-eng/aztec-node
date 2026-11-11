@@ -147,8 +147,8 @@ class FakeInboxL1Producer implements InboxL1Producer {
         msgHash: Fr.random().toString(),
         globalLeafIndex: this.nextIndex++,
         bucketSeq: this.bucketSeq,
-        content: intent.content.toString(),
-        secretHash: intent.secretHash.toString(),
+        publicContentHash: intent.publicContentHash.toString(),
+        privateContentHash: intent.privateContentHash.toString(),
         sender: this.expectedSender,
         recipient: recipient.toString(),
         version: rollupVersion,
@@ -200,8 +200,8 @@ class FakeInboxL1Producer implements InboxL1Producer {
       return [{ kind: 'count', detail: `${messages.length} vs ${intents.length}` }];
     }
     for (const [i, message] of messages.entries()) {
-      if (message.content !== intents[i].content.toString()) {
-        mismatches.push({ kind: 'content', detail: `position ${i}` });
+      if (message.publicContentHash !== intents[i].publicContentHash.toString()) {
+        mismatches.push({ kind: 'public_content_hash', detail: `position ${i}` });
       }
       if (i > 0 && message.globalLeafIndex !== messages[i - 1].globalLeafIndex + 1n) {
         mismatches.push({ kind: 'indices', detail: `position ${i}` });
@@ -618,7 +618,7 @@ describe('InboxBot', () => {
     it('refuses to trust a receipt whose events do not match the persisted intent', async () => {
       const bot = buildBot();
       producer.corruptNextReceipt = messages => [
-        { ...messages[0], content: Fr.random().toString() },
+        { ...messages[0], publicContentHash: Fr.random().toString() },
         ...messages.slice(1),
       ];
 
@@ -649,9 +649,9 @@ describe('InboxBot', () => {
         scenario: 'normal',
         intents: [
           {
-            content: Fr.random().toString(),
+            publicContentHash: Fr.random().toString(),
             secret: Fr.random().toString(),
-            secretHash: Fr.random().toString(),
+            privateContentHash: Fr.random().toString(),
             mode: 'public',
           },
         ],
@@ -668,13 +668,15 @@ describe('InboxBot', () => {
     });
 
     it('adopts the receipt of a submission that was in flight when the bot stopped', async () => {
-      const intents: L1ToL2MessageIntent[] = [{ content: Fr.random(), secret: Fr.random(), secretHash: Fr.random() }];
+      const intents: L1ToL2MessageIntent[] = [
+        { publicContentHash: Fr.random(), secret: Fr.random(), privateContentHash: Fr.random() },
+      ];
       const { batch } = await store.reserveBatch({
         scenario: 'normal',
         intents: intents.map(i => ({
-          content: i.content.toString(),
+          publicContentHash: i.publicContentHash.toString(),
           secret: i.secret.toString(),
-          secretHash: i.secretHash.toString(),
+          privateContentHash: i.privateContentHash.toString(),
           mode: 'public',
         })),
       });
@@ -695,9 +697,9 @@ describe('InboxBot', () => {
         scenario: 'normal',
         intents: [
           {
-            content: Fr.random().toString(),
+            publicContentHash: Fr.random().toString(),
             secret: Fr.random().toString(),
-            secretHash: Fr.random().toString(),
+            privateContentHash: Fr.random().toString(),
             mode: 'public',
           },
         ],
@@ -717,9 +719,9 @@ describe('InboxBot', () => {
         scenario: 'normal',
         intents: [
           {
-            content: Fr.random().toString(),
+            publicContentHash: Fr.random().toString(),
             secret: Fr.random().toString(),
-            secretHash: Fr.random().toString(),
+            privateContentHash: Fr.random().toString(),
             mode: 'public',
           },
         ],
@@ -739,9 +741,9 @@ describe('InboxBot', () => {
         scenario: 'normal',
         intents: [
           {
-            content: Fr.random().toString(),
+            publicContentHash: Fr.random().toString(),
             secret: Fr.random().toString(),
-            secretHash: Fr.random().toString(),
+            privateContentHash: Fr.random().toString(),
             mode: 'public',
           },
         ],
@@ -1225,7 +1227,7 @@ describe('InboxBot', () => {
     const nullifierOf = async (message: InboxMessageRecord) =>
       await siloNullifier(
         recipient,
-        await computeFeeJuiceMessageNullifier(Fr.fromHexString(message.msgHash!), Fr.fromHexString(message.secret)),
+        await computeFeeJuiceMessageNullifier(Fr.fromHexString(message.msgHash!), [Fr.fromHexString(message.secret)]),
       );
 
     const notConsumableYet = new Error('Assertion failed: Tried to consume nonexistent L1-to-L2 message');

@@ -17,9 +17,9 @@ describe('InboxStore', () => {
   let dateProvider: ManualDateProvider;
 
   const intent = (mode: 'public' | 'private' = 'public'): InboxMessageIntentInput => ({
-    content: Fr.random().toString(),
+    publicContentHash: Fr.random().toString(),
     secret: Fr.random().toString(),
-    secretHash: Fr.random().toString(),
+    privateContentHash: Fr.random().toString(),
     mode,
   });
 

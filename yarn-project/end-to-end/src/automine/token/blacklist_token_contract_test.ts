@@ -1,5 +1,5 @@
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
-import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import type { TxHash } from '@aztec-labs/aztec.js/tx';
@@ -178,10 +178,11 @@ export class BlacklistTokenContractTest extends AutomineTestContext {
 
     this.logger.verbose(`Minting ${amount} privately...`);
     const secret = Fr.random();
-    const secretHash = await computeSecretHash(secret);
-    const { receipt } = await asset.methods.mint_private(amount, secretHash).send({ from: this.adminAddress });
+    const privateContent = [secret];
+    const privateContentHash = await computePrivateContentHash(privateContent);
+    const { receipt } = await asset.methods.mint_private(amount, privateContentHash).send({ from: this.adminAddress });
 
-    await this.addPendingShieldNoteToPXE(asset, this.adminAddress, amount, secretHash, receipt.txHash);
+    await this.addPendingShieldNoteToPXE(asset, this.adminAddress, amount, privateContentHash, receipt.txHash);
     await asset.methods.redeem_shield(this.adminAddress, amount, secret).send({ from: this.adminAddress });
     this.logger.verbose(`Minting complete.`);
 

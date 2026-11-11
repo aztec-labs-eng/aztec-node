@@ -2,7 +2,7 @@ import { InboxAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { Archiver } from '@aztec-labs/archiver';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
-import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
@@ -84,8 +84,8 @@ describe('single-node/cross-chain/streaming_inbox_buckets', () => {
   });
 
   const randomMessage = async () => {
-    const [, secretHash] = await generateClaimSecret();
-    return { recipient: testContract.address, content: Fr.random(), secretHash };
+    const privateContentHash = await computePrivateContentHash([Fr.random()]);
+    return { recipient: testContract.address, publicContentHash: Fr.random(), privateContentHash };
   };
 
   /**

@@ -1,6 +1,6 @@
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
-import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { computePrivateContentHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
 import { isL1ToL2MessageReady, waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
@@ -193,7 +193,8 @@ describe('single-node/cross-chain/streaming_inbox', () => {
   // the prover node proves the covering checkpoint.
   it('streams a message into a non-first block, consumes it there, and proves the checkpoint', async () => {
     const l1Account = t.ethAccount;
-    const [secret, secretHash] = await generateClaimSecret();
+    const secret = Fr.random();
+    const privateContentHash = await computePrivateContentHash([secret]);
 
     // Readiness for a hash the chain has never seen is false before anything is sent, so the true answers below
     // are not an artifact of the helper answering true for everything.
@@ -204,11 +205,11 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     // asserts the index it actually got, so a competing sender fails the premise rather than the assertion.
     const readiness = cancellableNodeView();
     const anticipatedIndex = (await t.inbox.getState()).totalMessagesInserted;
-    const message = { recipient: testContract.address, content: Fr.random(), secretHash };
+    const message = { recipient: testContract.address, publicContentHash: Fr.random(), privateContentHash };
     const consume = await proveInteraction(
       wallet,
       testContract.methods.consume_message_from_arbitrary_sender_public(
-        message.content,
+        message.publicContentHash,
         secret,
         l1Account,
         anticipatedIndex,
@@ -326,7 +327,7 @@ describe('single-node/cross-chain/streaming_inbox', () => {
 
       // The leaf is nullified, so a second consume of the same message reverts.
       const { receipt: doubleSpend } = await testContract.methods
-        .consume_message_from_arbitrary_sender_public(message.content, secret, l1Account, globalLeafIndex)
+        .consume_message_from_arbitrary_sender_public(message.publicContentHash, secret, l1Account, globalLeafIndex)
         .send({ from: user1Address, wait: { dontThrowOnRevert: true } });
       expect(doubleSpend.executionResult).toBe(TxExecutionResult.REVERTED);
 
@@ -359,8 +360,8 @@ describe('single-node/cross-chain/streaming_inbox', () => {
 
     await withBackgroundFeeder(async () => {
       const wallClockAtSend = new Timer();
-      const [, secretHash] = await generateClaimSecret();
-      const message = { recipient: testContract.address, content: Fr.random(), secretHash };
+      const privateContentHash = await computePrivateContentHash([Fr.random()]);
+      const message = { recipient: testContract.address, publicContentHash: Fr.random(), privateContentHash };
       const { msgHash, txReceipt } = await sendMessageToL2(message);
       const messageL1Ts = await getMessageL1Timestamp(txReceipt.blockNumber!);
       log.warn(`Sent message ${msgHash.toString()} with L1 timestamp ${messageL1Ts}`);
@@ -400,8 +401,8 @@ describe('single-node/cross-chain/streaming_inbox', () => {
       0.5,
     );
 
-    const [, secretHash] = await generateClaimSecret();
-    const message = { recipient: testContract.address, content: Fr.random(), secretHash };
+    const privateContentHash = await computePrivateContentHash([Fr.random()]);
+    const message = { recipient: testContract.address, publicContentHash: Fr.random(), privateContentHash };
     const { msgHash } = await sendMessageToL2(message);
     log.warn(`Sent message ${msgHash.toString()} on an empty pool`);
 
