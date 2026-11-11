@@ -170,9 +170,12 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       ),
       severity: PeerErrorSeverity.MidToleranceError,
     },
+    // Mild because the setup allow list and its checks are local: peers running an older version or a different
+    // allow list honestly relay txs this node rejects. This takes many more rejections to disconnect or ban such a
+    // relayer, though each still counts against its gossipsub score for a few slots.
     phasesValidator: {
       validator: new PhasesTxValidator(contractDataSource, allowedInSetup, timestamp, bindings),
-      severity: PeerErrorSeverity.MidToleranceError,
+      severity: PeerErrorSeverity.HighToleranceError,
     },
     blockHeaderValidator: {
       validator: new BlockHeaderTxValidator(new ArchiveCache(merkleTree), bindings),
@@ -522,7 +525,7 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
 }
 
 /**
- * Creates a function that checks whether a tx's setup-phase calls are on the allow list.
+ * Creates a function that checks whether a tx's setup-phase calls pass the allow list checks.
  *
  * Uses the `PhasesTxValidator` on the full Tx. The result is stored as a boolean
  * flag in `TxMetaData.allowedSetupCalls` at receipt time, so the pending pool

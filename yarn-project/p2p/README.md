@@ -76,8 +76,8 @@ A REJECT result from any validation stage increments the gossipsub P4 (invalidMe
 | Severity | Approx. strikes to ban | Used for |
 |----------|------------------------|----------|
 | `LowToleranceError` | ~2 | Invalid proof, deserialization failure, old double-spend |
-| `MidToleranceError` | ~10 | Most validation failures (metadata, data, min gas, fee floor, fee-payer balance, phases, size) |
-| `HighToleranceError` | ~50 | Timestamp expiry, block header, max gas limits, recent double-spend, rate limits |
+| `MidToleranceError` | ~10 | Most validation failures (metadata, data, min gas, fee floor, fee-payer balance, size) |
+| `HighToleranceError` | ~50 | Timestamp expiry, block header, max gas limits, setup allow list checks (phases), recent double-spend, rate limits |
 
 See [Gossipsub Scoring](src/services/gossipsub/README.md) for full score calculation, decay mechanics, and threshold alignment.
 
