@@ -74,6 +74,12 @@ Only allow list functions that cannot revert for any calldata their entry allows
 
 **Migration**: existing allow list strings parse as before, except that `cl=N`, like the new `l2=N` and `da=N`, takes only a plain integer from 0 to 2^32-1. Before, it read only the leading digits, so `cl=4x` meant `cl=4` and `cl=1e3` meant `cl=1`; now the node fails to start with an `Invalid allow list entry` error. For each custom entry, measure the most gas its function can use in setup, for any calldata the entry allows, and declare it with `l2=N` and `da=N`; without them, txs whose gas limits leave too little for that call are still admitted. A custom entry that targets a `#[view]` function, which only works when called statically, no longer admits any tx: remove it. Older nodes reject the `l2=` and `da=` flags with an `unknown flag` error when they read their config, so do not put them in a network config shared with nodes that have not upgraded.
 
+### HA validators sign again with an odd `VALIDATOR_HA_MAX_STUCK_DUTIES_AGE_MS` ([#669](https://github.com/aztec-labs-eng/aztec-node/pull/669))
+
+An HA validator caps each signer call at half of `VALIDATOR_HA_MAX_STUCK_DUTIES_AGE_MS` when that is below `VALIDATOR_SIGNER_CALL_TIMEOUT_MS`. With an odd value, half of it was a fraction of a millisecond, and every signing failed at once with a `RangeError` saying the value is out of range. The cap is now rounded down to a whole millisecond. The default, two slots, is even and was not affected.
+
+**Migration**: none.
+
 ### Prover nodes prove epochs that an early proof already covered ([#693](https://github.com/aztec-labs-eng/aztec-node/pull/693))
 
 A proof that lands while its epoch is still open, such as an early-withdrawal partial proof requested through `startProof`, moves the proven tip past the epoch. L1 registers that proof as non-full and still rewards a full-epoch proof from every prover until the epoch's submission window closes. Prover nodes used to schedule from the proven tip alone, so they skipped such an epoch and lost its prover reward share and activity-score increase.
