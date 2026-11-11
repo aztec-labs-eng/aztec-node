@@ -229,8 +229,10 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     if (!l1Blocks) {
       return undefined;
     }
+    // Look blocks up by their own index, not their array position: the archiver leaves out a block it cannot read in
+    // full, which would shift every later block onto an earlier index.
     const diverging = unreported.filter(proposal => {
-      const l1Block = l1Blocks[proposal.indexWithinCheckpoint];
+      const l1Block = l1Blocks.find(block => block.indexWithinCheckpoint === proposal.indexWithinCheckpoint);
       return l1Block !== undefined && l1Block.slot === slot && !matchesL1Block(proposal, l1Block);
     });
     if (diverging.length === 0) {
@@ -240,6 +242,9 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     // An uncached L1 call. It repeats on every scan only while a diverging proposal stays unreported, which happens
     // with an empty committee: in that dev setup anyone may propose, so the blocks of sequencers that lost the slot
     // differ from L1 and are never attributed.
+    // Deliberately not handled: the lookup reads a failed escape-hatch query as a closed hatch, so it can name the
+    // committee proposer for a slot whose checkpoint the hatch proposer landed. Blaming that proposer also needs its
+    // own node to have misread the hatch and gossiped a block, so both reads must fail.
     const l1Proposer = await this.tryGetL1ProposerForSlot(slot);
     if (!l1Proposer || !diverging.some(proposal => proposal.getSender()?.equals(l1Proposer))) {
       return undefined;
