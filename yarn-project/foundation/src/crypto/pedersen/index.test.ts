@@ -3,13 +3,11 @@ import { BarretenbergSync } from '@aztec-foundation/bb.js';
 import { Buffer } from 'buffer';
 
 import { toBufferBE } from '../../bigint-buffer/index.js';
-import { setupCustomSnapshotSerializers } from '../../testing/index.js';
-import { pedersenCommit, pedersenHash, pedersenHashBuffer } from './index.js';
+import { pedersenCommit, pedersenHash } from './index.js';
 
 describe('pedersen', () => {
   beforeAll(async () => {
     await BarretenbergSync.initSingleton({ threads: 1 });
-    setupCustomSnapshotSerializers(expect);
   });
 
   it('pedersen commit', async () => {
@@ -36,13 +34,5 @@ describe('pedersen', () => {
   it('pedersen hash with index', async () => {
     const r = await pedersenHash([toBufferBE(1n, 32), toBufferBE(1n, 32)], 5);
     expect(r.toString()).toEqual('0x1c446df60816b897cda124524e6b03f36df0cec333fad87617aab70d7861daa6');
-  });
-
-  it('pedersen hash buffer', async () => {
-    const input = Buffer.alloc(123);
-    input.writeUint32BE(321, 0);
-    input.writeUint32BE(456, 119);
-    const r = await pedersenHashBuffer(input);
-    expect(r).toMatchSnapshot();
   });
 });

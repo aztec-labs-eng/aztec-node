@@ -13,6 +13,20 @@ import {
 } from './client.js';
 
 describe('createExtendedL1Client polling', () => {
+  const originalPollingInterval = process.env.L1_VIEM_POLLING_INTERVAL_MS;
+
+  beforeEach(() => {
+    delete process.env.L1_VIEM_POLLING_INTERVAL_MS;
+  });
+
+  afterEach(() => {
+    if (originalPollingInterval === undefined) {
+      delete process.env.L1_VIEM_POLLING_INTERVAL_MS;
+    } else {
+      process.env.L1_VIEM_POLLING_INTERVAL_MS = originalPollingInterval;
+    }
+  });
+
   const privateKey = `0x${'01'.repeat(32)}`;
   const rpcUrls = ['http://127.0.0.1:8545'];
 
@@ -25,8 +39,14 @@ describe('createExtendedL1Client polling', () => {
     expect(createExtendedL1Client(rpcUrls, privateKey, foundry, 0).pollingInterval).toBe(0);
   });
 
-  it('preserves the public-chain default', () => {
-    expect(createExtendedL1Client(rpcUrls, privateKey, sepolia).pollingInterval).toBe(4000);
+  it('uses the configured polling interval on public chains', () => {
+    process.env.L1_VIEM_POLLING_INTERVAL_MS = '250';
+    expect(createExtendedL1Client(rpcUrls, privateKey, sepolia).pollingInterval).toBe(250);
+    expect(createExtendedL1Client(rpcUrls, privateKey, sepolia, 0).pollingInterval).toBe(0);
+  });
+
+  it('defaults to one-second polling on public chains', () => {
+    expect(createExtendedL1Client(rpcUrls, privateKey, sepolia).pollingInterval).toBe(1000);
   });
 });
 

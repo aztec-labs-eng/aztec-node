@@ -64,12 +64,12 @@
     ]
   },
   "dependencies": {
-    "@aztec-foundation/wsdb": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/telemetry-client": "workspace:^",
+    "@aztec-labs/wsdb": "0.1.0-dummy",
     "msgpackr": "^1.11.2",
     "tslib": "^2.4.0",
     "zod": "~4.6.7"

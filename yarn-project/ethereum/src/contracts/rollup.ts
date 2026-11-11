@@ -1415,11 +1415,12 @@ export class RollupContract {
     return Fr.fromString(await this.rollup.read.archiveAt([BigInt(checkpointNumber)], options));
   }
 
-  getSequencerRewards(address: Hex | EthAddress): Promise<bigint> {
+  async getSequencerRewards(address: Hex | EthAddress, options?: { blockNumber?: bigint }): Promise<bigint> {
     if (address instanceof EthAddress) {
       address = address.toString();
     }
-    return this.rollup.read.getSequencerRewards([address]);
+    await checkBlockTag(options?.blockNumber, this.client);
+    return this.rollup.read.getSequencerRewards([address], options);
   }
 
   getSpecificProverRewardsForEpoch(epoch: bigint, prover: Hex | EthAddress): Promise<bigint> {

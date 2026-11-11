@@ -1,10 +1,10 @@
 import { type IpcClientAsync, UdsIpcClient, createNapiShmAsyncClient } from '@aztec-foundation/ipc-runtime';
-import { AsyncApi } from '@aztec-foundation/wsdb';
 
 import { times } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { AsyncApi } from '@aztec-labs/wsdb';
 
 import { NativeWorldStateService } from './native_world_state.js';
 

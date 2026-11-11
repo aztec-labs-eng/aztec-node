@@ -35,14 +35,3 @@ export function pedersenHash(input: Fieldable[], index = 0): Fr {
   });
   return Fr.fromBuffer(Buffer.from(response.hash));
 }
-
-/**
- * Create a pedersen hash from an arbitrary length buffer.
- */
-export function pedersenHashBuffer(input: Buffer, index = 0) {
-  const response = BarretenbergSync.getSingleton().pedersenHashBuffer({
-    input,
-    hashIndex: index,
-  });
-  return Buffer.from(response.hash);
-}

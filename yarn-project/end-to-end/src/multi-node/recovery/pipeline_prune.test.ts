@@ -56,7 +56,6 @@ describe('multi-node/recovery/pipeline_prune', () => {
       maxTxsPerBlock: 2,
       maxTxsPerCheckpoint: 24,
       mockGossipSubNetworkLatency: 500,
-      clearInheritedCoinbase: true,
       disableCheckpointPromotionOnFirstNode: true,
     });
     const { test, context, logger, archiver, validators, nodes, contract, from } = fixture;

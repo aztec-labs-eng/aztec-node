@@ -277,9 +277,9 @@ pub contract PublicFnsWithEmitRepro {
         }
 
         pub fn offchain_receive(self, messages: BoundedVec<aztec::messages::processing::offchain::OffchainMessage, 16>) -> aztec::context::calls::UtilityCall<16, 321, ()> {
-            let serialized_params: [Field; 321] = <BoundedVec<aztec::messages::processing::offchain::OffchainMessage, 16> as aztec::protocol::traits::Serialize>::serialize(messages);
+            let serialized_params: [Field; (16 * 20) + 1] = <BoundedVec<aztec::messages::processing::offchain::OffchainMessage, 16> as aztec::protocol::traits::Serialize<N = (16 * 20) + 1>>::serialize(messages);
             let selector: aztec::protocol::abis::function_selector::FunctionSelector = <aztec::protocol::abis::function_selector::FunctionSelector as aztec::protocol::traits::FromField>::from_field(1396850735_Field);
-            aztec::context::calls::UtilityCall::<16, 321, ()>::new(self.target_contract, selector, "offchain_receive", serialized_params)
+            aztec::context::calls::UtilityCall::<16, (16 * 20) + 1, ()>::new(self.target_contract, selector, "offchain_receive", serialized_params)
         }
     }
 

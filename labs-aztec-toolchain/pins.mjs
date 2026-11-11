@@ -45,7 +45,7 @@ function versionsIn(text, regex, expected, offset = 0) {
   });
 }
 
-// Where each @aztec-foundation npm resolution lives inside a foundation checkout, as
+// Where each first-party (@aztec-foundation, @aztec-labs) npm resolution lives inside a foundation checkout, as
 // "<yarn protocol><foundation-relative path>"; use-local relativizes the path from the
 // consuming manifest's directory. null marks packages with no consumable package dir in
 // the foundation tree, which stay pinned to the published release even in use-local mode.
@@ -63,9 +63,27 @@ const LOCAL_PACKAGES = {
   "@aztec-foundation/bb-avm-sim-linux-x64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-linux-x64",
   "@aztec-foundation/bb.js": "portal:barretenberg/ts/bb.js",
+  "@aztec-foundation/bb.js-api": "portal:barretenberg/ts/bb.js-api",
+  "@aztec-foundation/bb.js-api-darwin-arm64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-darwin-arm64",
+  "@aztec-foundation/bb.js-api-darwin-x64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-darwin-x64",
+  "@aztec-foundation/bb.js-api-linux-arm64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-linux-arm64",
+  "@aztec-foundation/bb.js-api-linux-x64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-linux-x64",
   "@aztec-foundation/cdb": "portal:barretenberg/ts/cdb",
   "@aztec-foundation/constants-codegen": "portal:protocol/constants-codegen",
   "@aztec-foundation/ipc-runtime": "portal:ipc-runtime/ts",
+  "@aztec-labs/kvdb": "portal:native-packages/kvdb/ts",
+  "@aztec-labs/kvdb-darwin-arm64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-darwin-arm64",
+  "@aztec-labs/kvdb-darwin-x64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-darwin-x64",
+  "@aztec-labs/kvdb-linux-arm64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-linux-arm64",
+  "@aztec-labs/kvdb-linux-x64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-linux-x64",
   "@aztec-foundation/l1-artifacts": "portal:l1-contracts/l1-artifacts",
   "@aztec-foundation/mock-protocol-circuits-artifacts":
     "portal:noir-projects/fnd/mock-protocol-circuits-artifacts/dist",
@@ -73,11 +91,15 @@ const LOCAL_PACKAGES = {
     "portal:noir-projects/fnd/protocol-circuits-artifacts/dist",
   "@aztec-foundation/protocol-contracts-artifacts":
     "portal:noir-projects/fnd/protocol-contracts-artifacts/dist",
-  "@aztec-foundation/wsdb": "portal:wsdb/ts",
-  "@aztec-foundation/wsdb-darwin-arm64": "portal:wsdb/ts/packages/wsdb-darwin-arm64",
-  "@aztec-foundation/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
-  "@aztec-foundation/wsdb-linux-arm64": "portal:wsdb/ts/packages/wsdb-linux-arm64",
-  "@aztec-foundation/wsdb-linux-x64": "portal:wsdb/ts/packages/wsdb-linux-x64",
+  "@aztec-labs/wsdb": "portal:native-packages/wsdb/ts",
+  "@aztec-labs/wsdb-darwin-arm64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-darwin-arm64",
+  "@aztec-labs/wsdb-darwin-x64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-darwin-x64",
+  "@aztec-labs/wsdb-linux-arm64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-linux-arm64",
+  "@aztec-labs/wsdb-linux-x64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-linux-x64",
   "@aztec-foundation/noir-acvm_js": "portal:noir/packages/acvm_js",
   "@aztec-foundation/noir-types": "portal:noir/packages/types",
   "@aztec-foundation/noir-noirc_abi": "portal:noir/packages/noirc_abi",
@@ -164,10 +186,10 @@ const SITES = [
   },
   {
     // yarn-project pins its first-party npm dependencies in one place, the resolutions block;
-    // the workspace manifests carry a dummy version. Every @aztec-foundation-scoped entry there is a
-    // release of this repo and so tracks BB_VERSION, unlike the third-party entries it sits
-    // beside.
-    name: "@aztec-foundation resolutions entry",
+    // the workspace manifests carry a dummy version. Every @aztec-foundation- or @aztec-labs-scoped
+    // entry there is a release of this repo and so tracks BB_VERSION, unlike the third-party
+    // entries it sits beside.
+    name: "first-party resolutions entry",
     files: () => ["yarn-project/package.json"],
     required: ["yarn-project/package.json"],
     pins(content, { bb }) {
@@ -176,7 +198,7 @@ const SITES = [
         throw new Error("yarn-project/package.json has no resolutions block");
       return versionsIn(
         block[0],
-        /"@aztec-foundation\/[^"]+":\s*"([^"]+)"/dg,
+        /"@(?:aztec-foundation|aztec-labs)\/[^"]+":\s*"([^"]+)"/dg,
         bb,
         block.index,
       );
@@ -187,7 +209,7 @@ const SITES = [
     verify(content) {
       const block = /"resolutions"\s*:\s*\{[^}]*\}/.exec(content);
       if (!block) return ["yarn-project/package.json has no resolutions block"];
-      const keys = [...block[0].matchAll(/"(@aztec-foundation\/[^"]+)":/g)].map(
+      const keys = [...block[0].matchAll(/"(@(?:aztec-foundation|aztec-labs)\/[^"]+)":/g)].map(
         (m) => m[1],
       );
       const errors = [];
@@ -212,7 +234,7 @@ const SITES = [
       const targets = [];
       let retargeted = 0;
       const updated = block[0].replace(
-        /"(@aztec-foundation\/[^"]+)":(\s*)"([^"]+)"/g,
+        /"(@(?:aztec-foundation|aztec-labs)\/[^"]+)":(\s*)"([^"]+)"/g,
         (entry, name, ws, current) => {
           const local = LOCAL_PACKAGES[name];
           if (local === undefined) {

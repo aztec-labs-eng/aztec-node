@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react-swc';
 import fs from 'fs';
 import { builtinModules } from 'module';
 import path from 'path';
+import { gzipSync } from 'zlib';
 
 // Only required for alternative bb wasm file, left as reference
 //import { viteStaticCopy } from 'vite-plugin-static-copy';
@@ -18,6 +19,8 @@ interface ChunkSizeLimit {
   maxSizeKB: number;
   /** Optional description for logging */
   description?: string;
+  /** Measure the gzipped size, for assets served compressed */
+  gzip?: boolean;
 }
 
 const chunkSizeValidator = (limits: ChunkSizeLimit[]): Plugin => {
@@ -52,10 +55,9 @@ const chunkSizeValidator = (limits: ChunkSizeLimit[]): Plugin => {
           if (stat.isDirectory()) {
             checkDir(filePath, relativePath);
           } else if (stat.isFile()) {
-            const sizeKB = stat.size / 1024;
-
             for (const limit of limits) {
               if (limit.pattern.test(relativePath)) {
+                const sizeKB = (limit.gzip ? gzipSync(fs.readFileSync(filePath)).length : stat.size) / 1024;
                 const desc = limit.description ? ` (${limit.description})` : '';
                 logger.info(`  ${relativePath}: ${sizeKB.toFixed(2)} KB / ${limit.maxSizeKB} KB${desc}`);
 
@@ -224,10 +226,22 @@ export default defineConfig(({ mode }) => {
         // - 2026-07-02: bumped to 5000 after merging from public to private repo resulted in 4800+k for some reason.
         // - 2026-07-04: bumped from 5000 => 5300 after bb changes on merge-train/barretenberg grew
         //   assets/barretenberg-*.js to 5079.12 KB and assets/barretenberg-threads-*.js to 5116.65 KB.
+        // - 2026-10-22: bumped from 5350 => 5550 after building bb's wasm with exception handling (wasi-sdk 34,
+        //   https://github.com/AztecProtocol/aztec-packages/pull/25669) grew assets/barretenberg-*.js to 5433.92 KB
+        //   and assets/barretenberg-threads-*.js to 5438.53 KB.
         {
-          pattern: /.*/,
-          maxSizeKB: 5350,
+          pattern: /^(?!.*\.wasm$)/,
+          maxSizeKB: 5550,
           description: 'Detect if json artifacts or bb.js wasm get out of control',
+        },
+        // bb.js used to inline its wasm as base64 gzip into assets/barretenberg-*.js, which the limit above caught.
+        // bb.js-api emits the wasm as its own uncompressed asset (about 18.6 MB), so it is measured gzipped
+        // instead: about 4100 KB for both builds when this limit was added.
+        {
+          pattern: /\.wasm$/,
+          maxSizeKB: 4300,
+          gzip: true,
+          description: 'bb.js-api wasm, gzipped',
         },
       ]),
     ],

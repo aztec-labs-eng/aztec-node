@@ -132,8 +132,8 @@ export function setupSimpleBlockProduction(opts: {
  * Creates validators and sets up a wide-slot test context with the pipelining timing profile and a prover
  * node, then starts (paused) validator nodes and points the wallet at node 0. Mirrors the per-test
  * setup from the dissolved `mbps.parallel` file. The blob-promotion and pipeline-prune suites layer their
- * adverse-network shape on via `mockGossipSubNetworkLatency`, `maxTxsPerCheckpoint`, `clearInheritedCoinbase`,
- * and `disableCheckpointPromotionOnFirstNode`.
+ * adverse-network shape on via `mockGossipSubNetworkLatency`, `maxTxsPerCheckpoint`, and
+ * `disableCheckpointPromotionOnFirstNode`.
  */
 export async function setupBlockProductionWithProver(opts: {
   syncChainTip: 'proposed' | 'checkpointed';
@@ -146,8 +146,6 @@ export async function setupBlockProductionWithProver(opts: {
   skipPushProposedBlocksToArchiver?: boolean;
   /** Injects artificial mock-gossip propagation latency (ms) to model adverse network conditions. */
   mockGossipSubNetworkLatency?: number;
-  /** Clears each validator node's inherited coinbase so it derives one from its own attester key. */
-  clearInheritedCoinbase?: boolean;
   /**
    * Disables checkpoint promotion on node 0 (`skipPromoteProposedCheckpointDuringL1Sync`), so node 0 fetches
    * blobs during L1 sync while its peers promote their own proposed checkpoints and skip the blob fetch.
@@ -164,13 +162,7 @@ export async function setupBlockProductionWithProver(opts: {
    */
   aztecTargetCommitteeSize?: number;
 }): Promise<BlockProductionWithProverFixture> {
-  const {
-    syncChainTip = 'checkpointed',
-    clearInheritedCoinbase = false,
-    disableCheckpointPromotionOnFirstNode = false,
-    testDeps,
-    ...setupOpts
-  } = opts;
+  const { syncChainTip = 'checkpointed', disableCheckpointPromotionOnFirstNode = false, testDeps, ...setupOpts } = opts;
 
   // WIDE_SLOT_TIMING is the wide 72s/12s pipelining cadence (see A-914 on why the tighter 36s/4s breaks
   // non-proposer nodes); the JSDoc on the profile carries the full rationale.
@@ -187,7 +179,6 @@ export async function setupBlockProductionWithProver(opts: {
     },
     nodeOpts: (index: number) => ({
       dontStartSequencer: true,
-      ...(clearInheritedCoinbase ? { coinbase: undefined } : {}),
       ...(disableCheckpointPromotionOnFirstNode && index === 0
         ? { skipPromoteProposedCheckpointDuringL1Sync: true }
         : {}),
