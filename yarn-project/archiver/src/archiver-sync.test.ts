@@ -4563,7 +4563,7 @@ describe('Archiver Sync', () => {
       expect(tips.checkpointed.block.number).toEqual(cp2.blocks[cp2.blocks.length - 1].number);
     }, 10_000);
 
-    it('detects equivocation when a local proposed checkpoint diverges only in the fee-asset-price modifier', async () => {
+    it('detects modifier-only equivocation and prunes proposed descendants', async () => {
       // feeAssetPriceModifier is signed but is not part of the header, so a checkpoint that differs only in
       // it still matches on header and archive root. The divergence check must catch the mismatch anyway.
       const equivocationSpy = jest.fn();
@@ -4611,6 +4611,25 @@ describe('Archiver Sync', () => {
         signer: proposer,
       });
 
+      const { checkpoint: cp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 6000n,
+        messagesL1BlockNumber: 5990n,
+        numL1ToL2Messages: 3,
+        numBlocks: 2,
+        signers,
+      });
+      for (const block of cp3.blocks) {
+        await archiverStore.blocks.addProposedBlock(block);
+      }
+      await archiverStore.blocks.addProposedCheckpoint({
+        checkpointNumber: cp3.number,
+        header: cp3.header,
+        startBlock: cp3.blocks[0].number,
+        blockCount: cp3.blocks.length,
+        totalManaUsed: 0n,
+        feeAssetPriceModifier: cp3.feeAssetPriceModifier,
+      });
+
       fake.setL1BlockNumber(5010n);
       await archiver.syncImmediate();
 
@@ -4626,6 +4645,18 @@ describe('Archiver Sync', () => {
       );
       // The valid L1 checkpoint 2 is still ingested after the local proposed copy is evicted.
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      expect(await archiverStore.blocks.getLastProposedCheckpoint()).toBeUndefined();
+      expect(await archiver.getBlockNumber()).toEqual(cp2.blocks.at(-1)!.number);
+      const tips = await archiver.getL2Tips();
+      expect(tips.proposed).toEqual(tips.checkpointed.block);
+      for (const block of cp3.blocks) {
+        expect(await archiver.getBlock({ number: block.number })).toBeUndefined();
+      }
+      expect(pruneSpy).toHaveBeenCalledWith({
+        type: L2BlockSourceEvents.L2PruneUncheckpointed,
+        slotNumber: cp3.slot,
+        blocks: expect.arrayContaining(cp3.blocks.map(block => expect.objectContaining({ number: block.number }))),
+      });
 
       archiver.events.off(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
     }, 15_000);

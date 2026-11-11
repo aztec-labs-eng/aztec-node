@@ -544,13 +544,13 @@ export class CheckpointIngestor {
       // block stream does not need them re-downloaded.
       const added = plan.toAdd.flatMap(c => c.checkpoint.blocks);
 
-      // If blocks were pruned due to conflict with L1 checkpoints, emit event
+      // If local blocks were pruned while reconciling with L1, emit event
       if (result.prunedBlocks && result.prunedBlocks.length > 0) {
         const prunedCheckpointNumber = result.prunedBlocks[0].checkpointNumber;
         const prunedSlotNumber = result.prunedBlocks[0].header.globalVariables.slotNumber;
 
         this.deps.log.info(
-          `Pruned ${result.prunedBlocks.length} mismatching blocks for checkpoint ${prunedCheckpointNumber}`,
+          `Pruned ${result.prunedBlocks.length} local blocks from checkpoint ${prunedCheckpointNumber} onwards that diverge from L1`,
           { prunedBlocks: result.prunedBlocks.map(b => b.toBlockInfo()), prunedSlotNumber, prunedCheckpointNumber },
         );
 
