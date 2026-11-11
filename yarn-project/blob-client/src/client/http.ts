@@ -817,10 +817,13 @@ export class HttpBlobClient implements BlobClientInterface {
 
   /**
    * Stop the blob client, clearing any periodic tasks.
+   * In-flight upload retries are not cancelled. They end once their backoff runs out, their saves are idempotent,
+   * and the CLI exits the process after shutdown.
    */
   public stop(): void {
     void this.consensusHostReprobe?.stop();
     void this.healthcheckUpload?.stop();
+    this.healthcheckUpload = undefined;
   }
 }
 
