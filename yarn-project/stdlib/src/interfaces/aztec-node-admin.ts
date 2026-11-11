@@ -14,6 +14,21 @@ import { type ProverConfig, ProverConfigSchema } from './prover-client.js';
 import { type SlasherConfig, SlasherConfigSchema } from './slasher.js';
 import { type ValidatorClientFullConfig, ValidatorClientFullConfigSchema } from './validator.js';
 
+/** Snapshot upload outcome. Unknown means the ID was never seen, evicted, or lost on process restart. */
+export const SnapshotUploadStatusSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('unknown') }),
+  z.object({ state: z.literal('capturing'), location: z.string() }),
+  z.object({ state: z.literal('uploading'), location: z.string() }),
+  z.object({ state: z.literal('succeeded'), location: z.string() }),
+  z.object({ state: z.literal('failed'), location: z.string(), error: z.string() }),
+]);
+
+/**
+ * Status of a snapshot upload. Capturing covers local database backups; uploading means backups are complete and
+ * syncing has resumed, but the node may still need to catch up before serving traffic. Success includes index publication.
+ */
+export type SnapshotUploadStatus = z.infer<typeof SnapshotUploadStatusSchema>;
+
 /**
  * Aztec node admin API.
  */
@@ -32,8 +47,16 @@ export interface AztecNodeAdmin {
   /**
    * Pauses syncing, creates a backup of archiver and world-state databases, and uploads them. Returns immediately.
    * @param location - The location to upload the snapshot to.
+   * @param operationId - Optional caller-generated UUID. Reusing a retained ID with the same location is a no-op;
+   * reusing it with a different location is rejected. Use a new ID to retry a failed upload.
    */
-  startSnapshotUpload(location: string): Promise<void>;
+  startSnapshotUpload(location: string, operationId?: string): Promise<void>;
+
+  /**
+   * Gets the outcome of an upload started with a caller-generated UUID. Status is held in memory for up to 100
+   * operations, with least recently used eviction. Unknown is not evidence of completion; check publication before retrying.
+   */
+  getSnapshotUploadStatus(operationId: string): Promise<SnapshotUploadStatus>;
 
   /**
    * Pauses syncing and rolls back the database to the target L2 block number.
@@ -126,7 +149,11 @@ export const AztecNodeAdminConfigSchema = SequencerConfigSchema.merge(ProverConf
 export const AztecNodeAdminApiSchema: ApiSchemaFor<AztecNodeAdmin> = {
   getConfig: z.function({ input: z.tuple([]), output: AztecNodeAdminConfigSchema }),
   setConfig: z.function({ input: z.tuple([AztecNodeAdminConfigSchema.partial()]), output: z.void() }),
-  startSnapshotUpload: z.function({ input: z.tuple([z.string()]), output: z.void() }),
+  startSnapshotUpload: z.function({
+    input: z.tuple([z.string(), optional(z.uuid())]),
+    output: z.void(),
+  }),
+  getSnapshotUploadStatus: z.function({ input: z.tuple([z.uuid()]), output: SnapshotUploadStatusSchema }),
   rollbackTo: z.function({
     input: z.tuple([z.number(), optional(z.boolean()), optional(z.boolean())]),
     output: z.void(),

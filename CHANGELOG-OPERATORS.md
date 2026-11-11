@@ -32,6 +32,24 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Snapshot upload status through the admin API (`aztecAdmin_getSnapshotUploadStatus`) ([#713](https://github.com/aztec-labs-eng/aztec-node/pull/713))
+
+`aztecAdmin_startSnapshotUpload(location, operationId?)` now accepts an optional caller-generated UUID.
+Poll `aztecAdmin_getSnapshotUploadStatus(operationId)` for `capturing`, `uploading`, `succeeded`, or `failed`
+(including an error). `capturing` covers the local database backups. `uploading` means the local copies are ready
+and syncing has resumed; check readiness and sync catch-up before returning the node to a load balancer.
+The node can serve traffic while the snapshot uploads. Capture failures also attempt to resume syncing;
+check readiness before returning a failed operation's node to service.
+Success means both snapshot data and its index entry have been published. Repeating a retained ID with the same
+location does not start another upload; a different location is rejected. To retry a failed upload, use a new UUID.
+
+Status is held in memory for up to 100 operations with least recently used eviction. An unrecognized ID, including
+after a process restart or eviction, returns `unknown`; this does not mean the upload succeeded or failed.
+Check the published snapshot before deciding whether to start another operation.
+
+**Migration**: existing one-argument calls remain supported. To track uploads and recover from lost responses,
+generate and save a UUID before calling start, then poll that UUID on the same node using the authenticated admin API.
+
 ### Blob filestore uploads retry transient storage errors
 
 Blob uploads from proposers, validators and blob retrieval now share a retry policy: after the first failure,

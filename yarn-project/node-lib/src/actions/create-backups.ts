@@ -1,14 +1,20 @@
 import type { Archiver } from '@aztec-labs/archiver';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { SnapshotDataUrls } from '@aztec-labs/stdlib/snapshots';
 import { existsSync } from 'fs';
 import { join } from 'path/posix';
 
+import { buildSnapshotMetadata } from './build-snapshot-metadata.js';
+import type { UploadSnapshotConfig } from './upload-snapshot.js';
+
+/** Copies both databases and captures their metadata while syncing is paused, then resumes syncing. */
 export async function createBackups(
   backupDir: string,
   archiver: Archiver,
   worldState: WorldStateSynchronizer,
+  config: UploadSnapshotConfig,
   log: Logger,
 ) {
   try {
@@ -17,7 +23,7 @@ export async function createBackups(
     await worldState.stopSync();
 
     log.info(`Creating backups of lmdb environments to ${backupDir}`);
-    const [archiverPath, worldStatePaths] = await Promise.all([
+    const [archiverPath, worldStatePaths] = await allToCompletion([
       archiver.backupTo(join(backupDir, 'archiver')),
       worldState.backupTo(join(backupDir, 'world-state')),
     ]);
@@ -28,8 +34,9 @@ export async function createBackups(
       throw new Error(`Missing backup files: ${missing.map(([key, path]) => `${path} (${key})`).join(', ')}`);
     }
 
+    const metadata = await buildSnapshotMetadata(archiver, config);
     log.info(`Data stores backed up to ${backupDir}`, { paths });
-    return paths;
+    return { paths, metadata };
   } catch (err) {
     throw new Error(`Error creating backups for snapshot upload: ${err}`);
   } finally {

@@ -2,7 +2,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { type Offense, OffenseType } from '../slashing/index.js';
-import { type AztecNodeAdmin, AztecNodeAdminApiSchema } from './aztec-node-admin.js';
+import { type AztecNodeAdmin, AztecNodeAdminApiSchema, type SnapshotUploadStatus } from './aztec-node-admin.js';
 import type { SequencerConfig } from './configs.js';
 import type { ProverConfig } from './prover-client.js';
 import type { ValidatorClientFullConfig } from './server.js';
@@ -47,6 +47,22 @@ describe('AztecNodeAdminApiSchema', () => {
 
   it('startSnapshotUpload', async () => {
     await context.client.startSnapshotUpload('foo');
+    await context.client.startSnapshotUpload('foo', '08c7d31c-dcc7-42fd-a22c-f0a60df98701');
+    await expect(context.client.startSnapshotUpload('foo', 'invalid')).rejects.toThrow();
+  });
+
+  it('getSnapshotUploadStatus', async () => {
+    const operationId = '08c7d31c-dcc7-42fd-a22c-f0a60df98701';
+    for (const status of [
+      { state: 'unknown' },
+      { state: 'capturing', location: 'gs://bucket' },
+      { state: 'uploading', location: 'gs://bucket' },
+      { state: 'succeeded', location: 'gs://bucket' },
+      { state: 'failed', location: 'gs://bucket', error: 'Index write denied' },
+    ] satisfies SnapshotUploadStatus[]) {
+      handler.snapshotStatus = status;
+      expect(await context.client.getSnapshotUploadStatus(operationId)).toEqual(status);
+    }
   });
 
   it('rollbackTo', async () => {
@@ -159,7 +175,11 @@ class MockAztecNodeAdmin implements AztecNodeAdmin {
       rollupAddress: EthAddress.random(),
     });
   }
-  startSnapshotUpload(_location: string): Promise<void> {
+  public snapshotStatus: SnapshotUploadStatus = { state: 'unknown' };
+  getSnapshotUploadStatus(_operationId: string): Promise<SnapshotUploadStatus> {
+    return Promise.resolve(this.snapshotStatus);
+  }
+  startSnapshotUpload(_location: string, _operationId?: string): Promise<void> {
     return Promise.resolve();
   }
   rollbackTo(_targetBlockNumber: number, _force?: boolean, _resumeSync?: boolean): Promise<void> {
