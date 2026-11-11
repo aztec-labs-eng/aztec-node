@@ -54,6 +54,7 @@ import type {
   ProtocolContractAddresses,
 } from '@aztec-labs/stdlib/contract';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { createFileStore } from '@aztec-labs/stdlib/file-store';
 import {
   GasFees,
   type ManaUsageEstimate,
@@ -1010,9 +1011,11 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
       this.snapshotUploads.start(operationId, location, async () => {
         const timer = new Timer();
         try {
+          // Reject an unusable location before pausing sync and copying the databases.
+          const store = await createFileStore(location);
           await using snapshot = await captureSnapshot(archiver, this.worldStateSynchronizer, this.config, this.log);
           this.snapshotUploads.markUploading(operationId);
-          await snapshot.upload(location);
+          await snapshot.upload(store);
         } catch (err) {
           this.metrics.recordSnapshotError();
           this.log.error('Error uploading snapshot', { operationId, location, err });

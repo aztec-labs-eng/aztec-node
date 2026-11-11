@@ -2,8 +2,9 @@ import type { Archiver } from '@aztec-labs/archiver';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { NoRetryError } from '@aztec-labs/foundation/retry';
 import { BlockHash, type L2Tips } from '@aztec-labs/stdlib/block';
-import { createFileStore } from '@aztec-labs/stdlib/file-store';
+import { type FileStore, createFileStore } from '@aztec-labs/stdlib/file-store';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import { getSnapshotIndex, makeSnapshotPaths } from '@aztec-labs/stdlib/snapshots';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'fs/promises';
@@ -65,8 +66,9 @@ describe('captureSnapshot', () => {
       await using snapshot = await captureSnapshot(archiver, worldState, { ...config, dataDirectory: directory }, log);
       expect(paused).toBe(false);
       archiver.getL2Tips.mockRejectedValue(new Error('Must not read live metadata during upload'));
-      await snapshot.upload(location);
-      const index = await getSnapshotIndex({ ...config, rollupAddress }, await createFileStore(location));
+      const store = await createFileStore(location);
+      await snapshot.upload(store);
+      const index = await getSnapshotIndex({ ...config, rollupAddress }, store);
       expect(index?.snapshots[0]).toMatchObject({ l1BlockNumber: 10, l2BlockNumber: 5, l2BlockHash: blockHash });
     }
     expect(await readdir(directory)).toEqual(['published']);
@@ -75,8 +77,10 @@ describe('captureSnapshot', () => {
   it('removes captured files when upload fails', async () => {
     await expect(async () => {
       await using snapshot = await captureSnapshot(archiver, worldState, { ...config, dataDirectory: directory }, log);
-      await snapshot.upload('invalid-location');
-    }).rejects.toThrow(/Unknown file store/);
+      const store = mock<FileStore>();
+      store.upload.mockRejectedValue(new NoRetryError('Upload denied'));
+      await snapshot.upload(store);
+    }).rejects.toThrow(/Upload denied/);
     expect(await readdir(directory)).toEqual([]);
     expect(paused).toBe(false);
   });

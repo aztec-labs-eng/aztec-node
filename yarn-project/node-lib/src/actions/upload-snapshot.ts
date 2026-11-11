@@ -2,7 +2,7 @@ import { ARCHIVER_DB_VERSION, type Archiver } from '@aztec-labs/archiver';
 import { tryRmDir } from '@aztec-labs/foundation/fs';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
-import { createFileStore } from '@aztec-labs/stdlib/file-store';
+import { type FileStore, createFileStore } from '@aztec-labs/stdlib/file-store';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { uploadSnapshotToIndex } from '@aztec-labs/stdlib/snapshots';
@@ -18,8 +18,8 @@ export type UploadSnapshotConfig = Pick<ChainConfig, 'l1ChainId' | 'rollupVersio
 
 /** Local database copies and frozen metadata, owned until asynchronous disposal removes the temporary files. */
 export interface CapturedSnapshot extends AsyncDisposable {
-  /** Publishes the captured data and its index entry to a URL supported by the file store. */
-  upload(location: string): Promise<void>;
+  /** Publishes the captured data and its index entry to the store. */
+  upload(store: FileStore): Promise<void>;
 }
 
 /** Captures consistent database copies and metadata, resuming syncing before returning. Use with `await using`. */
@@ -39,12 +39,8 @@ export async function captureSnapshot(
     const { paths, metadata } = await createBackups(backupDir, archiver, worldState, config, log);
     const versions = { archiver: ARCHIVER_DB_VERSION, worldState: WORLD_STATE_DB_VERSION };
     return {
-      async upload(location: string): Promise<void> {
-        const store = await createFileStore(location);
-        if (!store) {
-          throw new Error(`Failed to create file store for snapshot upload for location ${location}.`);
-        }
-        log.info(`Uploading snapshot to ${location}`, { snapshot: metadata });
+      async upload(store: FileStore): Promise<void> {
+        log.info(`Uploading snapshot`, { snapshot: metadata });
         const snapshot = await uploadSnapshotToIndex(paths, versions, metadata, store);
         log.info(`Snapshot uploaded successfully`, { snapshot });
       },
@@ -64,6 +60,7 @@ export async function uploadSnapshot(
   config: UploadSnapshotConfig,
   log: Logger,
 ): Promise<void> {
+  const store = await createFileStore(location);
   await using snapshot = await captureSnapshot(archiver, worldState, config, log);
-  await snapshot.upload(location);
+  await snapshot.upload(store);
 }
