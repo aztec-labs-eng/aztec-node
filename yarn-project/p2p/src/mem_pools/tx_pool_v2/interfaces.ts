@@ -2,7 +2,7 @@ import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
 import type { L2Block, L2BlockId, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
-import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { AllowedElement, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { BlockHeader, Tx, TxHash, TxValidator } from '@aztec-labs/stdlib/tx';
 
 import type { TxPoolRejectionError } from './eviction/interfaces.js';
@@ -59,6 +59,8 @@ export type TxPoolV2Config = {
    * at the finalized tip (default).
    */
   keepFinalizedTxsForSlots: number;
+  /** Entries added to the default setup allow list, against which txs entering the pool get their setup-call flag. */
+  txPublicSetupAllowListExtend: AllowedElement[];
 };
 
 /**
@@ -72,6 +74,7 @@ export const DEFAULT_TX_POOL_V2_CONFIG: TxPoolV2Config = {
   dropTransactionsProbability: 0,
   priceBumpPercentage: 10n,
   keepFinalizedTxsForSlots: 0,
+  txPublicSetupAllowListExtend: [],
 };
 
 /**
@@ -84,8 +87,8 @@ export type TxPoolV2Dependencies = {
   worldStateSynchronizer: WorldStateSynchronizer;
   /** Factory that creates a validator for re-validating pool transactions using metadata */
   createTxValidator: () => Promise<TxValidator<TxMetaData>>;
-  /** Checks whether a tx's setup-phase calls are on the allow list. Precomputed at receipt time. */
-  checkAllowedSetupCalls: (tx: Tx) => Promise<boolean>;
+  /** Checks whether a tx's setup-phase calls pass the given allow list. Precomputed at receipt time. */
+  checkAllowedSetupCalls: (tx: Tx, setupAllowList: AllowedElement[]) => Promise<boolean>;
   /**
    * Provides the fee the next block will charge. Used by eviction rules instead of stale block header fees. Only the
    * exact fee: admission pricing is applied by the validator `createTxValidator` builds.

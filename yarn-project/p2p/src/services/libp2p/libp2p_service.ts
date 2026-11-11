@@ -79,7 +79,7 @@ import {
   CheckpointProposalValidator,
   DoubleSpendTxValidator,
   FishermanAttestationValidator,
-  getDefaultAllowedSetupFunctions,
+  getSetupAllowList,
 } from '../../msg_validators/index.js';
 import { MessageSeenValidator } from '../../msg_validators/msg_seen_validator/msg_seen_validator.js';
 import {
@@ -2040,10 +2040,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     nextSlotTimestamp: UInt64,
   ): Promise<Record<string, TransactionValidator<GossipValidationFailure>>> {
     const gasFees = await this.getGasFees();
-    const allowedInSetup = [
-      ...(await getDefaultAllowedSetupFunctions()),
-      ...(this.config.txPublicSetupAllowListExtend ?? []),
-    ];
+    const allowedInSetup = await getSetupAllowList(this.config);
     const blockNumber = BlockNumber(currentBlockNumber + 1);
     const l1Constants = await this.archiver.getL1Constants();
     const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants, this.feeConfigProvider.getFeeConfig());
