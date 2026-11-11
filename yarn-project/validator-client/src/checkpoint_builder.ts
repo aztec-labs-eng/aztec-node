@@ -6,7 +6,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider, elapsed } from '@aztec-labs/foundation/timer';
-import { createTxValidatorForBlockBuilding, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p/msg_validators';
+import { createTxValidatorForBlockBuilding, getSetupAllowList } from '@aztec-labs/p2p/msg_validators';
 import { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
 import {
   type AvmSimulator,
@@ -260,10 +260,7 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
   }
 
   protected async makeBlockBuilderDeps(globalVariables: GlobalVariables, fork: MerkleTreeWriteOperations) {
-    const txPublicSetupAllowList = [
-      ...(await getDefaultAllowedSetupFunctions()),
-      ...(this.config.txPublicSetupAllowListExtend ?? []),
-    ];
+    const txPublicSetupAllowList = await getSetupAllowList(this.config);
     const contractsDB = this.contractsDB;
     const guardedFork = new GuardedMerkleTreeOperations(fork);
 

@@ -30,7 +30,6 @@ import {
   createCheckAllowedSetupCalls,
   createTxValidatorForOnDemandReceivedTxs,
   createTxValidatorForTransactionsEnteringPendingTxPool,
-  getDefaultAllowedSetupFunctions,
   warnOnSetupEntriesWithoutMinGas,
 } from '../msg_validators/index.js';
 import { TxValidationCache } from '../msg_validators/tx_validator/tx_validation_cache.js';
@@ -105,13 +104,8 @@ export async function createP2PClient(
   const txFileStoreBasePath = `aztec-${inputConfig.l1ChainId}-${inputConfig.rollupVersion}-0x${rollupAddress}`;
 
   warnOnSetupEntriesWithoutMinGas(inputConfig.txPublicSetupAllowListExtend ?? [], logger);
-  const allowedInSetup = [
-    ...(await getDefaultAllowedSetupFunctions()),
-    ...(inputConfig.txPublicSetupAllowListExtend ?? []),
-  ];
   const checkAllowedSetupCalls = createCheckAllowedSetupCalls(
     archiver,
-    allowedInSetup,
     () => epochCache.getEpochAndSlotInNextL1Slot().ts,
   );
 
@@ -151,6 +145,7 @@ export async function createP2PClient(
         dropTransactionsProbability: config.dropTransactionsProbability,
         priceBumpPercentage: config.priceBumpPercentage,
         keepFinalizedTxsForSlots: config.keepFinalizedTxsForSlots,
+        txPublicSetupAllowListExtend: config.txPublicSetupAllowListExtend ?? [],
       },
       dateProvider,
     );

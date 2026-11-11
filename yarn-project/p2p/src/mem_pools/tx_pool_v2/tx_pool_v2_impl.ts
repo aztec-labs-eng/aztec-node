@@ -12,6 +12,7 @@ import { DatabasePublicStateSource } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, Tx, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
+import { getSetupAllowList } from '../../msg_validators/tx_validator/allowed_public_setup.js';
 import { TxArchive } from './archive/index.js';
 import { DeletedPool } from './deleted_pool.js';
 import {
@@ -186,10 +187,7 @@ export class TxPoolV2Impl {
           this.#log.warn(`Failed to check mined status for tx ${txHashStr}`, { err });
           return undefined;
         });
-        const [allowedSetupCalls, fetchedTxEffect] = await Promise.all([
-          this.#checkAllowedSetupCalls(tx),
-          txEffectPromise,
-        ]);
+        const [allowedSetupCalls, fetchedTxEffect] = await Promise.all([this.#checkSetupCalls(tx), txEffectPromise]);
         meta = await buildTxMetaData(tx, allowedSetupCalls);
         txEffect = fetchedTxEffect;
       } catch (err) {
@@ -450,7 +448,7 @@ export class TxPoolV2Impl {
     const slotNumber = block.globalVariables.slotNumber;
 
     // Precompute setup-call allow-list flags outside the store transaction
-    const allowedFlags = await Promise.all(txs.map(tx => this.#checkAllowedSetupCalls(tx)));
+    const allowedFlags = await Promise.all(txs.map(tx => this.#checkSetupCalls(tx)));
 
     await this.#store.transactionAsync(async () => {
       for (let i = 0; i < txs.length; i++) {
@@ -1004,6 +1002,9 @@ export class TxPoolV2Impl {
     if (config.keepFinalizedTxsForSlots !== undefined) {
       this.#config.keepFinalizedTxsForSlots = config.keepFinalizedTxsForSlots;
     }
+    if (config.txPublicSetupAllowListExtend !== undefined) {
+      this.#config.txPublicSetupAllowListExtend = config.txPublicSetupAllowListExtend;
+    }
     // Update eviction rules with new config
     this.#evictionManager.updateConfig(config);
   }
@@ -1098,7 +1099,7 @@ export class TxPoolV2Impl {
         // Load the proof too: #addTx rewrites both entries, so re-adding a proofless tx would wipe the stored proof.
         const tx = await this.#loadTxWithProof(txHashStr, buffer);
         // The metadata was dropped on deletion, so recompute the setup-call flag instead of defaulting it to allowed.
-        const meta = await buildTxMetaData(tx, await this.#checkAllowedSetupCalls(tx));
+        const meta = await buildTxMetaData(tx, await this.#checkSetupCalls(tx));
         loaded.set(txHashStr, { tx, meta });
       } catch (err) {
         this.#log.warn(`Failed to load soft-deleted tx ${txHashStr}`, { txHash: txHashStr, err });
@@ -1151,6 +1152,11 @@ export class TxPoolV2Impl {
   // ============================================================================
   // PRIVATE HELPERS - Validation & Conflict Resolution
   // ============================================================================
+
+  /** Computes the tx's setup-call flag against the setup allow list as currently configured. */
+  async #checkSetupCalls(tx: Tx): Promise<boolean> {
+    return this.#checkAllowedSetupCalls(tx, await getSetupAllowList(this.#config));
+  }
 
   /** Validates transaction metadata, returning true if valid */
   async #validateMeta(
