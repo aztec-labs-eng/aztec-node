@@ -78,6 +78,8 @@ export const OK = 'aztec.ok';
 export const STATUS = 'aztec.status';
 /** Generic error type attribute */
 export const ERROR_TYPE = 'aztec.error_type';
+/** Blob filestore upload kind: blobs or healthcheck. */
+export const BLOB_CLIENT_UPLOAD_TYPE = 'aztec.blob_client.upload_type';
 /** The cause of an archiver prune (unproven / uncheckpointed / l1_conflict / orphan / l1_mismatch) */
 export const PRUNE_TYPE = 'aztec.archiver.prune_type';
 /** The type of the transaction */

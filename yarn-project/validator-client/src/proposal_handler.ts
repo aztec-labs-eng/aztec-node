@@ -2875,7 +2875,9 @@ export class ProposalHandler {
       const blockBlobData = blocks.map(b => b.toBlockBlobData());
       const blobFields = encodeCheckpointBlobDataFromBlocks(blockBlobData);
       const blobs: Blob[] = await getBlobsPerL1Block(blobFields);
-      await this.blobClient.sendBlobsToFilestore(blobs);
+      if (!(await this.blobClient.sendBlobsToFilestore(blobs))) {
+        return;
+      }
       this.log.debug(`Uploaded ${blobs.length} blobs to filestore for checkpoint at slot ${proposal.slotNumber}`, {
         ...proposalInfo,
         numBlobs: blobs.length,
