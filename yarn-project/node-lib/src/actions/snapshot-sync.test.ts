@@ -1,6 +1,8 @@
 import { ARCHIVER_DB_VERSION, createArchiverStore } from '@aztec-labs/archiver';
 import { makePublishedCheckpoint } from '@aztec-labs/archiver/test';
+import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { type Anvil, EthCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { fromEntries } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -22,6 +24,7 @@ describe('snapshot bootstrap history', () => {
   let config: Parameters<typeof trySnapshotSync>[0];
   let anvil: Anvil | undefined;
   let rpcUrl: string;
+  let l1Client: ViemPublicClient;
   const log = createLogger('node-lib:test:snapshot-history');
 
   const summary = (oldest: number, latest: number) => ({
@@ -33,6 +36,7 @@ describe('snapshot bootstrap history', () => {
 
   beforeAll(async () => {
     ({ anvil, rpcUrl } = await startAnvil({ port: 0, chainId: 1 }));
+    l1Client = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: 1 });
     await new EthCheatCodes([rpcUrl], new DateProvider()).mine(10000);
   });
 
@@ -46,7 +50,6 @@ describe('snapshot bootstrap history', () => {
       rollupAddress: EthAddress.random(),
       rollupVersion: 1,
       l1ChainId: 1,
-      l1RpcUrls: [rpcUrl],
       aztecEpochDuration: 32,
       syncMode: 'snapshot',
       snapshotsUrls: [`file://${directory}/snapshots`],
@@ -140,14 +143,14 @@ describe('snapshot bootstrap history', () => {
 
   it('resolves legacy snapshot block numbers to the newest snapshot in the pinned checkpoint', async () => {
     await writeIndex([await writeSnapshot(5), await writeSnapshot(12), await writeSnapshot(8)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(1, 8));
   });
 
   it('restores world state into its configured data directory', async () => {
     config.worldStateDataDirectory = join(directory, 'state-volume');
     await writeIndex([await writeSnapshot(8)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(1, 8));
   });
 
@@ -155,40 +158,40 @@ describe('snapshot bootstrap history', () => {
     const missing = await writeSnapshot(9);
     await rm(new URL(missing.dataUrls['public-data-tree']));
     await writeIndex([missing, await writeSnapshot(8, 8), await writeSnapshot(5)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(1, 5));
   });
 
   it('leaves genesis replay to the synchronizer when no snapshot is old enough', async () => {
     await writeIndex([await writeSnapshot(12)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(false);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(false);
   });
 
   it('restores an archive snapshot containing full history', async () => {
     config.worldStateHistoryRetention = { type: 'archive' };
     await writeIndex([await writeSnapshot(12)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(1, 12));
   });
 
   it('falls back to full history when the latest archive snapshot has been pruned', async () => {
     config.worldStateHistoryRetention = { type: 'archive' };
     await writeIndex([await writeSnapshot(12, 11), await writeSnapshot(9)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(1, 9));
   });
 
   it('leaves genesis replay to the synchronizer when all archive snapshots have been pruned', async () => {
     config.worldStateHistoryRetention = { type: 'archive' };
     await writeIndex([await writeSnapshot(12, 11)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(false);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(false);
   });
 
   it.each(['archive', 'pinned'] as const)('rejects missing %s history even in force-snapshot mode', async type => {
     config.worldStateHistoryRetention = type === 'pinned' ? { type, checkpoint: CheckpointNumber(3) } : { type };
     await installSnapshot(await writeSnapshot(12, 11));
     await writeIndex([await writeSnapshot(5)]);
-    await expect(trySnapshotSync({ ...config, syncMode: 'force-snapshot' }, log)).rejects.toThrow(
+    await expect(trySnapshotSync({ ...config, syncMode: 'force-snapshot' }, l1Client, log)).rejects.toThrow(
       type === 'archive' ? 'all checkpoint history is required' : 'history is required from the start of checkpoint 3',
     );
     expect(await readInstalledState()).toEqual(summary(11, 12));
@@ -197,14 +200,14 @@ describe('snapshot bootstrap history', () => {
   it('preserves compatible existing history without replacing it with an older snapshot', async () => {
     await installSnapshot(await writeSnapshot(12, 5));
     await writeIndex([await writeSnapshot(8)]);
-    await expect(trySnapshotSync({ ...config, syncMode: 'force-snapshot' }, log)).resolves.toBe(false);
+    await expect(trySnapshotSync({ ...config, syncMode: 'force-snapshot' }, l1Client, log)).resolves.toBe(false);
     expect(await readInstalledState()).toEqual(summary(5, 12));
   });
 
   it.each([1, 128])('accepts a pruned snapshot with a rolling window of %i', async history => {
     config.worldStateHistoryRetention = { type: 'rolling', checkpoints: history };
     await writeIndex([await writeSnapshot(12, 11)]);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(11, 12));
   });
 
@@ -213,8 +216,8 @@ describe('snapshot bootstrap history', () => {
     await rm(join(config.dataDirectory!, 'archiver'), { recursive: true });
     config.worldStateHistoryRetention = { type: 'rolling', checkpoints: history };
     await writeIndex([await writeSnapshot(9, 8)]);
-    await expect(trySnapshotSync({ ...config, syncMode: 'full' }, log)).resolves.toBe(false);
-    await expect(trySnapshotSync(config, log)).resolves.toBe(true);
+    await expect(trySnapshotSync({ ...config, syncMode: 'full' }, l1Client, log)).resolves.toBe(false);
+    await expect(trySnapshotSync(config, l1Client, log)).resolves.toBe(true);
     expect(await readInstalledState()).toEqual(summary(8, 9));
   });
 
