@@ -1475,8 +1475,6 @@ __metadata:
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^22.15.17"
     "@typescript/native-preview": "npm:7.0.0-dev.20260113.1"
-    dotenv: "npm:^16.0.3"
-    get-port: "npm:^7.1.0"
     jest: "npm:^30.0.0"
     jest-mock-extended: "npm:^4.0.0"
     ts-node: "npm:^10.9.1"
