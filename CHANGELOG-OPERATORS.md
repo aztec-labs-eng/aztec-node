@@ -32,6 +32,22 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### The node stops sending L1 requests to RPC URLs that fall behind ([#587](https://github.com/aztec-labs-eng/aztec-node/pull/587))
+
+With two or more URLs in `ETHEREUM_HOSTS`, the node used to send every request to the first one, and moved to the next only when a request failed. A URL that still answered but had fallen behind the chain kept getting all the traffic. The node now checks every URL's latest block every few seconds. It stops using a URL that falls behind the others or stops answering, and uses it again once it has caught up. A URL on a different L1 chain is never used, and the node logs an error naming it.
+
+If every URL falls behind at once, the node keeps using all of them, in the order you listed them. The logs show `Demoted L1 RPC URL` when a URL is set aside and `Restored L1 RPC URL` when it is back.
+
+The defaults should suit most setups. New variables tune the checks:
+
+- `ETHEREUM_HOSTS_GRADER_INTERVAL_MS` (default 4000): how often each URL is checked.
+- `ETHEREUM_HOSTS_GRADER_PROBE_TIMEOUT_MS` (default 1000): how long a check waits for an answer.
+- `ETHEREUM_HOSTS_GRADER_MAX_BLOCKS_BEHIND` (default 2): how many blocks a URL may trail the others.
+- `ETHEREUM_HOSTS_GRADER_THRESHOLD` (default 3) and `ETHEREUM_HOSTS_GRADER_WINDOW` (default 5): a URL is set aside after 3 bad checks among its last 5, and comes back after 3 good checks in a row.
+- `ETHEREUM_HOSTS_GRADER_KEEP_DEMOTED` (default false): set to true to keep URLs that were set aside as a last resort, rather than not using them at all.
+
+**Migration**: none. A node with a single URL in `ETHEREUM_HOSTS` behaves as before.
+
 ### Snapshot upload status through the admin API (`aztecAdmin_getSnapshotUploadStatus`) ([#713](https://github.com/aztec-labs-eng/aztec-node/pull/713))
 
 `aztecAdmin_startSnapshotUpload(location, operationId?)` now accepts an optional caller-generated UUID.
