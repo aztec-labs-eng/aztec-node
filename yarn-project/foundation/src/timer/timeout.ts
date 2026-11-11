@@ -88,12 +88,23 @@ export async function execWithSignal<T>(
 /**
  * Waits for the given promise, rejecting with a {@link TimeoutError} if it does not settle within the given timeout.
  * The timer is cleared as soon as either happens, so it never outlives the wait.
+ *
+ * @param opts - `unref` lets the process exit while the wait is still pending, for waits that bound a teardown.
  */
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage?: string): Promise<T> {
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage?: string,
+  opts: { unref?: boolean } = {},
+): Promise<T> {
   const timedOut = promiseWithResolvers<never>();
   const timer = setTimeout(() => {
     timedOut.reject(new TimeoutError(errorMessage ?? `Operation timed out after ${timeoutMs}ms`));
   }, timeoutMs);
+  // Browsers hand back a number, which has nothing to unref and holds no process open.
+  if (opts.unref && typeof timer === 'object') {
+    timer.unref();
+  }
 
   try {
     return await Promise.race([promise, timedOut.promise]);
