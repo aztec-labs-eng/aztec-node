@@ -28,6 +28,12 @@
       "path": "../node-keystore"
     },
     {
+      "path": "../noir-contracts.js"
+    },
+    {
+      "path": "../noir-protocol-circuits-types"
+    },
+    {
       "path": "../p2p"
     },
     {

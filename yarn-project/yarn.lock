@@ -1293,6 +1293,8 @@ __metadata:
     "@aztec-labs/ethereum": "workspace:^"
     "@aztec-labs/foundation": "workspace:^"
     "@aztec-labs/node-keystore": "workspace:^"
+    "@aztec-labs/noir-contracts.js": "workspace:^"
+    "@aztec-labs/noir-protocol-circuits-types": "workspace:^"
     "@aztec-labs/p2p": "workspace:^"
     "@aztec-labs/protocol-contracts": "workspace:^"
     "@aztec-labs/stdlib": "workspace:^"
@@ -1323,16 +1325,6 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-  peerDependencies:
-    "@aztec-foundation/l1-artifacts": 0.1.0-dummy
-    "@aztec-labs/accounts": "workspace:^"
-    "@aztec-labs/bb-prover": "workspace:^"
-    "@aztec-labs/ethereum": "workspace:^"
-    "@aztec-labs/noir-contracts.js": "workspace:^"
-    "@aztec-labs/noir-protocol-circuits-types": "workspace:^"
-    "@aztec-labs/noir-test-contracts.js": "workspace:^"
-    "@aztec-labs/protocol-contracts": "workspace:^"
-    "@aztec-labs/stdlib": "workspace:^"
   languageName: unknown
   linkType: soft
 
