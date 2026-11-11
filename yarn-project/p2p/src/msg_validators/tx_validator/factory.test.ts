@@ -205,10 +205,12 @@ describe('Validator factory functions', () => {
         true,
       );
 
-      // Timestamp, block header and max gas are high tolerance (more likely to be stale rather than malicious)
+      // Timestamp, block header, max gas and setup phases are high tolerance (more likely to be stale or a local
+      // config difference rather than malicious)
       expect(validators.timestampValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
       expect(validators.blockHeaderValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
       expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
+      expect(validators.phasesValidator.severity).toBe(PeerErrorSeverity.HighToleranceError);
 
       // Others are mid tolerance
       expect(validators.txsPermittedValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
@@ -222,7 +224,6 @@ describe('Validator factory functions', () => {
       // the tx is below the penalty floor as well.
       expect(validators.maxFeePerGasValidator.severity).toBe(IgnoreWithoutPenalty);
       expect(validators.maxFeePerGasFloorValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
-      expect(validators.phasesValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
     });
 
     it('each entry has a validator with a validateTx method', () => {
