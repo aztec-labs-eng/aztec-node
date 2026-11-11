@@ -32,6 +32,26 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### Blob filestore uploads retry transient storage errors
+
+Blob uploads from proposers, validators and blob retrieval now share a retry policy: after the first failure,
+retry after 1, 2, 4, 8 and 16 seconds. Existing blobs are skipped when retrying a partially successful batch.
+Exhausted uploads log an error with the blob hashes and return failure rather than throwing. Startup healthcheck
+uploads use the same retries but no longer fail node startup; periodic healthchecks continue after an outage,
+without overlapping runs.
+
+New metrics distinguish transient storage errors from requests that exhaust their retries:
+
+- `aztec.blob_client.upload_attempt_count`: storage attempts, labelled by attempt outcome.
+- `aztec.blob_client.upload_request_count`: upload requests, labelled by final outcome after retries.
+- `aztec.blob_client.upload_duration`: request duration in milliseconds, including retries.
+
+All three use `aztec.blob_client.upload_type` (`blobs` or `healthcheck`) and `aztec.status` (`success` or `failure`).
+A blob request counts a batch, not individual blobs. Alert on failed blob upload requests to detect possible gaps.
+Retries are in memory only: exhausted uploads and uploads interrupted by a restart are not queued for backfill.
+
+**Migration**: none.
+
 ### Static setup calls are rejected, and `TX_PUBLIC_SETUP_ALLOWLIST` entries declare a minimum setup gas ([#701](https://github.com/aztec-labs-eng/aztec-node/pull/701))
 
 Nodes now reject two more kinds of setup call, at gossip, RPC and block building. Pending-pool migration rejects them too, but reports every setup failure as `Setup function not on allow list`:
