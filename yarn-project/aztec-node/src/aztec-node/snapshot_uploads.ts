@@ -12,8 +12,11 @@ export class SnapshotUploads {
     return status ? { ...status } : { state: 'unknown' };
   }
 
-  /** Checks whether an ID already identifies an operation at this location. */
-  public has(operationId: string, location: string): boolean {
+  /**
+   * Returns true when the ID already identifies an operation at this location, false when the node does not know it.
+   * @throws If the ID already identifies an operation at a different location.
+   */
+  public checkExisting(operationId: string, location: string): boolean {
     const status = this.operations.get(operationId);
     if (!status || status.state === 'unknown') {
       return false;
@@ -35,7 +38,7 @@ export class SnapshotUploads {
 
   /** Starts work without awaiting completion, or accepts an idempotent retry of a retained operation. */
   public start(operationId: string, location: string, upload: () => Promise<void>): void {
-    if (this.has(operationId, location)) {
+    if (this.checkExisting(operationId, location)) {
       return;
     }
     if (this.runningId !== undefined) {

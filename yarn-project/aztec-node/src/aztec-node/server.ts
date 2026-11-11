@@ -983,7 +983,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public async startSnapshotUpload(location: string, operationId = randomUUID()): Promise<void> {
-    if (this.snapshotUploads.has(operationId, location)) {
+    if (this.snapshotUploads.checkExisting(operationId, location)) {
       return;
     }
     // Note that we are forcefully casting the blocksource as an archiver
