@@ -166,17 +166,7 @@ export default [
         'error',
         {
           peerDependencies: false,
-          devDependencies: [
-            '**/*.test.ts',
-            '**/test/**',
-            '**/testing/**',
-            '**/test-helpers/**',
-            '**/mocks/**',
-            '**/mocks.ts',
-            '**/fixtures/**',
-            '**/avm_proving_tests/**',
-            '**/src/jest/**',
-          ],
+          devDependencies: false,
         },
       ],
       // this unfortunately doesn't block `fit` and `fdescribe`
@@ -204,6 +194,25 @@ export default [
     rules: {
       'jsdoc/require-jsdoc': 'off',
       'no-restricted-properties': 'off',
+    },
+  },
+  {
+    // Test code may import devDependencies. The globs live in `files`, which ESLint matches relative to the package,
+    // because the rule's own `devDependencies` globs also match the absolute path, so a checkout under a directory
+    // named `test` would exempt every file.
+    files: [
+      '**/*.test.ts',
+      '**/test/**',
+      '**/testing/**',
+      '**/test-helpers/**',
+      '**/mocks/**',
+      '**/mocks.ts',
+      '**/fixtures/**',
+      '**/avm_proving_tests/**',
+      '**/src/jest/**',
+    ],
+    rules: {
+      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
     },
   },
 ];
