@@ -79,7 +79,7 @@ export class ValidatorHASigner {
     const maxStuckDutiesAgeMs = config.maxStuckDutiesAgeMs ?? DEFAULT_MAX_STUCK_DUTIES_AGE_MS;
     this.signerCallTimeoutMs = Math.min(
       config.signerCallTimeoutMs ?? DEFAULT_SIGNER_CALL_TIMEOUT_MS,
-      maxStuckDutiesAgeMs / 2,
+      Math.floor(maxStuckDutiesAgeMs / 2),
     );
 
     if (!config.nodeId || config.nodeId === '') {

@@ -264,6 +264,30 @@ describe('ValidatorHASigner', () => {
       }
     });
 
+    it('should sign when the clamped timeout comes from an odd maxStuckDutiesAgeMs', async () => {
+      const oddConfig = { ...config, maxStuckDutiesAgeMs: 401, signerCallTimeoutMs: 5000 };
+      const metrics = new HASignerMetrics(telemetryClient, oddConfig.nodeId);
+      const oddSigner = new ValidatorHASigner(db, oddConfig, { metrics, dateProvider });
+
+      try {
+        const result = await oddSigner.signWithProtection(
+          VALIDATOR_ADDRESS,
+          MESSAGE_HASH,
+          {
+            slot: SlotNumber(100),
+            blockNumber: BlockNumber(50),
+            checkpointNumber: CheckpointNumber(1),
+            dutyType: DutyType.BLOCK_PROPOSAL,
+            blockIndexWithinCheckpoint: IndexWithinCheckpoint(0),
+          },
+          signFn,
+        );
+        expect(result).toBe(mockSignature);
+      } finally {
+        await oddSigner.stop();
+      }
+    });
+
     it('should throw DutyAlreadySignedError when duty already signed', async () => {
       // First signing
       await signer.signWithProtection(
