@@ -1,3 +1,4 @@
+import type { Archiver } from '@aztec-labs/archiver';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover';
 import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
@@ -15,6 +16,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import { getLogLevel, setLogLevel } from '@aztec-labs/foundation/log';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import type { Hex } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
@@ -88,6 +90,7 @@ import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { type MockProxy, mock } from 'jest-mock-extended';
+import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -96,7 +99,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { type AztecNodeConfig, getConfigEnvVars } from './config.js';
 import { NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { makeFrontier } from './next_block/test_helpers.js';
-import { AztecNodeService } from './server.js';
+import { AztecNodeService, type AztecNodeServiceDeps } from './server.js';
 
 // Arbitrary fixed timestamp for the mock date provider. DateProvider.now() returns milliseconds but ExpirationTimestamp
 // is denominated in seconds.
@@ -150,8 +153,11 @@ describe('aztec node', () => {
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
   let lastBlockNumber: BlockNumber;
   let node: TestAztecNodeService;
-  /** Builds a node on the shared mocks, optionally overriding config entries. */
-  let createNode: (configOverrides?: Partial<AztecNodeConfig>) => TestAztecNodeService;
+  /** Builds a node on the shared mocks, optionally overriding config entries and collaborators. */
+  let createNode: (
+    configOverrides?: Partial<AztecNodeConfig>,
+    depsOverrides?: Partial<AztecNodeServiceDeps>,
+  ) => TestAztecNodeService;
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
   let nextBlockPredictor: NextBlockPredictor;
@@ -308,7 +314,7 @@ describe('aztec node', () => {
       dateProvider: new MockDateProvider(),
     });
 
-    createNode = (configOverrides: Partial<AztecNodeConfig> = {}) =>
+    createNode = (configOverrides: Partial<AztecNodeConfig> = {}, depsOverrides: Partial<AztecNodeServiceDeps> = {}) =>
       new TestAztecNodeService({
         config: { ...nodeConfig, ...configOverrides },
         p2pClient: p2p,
@@ -333,6 +339,7 @@ describe('aztec node', () => {
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
         rpcProofVerifier: new TestCircuitVerifier(),
+        ...depsOverrides,
       });
 
     node = createNode();
@@ -1475,6 +1482,37 @@ describe('aztec node', () => {
         await expect(result).rejects.toThrow(/not found in the node/);
         expect(l2LogsSource.getPublicLogsByTags).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('snapshot uploads', () => {
+    let archiver: MockProxy<Archiver>;
+
+    beforeEach(() => {
+      archiver = mock<Archiver>({ events: new EventEmitter() as ArchiverEmitter });
+      archiver.backupTo.mockRejectedValue(new Error('Backups are not expected in this test'));
+      archiver.isInitialSyncComplete.mockReturnValue(true);
+      archiver.getL2Tips.mockResolvedValue(
+        mock<L2Tips>({ proposed: { number: BlockNumber(1), hash: BlockHash.random().toString() } }),
+      );
+      node = createNode({}, { blockSource: archiver });
+    });
+
+    it('rejects an unusable location without pausing sync', async () => {
+      const operationId = randomUUID();
+      await node.startSnapshotUpload('invalid-location', operationId);
+      await retryFastUntil(
+        async () => (await node.getSnapshotUploadStatus(operationId)).state === 'failed',
+        'snapshot upload failure',
+      );
+
+      expect(await node.getSnapshotUploadStatus(operationId)).toEqual({
+        state: 'failed',
+        location: 'invalid-location',
+        error: expect.stringMatching(/Unknown file store/),
+      });
+      expect(archiver.stop).not.toHaveBeenCalled();
+      expect(worldState.stopSync).not.toHaveBeenCalled();
     });
   });
 

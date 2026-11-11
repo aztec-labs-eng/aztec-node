@@ -2,7 +2,7 @@ import { ARCHIVER_DB_VERSION, type Archiver } from '@aztec-labs/archiver';
 import { tryRmDir } from '@aztec-labs/foundation/fs';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
-import { createFileStore } from '@aztec-labs/stdlib/file-store';
+import type { FileStore } from '@aztec-labs/stdlib/file-store';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { uploadSnapshotToIndex } from '@aztec-labs/stdlib/snapshots';
@@ -11,39 +11,43 @@ import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { buildSnapshotMetadata } from './build-snapshot-metadata.js';
 import { createBackups } from './create-backups.js';
 
 export type UploadSnapshotConfig = Pick<ChainConfig, 'l1ChainId' | 'rollupVersion'> &
   Pick<DataStoreConfig, 'dataDirectory'>;
 
-/**
- * Pauses the archiver and world state sync, creates backups of the archiver and world state lmdb environments,
- * and uploads them to the specified location. Location must be a URL supported by our file store (eg `gs://bucketname/path`).
- */
-export async function uploadSnapshot(
-  location: string,
+/** Local database copies and frozen metadata, owned until asynchronous disposal removes the temporary files. */
+export interface CapturedSnapshot extends AsyncDisposable {
+  /** Publishes the captured data and its index entry to the store. */
+  upload(store: FileStore): Promise<void>;
+}
+
+/** Captures consistent database copies and metadata, resuming syncing before returning. Use with `await using`. */
+export async function captureSnapshot(
   archiver: Archiver,
   worldState: WorldStateSynchronizer,
   config: UploadSnapshotConfig,
   log: Logger,
-) {
-  const store = await createFileStore(location);
-  if (!store) {
-    throw new Error(`Failed to create file store for snapshot upload for location ${location}.`);
-  }
-
+): Promise<CapturedSnapshot> {
   const backupDir = await mkdtemp(join(config.dataDirectory ?? tmpdir(), 'snapshot-'));
+  const cleanup = async () => {
+    log.info(`Cleaning up backup dir ${backupDir}`, { backupDir });
+    await tryRmDir(backupDir, log);
+  };
 
   try {
-    const paths = await createBackups(backupDir, archiver, worldState, log);
+    const { paths, metadata } = await createBackups(backupDir, archiver, worldState, config, log);
     const versions = { archiver: ARCHIVER_DB_VERSION, worldState: WORLD_STATE_DB_VERSION };
-    const metadata = await buildSnapshotMetadata(archiver, config);
-    log.info(`Uploading snapshot to ${location}`, { snapshot: metadata });
-    const snapshot = await uploadSnapshotToIndex(paths, versions, metadata, store);
-    log.info(`Snapshot uploaded successfully`, { snapshot });
-  } finally {
-    log.info(`Cleaning up backup dir ${backupDir}`);
-    await tryRmDir(backupDir, log);
+    return {
+      async upload(store: FileStore): Promise<void> {
+        log.info(`Uploading snapshot`, { snapshot: metadata });
+        const snapshot = await uploadSnapshotToIndex(paths, versions, metadata, store);
+        log.info(`Snapshot uploaded successfully`, { snapshot });
+      },
+      [Symbol.asyncDispose]: cleanup,
+    };
+  } catch (err) {
+    await cleanup();
+    throw err;
   }
 }
