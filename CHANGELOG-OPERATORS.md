@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### Prover nodes derive the default `WS_HISTORY_RETENTION` from the proof submission window
+### Prover nodes derive the default `WS_HISTORY_RETENTION` from the proof submission window ([#727](https://github.com/aztec-labs-eng/aztec-node/pull/727))
 
 A node that leaves `WS_HISTORY_RETENTION` unset, along with the deprecated `WS_NUM_HISTORIC_CHECKPOINTS` and `WS_NUM_HISTORIC_BLOCKS`, used to keep `rolling:64` whatever its role. A prover node now keeps `rolling:max(64, (proofSubmissionEpochs + 1) * epochDuration)` instead, read from the rollup at startup, and logs the derived value at info. Other nodes still default to `rolling:64`. A prover configured with an explicit `rolling:N` below its proof submission window still fails at startup, and `archive` and `pinned` retention are unchanged.
 
