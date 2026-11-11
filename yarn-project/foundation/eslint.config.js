@@ -162,7 +162,23 @@ export default [
           ],
         },
       ],
-      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
+      'import-x/no-extraneous-dependencies': [
+        'error',
+        {
+          peerDependencies: false,
+          devDependencies: [
+            '**/*.test.ts',
+            '**/test/**',
+            '**/testing/**',
+            '**/test-helpers/**',
+            '**/mocks/**',
+            '**/mocks.ts',
+            '**/fixtures/**',
+            '**/avm_proving_tests/**',
+            '**/src/jest/**',
+          ],
+        },
+      ],
       // this unfortunately doesn't block `fit` and `fdescribe`
       'no-only-tests/no-only-tests': ['error'],
       'aztec-custom/no-async-dispose': 'error',

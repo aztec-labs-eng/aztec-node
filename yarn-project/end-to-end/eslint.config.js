@@ -10,8 +10,10 @@ export default [
   globalIgnores(['src/shared/timing_env.mjs']),
   {
     // Everything in this package is test code for Node.js, which sets and reads the variables of its own process.
+    // A private package, so its imports may resolve through devDependencies.
     rules: {
       'no-restricted-properties': 'off',
+      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
     },
   },
   {
