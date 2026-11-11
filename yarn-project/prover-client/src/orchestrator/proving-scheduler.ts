@@ -148,13 +148,17 @@ export abstract class ProvingScheduler {
       }
     };
 
-    void this.deferredJobQueue.put(async () => {
-      // Kick off the broker submission without awaiting it — awaiting here would serialise all
-      // proving (one job at a time) and kill parallelism. The `sleep(0)` yields the event loop
-      // so the next queued job initiates on the following macrotask, pacing bursts rather than
-      // bounding in-flight broker concurrency (the broker's own queue handles that).
-      void safeJob();
-      await sleep(0);
-    });
+    // The task itself never throws, so `put` only rejects when the queue is cancelled or closed on shutdown and the job
+    // is dropped.
+    this.deferredJobQueue
+      .put(async () => {
+        // Kick off the broker submission without awaiting it — awaiting here would serialise all
+        // proving (one job at a time) and kill parallelism. The `sleep(0)` yields the event loop
+        // so the next queued job initiates on the following macrotask, pacing bursts rather than
+        // bounding in-flight broker concurrency (the broker's own queue handles that).
+        void safeJob();
+        await sleep(0);
+      })
+      .catch(err => this.logger.debug(`Dropped proving job on shutdown`, err));
   }
 }

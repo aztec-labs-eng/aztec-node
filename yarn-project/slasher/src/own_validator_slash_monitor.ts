@@ -71,8 +71,8 @@ export class OwnValidatorSlashMonitor {
   /** Stops processing and waits for any in-flight drain, so no warning or metric is emitted after shutdown. */
   public async stop(): Promise<void> {
     this.stopped = true;
-    // Jobs already queued are no-ops now that the flag is set, so end() runs through them at no cost while still
-    // settling the promises their callers hold, where cancel() would discard them and leave those promises pending.
+    // Jobs already queued are no-ops now that the flag is set, so end() runs through them at no cost and resolves the
+    // promises their callers hold, where cancel() would reject them and handleVoteCast would log each as an error.
     await this.queue.end();
   }
 
