@@ -296,6 +296,7 @@ function check_toolchains {
   fi
   # Check wasi-sdk version.
   if ! cat /opt/wasi-sdk/VERSION 2> /dev/null | grep $expected_abs_wasi_version > /dev/null; then
+    echo "wasi-sdk version $expected_abs_wasi_version not found in /opt/wasi-sdk (found: $(head -n1 /opt/wasi-sdk/VERSION 2> /dev/null || echo none))."
     toolchain_incompatible
   fi
   # Check foundry version.
