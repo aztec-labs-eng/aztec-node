@@ -40,6 +40,9 @@
       "path": "../protocol-contracts"
     },
     {
+      "path": "../pxe"
+    },
+    {
       "path": "../stdlib"
     },
     {

@@ -88,6 +88,7 @@
     "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
     "@aztec-labs/p2p": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/pxe": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/wallets": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
