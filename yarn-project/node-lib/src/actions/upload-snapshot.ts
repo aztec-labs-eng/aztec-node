@@ -2,7 +2,7 @@ import { ARCHIVER_DB_VERSION, type Archiver } from '@aztec-labs/archiver';
 import { tryRmDir } from '@aztec-labs/foundation/fs';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
-import { type FileStore, createFileStore } from '@aztec-labs/stdlib/file-store';
+import type { FileStore } from '@aztec-labs/stdlib/file-store';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { uploadSnapshotToIndex } from '@aztec-labs/stdlib/snapshots';
@@ -50,17 +50,4 @@ export async function captureSnapshot(
     await cleanup();
     throw err;
   }
-}
-
-/** Captures and publishes a snapshot, removing local copies on success or failure. */
-export async function uploadSnapshot(
-  location: string,
-  archiver: Archiver,
-  worldState: WorldStateSynchronizer,
-  config: UploadSnapshotConfig,
-  log: Logger,
-): Promise<void> {
-  const store = await createFileStore(location);
-  await using snapshot = await captureSnapshot(archiver, worldState, config, log);
-  await snapshot.upload(store);
 }
