@@ -6,7 +6,6 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getEnv } from '@aztec-labs/foundation/config/env';
-import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Buffer } from 'buffer';
 import { createReadStream, createWriteStream } from 'fs';
 import { mkdir, mkdtemp, stat, unlink } from 'fs/promises';
@@ -36,7 +35,6 @@ export class S3FileStore implements FileStore {
     private readonly bucketName: string,
     private readonly basePath: string,
     opts: { endpoint?: string; publicBaseUrl?: string },
-    private readonly log: Logger = createLogger('stdlib:s3-file-store'),
   ) {
     this.endpoint = opts.endpoint;
     this.region = this.endpoint ? 'auto' : (getEnv().AWS_REGION ?? getEnv().AWS_DEFAULT_REGION ?? 'us-east-1');
@@ -154,6 +152,7 @@ export class S3FileStore implements FileStore {
     await pipeline(out.Body as Readable, createWriteStream(destPath));
   }
 
+  /** Returns false only when the object is not found, and rethrows any other error (5xx, 403, timeouts). */
   public async exists(pathOrUrlStr: string): Promise<boolean> {
     try {
       const { bucket, key } = this.getBucketAndKey(pathOrUrlStr);
@@ -164,8 +163,14 @@ export class S3FileStore implements FileStore {
       if (code === 404 || code === 'NotFound' || code === 'NoSuchKey') {
         return false;
       }
-      this.log.warn(`Error checking existence for ${pathOrUrlStr}: ${err?.message ?? String(err)}`);
-      return false;
+      // S3 answers a HEAD on a missing key with 403 instead of 404 when the credentials lack s3:ListBucket, so that
+      // the response does not reveal which keys exist. For such credentials a 403 is how a missing object looks.
+      if (code === 403) {
+        return false;
+      }
+      // Anything else (5xx, timeouts, connection errors) says nothing about whether the object exists. Rethrow so a
+      // caller never mistakes an outage for a missing object, e.g. by overwriting an existing file it could not see.
+      throw err;
     }
   }
 
