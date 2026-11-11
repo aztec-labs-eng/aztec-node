@@ -23,7 +23,7 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { type ApiSchema, getSchemaReturnType } from '@aztec-labs/foundation/schemas';
-import { sleep } from '@aztec-labs/foundation/sleep';
+import { withTimeout } from '@aztec-labs/foundation/timer';
 import { NodeConnector, TransportClient } from '@aztec-labs/foundation/transport';
 import type { PXEConfig } from '@aztec-labs/pxe/config';
 import type { ContractArtifact, EventMetadataDefinition, FunctionCall } from '@aztec-labs/stdlib/abi';
@@ -96,13 +96,13 @@ export class WorkerWallet implements Wallet {
     worker.once('error', onError);
     worker.once('exit', onExit);
 
-    const timeout = sleep(WORKER_READY_TIMEOUT_MS).then(() => {
-      throw new Error(`Worker wallet creation timed out after ${WORKER_READY_TIMEOUT_MS / 1000}s`);
-    });
-
     try {
       // wait for worker wallet to start
-      await Promise.race([wallet.getChainInfo(), workerDied, timeout]);
+      await withTimeout(
+        Promise.race([wallet.getChainInfo(), workerDied]),
+        WORKER_READY_TIMEOUT_MS,
+        `Worker wallet creation timed out after ${WORKER_READY_TIMEOUT_MS / 1000}s`,
+      );
     } catch (err) {
       log.error('Worker wallet creation failed, cleaning up', { error: String(err) });
       client.close();
