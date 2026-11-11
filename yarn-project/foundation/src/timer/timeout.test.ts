@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 
+import { TimeoutError } from '../error/index.js';
 import { sleep } from '../sleep/index.js';
 import { execWithSignal, executeTimeout, withTimeout } from './timeout.js';
 
@@ -167,5 +168,42 @@ describe('withTimeout', () => {
   it('leaves no timer pending once the promise settles', async () => {
     await expect(withTimeout(Promise.resolve('ok'), 60_000)).resolves.toEqual('ok');
     expect(jest.getTimerCount()).toEqual(0);
+  });
+
+  describe('unref', () => {
+    const watchTimers = () => {
+      const spy = jest.spyOn(globalThis, 'setTimeout');
+      return () => spy.mock.results.map(result => (result.value as NodeJS.Timeout).hasRef());
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('keeps the process alive while it waits by default', async () => {
+      const timersHoldingProcess = watchTimers();
+      const promise = withTimeout(new Promise(() => {}), 1000);
+      expect(timersHoldingProcess()).toEqual([true]);
+      jest.advanceTimersByTime(1000);
+      await expect(promise).rejects.toThrow(TimeoutError);
+    });
+
+    it('does not keep the process alive while it waits when asked to unref', async () => {
+      const timersHoldingProcess = watchTimers();
+      const promise = withTimeout(new Promise(() => {}), 1000, 'Too slow!', { unref: true });
+      expect(timersHoldingProcess()).toEqual([false]);
+      jest.advanceTimersByTime(1000);
+      await expect(promise).rejects.toThrow('Too slow!');
+    });
+
+    it('still times out where timers are plain numbers, as in browsers', async () => {
+      const nodeSetTimeout = globalThis.setTimeout;
+      jest
+        .spyOn(globalThis, 'setTimeout')
+        .mockImplementation(((fn: () => void, ms?: number) => Number(nodeSetTimeout(fn, ms))) as typeof setTimeout);
+      const promise = withTimeout(new Promise(() => {}), 1000, 'Too slow!', { unref: true });
+      jest.advanceTimersByTime(1000);
+      await expect(promise).rejects.toThrow('Too slow!');
+    });
   });
 });

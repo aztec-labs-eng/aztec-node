@@ -4,7 +4,7 @@ import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { Semaphore, SerialQueue } from '@aztec-labs/foundation/queue';
-import { Timer } from '@aztec-labs/foundation/timer';
+import { Timer, withTimeout } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
@@ -30,6 +30,15 @@ const STOP_DRAIN_TIMEOUT_MS = 5_000;
  * result.
  */
 export const MAX_PROOFS_IN_FLIGHT = 1024;
+
+/**
+ * Bounds a step of stop() so a wedged native backend can't block teardown. The timer is unref'd so it never keeps the
+ * process alive.
+ */
+function withStopTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  const message = `BatchChonkVerifier ${label} timed out after ${STOP_DRAIN_TIMEOUT_MS}ms`;
+  return withTimeout(promise, STOP_DRAIN_TIMEOUT_MS, message, { unref: true });
+}
 
 /** Result from the FIFO, matching the C++ VerifyResult struct. */
 interface FifoVerifyResult {
@@ -260,10 +269,10 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     try {
       // Stop accepting new proofs and flush the send queue. Bound it so an unresponsive
       // native process can't block teardown of our own event-loop handles indefinitely.
-      await this.withTimeout(this.sendQueue.end(), STOP_DRAIN_TIMEOUT_MS, 'send queue flush');
+      await withStopTimeout(this.sendQueue.end(), 'send queue flush');
 
       // Stop the bb service (flushes remaining proofs).
-      await this.withTimeout(this.bb.chonkBatchVerifierStop({}), STOP_DRAIN_TIMEOUT_MS, 'chonkBatchVerifierStop');
+      await withStopTimeout(this.bb.chonkBatchVerifierStop({}), 'chonkBatchVerifierStop');
 
       // Native stop flushes callbacks; keep the FIFO open until those frames are observed.
       const drained = await this.waitForPendingRequestsToDrain(STOP_DRAIN_TIMEOUT_MS);
@@ -284,29 +293,6 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     }
 
     this.logger.info('BatchChonkVerifier stopped');
-  }
-
-  /**
-   * Races a promise against a timeout so a wedged native backend can't block teardown. The
-   * timer is unref'd so it never keeps the process alive; the underlying promise stays handled
-   * by the race even if the timeout wins, so it cannot surface as an unhandled rejection.
-   */
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T | void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<void>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`BatchChonkVerifier ${label} timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
-      timer.unref();
-    });
-    try {
-      return await Promise.race([promise, timeout]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
   }
 
   private startFifoReader(): void {
