@@ -128,16 +128,16 @@ export abstract class BaseMemoryQueue<T> {
    * @returns A Promise<void> that resolves when the queue is finished processing.
    */
   public async process(handler: (item: T) => Promise<void> | void) {
-    try {
-      while (true) {
-        const item = await this.get();
-        if (item === null) {
-          break;
-        }
-        await handler(item);
+    while (true) {
+      const item = await this.get();
+      if (item === null) {
+        break;
       }
-    } catch (err) {
-      this.log.error('Queue handler exception', err);
+      try {
+        await handler(item);
+      } catch (err) {
+        this.log.error('Queue handler exception', err);
+      }
     }
   }
 }
