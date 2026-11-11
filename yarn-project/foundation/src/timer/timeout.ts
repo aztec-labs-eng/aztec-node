@@ -85,14 +85,19 @@ export async function execWithSignal<T>(
   }
 }
 
-/** Returns a promise that rejects after the given timeout */
-export function timeoutPromise(timeoutMs: number, errorMessage?: string) {
-  const promise = promiseWithResolvers<never>();
-
+/**
+ * Waits for the given promise, rejecting with a {@link TimeoutError} if it does not settle within the given timeout.
+ * The timer is cleared as soon as either happens, so it never outlives the wait.
+ */
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage?: string): Promise<T> {
+  const timedOut = promiseWithResolvers<never>();
   const timer = setTimeout(() => {
-    promise.reject(new TimeoutError(errorMessage ?? `Operation timed out after ${timeoutMs}ms`));
+    timedOut.reject(new TimeoutError(errorMessage ?? `Operation timed out after ${timeoutMs}ms`));
   }, timeoutMs);
 
-  const cleanup = () => clearTimeout(timer);
-  return promise.promise.finally(cleanup);
+  try {
+    return await Promise.race([promise, timedOut.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
