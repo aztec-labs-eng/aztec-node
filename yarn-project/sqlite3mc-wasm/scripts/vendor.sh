@@ -145,7 +145,7 @@ if [[ -n "$NPMIGNORE_BACKUP" ]]; then
 fi
 
 echo "==> Generating vendor/jswasm/SHA256SUMS"
-(cd "$PKG_ROOT/vendor/jswasm" && sha256sum -- * 2>/dev/null | sort -k2 > SHA256SUMS)
+(cd "$PKG_ROOT/vendor/jswasm" && sha256sum -- * 2>/dev/null | LC_ALL=C sort -k2 > SHA256SUMS)
 # Exclude SHA256SUMS from itself (sha256sum already skipped it since it didn't exist yet,
 # but guard against re-runs where it would).
 grep -v " SHA256SUMS$" "$PKG_ROOT/vendor/jswasm/SHA256SUMS" > "$PKG_ROOT/vendor/jswasm/SHA256SUMS.tmp"
