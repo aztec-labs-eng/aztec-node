@@ -44,9 +44,11 @@ import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 import { Blob } from '@aztec-labs/blob-lib';
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -461,7 +463,7 @@ describe('single-node/sync/synching', () => {
       config.governanceProposerAddress.toString(),
     );
     const slashingProposerContract = await rollupContract.getSlashingProposer();
-    const epochCache = await EpochCache.create(config.rollupAddress, config, { dateProvider });
+    const epochCache = await EpochCache.create(rollupContract, config, { dateProvider });
     const sequencerPublisherMetrics: MockProxy<SequencerPublisherMetrics> = mock<SequencerPublisherMetrics>();
     using publisher = new SequencerPublisher(
       {
@@ -614,9 +616,15 @@ describe('single-node/sync/synching', () => {
             await aztecNode.stop();
           }
 
+          const l1Client = getPublicClient(opts.config!);
           const blobClient = await createBlobClientWithFileStores(
             opts.config!,
             createLogger('test:blob-client:client'),
+          );
+          const epochCache = await EpochCache.create(
+            new RollupContract(l1Client, opts.config!.rollupAddress),
+            opts.config!,
+            { dateProvider: opts.dateProvider! },
           );
           const nativeWs = await createWorldState(opts.config!, opts.genesis);
           const initialHeader = nativeWs.getInitialHeader();
@@ -624,7 +632,14 @@ describe('single-node/sync/synching', () => {
           const archiver = await createArchiver(
             opts.config!,
             // The checkpoints synced here stay far below the rollup's mana limit, so a test provider is enough.
-            { blobClient, dateProvider: opts.dateProvider!, feeConfigProvider: new TestRollupFeeConfigProvider() },
+            {
+              l1Client,
+              l1DebugClient: l1Client as ViemPublicDebugClient,
+              blobClient,
+              epochCache,
+              dateProvider: opts.dateProvider!,
+              feeConfigProvider: new TestRollupFeeConfigProvider(),
+            },
             { blockUntilSync: true },
             initialHeader,
             initialBlockHash,

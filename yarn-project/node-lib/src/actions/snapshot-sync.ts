@@ -6,8 +6,8 @@ import {
   getArchiverSynchPoint,
 } from '@aztec-labs/archiver';
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
-import { type EthereumClientConfig, getPublicClient } from '@aztec-labs/ethereum/client';
 import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { tryRmDir } from '@aztec-labs/foundation/fs';
@@ -51,8 +51,7 @@ type SnapshotSyncConfig = Pick<SharedNodeConfig, 'syncMode'> &
   Pick<ArchiverConfig, 'archiverStoreMapSizeKb'> &
   WorldStateConfig &
   DataStoreConfig &
-  Required<Pick<DataStoreConfig, 'rollupAddress'>> &
-  EthereumClientConfig & {
+  Required<Pick<DataStoreConfig, 'rollupAddress'>> & {
     snapshotsUrls?: string[];
     minL1BlocksToTriggerReplace?: number;
   };
@@ -60,8 +59,14 @@ type SnapshotSyncConfig = Pick<SharedNodeConfig, 'syncMode'> &
 /**
  * Validates local history and restores the newest compatible snapshot when bootstrap is needed.
  * Fixed history boundaries are resolved against archived block and checkpoint metadata.
+ * @param l1Client - Reads the current L1 block, to decide whether the local archiver is far enough behind.
  */
-export async function trySnapshotSync(config: SnapshotSyncConfig, log: Logger, genesis?: GenesisData) {
+export async function trySnapshotSync(
+  config: SnapshotSyncConfig,
+  l1Client: Pick<ViemPublicClient, 'getBlockNumber'>,
+  log: Logger,
+  genesis?: GenesisData,
+) {
   const { syncMode, snapshotsUrls, dataDirectory, l1ChainId, rollupVersion, rollupAddress } = config;
   const historyStartCheckpoint = getWorldStateHistoryStartCheckpoint(config);
   let maxSnapshotBlock: BlockNumber | undefined;
@@ -120,7 +125,7 @@ export async function trySnapshotSync(config: SnapshotSyncConfig, log: Logger, g
     return false;
   }
 
-  const currentL1BlockNumber = await getPublicClient(config).getBlockNumber();
+  const currentL1BlockNumber = await l1Client.getBlockNumber();
   if (
     historyStartCheckpoint === undefined &&
     archiverL1BlockNumber &&
