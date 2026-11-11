@@ -162,7 +162,7 @@ export default [
           ],
         },
       ],
-      'import-x/no-extraneous-dependencies': 'error',
+      'import-x/no-extraneous-dependencies': ['error', { peerDependencies: false }],
       // this unfortunately doesn't block `fit` and `fdescribe`
       'no-only-tests/no-only-tests': ['error'],
       'aztec-custom/no-async-dispose': 'error',
