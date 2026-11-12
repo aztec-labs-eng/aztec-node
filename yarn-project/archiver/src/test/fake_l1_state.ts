@@ -769,7 +769,7 @@ export class FakeL1State {
     // The blockId is the L1 block hash, which we derive from the L1 block number
     blobClient.getBlobSidecar.mockImplementation((blockId: `0x${string}`) =>
       Promise.resolve(
-        this.checkpoints.find(cpData => Buffer32.fromBigInt(cpData.l1BlockNumber).toString() === blockId)?.blobs ?? [],
+        this.checkpoints.find(cpData => this.getL1BlockHash(cpData.l1BlockNumber).toString() === blockId)?.blobs ?? [],
       ),
     );
 
@@ -812,7 +812,7 @@ export class FakeL1State {
       .filter(cpData => cpData.l1BlockNumber >= fromBlock && cpData.l1BlockNumber <= toBlock)
       .map(cpData => ({
         l1BlockNumber: cpData.l1BlockNumber,
-        l1BlockHash: Buffer32.fromBigInt(cpData.l1BlockNumber),
+        l1BlockHash: this.getL1BlockHash(cpData.l1BlockNumber),
         l1TransactionHash: cpData.tx.hash as `0x${string}`,
         ...this.getPositionInL1Block(this.checkpoints, cpData),
         args: {
