@@ -913,6 +913,9 @@ export async function createAndSyncProverNode(
   const proverNode = await createAztecNodeService(
     {
       ...baseConfig,
+      // The shared config's short rolling retention is meant for the main node; a prover rejects any rolling
+      // window shorter than its proof submission window, so it derives its own instead.
+      worldStateHistoryRetention: undefined,
       ...configOverrides,
       p2pPort: 0,
       enableProverNode: true,

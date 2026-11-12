@@ -12,6 +12,35 @@ export type WorldStateHistoryRetention =
   | { type: 'pinned'; checkpoint: CheckpointNumber }
   | { type: 'archive' };
 
+/** Checkpoints a rolling window retains when retention is unset, and the floor of any window derived from it. */
+export const DEFAULT_HISTORY_RETENTION_CHECKPOINTS = 64;
+
+/**
+ * Returns the effective history retention policy. Unset retention becomes a rolling window of
+ * {@link DEFAULT_HISTORY_RETENTION_CHECKPOINTS} checkpoints, widened to cover `requirement` when it asks for more.
+ * Configured archive and pinned retention are returned unchanged, and a configured rolling window shorter than
+ * `requirement` is rejected.
+ */
+export function resolveWorldStateHistoryRetention(
+  configured: WorldStateHistoryRetention | undefined,
+  requirement?: { checkpoints: number; purpose: string },
+): WorldStateHistoryRetention {
+  if (configured === undefined) {
+    return {
+      type: 'rolling',
+      checkpoints: Math.max(DEFAULT_HISTORY_RETENTION_CHECKPOINTS, requirement?.checkpoints ?? 0),
+    };
+  }
+  if (requirement && configured.type === 'rolling' && configured.checkpoints < requirement.checkpoints) {
+    throw new Error(
+      `WS_HISTORY_RETENTION=rolling:${configured.checkpoints} is insufficient: ${requirement.purpose} spans ` +
+        `${requirement.checkpoints} checkpoints. Set WS_HISTORY_RETENTION=rolling:${requirement.checkpoints} or ` +
+        `greater, use archive or pinned retention, or leave it unset to derive the window.`,
+    );
+  }
+  return configured;
+}
+
 function parseHistoryRetention(value: string): WorldStateHistoryRetention {
   if (value === 'archive') {
     return { type: 'archive' };
@@ -63,8 +92,8 @@ export interface WorldStateConfig {
   /** Optional directory for the world state DB, if unspecified will default to the general data directory */
   worldStateDataDirectory?: string;
 
-  /** The policy for retaining historic checkpoints. */
-  worldStateHistoryRetention: WorldStateHistoryRetention;
+  /** The policy for retaining historic checkpoints; unset resolves via {@link resolveWorldStateHistoryRetention}. */
+  worldStateHistoryRetention?: WorldStateHistoryRetention;
 }
 
 export const worldStateConfigMappings: ConfigMappingsType<WorldStateConfig> = {
@@ -125,15 +154,9 @@ export const worldStateConfigMappings: ConfigMappingsType<WorldStateConfig> = {
       { env: 'WS_NUM_HISTORIC_BLOCKS', transform: migrateLegacyHistoryRetention },
     ],
     description:
-      'World-state history retention: rolling:N retains N finalized checkpoints, pinned:N retains checkpoint N onwards, archive retains all history.',
+      'World-state history retention: rolling:N retains N finalized checkpoints, pinned:N retains checkpoint N onwards, archive retains all history. ' +
+      `Unset, it is rolling:${DEFAULT_HISTORY_RETENTION_CHECKPOINTS}, or on a prover node the rollup's proof submission window if that is longer.`,
     parseEnv: parseHistoryRetention,
-    defaultValue: { type: 'rolling', checkpoints: 64 },
-    printDefault: (value: WorldStateHistoryRetention) =>
-      value.type === 'archive'
-        ? 'archive'
-        : value.type === 'rolling'
-          ? `rolling:${value.checkpoints}`
-          : `pinned:${value.checkpoint}`,
   },
 };
 
