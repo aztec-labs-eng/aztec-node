@@ -52,6 +52,9 @@ class NoopL1Synchronizer implements FunctionsOf<ArchiverL1Synchronizer> {
   isRecoveringMessages(): boolean {
     return false;
   }
+  getL1ProposerForSlot(_slot: SlotNumber): Promise<EthAddress | undefined> {
+    return Promise.resolve(undefined);
+  }
 }
 
 /**

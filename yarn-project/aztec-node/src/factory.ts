@@ -522,7 +522,7 @@ export async function createAztecNodeService(
         log.verbose('Skipping data-withholding watcher since p2p is disabled');
       }
 
-      broadcastedProposalWatcher = new BroadcastedProposalWatcher(p2pClient, archiver, epochCache, config);
+      broadcastedProposalWatcher = new BroadcastedProposalWatcher(p2pClient, archiver, archiver, epochCache, config);
       watchers.push(broadcastedProposalWatcher);
 
       // The proposal handler (validator-owned or standalone) is the source of invalid-proposal/equivocation
