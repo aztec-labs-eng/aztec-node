@@ -2,13 +2,13 @@ import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 
 import type { WorldStateStatusSummary } from '../native/message.js';
-import type { WorldStateConfig } from './config.js';
+import { type WorldStateConfig, resolveWorldStateHistoryRetention } from './config.js';
 
 /** Returns the fixed checkpoint boundary, or undefined for a rolling checkpoint window. */
 export function getWorldStateHistoryStartCheckpoint(
   config: Pick<WorldStateConfig, 'worldStateHistoryRetention'>,
 ): CheckpointNumber | undefined {
-  const policy = config.worldStateHistoryRetention;
+  const policy = resolveWorldStateHistoryRetention(config.worldStateHistoryRetention);
   return policy.type === 'archive' ? CheckpointNumber.ZERO : policy.type === 'pinned' ? policy.checkpoint : undefined;
 }
 
@@ -18,6 +18,7 @@ export async function validateWorldStateHistory(
   summary: WorldStateStatusSummary,
   blockSource?: Pick<L2BlockSource, 'getBlockData'>,
 ): Promise<void> {
+  const policy = resolveWorldStateHistoryRetention(config.worldStateHistoryRetention);
   const startCheckpoint = getWorldStateHistoryStartCheckpoint(config);
   const { oldestHistoricalBlock, unfinalizedBlockNumber, finalizedBlockNumber } = summary;
   if (oldestHistoricalBlock <= 1) {
@@ -31,12 +32,10 @@ export async function validateWorldStateHistory(
 
   const oldest = await blockSource?.getBlockData({ number: oldestHistoricalBlock });
   let requiredCheckpoint = startCheckpoint;
-  if (config.worldStateHistoryRetention.type === 'rolling') {
+  if (policy.type === 'rolling') {
     const finalized = await blockSource?.getBlockData({ number: finalizedBlockNumber });
     if (finalized) {
-      requiredCheckpoint = CheckpointNumber(
-        Math.max(1, finalized.checkpointNumber - config.worldStateHistoryRetention.checkpoints + 1),
-      );
+      requiredCheckpoint = CheckpointNumber(Math.max(1, finalized.checkpointNumber - policy.checkpoints + 1));
     }
   }
   if (!oldest || requiredCheckpoint === undefined) {
