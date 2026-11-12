@@ -28,7 +28,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { type AztecNode, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
 import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
 import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
-import { chunk, compactArray } from '@aztec-labs/foundation/collection';
+import { chunk, compactArray, partition } from '@aztec-labs/foundation/collection';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { getPXEConfig } from '@aztec-labs/pxe/server';
 import { getContractClassFromArtifact, getContractInstanceFromInstantiationParams } from '@aztec-labs/stdlib/contract';
@@ -1011,8 +1011,7 @@ class DeploymentRun<C extends Steps> {
     }
     // Fund units run sequentially relative to each other: their send closures submit L1 bridge
     // txs, and two bridges signed by the same funder key would race on nonces.
-    const fundRest = rest.filter(unit => unit.kind === 'fund');
-    const parallelRest = rest.filter(unit => unit.kind !== 'fund');
+    const [fundRest, parallelRest] = partition(rest, unit => unit.kind === 'fund');
     const runParallel = () => Promise.all(parallelRest.map(unit => this.runUnit(unit, feeSession)));
     const runFunds = async () => {
       for (const unit of fundRest) {
