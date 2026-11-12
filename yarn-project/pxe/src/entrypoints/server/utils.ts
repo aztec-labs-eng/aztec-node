@@ -8,6 +8,7 @@ import { WASMSimulator } from '@aztec-labs/simulator/client';
 import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
 import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry';
 import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import { getStandardPostQuantumPublicKeyRegistry } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { PXEConfig } from '../../config/index.js';
@@ -85,6 +86,7 @@ export async function createPXE(
       await getStandardMultiCallEntrypoint(),
       await getStandardAuthRegistry(),
       await getStandardHandshakeRegistry(),
+      await getStandardPostQuantumPublicKeyRegistry(),
     ],
   };
 

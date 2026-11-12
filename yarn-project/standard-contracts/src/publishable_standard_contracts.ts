@@ -10,7 +10,9 @@ import type { StandardContract } from './standard_contract.js';
  * helpers.
  *
  * MultiCallEntrypoint is deliberately excluded: it is a client-side entrypoint used to encode
- * batched private calls and is never published for public execution.
+ * batched private calls and is never published for public execution. PostQuantumPublicKeyRegistry
+ * is excluded too: accounts register their keys with a private call and senders read them with a
+ * utility call, and both work without publishing it.
  *
  * This is the single source of truth for the set of standard contracts that test environments seed
  * at genesis (registration/deployment nullifiers) and preload into the archiver contract store, so

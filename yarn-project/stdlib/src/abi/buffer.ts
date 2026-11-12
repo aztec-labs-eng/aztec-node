@@ -10,14 +10,7 @@ import chunk from 'lodash.chunk';
  * @returns A field with the total length in bytes, followed by an array of fields such that their concatenation is equal to the input buffer, followed by enough zeroes to reach targetLength.
  */
 export function bufferAsFields(input: Buffer, targetLength: number): Fr[] {
-  const encoded = [
-    new Fr(input.length),
-    ...chunk(input, Fr.SIZE_IN_BYTES - 1).map(c => {
-      const fieldBytes = Buffer.alloc(Fr.SIZE_IN_BYTES);
-      Buffer.from(c).copy(fieldBytes, 1);
-      return Fr.fromBuffer(fieldBytes);
-    }),
-  ];
+  const encoded = [new Fr(input.length), ...bufferToFieldChunks(input)];
   if (encoded.length > targetLength) {
     throw new Error(`Input buffer exceeds maximum size: got ${encoded.length} but max is ${targetLength}`);
   }
@@ -55,7 +48,7 @@ export function bufferFromFields(fields: Fr[], maxByteLength?: number): Buffer {
   if (maxByteLength !== undefined && byteLength > maxByteLength) {
     throw new Error(`Declared byte length ${byteLength} exceeds maximum ${maxByteLength}`);
   }
-  const raw = Buffer.concat(payload.map(f => f.toBuffer().subarray(1)));
+  const raw = bufferFromFieldChunks(payload);
   if (raw.length >= byteLength) {
     return raw.subarray(0, byteLength);
   }
@@ -66,4 +59,24 @@ export function bufferFromFields(fields: Fr[], maxByteLength?: number): Buffer {
   const result = Buffer.alloc(byteLength);
   raw.copy(result);
   return result;
+}
+
+/**
+ * Splits a buffer into 31-byte chunks and stores each in a field, omitting the field's first byte so that it fits. The
+ * last chunk holds the remaining bytes, followed by zeros.
+ */
+export function bufferToFieldChunks(input: Buffer): Fr[] {
+  return chunk(input, Fr.SIZE_IN_BYTES - 1).map(c => {
+    const fieldBytes = Buffer.alloc(Fr.SIZE_IN_BYTES);
+    Buffer.from(c).copy(fieldBytes, 1);
+    return Fr.fromBuffer(fieldBytes);
+  });
+}
+
+/**
+ * Concatenates the 31-byte chunks {@link bufferToFieldChunks} stores in fields, ignoring each field's first byte. The
+ * result is 31 bytes per field, so it ends with the zeros that pad the last chunk.
+ */
+export function bufferFromFieldChunks(fields: Fr[]): Buffer {
+  return Buffer.concat(fields.map(f => f.toBuffer().subarray(1)));
 }

@@ -137,11 +137,40 @@ pub unconstrained fn get_fact_collections_by_type(
     get_fact_collections_by_type_oracle(contract_address, scope, fact_collection_type_id)
 }
 
+/// Serializes `value` into a fact payload, which [`deserialize_payload`] reads back.
+pub unconstrained fn serialize_payload<T>(value: T) -> EphemeralArray<Field>
+where
+    T: Serialize,
+{
+    EphemeralArray::from_array(value.serialize())
+}
+
+/// Deserializes a fact payload written by [`serialize_payload`].
+///
+/// Fails if the payload's length is not `T`'s serialized length.
+pub unconstrained fn deserialize_payload<T>(payload: EphemeralArray<Field>) -> T
+where
+    T: Deserialize,
+{
+    let len = payload.len();
+    let serialized_len = <T as Deserialize>::N;
+    assert(
+        len == serialized_len,
+        f"Fact payload has {len} fields, but the value's serialized length is {serialized_len}",
+    );
+
+    let mut fields = [0; <T as Deserialize>::N];
+    for i in 0..fields.len() {
+        fields[i] = payload.get(i);
+    }
+    T::deserialize(fields)
+}
+
 mod test {
     use crate::ephemeral::EphemeralArray;
     use crate::facts::{
-        delete_fact_collection, FactScope, get_fact_collection, get_fact_collections_by_type,
-        record_non_retractable_fact, record_retractable_fact,
+        delete_fact_collection, deserialize_payload, FactScope, get_fact_collection, get_fact_collections_by_type,
+        record_non_retractable_fact, record_retractable_fact, serialize_payload,
     };
     use crate::oracle::block_reference::BlockReference;
     use crate::protocol::address::AztecAddress;
@@ -424,6 +453,32 @@ mod test {
             let collection_after_recreate =
                 get_fact_collection(contract_address, scope, TYPE_ID, COLLECTION_ID).unwrap();
             assert_eq(collection_after_recreate.facts.len(), 1);
+        });
+    }
+
+    #[test]
+    unconstrained fn deserialize_payload_reads_back_a_serialized_value() {
+        let env = TestEnvironment::new();
+        env.utility_context(|_| {
+            let payload = serialize_payload(PAYLOAD);
+            assert_payload(payload);
+
+            let value: [Field; 3] = deserialize_payload(payload);
+            assert_eq(value, PAYLOAD);
+        });
+    }
+
+    #[test(should_fail_with = "Fact payload has 2 fields, but the value's serialized length is 3")]
+    unconstrained fn deserialize_payload_fails_on_a_shorter_payload() {
+        let env = TestEnvironment::new();
+        env.utility_context(|_| { let _: [Field; 3] = deserialize_payload(EphemeralArray::from_array([123, 456])); });
+    }
+
+    #[test(should_fail_with = "Fact payload has 4 fields, but the value's serialized length is 3")]
+    unconstrained fn deserialize_payload_fails_on_a_longer_payload() {
+        let env = TestEnvironment::new();
+        env.utility_context(|_| {
+            let _: [Field; 3] = deserialize_payload(EphemeralArray::from_array([123, 456, 789, 0]));
         });
     }
 }

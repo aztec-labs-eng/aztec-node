@@ -1,17 +1,23 @@
 import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
+import { RegisterPostQuantumPublicKeyInteraction } from '@aztec-labs/aztec.js/keys';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { DomainSeparator, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { PostQuantumPublicKeyRegistryContract } from '@aztec-labs/noir-contracts.js/PostQuantumPublicKeyRegistry';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import {
+  PostQuantumPublicKey,
   computeAppNullifierHidingKey,
   computeAppSecretKey,
+  deriveKeys,
   deriveMasterNullifierHidingSecretKey,
   deriveMasterOutgoingViewingSecretKey,
+  derivePostQuantumKeyPair,
   derivePublicKeyFromSecretKey,
   hashPublicKey,
 } from '@aztec-labs/stdlib/keys';
@@ -22,9 +28,9 @@ import { AutomineTestContext } from '../automine_test_context.js';
 
 const TIMEOUT = 300_000;
 
-// Covers cryptographic key derivation and usage: nhk_app-based nullification detection and
-// ovsk_app retrieval via the TestContract. Single automine node, one funded Schnorr account,
-// TestContract deployed in beforeAll.
+// Covers cryptographic key derivation and usage: nhk_app-based nullification detection, ovsk_app
+// retrieval via the TestContract, and registering the post-quantum public key in the standard registry.
+// Single automine node, one funded Schnorr account, TestContract deployed in beforeAll.
 describe('automine/accounts/keys', () => {
   jest.setTimeout(TIMEOUT);
 
@@ -141,6 +147,31 @@ describe('automine/accounts/keys', () => {
 
       // Check that the ovsk_app is as expected
       expect(ovskApp.equals(expectedOvskApp)).toBeTrue();
+    });
+  });
+
+  describe('post-quantum public key', () => {
+    it('registers the post-quantum public key derived from the account keys and reads it back from the registry', async () => {
+      const { masterTaggingSecretKey } = await deriveKeys(secret);
+      const { publicKey } = derivePostQuantumKeyPair(masterTaggingSecretKey);
+      const registry = PostQuantumPublicKeyRegistryContract.at(
+        STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS,
+        wallet,
+      );
+      const getRegisteredKey = async () => {
+        const { result } = await registry.methods
+          .get_post_quantum_public_key(defaultAccountAddress)
+          .simulate({ from: defaultAccountAddress });
+        return result === undefined
+          ? undefined
+          : PostQuantumPublicKey.fromFields(result.fields.map((f: bigint) => new Fr(f)));
+      };
+
+      expect(await getRegisteredKey()).toBeUndefined();
+
+      await new RegisterPostQuantumPublicKeyInteraction(wallet, defaultAccountAddress, publicKey).send();
+
+      expect((await getRegisteredKey())?.toBuffer()).toEqual(publicKey.toBuffer());
     });
   });
 });

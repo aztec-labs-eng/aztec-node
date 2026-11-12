@@ -99,6 +99,7 @@
     "@aztec-labs/ethereum": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@google-cloud/storage": "^7.15.0",
+    "@noble/post-quantum": "0.7.1",
     "axios": "^1.15.1",
     "buffer": "^6.0.3",
     "json-stringify-deterministic": "1.0.12",
