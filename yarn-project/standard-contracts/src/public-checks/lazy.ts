@@ -14,7 +14,7 @@ let standardContractArtifact: ContractArtifact;
 
 export async function getPublicChecksArtifact(): Promise<ContractArtifact> {
   if (!standardContractArtifact) {
-    // Cannot assert this import as it's incompatible with bundlers like vite
+    // Cannot add `with { type: 'json' }` to this import as it's incompatible with bundlers like vite
     // https://github.com/vitejs/vite/issues/19095#issuecomment-2566074352
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
