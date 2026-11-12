@@ -16,7 +16,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   statSync,
   utimesSync,
@@ -24,7 +23,7 @@ import {
 } from 'fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'os';
-import { basename, dirname, isAbsolute, join, resolve } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import readline from 'readline';
 import type { Hex } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
@@ -423,17 +422,10 @@ export function prepareL1ContractsForDeployment(): string {
     logger.verbose(`Updated solc path in foundry.toml to: ${absoluteSolcPath}`);
   }
 
-  const cachePath = join(tempDir, FORGE_CACHE_FILE);
-  const cache: ForgeCache = JSON.parse(readFileSync(cachePath, 'utf-8'));
-  if (!cache.preprocessed) {
-    // A cache written without test preprocessing is only accepted by forge 1.8 if dynamic test linking is off. Test
-    // preprocessing does not affect the contracts and scripts we deploy.
-    foundryToml = foundryToml.replace(/^\[profile\.default\]$/m, '$&\ndynamic_test_linking = false');
-  }
   writeFileSync(join(tempDir, 'foundry.toml'), foundryToml);
 
   try {
-    patchForgeCache(tempDir, cache);
+    patchForgeCache(tempDir);
   } catch (err) {
     logger.warn(`Failed to patch the forge cache, forge will recompile the L1 contracts`, { err });
   }
@@ -444,53 +436,34 @@ export function prepareL1ContractsForDeployment(): string {
 
 const FORGE_CACHE_FILE = join('cache', 'solidity-files-cache.json');
 
-/** The fields of forge's `solidity-files-cache.json` that depend on the forge version or the project location. */
-type ForgeCache = {
-  profiles?: Record<string, { solc?: Record<string, unknown> }>;
-  remappings?: string[];
-  preprocessed?: boolean;
-};
+/** The version of forge's test preprocessor that forge 1.9 records in its cache. */
+const FORGE_1_9_PREPROCESSOR_VERSION = 13;
 
 /**
- * Makes the forge build cache shipped in l1-artifacts valid in a deploy directory, so forge uses the shipped artifacts
- * instead of recompiling all L1 contracts, which takes ~10s per process and yields bytecode with a different metadata
- * hash than the published one.
+ * Makes the forge 1.8 build cache shipped in l1-artifacts valid for forge 1.9 in a deploy directory, so forge uses the
+ * shipped artifacts instead of recompiling all L1 contracts, which takes ~7s per process and yields bytecode with a
+ * different metadata hash than the published one.
  *
- * Since 1.8, forge stores the absolute remappings of the project in its cache, and discards a cache whose remappings do
- * not match the current project root. So a cache written in the directory where l1-artifacts was built never matches a
- * copy of it. We regenerate the remappings for the deploy directory in the format forge writes them, which lists every
- * context remapping twice: once with a relative context and once with an absolute one.
+ * Forge 1.9 discards a cache whose remappings or test preprocessor version differ from its own. Forge 1.8 recorded
+ * absolute remappings, which tie its cache to the directory where l1-artifacts was built, and preprocessor version 8.
+ * We write both as forge 1.9 does: the remappings as `forge remappings` prints them, relative to the project root, and
+ * its preprocessor version. The preprocessor only rewrites test sources, so the contracts and scripts we deploy are
+ * the same under either version.
  *
- * Caches written by forge before 1.8 also lack the `viaSSACFG` and `experimental` solc settings, and need dynamic test
- * linking disabled (see `prepareL1ContractsForDeployment`).
- *
- * TODO: Once l1-artifacts is built with forge 1.8.5 or later, remove the `viaSSACFG`/`experimental` backfill and the
- * `dynamic_test_linking = false` override, as such caches already carry both settings and record `preprocessed: true`.
- * Keep the remappings rewrite: a forge 1.8 cache stays tied to the directory where it was written.
+ * TODO: Remove this patch once l1-artifacts is built with forge 1.9 or later. A copy of such a cache is already valid in
+ * any directory.
  */
-function patchForgeCache(deployDir: string, cache: ForgeCache) {
-  const root = realpathSync(deployDir);
-  const remappings = execFileSync(resolveFoundryBinary('forge'), ['remappings'], { cwd: root, encoding: 'utf-8' })
+function patchForgeCache(deployDir: string) {
+  const remappings = execFileSync(resolveFoundryBinary('forge'), ['remappings'], { cwd: deployDir, encoding: 'utf-8' })
     .split('\n')
-    .filter(line => line.trim())
-    .flatMap(line => {
-      const separator = line.indexOf('=');
-      const context = line.slice(0, separator).trim();
-      const target = line.slice(separator + 1).trim();
-      const absoluteTarget = isAbsolute(target) ? target : `${root}/${target}`;
-      const remapping = `${context}=${absoluteTarget}`;
-      return context.includes(':') ? [remapping, `${root}/${remapping}`] : [remapping];
-    });
-
-  for (const profile of Object.values(cache.profiles ?? {})) {
-    if (profile.solc) {
-      profile.solc.viaSSACFG ??= false;
-      profile.solc.experimental ??= false;
-    }
-  }
-  cache.remappings = remappings;
+    .map(line => line.trim())
+    .filter(line => line);
 
   const cachePath = join(deployDir, FORGE_CACHE_FILE);
+  const cache = JSON.parse(readFileSync(cachePath, 'utf-8'));
+  cache.remappings = remappings;
+  cache.preprocessor_version = FORGE_1_9_PREPROCESSOR_VERSION;
+
   const { atime, mtime } = statSync(cachePath);
   writeFileSync(cachePath, JSON.stringify(cache));
   utimesSync(cachePath, atime, mtime);

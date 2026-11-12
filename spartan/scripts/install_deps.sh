@@ -89,7 +89,7 @@ if command -v gcloud &> /dev/null; then
   fi
 fi
 
-FOUNDRY_VERSION="v1.8.5"
+FOUNDRY_VERSION="v1.9.0"
 if ! command -v cast &> /dev/null; then
   log "Installing cast (foundry $FOUNDRY_VERSION)..."
   export FOUNDRY_DIR="$HOME/.foundry"
