@@ -20,6 +20,11 @@ The shared foundation ESLint config enables these rules as errors:
   Use `compactArray(items)` from `@aztec-labs/foundation/collection`.
 - `aztec-custom/prefer-unique` reports `[...new Set(items)]` and `Array.from(new Set(items))` when `items` is an array.
   Use `unique(items)` from `@aztec-labs/foundation/collection`.
+- `aztec-custom/prefer-partition` reports two adjacent `const` or `let` declarations that filter the same array with
+  inline callbacks whose bodies are a predicate and its negation: `!p` and `p`, or `a === b` and `a !== b` (also `==` and
+  `!=`). Use `const [pass, fail] = partition(items, predicate)` from `@aztec-labs/foundation/collection`. It skips
+  receivers other than identifiers, `this` and property chains, callbacks that take the index or narrow with a type
+  predicate, and filters whose result is not assigned directly, such as `.filter(p).length`.
 - `aztec-custom/prefer-sum` reports addition reducers starting with `0` for numbers or `0n` for bigints.
   Use `sum(items)` from `@aztec-labs/foundation/collection` or `sumBigint(items)` from `@aztec-labs/foundation/bigint`.
 - `aztec-custom/prefer-promise-with-resolvers` reports Promise executors that only assign their resolver functions to
