@@ -12,17 +12,17 @@ export type SharedSecretKind = 'arbitrary-secret' | 'handshake';
 export type SharedSecret = { kind: SharedSecretKind; secret: Point };
 
 /**
- * Stores the sources from which directional messaging secrets are derived during recipient log synchronization.
+ * Stores the sources from which messaging secrets are derived during recipient log synchronization.
  *
  * Two kinds of source are held:
  * - Sender addresses: combined with a recipient to derive a shared secret point via ECDH. These are global (not
  *   scoped to a recipient) because the per-recipient binding comes from re-mixing the recipient's keys during
  *   derivation, so each account only ever derives secrets meant for it.
- * - Pre-shared secret points: shared secret points registered directly, bypassing ECDH. These are scoped to a
- *   specific recipient, since the derivation of the directional messaging secret does not require any secret
- *   recipient data: given the original secret anyone can derive a recipient's app-siloed directional messaging secret,
- *   and so these must not be reused across recipients to preserve privacy. Each carries the {@link SharedSecretKind}
- *   it was registered through, which determines the tag streams it is scanned under.
+ * - Pre-shared secret points: shared secret points registered directly, bypassing ECDH. These are scoped to a specific
+ *   recipient, since deriving a messaging secret from them does not require any secret recipient data: given the point
+ *   anyone can derive the recipient's messaging secret, and so these must not be reused across recipients to preserve
+ *   privacy. Each carries the {@link SharedSecretKind} it was registered through, which determines how its messaging
+ *   secret is derived (see `MessagingSecret`) and the tag streams it is scanned under.
  */
 export class MessagingSecretSourcesStore {
   #store: AztecAsyncKVStore;

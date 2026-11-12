@@ -34,10 +34,11 @@ global LOG_RETRIEVAL_REQUEST_ARRAY_SLOT: Field =
 
 /// Discovers non-interactive handshakes addressed to the syncing account.
 ///
-/// On every sync, scans the recipient-keyed bootstrap tag over the blocks mined since the previous sync, decrypts
-/// each matching log to recover the handshake `eph_pk`, and records it as a retractable fact whose origin is the block
-/// the log landed in, so a reorg pruning that block makes the handshake invisible again. It then falls through to
-/// [`do_sync_state`] so that normal note/event/partial-note discovery still happens.
+/// On every sync, scans the recipient-keyed tag of handshake logs over the blocks mined since the previous sync,
+/// decrypts each matching log to recover the handshake `eph_pk`, and records it as a retractable fact whose origin is
+/// the block the log landed in, so a reorg pruning that block makes the handshake invisible again. It then falls
+/// through to [`do_sync_state_without_handshake_discovery`] so that normal note/event/partial-note discovery still
+/// happens.
 ///
 /// `scope` is the account PXE is syncing for, which doubles as both the recipient whose tag we scan and the fact
 /// scope we persist under, so handshakes for one account never leak into another's list.
