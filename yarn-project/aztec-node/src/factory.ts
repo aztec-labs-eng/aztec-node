@@ -60,7 +60,11 @@ import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer
 import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
 import { createPublicClient } from 'viem';
 
-import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
+import {
+  type AztecNodeConfig,
+  createKeyStoreForValidator,
+  resolveNodeWorldStateHistoryRetention,
+} from './aztec-node/config.js';
 import { AdmissionMinFeesProvider, NextBlockFeeCache, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
@@ -226,6 +230,21 @@ export async function createAztecNodeService(
       );
     }
 
+    const proofSubmissionEpochs = config.enableProverNode ? await rollupContract.getProofSubmissionEpochs() : undefined;
+    // Snapshot sync and world-state creation below read the resolved policy, so this must run before either.
+    const configuredHistoryRetention = config.worldStateHistoryRetention;
+    config.worldStateHistoryRetention = resolveNodeWorldStateHistoryRetention(
+      configuredHistoryRetention,
+      proofSubmissionEpochs === undefined ? undefined : { proofSubmissionEpochs, epochDuration: Number(epochDuration) },
+    );
+    if (configuredHistoryRetention === undefined && proofSubmissionEpochs !== undefined) {
+      log.info('Derived world-state history retention from the proof submission window', {
+        historyRetention: config.worldStateHistoryRetention,
+        proofSubmissionEpochs,
+        epochDuration: Number(epochDuration),
+      });
+    }
+
     const blobClient = await createBlobClientWithFileStores(config, log.createChild('blob-client'));
 
     // attempt snapshot sync if possible
@@ -347,8 +366,7 @@ export async function createAztecNodeService(
     // submission window spans (proofSubmissionEpochs + 1) epochs, so its tx pool must keep finalized txs
     // for at least that long to re-fetch them for proving and failure upload. Operators may configure a
     // larger margin but not a smaller one.
-    if (config.enableProverNode) {
-      const proofSubmissionEpochs = await rollupContract.getProofSubmissionEpochs();
+    if (proofSubmissionEpochs !== undefined) {
       const proverRetentionFloorSlots = (proofSubmissionEpochs + 1) * Number(epochDuration);
       const configuredSlots = config.keepFinalizedTxsForSlots ?? 0;
       if (proverRetentionFloorSlots > configuredSlots) {

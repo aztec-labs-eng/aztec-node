@@ -35,6 +35,7 @@ import {
   type WorldStateConfig,
   createWorldState,
   getWorldStateHistoryStartCheckpoint,
+  resolveWorldStateHistoryRetention,
   validateWorldStateHistory,
 } from '@aztec-labs/world-state';
 import { copyFile, mkdir, mkdtemp, readFile, rename, stat, unlink } from 'fs/promises';
@@ -450,7 +451,7 @@ async function validateLocalWorldStateHistory(config: SnapshotSyncConfig, log: L
       oldestHistoricBlock: summary.oldestHistoricalBlock,
       latestBlock: summary.unfinalizedBlockNumber,
       historyStartCheckpoint: getWorldStateHistoryStartCheckpoint(config),
-      historyRetention: config.worldStateHistoryRetention,
+      historyRetention: resolveWorldStateHistoryRetention(config.worldStateHistoryRetention),
     });
   } finally {
     await worldState.close();
