@@ -17,6 +17,7 @@ import preferBoundedCollection from './eslint-rules/prefer-bounded-collection.js
 import preferBufferToHex from './eslint-rules/prefer-buffer-to-hex.js';
 import preferCompactArray from './eslint-rules/prefer-compact-array.js';
 import preferExecuteTimeout from './eslint-rules/prefer-execute-timeout.js';
+import preferPartition from './eslint-rules/prefer-partition.js';
 import preferPromiseWithResolvers from './eslint-rules/prefer-promise-with-resolvers.js';
 import preferRunningPromise from './eslint-rules/prefer-running-promise.js';
 import preferSleep from './eslint-rules/prefer-sleep.js';
@@ -80,6 +81,7 @@ export default [
           'prefer-buffer-to-hex': preferBufferToHex,
           'prefer-compact-array': preferCompactArray,
           'prefer-execute-timeout': preferExecuteTimeout,
+          'prefer-partition': preferPartition,
           'prefer-promise-with-resolvers': preferPromiseWithResolvers,
           'prefer-running-promise': preferRunningPromise,
           'prefer-sleep': preferSleep,
@@ -180,6 +182,7 @@ export default [
       'aztec-custom/prefer-buffer-to-hex': 'error',
       'aztec-custom/prefer-compact-array': 'error',
       'aztec-custom/prefer-execute-timeout': 'error',
+      'aztec-custom/prefer-partition': 'error',
       'aztec-custom/prefer-promise-with-resolvers': 'error',
       'aztec-custom/prefer-running-promise': 'error',
       'aztec-custom/prefer-sleep': 'error',
