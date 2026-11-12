@@ -44,8 +44,8 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  *   the pair. It is app-siloed, and backs both delivery modes. The registry validates it, by recomputing the app-siloed
  *   secret from the point for the calling contract.
  * - **Recipient tsk** ({@link computeFromRecipientTsk}): the raw secret is the recipient's master tagging secret key
- *   `tsk_m`. It is app-siloed into `tsk_app` and directed to `recipient`. It only backs unconstrained delivery. The
- *   kernel can validate `tsk_app`, by recomputing it from `tsk_m` for the calling contract.
+ *   `tsk_m`. It is app-siloed into `tsk_app` and directed to `recipient`, and backs both delivery modes. Constrained
+ *   delivery has the kernel validate `tsk_app`, by recomputing it from `tsk_m` for the calling contract.
  *
  * ## From messaging secret to tag
  *
@@ -60,8 +60,9 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  *
  * The first two are computed by the contract and the last one by the kernel, and `siloedTag` is what appears onchain.
  *
- * The separator depends on the delivery mode because a handshake secret backs both, each with its own index sequence.
- * Mechanisms need no separators of their own at this step, as different derivations already yield different secrets.
+ * The separator depends on the delivery mode because a handshake or recipient tsk secret backs both, each with its own
+ * index sequence. Mechanisms need no separators of their own at this step, as different derivations already yield
+ * different secrets.
  */
 export class MessagingSecret {
   constructor(
@@ -140,20 +141,21 @@ export class MessagingSecret {
   /**
    * Derives the messaging secret from the recipient's tagging secret key.
    *
-   * The secret is the recipient's app-siloed tagging key hashed with their address, for unconstrained delivery. Hashing
-   * in the address gives accounts that share a tagging key separate tag streams. The secret is a property of the
-   * recipient alone, so whoever sends the log has to know `recipientTsk`, and the recipient finds the log without
+   * The secret is the recipient's app-siloed tagging key hashed with their address, under the given delivery mode.
+   * Hashing in the address gives accounts that share a tagging key separate tag streams. The secret is a property of
+   * the recipient alone, so whoever sends the log has to know `recipientTsk`, and the recipient finds the log without
    * knowing who sent it.
    */
   static async computeFromRecipientTsk(
     recipientTsk: Fq,
     app: AztecAddress,
     recipient: AztecAddress,
+    deliveryMode: OnchainDeliveryMode,
   ): Promise<MessagingSecret> {
     const tskApp = await computeAppTaggingSecretKey(recipientTsk, app);
     const secret = await poseidon2HashWithSeparator([tskApp, recipient], DOM_SEP__RECIPIENT_TSK_SECRET);
 
-    return new MessagingSecret(secret, app, OnchainDeliveryMode.UNCONSTRAINED);
+    return new MessagingSecret(secret, app, deliveryMode);
   }
 
   toString(): string {

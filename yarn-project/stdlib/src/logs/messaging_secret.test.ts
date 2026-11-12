@@ -115,8 +115,8 @@ describe('MessagingSecret', () => {
       const alice = AztecAddress.fromNumberUnsafe(43);
       const bob = AztecAddress.fromNumberUnsafe(44);
 
-      const toAlice = await MessagingSecret.computeFromRecipientTsk(tsk, app, alice);
-      const toBob = await MessagingSecret.computeFromRecipientTsk(tsk, app, bob);
+      const toAlice = await MessagingSecret.computeFromRecipientTsk(tsk, app, alice, OnchainDeliveryMode.UNCONSTRAINED);
+      const toBob = await MessagingSecret.computeFromRecipientTsk(tsk, app, bob, OnchainDeliveryMode.UNCONSTRAINED);
 
       expect(toAlice).toEqual(
         new MessagingSecret(
@@ -200,7 +200,12 @@ describe('MessagingSecret', () => {
       const nameHash = await poseidon2HashBytes(Buffer.from('az_dom_sep__recipient_tsk_secret'));
       const separator = Number(nameHash.toBigInt() & 0xffffffffn);
 
-      const { secret } = await MessagingSecret.computeFromRecipientTsk(tsk, app, recipient);
+      const { secret } = await MessagingSecret.computeFromRecipientTsk(
+        tsk,
+        app,
+        recipient,
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
 
       const tskApp = await computeAppTaggingSecretKey(tsk, app);
       expect(secret).toEqual(await poseidon2HashWithSeparator([tskApp, recipient], separator));
@@ -210,10 +215,42 @@ describe('MessagingSecret', () => {
       const tsk = GrumpkinScalar.random();
       const app = await AztecAddress.random();
 
-      const a = await MessagingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
-      const b = await MessagingSecret.computeFromRecipientTsk(tsk, app, await AztecAddress.random());
+      const a = await MessagingSecret.computeFromRecipientTsk(
+        tsk,
+        app,
+        await AztecAddress.random(),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+      const b = await MessagingSecret.computeFromRecipientTsk(
+        tsk,
+        app,
+        await AztecAddress.random(),
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
 
       expect(b.secret).not.toEqual(a.secret);
+    });
+
+    // Aztec.nr derives the same secret for both delivery modes, so the mode must only label the tag stream.
+    it('derives the same secret for each delivery mode', async () => {
+      const tsk = GrumpkinScalar.random();
+      const app = await AztecAddress.random();
+      const recipient = await AztecAddress.random();
+
+      const unconstrained = await MessagingSecret.computeFromRecipientTsk(
+        tsk,
+        app,
+        recipient,
+        OnchainDeliveryMode.UNCONSTRAINED,
+      );
+      const constrained = await MessagingSecret.computeFromRecipientTsk(
+        tsk,
+        app,
+        recipient,
+        OnchainDeliveryMode.CONSTRAINED,
+      );
+
+      expect(constrained).toEqual(new MessagingSecret(unconstrained.secret, app, OnchainDeliveryMode.CONSTRAINED));
     });
   });
 

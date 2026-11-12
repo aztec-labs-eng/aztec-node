@@ -186,11 +186,13 @@ impl MessageDelivery {
     /// plaintext and recognizing that a log was sent between a given sender and recipient require their shared
     /// messaging secret, which no third party can compute.
     ///
-    /// The exception is the discovery tag. Constrained delivery is always backed by a handshake, established by
-    /// default as a non-interactive one the first time the sender reaches the recipient. A non-interactive handshake
-    /// reveals, to anyone who knows the recipient's address, that a handshake was made with them, but not by whom,
-    /// nor the contents. An interactive handshake ([`OnchainConstrainedDelivery::via_interactive_handshake`]) does
-    /// not leak this, but it requires the recipient's cooperation.
+    /// The exception is the discovery tag. Reaching a recipient the sender has not handshaked with before establishes,
+    /// by default, a non-interactive handshake. A non-interactive handshake reveals to anyone who knows the recipient's
+    /// address that a handshake was made with them, but not by whom. An interactive handshake
+    /// ([`OnchainConstrainedDelivery::via_interactive_handshake`]) does not leak this, but it requires the recipient's
+    /// cooperation.
+    ///
+    /// Delivering to the sender itself reveals nothing.
     ///
     /// Delivering the message does produce on-chain information in the form of private logs and nullifiers, so
     /// transactions that deliver many messages this way might be identifiable by these markers.
@@ -284,6 +286,21 @@ impl OnchainUnconstrainedDelivery {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::address_derived());
         *self
     }
+
+    /// Derives the discovery tag from the recipient's tagging key, regardless of the sender. Leaves no on-chain trace.
+    ///
+    /// The send fails unless the sender's PXE holds the recipient's keys and the recipient is in the execution's
+    /// scopes, both of which are typically true when delivering to the sender itself.
+    ///
+    /// ## Examples
+    ///
+    /// ```noir
+    /// MessageDelivery::onchain_unconstrained().via_recipient_tsk_secret()
+    /// ```
+    pub fn via_recipient_tsk_secret(&mut self) -> Self {
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::recipient_tsk());
+        *self
+    }
 }
 
 impl MessageDeliveryBuilder for OnchainUnconstrainedDelivery {
@@ -306,7 +323,7 @@ impl From<OnchainUnconstrainedDelivery> for OnchainDeliveryMode {
 ///
 /// By default the tag reuses a handshake already registered for the pair, and otherwise falls back to the
 /// wallet-resolved [messaging secret strategy][`crate::messages::delivery::ResolvedMessagingSecretStrategy`].
-/// Constrained delivery only supports handshake-backed derivations.
+/// Constrained delivery only supports handshake and recipient-tsk derivations.
 pub struct OnchainConstrainedDelivery {
     sender_override: Option<AztecAddress>,
     messaging_secret_derivation: Option<MessagingSecretDerivation>,
@@ -350,6 +367,21 @@ impl OnchainConstrainedDelivery {
     /// if they cannot be reached.
     pub fn via_interactive_handshake(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::interactive_handshake());
+        *self
+    }
+
+    /// Derives the discovery tag from the recipient's tagging key, regardless of the sender. Overrides the wallet's
+    /// default resolution.
+    ///
+    /// See [`OnchainUnconstrainedDelivery::via_recipient_tsk_secret`] for details.
+    ///
+    /// ## Examples
+    ///
+    /// ```noir
+    /// MessageDelivery::onchain_constrained().via_recipient_tsk_secret()
+    /// ```
+    pub fn via_recipient_tsk_secret(&mut self) -> Self {
+        self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::recipient_tsk());
         *self
     }
 }
@@ -451,6 +483,20 @@ mod test {
         assert_eq(
             constrained_interactive.messaging_secret_derivation(),
             Option::some(MessagingSecretDerivation::interactive_handshake()),
+        );
+
+        let unconstrained_recipient_tsk =
+            MessageDelivery::onchain_unconstrained().via_recipient_tsk_secret().build_message_delivery();
+        assert_eq(
+            unconstrained_recipient_tsk.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::recipient_tsk()),
+        );
+
+        let constrained_recipient_tsk =
+            MessageDelivery::onchain_constrained().via_recipient_tsk_secret().build_message_delivery();
+        assert_eq(
+            constrained_recipient_tsk.messaging_secret_derivation(),
+            Option::some(MessagingSecretDerivation::recipient_tsk()),
         );
     }
 }

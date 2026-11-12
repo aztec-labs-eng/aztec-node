@@ -5,6 +5,7 @@ use super::delivery_messaging_secret::DeliveryMessagingSecret;
 global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
 global UNCONSTRAINED_SECRET: u8 = 2;
 global INTERACTIVE_HANDSHAKE: u8 = 3;
+global RECIPIENT_TSK: u8 = 4;
 
 /// The outcome of the wallet's messaging secret strategy.
 ///
@@ -22,7 +23,8 @@ impl ResolvedMessagingSecretStrategy {
         Self { kind: NON_INTERACTIVE_HANDSHAKE, secret: 0 }
     }
 
-    /// An app-siloed, recipient-directional secret, ready to use. Only sound for unconstrained delivery.
+    /// A messaging secret ready to use, whose derivation the contract cannot verify. Only sound for unconstrained
+    /// delivery.
     pub fn unconstrained_secret(secret: Field) -> Self {
         Self { kind: UNCONSTRAINED_SECRET, secret }
     }
@@ -30,6 +32,12 @@ impl ResolvedMessagingSecretStrategy {
     /// An interactive handshake: the recipient learns the secret while signing its authorization.
     pub fn interactive_handshake() -> Self {
         Self { kind: INTERACTIVE_HANDSHAKE, secret: 0 }
+    }
+
+    /// The recipient's messaging secret derived from their tagging key, ready to use. Sound for both delivery modes:
+    /// constrained delivery proves the derivation.
+    pub fn recipient_tsk(secret: Field) -> Self {
+        Self { kind: RECIPIENT_TSK, secret }
     }
 
     pub fn is_unconstrained_secret(self) -> bool {
@@ -47,6 +55,8 @@ impl ResolvedMessagingSecretStrategy {
             DeliveryMessagingSecret::new_non_interactive_handshake(context, sender, recipient)
         } else if self.kind == INTERACTIVE_HANDSHAKE {
             DeliveryMessagingSecret::new_interactive_handshake(context, sender, recipient)
+        } else if self.kind == RECIPIENT_TSK {
+            DeliveryMessagingSecret::recipient_tsk(self.secret)
         } else {
             DeliveryMessagingSecret::unconstrained_secret(self.secret)
         }
@@ -57,7 +67,8 @@ impl ResolvedMessagingSecretStrategy {
         let resolved = Self { kind, secret };
         assert(
             (((kind == NON_INTERACTIVE_HANDSHAKE) | (kind == INTERACTIVE_HANDSHAKE)) & (secret == 0))
-                | (kind == UNCONSTRAINED_SECRET),
+                | (kind == UNCONSTRAINED_SECRET)
+                | (kind == RECIPIENT_TSK),
             f"unrecognized resolved messaging secret strategy kind: {kind}",
         );
         resolved
@@ -87,10 +98,12 @@ mod test {
         let non_interactive = ResolvedMessagingSecretStrategy::non_interactive_handshake();
         let unconstrained_secret = ResolvedMessagingSecretStrategy::unconstrained_secret(42);
         let interactive = ResolvedMessagingSecretStrategy::interactive_handshake();
+        let recipient_tsk = ResolvedMessagingSecretStrategy::recipient_tsk(42);
 
         assert(ResolvedMessagingSecretStrategy::deserialize(non_interactive.serialize()) == non_interactive);
         assert(ResolvedMessagingSecretStrategy::deserialize(unconstrained_secret.serialize()) == unconstrained_secret);
         assert(ResolvedMessagingSecretStrategy::deserialize(interactive.serialize()) == interactive);
+        assert(ResolvedMessagingSecretStrategy::deserialize(recipient_tsk.serialize()) == recipient_tsk);
     }
 
     #[test(should_fail_with = "unrecognized resolved messaging secret strategy kind")]
