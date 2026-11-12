@@ -98,8 +98,6 @@ export async function deployNewRollupContracts(
  * @returns The contract names.
  */
 export async function getExampleContractNames(): Promise<string[]> {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
   const { ContractNames } = await import('@aztec-labs/noir-contracts.js');
   return ContractNames;
 }
@@ -118,8 +116,6 @@ export async function getContractArtifact(fileDir: string, log: LogFn) {
     // depend on all of them — the CI dependency map content-hashes generated files from the
     // working tree — plus the generator side.
     // @dependency ../../../noir-contracts.js/src/*.ts, ../../../noir-contracts.js/scripts/generate-types.sh, ../../../noir-contracts.js/package.json
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
     const imported = await import(`@aztec-labs/noir-contracts.js/${contractName}`);
     const artifact = imported[`${contractName}ContractArtifact`] as ContractArtifact;
     if (!artifact) {

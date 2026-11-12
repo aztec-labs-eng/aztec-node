@@ -64,6 +64,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/ipc-runtime": "0.1.0-dummy",
     "@aztec-foundation/wsdb": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
@@ -75,7 +76,6 @@
     "zod": "~4.6.7"
   },
   "devDependencies": {
-    "@aztec-foundation/ipc-runtime": "0.1.0-dummy",
     "@aztec-labs/archiver": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
