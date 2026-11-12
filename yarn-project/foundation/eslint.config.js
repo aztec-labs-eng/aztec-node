@@ -25,6 +25,12 @@ import preferTimer from './eslint-rules/prefer-timer.js';
 import preferTimes from './eslint-rules/prefer-times.js';
 import preferUnique from './eslint-rules/prefer-unique.js';
 
+/**
+ * Options for `import-x/no-extraneous-dependencies`. A config that allows devDependencies spreads them and sets
+ * `devDependencies: true`, since a later config that sets a rule's options replaces the earlier ones outright.
+ */
+export const noExtraneousDependenciesOptions = { peerDependencies: false, devDependencies: false };
+
 export default [
   globalIgnores([
     '**/node_modules/**',
@@ -162,7 +168,7 @@ export default [
           ],
         },
       ],
-      'import-x/no-extraneous-dependencies': 'error',
+      'import-x/no-extraneous-dependencies': ['error', noExtraneousDependenciesOptions],
       // this unfortunately doesn't block `fit` and `fdescribe`
       'no-only-tests/no-only-tests': ['error'],
       'aztec-custom/no-async-dispose': 'error',
@@ -188,6 +194,24 @@ export default [
     rules: {
       'jsdoc/require-jsdoc': 'off',
       'no-restricted-properties': 'off',
+    },
+  },
+  {
+    // Test code may import devDependencies. The globs live in `files`, which ESLint matches relative to the package,
+    // because the rule's own `devDependencies` globs also match the absolute path, so a checkout under a directory
+    // named `test` would exempt every file.
+    files: [
+      '**/*.test.ts',
+      '**/test/**',
+      '**/testing/**',
+      '**/test-helpers/**',
+      '**/mocks/**',
+      '**/mocks.ts',
+      '**/fixtures/**',
+      '**/avm_proving_tests/**',
+    ],
+    rules: {
+      'import-x/no-extraneous-dependencies': ['error', { ...noExtraneousDependenciesOptions, devDependencies: true }],
     },
   },
 ];
