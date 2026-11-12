@@ -32,7 +32,7 @@ import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { WorldStateInstrumentation } from '../instrumentation/instrumentation.js';
 import type { WorldStateStatusFull } from '../native/message.js';
 import type { MerkleTreeAdminDatabase } from '../world-state-db/merkle_tree_db.js';
-import type { WorldStateConfig } from './config.js';
+import { type WorldStateConfig, type WorldStateHistoryRetention, resolveWorldStateHistoryRetention } from './config.js';
 import { WorldStateSynchronizerError } from './errors.js';
 import { validateWorldStateHistory } from './history.js';
 
@@ -76,6 +76,8 @@ export class ServerWorldStateSynchronizer
   private readonly blockHashCache = new LruMap<number, string>(MAX_CACHED_BLOCK_HASHES);
   private blockHashCacheGeneration = 0;
 
+  private readonly historyRetention: WorldStateHistoryRetention;
+
   constructor(
     private readonly merkleTreeDb: MerkleTreeAdminDatabase,
     private readonly l2BlockSource: L2BlockSource & L1ToL2MessageSource,
@@ -83,8 +85,9 @@ export class ServerWorldStateSynchronizer
     private instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     private readonly log: Logger = createLogger('world_state'),
   ) {
+    this.historyRetention = resolveWorldStateHistoryRetention(config.worldStateHistoryRetention);
     this.mutationQueue.start();
-    this.log.info('Created world state synchronizer', { historyRetention: config.worldStateHistoryRetention });
+    this.log.info('Created world state synchronizer', { historyRetention: this.historyRetention });
   }
 
   public getCommitted(): MerkleTreeReadOperations {
@@ -171,13 +174,13 @@ export class ServerWorldStateSynchronizer
     }
 
     const summary = await this.merkleTreeDb.getStatusSummary();
-    if (this.config.worldStateHistoryRetention.type !== 'rolling') {
+    if (this.historyRetention.type !== 'rolling') {
       await validateWorldStateHistory(this.config, summary, this.l2BlockSource);
     }
     this.log.info('World state history available at startup', {
       oldestHistoricBlock: summary.oldestHistoricalBlock,
       latestBlock: summary.unfinalizedBlockNumber,
-      historyRetention: this.config.worldStateHistoryRetention,
+      historyRetention: this.historyRetention,
     });
 
     // Get the current latest block number
@@ -556,7 +559,7 @@ export class ServerWorldStateSynchronizer
       return;
     }
     const summary = await this.merkleTreeDb.setFinalized(blockNumber);
-    const policy = this.config.worldStateHistoryRetention;
+    const policy = this.historyRetention;
     if (policy.type === 'archive') {
       return;
     }

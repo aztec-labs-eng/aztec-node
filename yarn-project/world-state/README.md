@@ -37,9 +37,14 @@ The interface to the Merkle Tree DB offers a unified asynchronous API to the set
 
 `WS_HISTORY_RETENTION` (CLI: `--world-state-history-retention`) selects one history retention policy:
 
-- `rolling:N` retains the latest N finalized checkpoints and all newer state. The default is `rolling:64`.
+- `rolling:N` retains the latest N finalized checkpoints and all newer state.
 - `pinned:N` retains every block in checkpoint N and every later checkpoint permanently.
 - `archive` retains all history from genesis and disables history pruning.
+
+When retention is unset, a node uses `rolling:64`. A prover node needs every checkpoint in its proof submission window,
+which spans `(proofSubmissionEpochs + 1) * epochDuration` checkpoints read from the rollup, so unset retention on a
+prover becomes `rolling:max(64, window)`. A prover configured with a shorter `rolling:N` fails at startup; `pinned` and
+`archive` are always accepted.
 
 Rolling counts and pinned checkpoint numbers must be positive integers. Pruning preserves complete checkpoints and always
 retains the checkpoint containing the finalized tip. A future pin prunes to the finalized checkpoint until the pin is reached,
