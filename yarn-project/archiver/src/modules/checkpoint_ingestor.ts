@@ -346,10 +346,11 @@ export class CheckpointIngestor {
   ): Promise<{ accepted: ResolvedCheckpointFromCalldata[]; lastAccepted: boolean }> {
     const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
     let lastAccepted = false;
-    // Archive roots accepted earlier in this batch. The store only drops a rejected entry for a root when the batch
-    // is persisted, so an accepted checkpoint whose root was also rejected (an earlier post of the same checkpoint
-    // with invalid attestations) would otherwise still look rejected to the children that follow it in this batch.
-    const acceptedArchiveRoots = new Set<string>();
+    // Archive roots accepted earlier in this batch, by checkpoint number. The store only drops the rejected entry for a
+    // checkpoint number when the batch is persisted, so an accepted checkpoint that was also rejected (an earlier post
+    // of the same checkpoint with invalid attestations) would otherwise still look rejected to the children that follow
+    // it in this batch.
+    const acceptedArchiveRoots = new Map<CheckpointNumber, string>();
 
     for (const [index, resolved] of resolvedCheckpoints.entries()) {
       const { checkpoint: calldataCheckpoint, validationResult: resolvedValidationResult } = resolved;
@@ -365,9 +366,11 @@ export class CheckpointIngestor {
       // ancestor was skipped earlier (e.g. due to invalid attestations), the catch handler
       // would roll back the L1 sync point, and the next iteration would re-fetch and re-throw.
       const parentArchiveRoot = calldataCheckpoint.header.lastArchiveRoot;
-      const rejectedAncestor = acceptedArchiveRoots.has(parentArchiveRoot.toString())
-        ? undefined
-        : await this.deps.stores.blocks.getRejectedCheckpointByArchiveRoot(parentArchiveRoot);
+      const parentNumber = CheckpointNumber(calldataCheckpoint.checkpointNumber - 1);
+      const rejectedAncestor =
+        acceptedArchiveRoots.get(parentNumber) === parentArchiveRoot.toString()
+          ? undefined
+          : await this.deps.stores.blocks.getRejectedCheckpoint(parentNumber, parentArchiveRoot);
 
       validation.observe(validationResult, { hasRejectedAncestor: rejectedAncestor !== undefined });
 
@@ -428,7 +431,7 @@ export class CheckpointIngestor {
       }
 
       checkpointsToIngest.push(calldataCheckpoint);
-      acceptedArchiveRoots.add(calldataCheckpoint.archiveRoot.toString());
+      acceptedArchiveRoots.set(calldataCheckpoint.checkpointNumber, calldataCheckpoint.archiveRoot.toString());
       lastAccepted = index === resolvedCheckpoints.length - 1;
     }
 

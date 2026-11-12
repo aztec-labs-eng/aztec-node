@@ -64,6 +64,7 @@ export const DefaultSequencerConfig = {
   injectUnrecoverableSignatureAttestation: false,
   injectYParityAttestation: false,
   republishAfterFakeAttestation: false,
+  claimParentArchiveRoot: false,
   fishermanMode: false,
   governanceProposerForcePayloadVote: false,
   shuffleAttestationOrdering: false,
@@ -245,6 +246,12 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
       'Publish the checkpoint with a fake attestation first, then invalidate it and publish it again with the ' +
       'collected attestations within the same slot (for testing only)',
     ...booleanConfigHelper(DefaultSequencerConfig.republishAfterFakeAttestation),
+  },
+  claimParentArchiveRoot: {
+    description:
+      "Publish the checkpoint claiming its parent's archive root as its own. The proposal is signed over that root, " +
+      'so pair it with skipBroadcastProposals and skipPushProposedBlocksToArchiver to keep it to L1 (for testing only)',
+    ...booleanConfigHelper(DefaultSequencerConfig.claimParentArchiveRoot),
   },
   fishermanMode: {
     env: 'FISHERMAN_MODE',
