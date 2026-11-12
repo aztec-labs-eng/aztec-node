@@ -22,9 +22,14 @@ instance's Helm releases, PVCs, PVs, and disks; see the
 [instance module lifecycle notes](../modules/ethereum-node-instance/README.md)
 before doing so.
 
-Instances created by the module are not registered with Kong, the internal API
-LoadBalancers, or the metrics collector. Their internal endpoints and storage
-identifiers are in the `mainnet_instances` output.
+`local.mainnet_serving_slot` selects which slot backs the public mainnet Kong
+execution and beacon routes and the in-cluster `mainnet-execution` (`:8545`
+HTTP, `:8546` WebSocket) and `mainnet-beacon` (`:5052`) Services; `null` points
+them at the legacy pair. In-cluster consumers should use those Service names
+(listed in the `mainnet_serving_urls` output) so a swap needs no consumer change.
+The internal API LoadBalancers and the metrics collector always target the
+legacy pair.
+Instance endpoints and storage identifiers are in the `mainnet_instances` output.
 
 ### Upgrade by cloning the serving pair
 
@@ -83,9 +88,16 @@ recovered and synced. The source pair keeps serving throughout. Alternate betwee
 
 5. **Validate recovery** (see [Validating a clone](#validating-a-clone)) before
    routing any traffic to the new pair, then set `liveness_probes_enabled = true`
-   for the slot.
+   for the slot. Apply that on its own, since it restarts both pods, and confirm
+   they recover.
 
-6. **Retire the old pair** only after traffic has moved and the new pair has run
+6. **Move public traffic** by setting `local.mainnet_serving_slot` to the new
+   slot. The plan should only change the backend Service of the two mainnet Kong
+   Ingresses and the selectors of `mainnet-execution` and `mainnet-beacon`. Node-local state does not move: clients must recreate filters and
+   reconnect subscriptions. To roll back, set it to the previous slot (or `null`
+   for the legacy pair) and apply again.
+
+7. **Retire the old pair** only after traffic has moved and the new pair has run
    in production for several days. Keep its disks or snapshots until then. Never
    run older client versions against a database the newer versions have migrated.
 
@@ -145,6 +157,34 @@ network directory) and its own Engine API JWT, and Lighthouse connects only to
 the same instance's Reth. When sharing traffic, route only the public execution
 and beacon APIs. Do not widen the instance Services' selectors: Reth's Service
 also carries the Engine API.
+
+### Extending blue/green to Sepolia
+
+`modules/ethereum-node-instance` already accepts `CHAIN = "sepolia"`, but this
+root's wiring is mainnet-only. Making the change is a state refactor, so do it in
+its own change, separate from any client upgrade:
+
+1. **Key instances by chain.** Replace `mainnet_instances` and
+   `mainnet_serving_slot` with per-chain maps (for example
+   `ethereum_instances = { mainnet = { blue = {...} }, sepolia = {...} }` and
+   `serving_slots = { mainnet = "blue", sepolia = null }`), flattened to
+   `"<chain>-<slot>"` keys for the module's `for_each`. The `chain == "mainnet"`
+   guard in `gateway_routes` then becomes a lookup of that chain's serving slot.
+   Keep an unknown slot name a plan error rather than a silent fallback to the
+   legacy pair.
+2. **Add `moved` blocks** for every existing instance, for example from
+   `module.mainnet_instances["blue"]` to `module.ethereum_instances["mainnet-blue"]`.
+   Without them, Terraform plans to destroy and recreate the instance;
+   `prevent_destroy` blocks that plan for the disks, PVs, and PVCs. The plan for
+   the refactor must show only moves.
+3. **Take per-chain values from `local.ethereum_chains`.** `mainnet-instances.tf`
+   hard-codes mainnet's resources, extra arguments, checkpoint URL, disk sizes,
+   and `avoid_release_prefixes = ["mainnet"]`; Sepolia's Reth disk, for example,
+   is 1792 GiB.
+4. **Parameterize the chain in `snapshot-live-mainnet.sh`,** which accepts only
+   `mainnet*` releases and labels snapshots `eth-network=mainnet`.
+5. **Allocate distinct P2P NodePorts** for each Sepolia slot and open them in the
+   `gke-cluster` firewall, as for mainnet.
 
 ## Before upgrading in place (stopped-client backups)
 

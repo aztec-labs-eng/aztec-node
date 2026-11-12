@@ -1,4 +1,7 @@
 locals {
+  # Slot whose clients back the public mainnet Kong routes; null routes them to the legacy pair.
+  mainnet_serving_slot = "blue"
+
   # Deployment membership must not depend on remembering a local var file during routine applies.
   mainnet_instances = {
     blue = {
@@ -76,6 +79,64 @@ module "mainnet_instances" {
   )
 
   depends_on = [kubernetes_namespace_v1.ethereum]
+}
+
+locals {
+  mainnet_serving_releases = local.mainnet_serving_slot == null ? {
+    reth       = module.ethereum_nodes["mainnet"].reth_release_name
+    lighthouse = module.ethereum_nodes["mainnet"].lighthouse_release_name
+    } : {
+    for client, instance in module.mainnet_instances[local.mainnet_serving_slot].clients : client => instance.release_name
+  }
+
+  mainnet_serving_services = {
+    reth = {
+      name  = "mainnet-execution"
+      ports = { http-rpc = 8545, ws-rpc = 8546 }
+    }
+    lighthouse = {
+      name  = "mainnet-beacon"
+      ports = { http-api = 5052 }
+    }
+  }
+}
+
+# Slot-independent in-cluster names that follow mainnet_serving_slot, so consumers don't change on a swap.
+resource "kubernetes_service_v1" "mainnet_serving" {
+  provider = kubernetes.gke-cluster
+  for_each = local.mainnet_serving_services
+
+  metadata {
+    name      = each.value.name
+    namespace = local.namespace
+  }
+
+  spec {
+    type = "ClusterIP"
+    selector = {
+      "app.kubernetes.io/instance" = local.mainnet_serving_releases[each.key]
+      "app.kubernetes.io/name"     = each.key
+    }
+
+    dynamic "port" {
+      for_each = each.value.ports
+      content {
+        name        = port.key
+        port        = port.value
+        protocol    = "TCP"
+        target_port = port.key
+      }
+    }
+  }
+}
+
+output "mainnet_serving_urls" {
+  description = "In-cluster mainnet URLs that follow mainnet_serving_slot."
+  value = {
+    execution    = "http://mainnet-execution.${local.namespace}.svc.cluster.local:8545"
+    execution_ws = "ws://mainnet-execution.${local.namespace}.svc.cluster.local:8546"
+    beacon       = "http://mainnet-beacon.${local.namespace}.svc.cluster.local:5052"
+  }
 }
 
 output "mainnet_instances" {
