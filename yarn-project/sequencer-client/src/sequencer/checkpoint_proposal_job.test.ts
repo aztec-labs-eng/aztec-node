@@ -1308,7 +1308,7 @@ describe('CheckpointProposalJob', () => {
           attestors: [EthAddress.random()],
           invalidIndex: 0,
           attestations: [CommitteeAttestation.random()],
-          verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
+          verbatimAttestations: { signatureIndices: '0x01', signaturesOrAddresses: Fr.random().toString() },
         };
       }
 
@@ -1392,6 +1392,31 @@ describe('CheckpointProposalJob', () => {
 
         expect(publisher.simulateInvalidateCheckpoint).not.toHaveBeenCalled();
         expect(publisher.enqueueInvalidateCheckpoint.mock.calls).toEqual([[buildTimeInvalidation]]);
+        expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+        expect(mismatchEvents).toHaveLength(0);
+        const publicationPlan = publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2];
+        expect(publicationPlan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1) });
+      });
+
+      // The proposer of the bad checkpoint can invalidate it and post a different invalid checkpoint at the same number
+      // while this job builds. Only an invalidation built from what L1 holds at publish time removes the replacement.
+      it('invalidates the checkpoint L1 holds at publish time when the one seen at build time was replaced', async () => {
+        const buildTimeInvalidation = makeInvalidateRequest(CheckpointNumber(2));
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined, {
+          invalidateCheckpoint: buildTimeInvalidation,
+        });
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        const replacement = makeInvalidValidation(CheckpointNumber(2));
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(replacement);
+        const replacementInvalidation = makeInvalidateRequest(CheckpointNumber(2));
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(replacementInvalidation);
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.simulateInvalidateCheckpoint).toHaveBeenCalledWith(replacement);
+        expect(publisher.enqueueInvalidateCheckpoint.mock.calls).toEqual([
+          [replacementInvalidation, expect.any(Object)],
+        ]);
         expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
         expect(mismatchEvents).toHaveLength(0);
         const publicationPlan = publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2];
