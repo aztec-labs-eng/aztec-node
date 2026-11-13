@@ -128,7 +128,7 @@ locals {
       "${chain}-execution" = {
         hosts                       = local.ethereum_chains[chain].execution_hosts
         route_namespace             = local.namespace
-        upstream_service_name       = node.reth_service_name
+        upstream_service_name       = chain == "mainnet" && local.mainnet_serving_slot != null ? module.mainnet_instances[local.mainnet_serving_slot].clients.reth.service_name : node.reth_service_name
         upstream_service_port       = node.reth_http_port
         auth_mode                   = "keyed_only"
         anonymous_rate_limit_minute = 0
@@ -139,7 +139,7 @@ locals {
       "${chain}-beacon" = {
         hosts                       = local.ethereum_chains[chain].beacon_hosts
         route_namespace             = local.namespace
-        upstream_service_name       = node.lighthouse_service_name
+        upstream_service_name       = chain == "mainnet" && local.mainnet_serving_slot != null ? module.mainnet_instances[local.mainnet_serving_slot].clients.lighthouse.service_name : node.lighthouse_service_name
         upstream_service_port       = node.lighthouse_http_port
         auth_mode                   = "keyed_only"
         anonymous_rate_limit_minute = 0
