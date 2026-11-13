@@ -1364,10 +1364,11 @@ describe('Archiver Sync', () => {
 
       describe('and replayed by an L1 reorg after both posts were read', () => {
         /**
-         * Re-posts checkpoint 2 in the L1 block of the invalid post and syncs it. With `reorg`, an L1 reorg then
-         * re-includes both posts in the next L1 block, above the sync point, so the next pass reads both again.
+         * Re-posts checkpoint 2 in the L1 block of the invalid post, syncs it, and adds checkpoint 3 on L1. With
+         * `reorg`, an L1 reorg first re-includes both posts in the next L1 block, above the sync point, so the next
+         * pass reads both again.
          */
-        async function repostAndSync({ reorg }: { reorg: boolean }) {
+        async function repostAndAddChild({ reorg }: { reorg: boolean }) {
           await fake.repostCheckpoint(CheckpointNumber(2), { l1BlockNumber: 80n, signers });
           fake.setL1BlockNumber(100n);
           await archiver.syncImmediate();
@@ -1380,6 +1381,10 @@ describe('Archiver Sync', () => {
 
           await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 120n, numL1ToL2Messages: 0, signers });
           fake.setL1BlockNumber(125n);
+        }
+
+        async function repostAndSync({ reorg }: { reorg: boolean }) {
+          await repostAndAddChild({ reorg });
           await archiver.syncImmediate();
           expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
         }
@@ -1414,6 +1419,18 @@ describe('Archiver Sync', () => {
 
         it('syncs a child of the re-posted checkpoint read in a later pass', async () => {
           await repostAndSync({ reorg: true });
+          await replaceChildAndExtendTo5();
+        }, 20_000);
+
+        it('drops the rejected entry once a replay pass that failed to persist is retried', async () => {
+          await repostAndAddChild({ reorg: true });
+          blobClient.getBlobSidecar.mockRejectedValueOnce(new Error('blob sidecar unavailable'));
+          await expect(archiver.syncImmediate()).rejects.toThrow();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+
+          await archiver.syncImmediate();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
+          expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toBeUndefined();
           await replaceChildAndExtendTo5();
         }, 20_000);
 
