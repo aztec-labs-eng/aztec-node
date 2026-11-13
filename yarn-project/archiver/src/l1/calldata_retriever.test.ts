@@ -66,8 +66,11 @@ class TestCalldataRetriever extends CalldataRetriever {
     return super.tryDecodeDirectPropose(tx, expectedHashes, checkpointNumber, blockHash);
   }
 
-  public override async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
-    return await super.extractCalldataViaTrace(txHash, checkpointNumber);
+  public override async extractProposeCalldatasViaTrace(
+    txHash: Hex,
+    checkpointNumber: CheckpointNumber,
+  ): Promise<Hex[]> {
+    return await super.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
   }
 
   public override tryDecodeAndVerifyPropose(
@@ -1033,7 +1036,7 @@ describe('CalldataRetriever', () => {
     });
   });
 
-  describe('extractCalldataViaTrace', () => {
+  describe('extractProposeCalldatasViaTrace', () => {
     it('should successfully extract calldata using trace_transaction', async () => {
       const proposeCalldata = makeProposeCalldata();
 
@@ -1058,9 +1061,9 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
+      const result = await retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
 
-      expect(result).toBe(proposeCalldata);
+      expect(result).toEqual([proposeCalldata]);
       expect(debugClient.request).toHaveBeenCalledWith({ method: 'trace_transaction', params: [txHash] });
     });
 
@@ -1096,9 +1099,9 @@ describe('CalldataRetriever', () => {
         ],
       });
 
-      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
+      const result = await retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
 
-      expect(result).toBe(proposeCalldata);
+      expect(result).toEqual([proposeCalldata]);
       expect(debugClient.request).toHaveBeenCalledTimes(2);
       expect(debugClient.request).toHaveBeenNthCalledWith(1, { method: 'trace_transaction', params: [txHash] });
       expect(debugClient.request).toHaveBeenNthCalledWith(2, {
@@ -1114,7 +1117,7 @@ describe('CalldataRetriever', () => {
       // Second call (debug_traceTransaction) also fails
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
 
@@ -1129,7 +1132,7 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -1139,7 +1142,7 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -1163,7 +1166,9 @@ describe('CalldataRetriever', () => {
         output: '0x',
       });
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).resolves.toBe(proposeCalldata);
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).resolves.toEqual([
+        proposeCalldata,
+      ]);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ txHash, issues: expect.any(Array) }),
@@ -1176,16 +1181,15 @@ describe('CalldataRetriever', () => {
       // Mock debug client to return empty trace
       debugClient.request.mockResolvedValueOnce([]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'No successful propose calls found in transaction ' + txHash,
       );
     });
 
-    it('should throw when multiple propose calls found', async () => {
+    it('should return every successful propose call in trace order', async () => {
       const proposeCalldata1 = makeProposeCalldata();
       const proposeCalldata2 = makeProposeCalldata();
 
-      // Mock debug client to return trace with multiple propose calls
       debugClient.request.mockResolvedValueOnce([
         {
           type: 'call',
@@ -1223,9 +1227,10 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
-        'Multiple successful propose calls found in transaction ' + txHash + ' (2)',
-      );
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).resolves.toEqual([
+        proposeCalldata1,
+        proposeCalldata2,
+      ]);
     });
   });
 
