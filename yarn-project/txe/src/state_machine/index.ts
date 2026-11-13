@@ -4,7 +4,6 @@ import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { DateProvider } from '@aztec-labs/foundation/timer';
 import {
   type AnchorBlockStore,
   ContractClassService,
@@ -61,7 +60,6 @@ export class TXEStateMachine {
       globalVariableBuilder,
       epochCache,
       signatureContext: { chainId: CHAIN_ID, rollupAddress: EthAddress.ZERO },
-      dateProvider: new DateProvider(),
     });
     const node = new AztecNodeService({
       config: aztecNodeConfig,

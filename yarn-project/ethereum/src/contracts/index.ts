@@ -15,3 +15,4 @@ export * from './registry.js';
 export * from './rollup.js';
 export * from './slashing_proposer.js';
 export * from './slasher_contract.js';
+export * from './rollup_reads.js';

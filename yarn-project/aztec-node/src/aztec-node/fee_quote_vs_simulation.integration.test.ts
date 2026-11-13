@@ -192,7 +192,9 @@ describeWithAnvil('fee quote vs public simulation', () => {
   const startNodeAt = async (nodeClockSlotStart: bigint) => {
     dateProvider.setTime(Number(nodeClockSlotStart) * 1000);
 
-    feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, blockSource);
+    feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, {
+      getL1SyncPoint: () => blockSource.getL1SyncPoint(),
+    });
     // Long polling interval: every refresh in these scenarios is driven explicitly, as an archiver pass would.
     await feeProvider.start(60_000);
 
@@ -209,7 +211,6 @@ describeWithAnvil('fee quote vs public simulation', () => {
       rollupContract: rollup,
       epochCache,
       signatureContext: { chainId: foundry.id, rollupAddress: config.rollupAddress },
-      dateProvider,
     });
 
     node = new AztecNodeService({

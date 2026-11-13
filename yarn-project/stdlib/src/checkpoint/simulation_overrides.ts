@@ -1,5 +1,6 @@
 import {
   type FeeHeader,
+  type L1ReadPin,
   RollupContract,
   SimulationOverridesBuilder,
   type SimulationOverridesPlan,
@@ -19,6 +20,11 @@ type CheckpointSimulationOverridesPlanInput = {
    * that block too, so the fee quote does not mix two L1 snapshots.
    */
   l1BlockNumber: bigint;
+  /**
+   * Hash of that L1 block. When set, the parent's fee header is read pinned to it instead of to `l1BlockNumber`, in
+   * a single L1 request.
+   */
+  l1BlockHash?: `0x${string}`;
   /** Checkpoint number to be proposed. */
   checkpointNumber: CheckpointNumber;
   /** Logger instance. */
@@ -109,6 +115,7 @@ export async function buildCheckpointSimulationOverridesPlan(
       proposedCheckpointData: input.proposedCheckpointData,
       rollup: input.rollup,
       l1BlockNumber: input.l1BlockNumber,
+      l1BlockHash: input.l1BlockHash,
       log: input.log,
     });
     if (feeHeader) {
@@ -144,6 +151,8 @@ type PipelinedParentFeeHeaderInput = {
   rollup: RollupContract;
   /** L1 block to read the grandparent and the mana target at. */
   l1BlockNumber: bigint;
+  /** Hash of that L1 block; when set, both values are read pinned to it in one request. */
+  l1BlockHash?: `0x${string}`;
   log: Logger;
 };
 
@@ -162,11 +171,11 @@ export async function computePipelinedParentFeeHeader(
 
   const grandparentCheckpointNumber = CheckpointNumber(input.checkpointNumber - 2);
 
-  const opts = { blockNumber: input.l1BlockNumber };
-  const [grandparentCheckpoint, manaTarget] = await Promise.all([
-    input.rollup.getCheckpoint(grandparentCheckpointNumber, opts),
-    input.rollup.getManaTarget(opts),
-  ]);
+  const { checkpoint: grandparentCheckpoint, manaTarget } = await readGrandparentAndManaTarget(
+    input.rollup,
+    grandparentCheckpointNumber,
+    { blockNumber: input.l1BlockNumber, blockHash: input.l1BlockHash },
+  );
 
   if (!grandparentCheckpoint?.feeHeader) {
     throw new Error(
@@ -180,4 +189,15 @@ export async function computePipelinedParentFeeHeader(
     input.proposedCheckpointData.feeAssetPriceModifier,
     manaTarget,
   );
+}
+
+async function readGrandparentAndManaTarget(rollup: RollupContract, grandparent: CheckpointNumber, pin: L1ReadPin) {
+  if (pin.blockHash !== undefined) {
+    return await rollup.getCheckpointAndManaTarget(grandparent, pin.blockHash);
+  }
+  const [checkpoint, manaTarget] = await Promise.all([
+    rollup.getCheckpoint(grandparent, pin),
+    rollup.getManaTarget(pin),
+  ]);
+  return { checkpoint, manaTarget };
 }

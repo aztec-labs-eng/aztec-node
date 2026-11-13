@@ -11,14 +11,14 @@ import type { CheckpointGlobalVariables } from './global_variables.js';
 export interface GlobalVariableBuilder {
   /**
    * Builds global variables that are constant throughout a checkpoint.
-   * @param options - Optional L1 block number to pin the fee read to, so the fee describes the same L1 state
-   * the caller planned the block from.
+   * @param options - Optional L1 block to pin the fee read to, so the fee describes the same L1 state the caller
+   * planned the block from. A block hash takes precedence over a number, and also pins the overrides plan's reads.
    */
   buildCheckpointGlobalVariables(
     coinbase: EthAddress,
     feeRecipient: AztecAddress,
     slotNumber: SlotNumber,
     simulationOverridesPlan?: SimulationOverridesPlan,
-    options?: { blockNumber?: bigint },
+    options?: { blockNumber?: bigint; blockHash?: `0x${string}` },
   ): Promise<CheckpointGlobalVariables>;
 }

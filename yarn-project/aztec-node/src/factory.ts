@@ -348,15 +348,9 @@ export async function createAztecNodeService(
       rollupContract,
       epochCache,
       signatureContext: { chainId: ethereumChain.chainInfo.id, rollupAddress: config.rollupAddress },
-      dateProvider,
       log: nextBlockLog.createChild('fee-cache'),
     });
-    const nextBlockPredictor = new NextBlockPredictor({
-      blockSource: archiver,
-      feeCache: nextBlockFeeCache,
-      epochCache,
-      log: nextBlockLog,
-    });
+    const nextBlockPredictor = new NextBlockPredictor({ feeCache: nextBlockFeeCache, log: nextBlockLog });
     nextBlockPredictor.start();
     started.push(nextBlockPredictor);
 

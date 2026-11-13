@@ -530,7 +530,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     });
     // Tagging the projections with the head's L1 sync point keeps both halves of the answer on one L1 block.
     const asOf = head?.l1SyncPoint && {
-      blockNumber: head.l1SyncPoint.blockNumber,
+      ...head.l1SyncPoint,
       maxWaitMs: Math.max(0, QUOTE_MAX_WAIT_MS - timer.ms()),
     };
     const projections = await this.feeProvider.getPredictedMinFees(manaUsage, asOf);

@@ -8,9 +8,16 @@ import { CheckpointNumber, type SlotNumber } from '@aztec-labs/foundation/brande
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/promise';
-import { type DateProvider, executeTimeout } from '@aztec-labs/foundation/timer';
+import { Timer, executeTimeout } from '@aztec-labs/foundation/timer';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import type { L1SyncPoint, L2BlockId, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
+import {
+  type L1SyncPoint,
+  type L2BlockId,
+  type L2BlockSource,
+  L2BlockSourceEvents,
+  type L2Frontier,
+  getBlockSourceEmitter,
+} from '@aztec-labs/stdlib/block';
 import { buildCheckpointSimulationOverridesPlan } from '@aztec-labs/stdlib/checkpoint';
 import type { GasFees } from '@aztec-labs/stdlib/gas';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
@@ -20,6 +27,7 @@ import type { CheckpointOpeningFeeSource } from '@aztec-labs/validator-client';
 import {
   type BoundaryFeeKey,
   type NewCheckpointPlan,
+  type NextBlockPlan,
   boundaryFeeKeyEquals,
   computeBoundaryFeeKey,
   getClockSlot,
@@ -29,22 +37,31 @@ import {
 /** Default interval for the background refresh, well below L1's block time. */
 export const DEFAULT_REFRESH_INTERVAL_MS = 1000;
 
+/** Refreshes a reader waits through on a miss, re-planning from a new snapshot after each, before giving up. */
+const MAX_READER_REFRESHES = 2;
+
 /**
- * A record older than this many refresh intervals is treated as missing: the refresh has been failing long
- * enough that serving its value could underquote a fee that has since stepped. Ten intervals because one
- * failed pass is a hiccup, and a ten-second-old boundary fee is almost always still right.
+ * Refreshes one pass of the background loop runs at most. The first may be one a reader started for another slot or
+ * an older snapshot; the second prices the boundary the loop itself plans.
  */
-export const MAX_AGE_INTERVALS = 10;
+const MAX_REFRESHES_PER_PASS = 2;
 
-/** Refresh passes an uncapped reader will wait through before giving up on its boundary. */
-const MAX_REFRESH_ATTEMPTS = 2;
-
-/** A priced checkpoint boundary, with the L1 block it was priced at kept as metadata. */
-type BoundaryFeeRecord = {
+/** A priced checkpoint boundary, with the L1 block it was priced at. */
+export type BoundaryFeeRecord = {
   key: BoundaryFeeKey;
   l1SyncPoint: L1SyncPoint | undefined;
   globals: CheckpointGlobalVariables;
-  refreshedAtMs: number;
+};
+
+/** The next block as a reader planned it, with the priced boundary when it opens a checkpoint and one was served. */
+export type NextBlockLookup = {
+  /** Snapshot the plan was derived from. */
+  frontier: L2Frontier;
+  plan: NextBlockPlan;
+  /** Set when the next block opens a checkpoint, so its fee comes from L1 rather than from the proposed tip. */
+  key?: BoundaryFeeKey;
+  /** The record the reader is served, when the cache has one it may use. */
+  record?: BoundaryFeeRecord;
 };
 
 /** Dependencies required to build a {@link NextBlockFeeCache}. */
@@ -60,7 +77,6 @@ export interface NextBlockFeeCacheDeps {
   rollupContract?: RollupContract;
   epochCache: EpochCacheInterface;
   signatureContext: CoordinationSignatureContext;
-  dateProvider: DateProvider;
   log?: Logger;
 }
 
@@ -68,22 +84,22 @@ export interface NextBlockFeeCacheDeps {
  * Caches the checkpoint globals, and so the mana min fee, that a block opening a fresh checkpoint would carry.
  * This is the only value on the RPC path that has to be read from L1.
  *
- * A background loop prices the upcoming boundary on every pass, so requests are normally answered from memory.
- * Records are looked up by {@link BoundaryFeeKey}: the target slot, the checkpointed tip, the block the plan
- * builds on, and the proposed parent's fee-relevant fields or the pending chain's validity. The L1 block a record
- * was priced at is stored with it but is not part of the key: the rollup transactions that move the fee also move
- * the frontier and hence the key, so a miss means the chain moved (a slot rollover, a checkpoint landing or being
- * proposed, a validity flip), not merely that L1 produced a block. Governance updates such as the mana target are
- * the exception; the loop re-prices a matching record whenever the L1 anchor moves, so those lag by at most one
- * refresh interval.
+ * The cache holds one record: the boundary priced from the archiver's latest snapshot, keyed by {@link BoundaryFeeKey}
+ * (the target slot, the checkpointed tip, the block the plan builds on, and the proposed parent's fee-relevant fields
+ * or the pending chain's validity) and stamped with the L1 block it was priced at. Every read of a re-price is pinned
+ * to that block's hash, so the fee describes exactly that block. A background loop re-prices whenever the key or the
+ * archiver's L1 sync point moves, and is woken early when the archiver announces a new sync point, so a fee oracle or
+ * governance update that does not move the key is picked up on the next L1 block.
  *
- * On a miss a request does not call L1 itself. It joins the single refresh already in flight, or starts the one
- * the loop would have started, so a burst of requests during a transition costs one L1 round trip. Simulations
- * wait for as long as the refresh takes and surface its failure; fee quotes cap their wait and fall back to the
- * last record they can trust.
+ * Readers plan the next block from a fresh snapshot and look the record up. On a miss they do not call L1
+ * themselves: they join the single refresh in flight, or start the one the loop would have started, then re-plan from
+ * a new snapshot, since the chain may have moved while they waited. A validator checking a proposal needs a record
+ * priced at its own snapshot's L1 block. Simulations, quotes and admission also take a record one L1 block behind
+ * their snapshot, so they do not miss every time L1 produces a block. Simulations wait for as long as the refresh
+ * takes and surface its failure; quotes cap their wait; admission never waits.
  *
- * Before {@link start} (or after {@link stop}) requests still price inline through the same refresh path, which
- * is what tests and TXE-like environments rely on.
+ * Before {@link start} (or after {@link stop}) readers still price inline through the same refresh path, which is
+ * what tests and TXE-like environments rely on.
  */
 export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
   private readonly blockSource: L2BlockSource;
@@ -91,12 +107,9 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
   private readonly rollupContract: RollupContract | undefined;
   private readonly epochCache: EpochCacheInterface;
   private readonly signatureContext: CoordinationSignatureContext;
-  private readonly dateProvider: DateProvider;
   private readonly log: Logger;
 
-  private current: BoundaryFeeRecord | undefined;
-  private previous: BoundaryFeeRecord | undefined;
-  private refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS;
+  private record: BoundaryFeeRecord | undefined;
   private refreshLoop: RunningPromise | undefined;
   private inFlightRefresh: Promise<void> | undefined;
 
@@ -106,7 +119,6 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
     this.rollupContract = deps.rollupContract;
     this.epochCache = deps.epochCache;
     this.signatureContext = deps.signatureContext;
-    this.dateProvider = deps.dateProvider;
     this.log = deps.log ?? createLogger('node:next-block-fee-cache');
   }
 
@@ -120,11 +132,12 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
     if (this.refreshLoop) {
       return;
     }
-    this.refreshIntervalMs = pollingIntervalMs;
-    this.refreshLoop = new RunningPromise(() => this.refresh(), this.log, pollingIntervalMs).start();
+    this.refreshLoop = new RunningPromise(() => this.runLoopPass(), this.log, pollingIntervalMs).start();
+    getBlockSourceEmitter(this.blockSource)?.on(L2BlockSourceEvents.L1SyncPointUpdated, this.onSyncPointUpdated);
   }
 
   public async stop(): Promise<void> {
+    getBlockSourceEmitter(this.blockSource)?.off(L2BlockSourceEvents.L1SyncPointUpdated, this.onSyncPointUpdated);
     const loop = this.refreshLoop;
     this.refreshLoop = undefined;
     await loop?.stop();
@@ -133,26 +146,44 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
   }
 
   /**
-   * The checkpoint globals for a boundary keyed by `key`, or undefined when they could not be produced in time.
-   *
-   * A matching record under the staleness cutoff is served straight away. Otherwise the caller joins the single
-   * shared refresh: a simulation waits for it and surfaces its failure, while a quote passes `maxWaitMs` and
-   * falls back to whatever the cache already holds rather than turning an L1 outage into a multi-second RPC.
+   * Plans the next block from a fresh snapshot and, when it opens a checkpoint, finds its priced boundary. On a miss
+   * it joins the shared refresh and re-plans, for at most {@link MAX_READER_REFRESHES} refreshes. Without `maxWaitMs`
+   * it waits for each refresh and surfaces its failure; with it, it gives up waiting once that budget is spent, and
+   * with a budget of zero it only starts the refresh. The result carries no record when none could be served.
    */
-  public getBoundaryGlobals(
-    key: BoundaryFeeKey,
-    frontier: L2Frontier,
-    opts?: { maxWaitMs?: number },
-  ): Promise<CheckpointGlobalVariables | undefined> {
-    return this.findOrPrice(key, frontier, opts?.maxWaitMs);
+  public async lookupNextBlock(maxWaitMs?: number): Promise<NextBlockLookup> {
+    const timer = new Timer();
+    for (let refreshes = 0; ; refreshes++) {
+      const frontier = await this.blockSource.getL2Frontier();
+      const plan = planNextBlock(frontier, getClockSlot(this.epochCache));
+      const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
+      if (!key) {
+        return { frontier, plan };
+      }
+      const record = this.findRecord(key, frontier.l1SyncPoint, { allowOneBlockBehind: true });
+      if (record || refreshes === MAX_READER_REFRESHES) {
+        return { frontier, plan, key, record };
+      }
+
+      const refresh = this.refresh();
+      if (maxWaitMs === undefined) {
+        await refresh;
+        continue;
+      }
+      const remainingMs = maxWaitMs - timer.ms();
+      if (remainingMs <= 0) {
+        return { frontier, plan, key };
+      }
+      await this.waitFor(refresh, remainingMs);
+    }
   }
 
   /**
    * The gas fees the first block of a checkpoint at `slot` built on `parent` must carry, for checking a block proposal
    * against. Keyed on the proposal's slot and parent rather than on the slot this node's clock would plan: the frontier
-   * must end at `parent`, and the boundary is planned for `slot` from it. A matching record is served from memory; on
-   * a miss the request joins the refresh in flight and then runs a pass planned on `slot`, so it gets the exact price
-   * and not a fallback.
+   * must end at `parent`, and the boundary is planned for `slot` from it. A record priced for that boundary at the
+   * frontier's own L1 block is served from memory; on a miss the request joins the refresh in flight, or runs one
+   * planned on `slot`, and re-plans from a new snapshot, so it gets the exact price even if the chain moved meanwhile.
    *
    * Undefined when this node's view does not hold the data to produce the price the proposer computes yet: the
    * frontier does not end at `parent` (the parent's checkpoint proposal has not been processed, or the chain moved
@@ -160,48 +191,65 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
    * L1 (see {@link pricesAsProposer}). The caller waits for a later archiver sync rather than accepting the pinned-tips
    * approximation. Throws when the L1 read fails.
    *
-   * Only a record priced at the frontier's L1 block, or at a later one, is served. The L1 fee oracle can change without
-   * moving the frontier (anyone may call its update), and the background loop only catches up within a refresh
-   * interval, so an older record could carry a price the proposer has already moved past.
+   * Only a record priced at the frontier's own L1 block, compared by hash, is served. The L1 fee oracle can change
+   * without moving the frontier (anyone may call its update), so a record from any other block could carry a price
+   * the proposer did not compute.
    */
   public async getCheckpointOpeningGasFees(slot: SlotNumber, parent: L2BlockId): Promise<GasFees | undefined> {
-    const frontier = await this.blockSource.getL2Frontier();
-    const tip = frontier.tips.proposed;
-    if (tip.number !== parent.number || tip.hash !== parent.hash) {
-      this.log.debug(`Cannot price the checkpoint opened at slot ${slot}: the proposed tip is not its parent`, {
-        slot,
-        parent,
-        tip,
-      });
-      return undefined;
+    for (let refreshes = 0; ; refreshes++) {
+      const frontier = await this.blockSource.getL2Frontier();
+      const tip = frontier.tips.proposed;
+      if (tip.number !== parent.number || tip.hash !== parent.hash) {
+        this.log.debug(`Cannot price the checkpoint opened at slot ${slot}: the proposed tip is not its parent`, {
+          slot,
+          parent,
+          tip,
+        });
+        return undefined;
+      }
+      const plan = planNextBlock(frontier, slot);
+      const newCheckpoint = plan.newCheckpoint;
+      if (!newCheckpoint || newCheckpoint.targetSlot !== slot || !this.pricesAsProposer(frontier, newCheckpoint)) {
+        this.log.debug(`Cannot price the checkpoint opened at slot ${slot} as its proposer does from this frontier`, {
+          slot,
+          parent,
+          targetSlot: newCheckpoint?.targetSlot,
+          proposedCheckpointNumber: newCheckpoint?.proposedCheckpointData?.checkpointNumber,
+          checkpointedCheckpointNumber: newCheckpoint?.checkpointedCheckpointNumber,
+        });
+        return undefined;
+      }
+      const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
+      if (!key) {
+        return undefined;
+      }
+      const record = this.findRecord(key, frontier.l1SyncPoint, { allowOneBlockBehind: false });
+      if (record) {
+        return record.globals.gasFees;
+      }
+      if (refreshes === MAX_READER_REFRESHES) {
+        this.log.debug(`Could not price the checkpoint opened at slot ${slot} at this node's L1 sync point`, {
+          slot,
+          parent,
+          l1SyncPoint: frontier.l1SyncPoint,
+        });
+        return undefined;
+      }
+      await this.refresh(slot);
     }
-    const plan = planNextBlock(frontier, slot);
-    const newCheckpoint = plan.newCheckpoint;
-    if (!newCheckpoint || newCheckpoint.targetSlot !== slot || !this.pricesAsProposer(frontier, newCheckpoint)) {
-      this.log.debug(`Cannot price the checkpoint opened at slot ${slot} as its proposer does from this frontier`, {
-        slot,
-        parent,
-        targetSlot: newCheckpoint?.targetSlot,
-        proposedCheckpointNumber: newCheckpoint?.proposedCheckpointData?.checkpointNumber,
-        checkpointedCheckpointNumber: newCheckpoint?.checkpointedCheckpointNumber,
-      });
-      return undefined;
-    }
-    const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
-    return key && (await this.findOrPrice(key, frontier, undefined, slot, frontier.l1SyncPoint))?.gasFees;
   }
 
   /**
    * Runs one refresh pass, or joins the one already running. Single-flight is what keeps a burst of requests
-   * during a transition down to a single L1 round trip, shared with the background loop.
-   * @param frontier - Snapshot to plan from; read fresh from the archiver when omitted, as the loop does.
+   * during a transition down to a single L1 round trip, shared with the background loop. A pass plans from the
+   * archiver's current snapshot and re-prices only when its key or L1 sync point differs from the record's.
    * @param slot - Slot to plan the boundary for in place of this node's clock slot.
    */
-  public refresh(frontier?: L2Frontier, slot?: SlotNumber): Promise<void> {
+  public refresh(slot?: SlotNumber): Promise<void> {
     if (this.inFlightRefresh) {
       return this.inFlightRefresh;
     }
-    const refresh = this.runRefresh(frontier, slot).finally(() => {
+    const refresh = this.runRefresh(slot).finally(() => {
       this.inFlightRefresh = undefined;
     });
     // Every caller awaits the returned promise and reports its failure, but the stored copy may only be awaited by
@@ -211,85 +259,78 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
     return refresh;
   }
 
+  private readonly onSyncPointUpdated = () => {
+    void this.refreshLoop
+      ?.trigger()
+      .catch(err => this.log.debug(`Refresh triggered by an L1 sync point update did not run`, { err }));
+  };
+
   /**
-   * Serves the record matching `key`, or joins the shared refresh to produce it, as {@link getBoundaryGlobals}
-   * describes. `slot` plans a refresh this reader starts for that slot rather than for the clock slot.
-   * `minL1SyncPoint`, when set, skips records priced before that L1 block (see {@link pricedAtOrAfter}).
+   * One pass of the background loop. The refresh it starts may join one a reader started for another slot or from an
+   * older snapshot, so it refreshes once more if the record still does not describe the boundary the clock plans at
+   * the archiver's current sync point, rather than waiting a whole interval.
    */
-  private async findOrPrice(
-    key: BoundaryFeeKey,
-    frontier: L2Frontier,
-    maxWaitMs: number | undefined,
-    slot?: SlotNumber,
-    minL1SyncPoint?: L1SyncPoint,
-  ): Promise<CheckpointGlobalVariables | undefined> {
-    // An uncapped reader gets more than one attempt because the refresh it joins may be one that started from an
-    // older frontier and therefore priced a different boundary; the next pass is its own. Still never concurrent.
-    const attempts = maxWaitMs === undefined ? MAX_REFRESH_ATTEMPTS : 1;
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const hit = this.findRecord(key, minL1SyncPoint);
-      if (hit) {
-        return hit.globals;
+  private async runLoopPass(): Promise<void> {
+    for (let i = 0; i < MAX_REFRESHES_PER_PASS; i++) {
+      await this.refresh();
+      const frontier = await this.blockSource.getL2Frontier();
+      const plan = planNextBlock(frontier, getClockSlot(this.epochCache));
+      const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
+      if (!key || this.findRecord(key, frontier.l1SyncPoint, { allowOneBlockBehind: false })) {
+        return;
       }
-      const refresh = this.refresh(frontier, slot);
-      await (maxWaitMs === undefined ? refresh : this.waitFor(refresh, maxWaitMs));
     }
-    return this.findRecord(key, minL1SyncPoint)?.globals;
   }
 
-  private async runRefresh(frontier?: L2Frontier, slot?: SlotNumber): Promise<void> {
-    const snapshot = frontier ?? (await this.blockSource.getL2Frontier());
-    const plan = planNextBlock(snapshot, slot ?? getClockSlot(this.epochCache));
-    const key = computeBoundaryFeeKey(plan, snapshot.pendingChainValidationStatus);
+  private async runRefresh(slot?: SlotNumber): Promise<void> {
+    const frontier = await this.blockSource.getL2Frontier();
+    const plan = planNextBlock(frontier, slot ?? getClockSlot(this.epochCache));
+    const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
     if (!key || !plan.newCheckpoint) {
       // Mid-checkpoint: the fee is frozen in the in-progress checkpoint's header, so there is nothing to price.
       return;
     }
-
-    const current = this.current;
-    const sameKey = current !== undefined && boundaryFeeKeyEquals(current.key, key);
-    if (sameKey && l1SyncPointEquals(current.l1SyncPoint, snapshot.l1SyncPoint)) {
-      // This pass confirmed against a fresh snapshot that none of the fee's inputs moved, so the record is as
-      // good as one just priced. Re-stamping it is what makes the staleness cutoff mean "how long we have been
-      // unable to confirm", rather than expiring a value that is still exactly right.
-      this.current = { ...current, refreshedAtMs: this.dateProvider.now() };
+    if (this.findRecord(key, frontier.l1SyncPoint, { allowOneBlockBehind: false })) {
       return;
     }
 
-    const overrides = await this.buildOverridesPlan(snapshot, plan.newCheckpoint);
+    const overrides = await this.buildOverridesPlan(frontier, plan.newCheckpoint);
     // Pinned to the L1 block the frontier was read at, so the fee describes the same L1 state the plan derives
-    // from. Undefined before the archiver's first sync pass, where the read falls back to L1's head.
+    // from. Unpinned before the archiver's first sync pass, where the read falls back to L1's head.
+    const l1SyncPoint = frontier.l1SyncPoint;
     const globals = await this.globalVariableBuilder.buildCheckpointGlobalVariables(
       EthAddress.ZERO,
       AztecAddress.ZERO,
       plan.newCheckpoint.targetSlot,
       overrides,
-      { blockNumber: snapshot.l1SyncPoint?.blockNumber },
+      { blockNumber: l1SyncPoint?.blockNumber, blockHash: l1SyncPoint?.blockHash.toString() },
     );
-
-    const record = { key, l1SyncPoint: snapshot.l1SyncPoint, globals, refreshedAtMs: this.dateProvider.now() };
-    if (!sameKey) {
-      // Keep the boundary we just left addressable: a request that planned from the previous frontier is still
-      // served while the new one settles.
-      this.previous = current;
-    }
-    this.current = record;
+    this.record = { key, l1SyncPoint, globals };
   }
 
   /**
-   * The freshest record matching `key`, or undefined when none is recent enough to trust. With `minL1SyncPoint`, a
-   * record also has to be priced at that L1 block or a later one.
+   * The record, if it prices the boundary keyed by `key` and may be served to a reader whose snapshot is anchored at
+   * `l1SyncPoint`: priced at that very block, compared by hash, or, when `allowOneBlockBehind` is set, at the block
+   * just below it. The one-block-behind record's ancestry is not checked, so after a one-block L1 reorg that changed
+   * only the fee oracle it can serve the dropped fork's fee for one block; only non-consensus readers accept that.
    */
-  private findRecord(key: BoundaryFeeKey, minL1SyncPoint?: L1SyncPoint): BoundaryFeeRecord | undefined {
-    const maxAgeMs = MAX_AGE_INTERVALS * this.refreshIntervalMs;
-    const now = this.dateProvider.now();
-    return [this.current, this.previous].find(
-      record =>
-        record !== undefined &&
-        boundaryFeeKeyEquals(record.key, key) &&
-        now - record.refreshedAtMs < maxAgeMs &&
-        (minL1SyncPoint === undefined || pricedAtOrAfter(record.l1SyncPoint, minL1SyncPoint)),
-    );
+  private findRecord(
+    key: BoundaryFeeKey,
+    l1SyncPoint: L1SyncPoint | undefined,
+    { allowOneBlockBehind }: { allowOneBlockBehind: boolean },
+  ): BoundaryFeeRecord | undefined {
+    const record = this.record;
+    if (record === undefined || !boundaryFeeKeyEquals(record.key, key)) {
+      return undefined;
+    }
+    const pricedAt = record.l1SyncPoint;
+    if (pricedAt === undefined || l1SyncPoint === undefined) {
+      return pricedAt === l1SyncPoint ? record : undefined;
+    }
+    if (pricedAt.blockHash.equals(l1SyncPoint.blockHash)) {
+      return record;
+    }
+    return allowOneBlockBehind && pricedAt.blockNumber + 1n === l1SyncPoint.blockNumber ? record : undefined;
   }
 
   /** Awaits `promise` for at most `maxWaitMs`, swallowing both a timeout and the promise's own failure. */
@@ -386,23 +427,9 @@ export class NextBlockFeeCache implements CheckpointOpeningFeeSource {
       rollup,
       // The same L1 block the fee simulation is pinned to, so the parent's fee header and the fee agree.
       l1BlockNumber: l1SyncPoint.blockNumber,
+      l1BlockHash: l1SyncPoint.blockHash.toString(),
       signatureContext: this.signatureContext,
       log: this.log,
     });
   }
-}
-
-function l1SyncPointEquals(a: L1SyncPoint | undefined, b: L1SyncPoint | undefined): boolean {
-  return a === undefined || b === undefined ? a === b : a.blockHash.equals(b.blockHash);
-}
-
-/**
- * Whether a record priced at `pricedAt` reflects L1 at least as recent as `min`. At the same height the hashes must
- * match, since a reorg that replaces that block can carry different fee state.
- */
-function pricedAtOrAfter(pricedAt: L1SyncPoint | undefined, min: L1SyncPoint): boolean {
-  if (pricedAt === undefined || pricedAt.blockNumber < min.blockNumber) {
-    return false;
-  }
-  return pricedAt.blockNumber > min.blockNumber || pricedAt.blockHash.equals(min.blockHash);
 }

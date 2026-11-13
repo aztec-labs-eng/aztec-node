@@ -32,6 +32,14 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### The node sends far fewer L1 requests to keep its fee estimates current
+
+The node used to send about 14 L1 requests for every new L1 block to keep its fee estimates current, and a few more each time it re-priced the next block's fee: roughly 4,000 to 5,400 requests an hour. It now batches these reads into one Multicall3 call per L1 block in the common case, and re-prices the next block's fee with one or two requests, for a few hundred requests an hour. On an RPC provider that bills per request, this cuts the bill for this traffic by about a factor of ten.
+
+Every one of these reads is pinned to the hash of the L1 block the archiver is synced to, so the L1 RPC endpoint must serve Multicall3 at its canonical address and accept `eth_call` with a block hash (EIP-1898). Every public Ethereum network and every common client does.
+
+**Migration**: none.
+
 ### The node stops sending L1 requests to RPC URLs that fall behind ([#587](https://github.com/aztec-labs-eng/aztec-node/pull/587))
 
 With two or more URLs in `ETHEREUM_HOSTS`, the node used to send every request to the first one, and moved to the next only when a request failed. A URL that still answered but had fallen behind the chain kept getting all the traffic. The node now checks every URL's latest block every few seconds. It stops using a URL that falls behind the others or stops answering, and uses it again once it has caught up. A URL on a different L1 chain is never used, and the node logs an error naming it.

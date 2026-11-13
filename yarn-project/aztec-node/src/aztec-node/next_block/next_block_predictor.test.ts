@@ -3,14 +3,16 @@ import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-l
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
 import { GasFees } from '@aztec-labs/stdlib/gas';
-import type { CheckpointGlobalVariables } from '@aztec-labs/stdlib/tx';
+import type { CheckpointGlobalVariables, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
-import type { NextBlockFeeCache } from './next_block_fee_cache.js';
-import { NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block_predictor.js';
+import { NextBlockFeeCache } from './next_block_fee_cache.js';
+import { NextBlockPredictor } from './next_block_predictor.js';
 import { type L2FrontierArgs, makeFrontier, makeProposedCheckpointData } from './test_helpers.js';
 
 const CHAIN_ID = new Fr(12345);
@@ -19,8 +21,9 @@ const BOUNDARY_FEES = new GasFees(0, 4242);
 
 describe('NextBlockPredictor', () => {
   let blockSource: MockProxy<L2BlockSource>;
-  let feeCache: MockProxy<NextBlockFeeCache>;
+  let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
   let epochCache: MockProxy<EpochCacheInterface>;
+  let feeCache: NextBlockFeeCache;
   let predictor: NextBlockPredictor;
 
   const l1SyncPoint: L1SyncPoint = { blockNumber: 99n, blockHash: Buffer32.fromField(new Fr(9)) };
@@ -69,7 +72,7 @@ describe('NextBlockPredictor', () => {
 
   beforeEach(() => {
     blockSource = mock<L2BlockSource>();
-    feeCache = mock<NextBlockFeeCache>();
+    globalVariableBuilder = mock<GlobalVariableBuilder>();
     epochCache = mock<EpochCacheInterface>();
 
     epochCache.getEpochAndSlotInNextL1Slot.mockReturnValue({
@@ -78,10 +81,24 @@ describe('NextBlockPredictor', () => {
       ts: 0n,
       nowSeconds: 0n,
     });
-    feeCache.getBoundaryGlobals.mockImplementation(key => Promise.resolve(boundaryGlobals(key.targetSlot)));
+    globalVariableBuilder.buildCheckpointGlobalVariables.mockImplementation((_c, _f, slotNumber) =>
+      Promise.resolve(boundaryGlobals(slotNumber)),
+    );
 
-    predictor = new NextBlockPredictor({ blockSource, feeCache, epochCache });
+    feeCache = new NextBlockFeeCache({
+      blockSource,
+      globalVariableBuilder,
+      epochCache,
+      signatureContext: { chainId: CHAIN_ID.toNumber(), rollupAddress: EthAddress.ZERO },
+    });
+    predictor = new NextBlockPredictor({ feeCache });
   });
+
+  afterEach(() => feeCache.stop());
+
+  /** Makes every boundary pricing fail, as an unreachable L1 would. */
+  const failPricing = () =>
+    globalVariableBuilder.buildCheckpointGlobalVariables.mockRejectedValue(new Error('L1 is down'));
 
   describe('predict', () => {
     it('copies the in-progress checkpoint globals and bumps only the block number', async () => {
@@ -93,14 +110,14 @@ describe('NextBlockPredictor', () => {
       expect(globals.blockNumber).toEqual(BlockNumber(10));
       expect(globals.slotNumber).toEqual(SlotNumber(42));
       expect(globals.gasFees).toEqual(new GasFees(0, 777));
-      expect(feeCache.getBoundaryGlobals).not.toHaveBeenCalled();
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
     });
 
     it('rejects a snapshot missing the proposed tip header', async () => {
       setMidCheckpointFrontier({ omitLatestBlockHeader: true });
 
       await expect(predictor.predict()).rejects.toThrow(/carries no header/);
-      expect(feeCache.getBoundaryGlobals).not.toHaveBeenCalled();
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
     });
 
     it('prices a checkpoint-opening block at the cached boundary fee, with zero payout addresses', async () => {
@@ -119,21 +136,17 @@ describe('NextBlockPredictor', () => {
       expect(globals.feeRecipient).toEqual(AztecAddress.ZERO);
     });
 
-    it('waits without a cap for the boundary fee', async () => {
+    it('returns the snapshot it planned from', async () => {
       const frontier = setBoundaryFrontier();
 
-      await predictor.predict();
-
-      const [, passedFrontier, opts] = feeCache.getBoundaryGlobals.mock.calls[0];
-      expect(passedFrontier).toBe(frontier);
-      expect(opts).toBeUndefined();
+      await expect(predictor.predict()).resolves.toMatchObject({ frontier });
     });
 
-    it('fails when the boundary fee cannot be produced', async () => {
+    it('surfaces the failure when the boundary fee cannot be produced', async () => {
       setBoundaryFrontier();
-      feeCache.getBoundaryGlobals.mockResolvedValue(undefined);
+      failPricing();
 
-      await expect(predictor.predict()).rejects.toThrow(/no boundary fee available/);
+      await expect(predictor.predict()).rejects.toThrow('L1 is down');
     });
   });
 
@@ -142,20 +155,18 @@ describe('NextBlockPredictor', () => {
       setMidCheckpointFrontier();
 
       await expect(predictor.quoteMinFees()).resolves.toEqual({ fees: new GasFees(0, 777), l1SyncPoint });
-      expect(feeCache.getBoundaryGlobals).not.toHaveBeenCalled();
+      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
     });
 
-    it('quotes the boundary fee with a bounded wait', async () => {
+    it('quotes the boundary fee, waiting for it to be priced', async () => {
       setBoundaryFrontier();
 
       await expect(predictor.quoteMinFees()).resolves.toEqual({ fees: BOUNDARY_FEES, l1SyncPoint });
-      const [, , opts] = feeCache.getBoundaryGlobals.mock.calls[0];
-      expect(opts).toEqual({ maxWaitMs: QUOTE_MAX_WAIT_MS });
     });
 
     it('quotes nothing when the cache has nothing usable', async () => {
       setBoundaryFrontier();
-      feeCache.getBoundaryGlobals.mockResolvedValue(undefined);
+      failPricing();
 
       await expect(predictor.quoteMinFees()).resolves.toBeUndefined();
     });
@@ -174,17 +185,21 @@ describe('NextBlockPredictor', () => {
       await expect(predictor.getNextBlockMinFees()).resolves.toEqual(new GasFees(0, 777));
     });
 
-    it('reports the boundary fee without waiting on a refresh', async () => {
+    it('reports the boundary fee once priced, without waiting on the refresh it starts', async () => {
       setBoundaryFrontier();
+      const pricing = promiseWithResolvers<CheckpointGlobalVariables>();
+      globalVariableBuilder.buildCheckpointGlobalVariables.mockReturnValueOnce(pricing.promise);
 
+      await expect(predictor.getNextBlockMinFees()).resolves.toBeUndefined();
+      pricing.resolve(boundaryGlobals(SlotNumber(20)));
+
+      await retryFastUntil(() => predictor.getNextBlockMinFees(), 'boundary fee priced');
       await expect(predictor.getNextBlockMinFees()).resolves.toEqual(BOUNDARY_FEES);
-      const [, , opts] = feeCache.getBoundaryGlobals.mock.calls[0];
-      expect(opts).toEqual({ maxWaitMs: 0 });
     });
 
     it('reports nothing when the cache has nothing usable', async () => {
       setBoundaryFrontier();
-      feeCache.getBoundaryGlobals.mockResolvedValue(undefined);
+      failPricing();
 
       await expect(predictor.getNextBlockMinFees()).resolves.toBeUndefined();
     });
