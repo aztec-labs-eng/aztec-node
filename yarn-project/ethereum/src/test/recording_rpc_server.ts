@@ -1,12 +1,17 @@
 import { Buffer } from 'buffer';
 import { type Server, createServer } from 'node:http';
 
-/** A JSON-RPC endpoint that records the method of every request it receives. */
+/** A JSON-RPC request as the recording server received it. */
+export type RecordedRpcRequest = { method: string; params: unknown[] };
+
+/** A JSON-RPC endpoint that records every request it receives. */
 export type RecordingRpcServer = {
   /** URL the server listens on. */
   url: string;
   /** Methods of the JSON-RPC requests received so far, in arrival order. */
   methods: string[];
+  /** The JSON-RPC requests received so far, with their params, in arrival order. */
+  requests: RecordedRpcRequest[];
   /** Stops the server. */
   close: () => Promise<void>;
 };
@@ -23,7 +28,7 @@ export class RpcErrorAnswer extends Error {
 }
 
 /**
- * Starts a JSON-RPC server that records the method of every request it receives, so tests can assert on what a
+ * Starts a JSON-RPC server that records every request it receives, method and params, so tests can assert on what a
  * client actually put on the wire. When `answer` is given, its return value (awaited) is sent as the `result` of each
  * request (`null` included), and an error it throws is sent as a JSON-RPC error: an {@link RpcErrorAnswer} as is, and
  * anything else with code -32000. Its `forward` argument sends the request on to `forwardTo` and returns that node's
@@ -34,6 +39,7 @@ export async function startRecordingRpcServer(
   opts: { forwardTo?: string; answer?: (method: string, forward: () => Promise<unknown>) => unknown } = {},
 ): Promise<RecordingRpcServer> {
   const methods: string[] = [];
+  const recorded: RecordedRpcRequest[] = [];
 
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -44,9 +50,10 @@ export async function startRecordingRpcServer(
         const parsed: unknown = body.length > 0 ? JSON.parse(body) : undefined;
         const requests = Array.isArray(parsed) ? parsed : [parsed];
         for (const request of requests) {
-          const method = (request as { method?: string } | undefined)?.method;
+          const { method, params } = (request ?? {}) as { method?: unknown; params?: unknown };
           if (typeof method === 'string') {
             methods.push(method);
+            recorded.push({ method, params: Array.isArray(params) ? params : [] });
           }
         }
 
@@ -110,6 +117,7 @@ export async function startRecordingRpcServer(
   return {
     url: `http://127.0.0.1:${address.port}`,
     methods,
+    requests: recorded,
     close: () => new Promise<void>(resolve => server.close(() => resolve())),
   };
 }
