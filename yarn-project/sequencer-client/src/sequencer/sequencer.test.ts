@@ -67,6 +67,7 @@ import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publis
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { MockCheckpointBuilder, MockCheckpointsBuilder } from '../test/utils.js';
 import * as TestUtils from '../test/utils.js';
+import type { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { SequencerMetrics } from './metrics.js';
 import { Sequencer } from './sequencer.js';
 import { SequencerState } from './utils.js';
@@ -926,6 +927,70 @@ describe('sequencer', () => {
       // Now we should build and publish the checkpoint
       expect(checkpointBuilder.buildBlockCalls.length).toBeGreaterThan(0);
       expectPublisherProposeL2Block();
+    });
+
+    describe('on an invalid pending chain without a proposed parent', () => {
+      function makeInvalidateRequest(): InvalidateCheckpointRequest {
+        return {
+          request: { to: EthAddress.random().toString(), data: '0x' },
+          reason: 'insufficient-attestations',
+          gasUsed: 100_000n,
+          checkpointNumber: CheckpointNumber(1),
+          forcePendingCheckpointNumber: CheckpointNumber.ZERO,
+          lastArchive: Fr.random(),
+        };
+      }
+
+      beforeEach(async () => {
+        await setupSingleTxBlock();
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(invalidPendingChainStatus);
+        publisher.canProposeAt.mockResolvedValue({
+          slot: block.header.globalVariables.slotNumber,
+          checkpointNumber: CheckpointNumber.fromBlockNumber(block.header.globalVariables.blockNumber),
+          timeOfNextL1Slot: 1000n,
+        });
+      });
+
+      it('builds on the rolled-back tip and sends only the invalidation created at publish time', async () => {
+        const buildTimeInvalidation = makeInvalidateRequest();
+        const publishTimeInvalidation = makeInvalidateRequest();
+        publisher.simulateInvalidateCheckpoint
+          .mockResolvedValueOnce(buildTimeInvalidation)
+          .mockResolvedValueOnce(publishTimeInvalidation);
+
+        await sequencer.work();
+        await sequencer.awaitLastProposalSubmission();
+
+        expect(sequencer.createdJobRollbackTargets).toEqual([CheckpointNumber.ZERO]);
+        expect(publisher.canProposeAt.mock.calls[0][0]).toEqual(buildTimeInvalidation.lastArchive);
+        expect(publisher.enqueueInvalidateCheckpoint.mock.calls).toEqual([
+          [publishTimeInvalidation, expect.objectContaining({ txTimeoutAt: expect.any(Date) })],
+        ]);
+        expectPublisherProposeL2Block();
+      });
+
+      it('does not build when the build-time invalidation simulation throws', async () => {
+        publisher.simulateInvalidateCheckpoint.mockRejectedValueOnce(new Error('Rollup__AttestationsAreValid'));
+
+        await expect(sequencer.work()).rejects.toThrow('Rollup__AttestationsAreValid');
+        await sequencer.awaitLastProposalSubmission();
+
+        expect(sequencer.createdJobRollbackTargets).toEqual([]);
+        expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+        expect(publisher.enqueueInvalidateCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+      });
+
+      it('builds without a rollback target when the build-time simulation finds nothing to invalidate', async () => {
+        publisher.simulateInvalidateCheckpoint.mockResolvedValue(undefined);
+
+        await sequencer.work();
+        await sequencer.awaitLastProposalSubmission();
+
+        expect(sequencer.createdJobRollbackTargets).toEqual([undefined]);
+        expect(publisher.enqueueInvalidateCheckpoint).not.toHaveBeenCalled();
+        expectPublisherProposeL2Block();
+      });
     });
 
     it('does not build a block if not enough txs', async () => {
@@ -2204,6 +2269,38 @@ describe('sequencer', () => {
 class TestSequencer extends Sequencer {
   /** When true, work() only runs prepareCheckpointProposal and skips execute(). */
   public skipExecute = false;
+
+  /** Rollback target of every checkpoint proposal job created, in creation order. */
+  public createdJobRollbackTargets: (CheckpointNumber | undefined)[] = [];
+
+  protected override createCheckpointProposalJob(
+    targetSlot: SlotNumber,
+    targetEpoch: EpochNumber,
+    checkpointNumber: CheckpointNumber,
+    syncedToBlockNumber: BlockNumber,
+    checkpointedCheckpointNumber: CheckpointNumber,
+    syncedL1BlockNumber: bigint,
+    proposer: EthAddress | undefined,
+    publisher: SequencerPublisher,
+    attestorAddress: EthAddress,
+    invalidateToPendingCheckpointNumber: CheckpointNumber | undefined,
+    proposedCheckpointData?: ProposedCheckpointData,
+  ): CheckpointProposalJob {
+    this.createdJobRollbackTargets.push(invalidateToPendingCheckpointNumber);
+    return super.createCheckpointProposalJob(
+      targetSlot,
+      targetEpoch,
+      checkpointNumber,
+      syncedToBlockNumber,
+      checkpointedCheckpointNumber,
+      syncedL1BlockNumber,
+      proposer,
+      publisher,
+      attestorAddress,
+      invalidateToPendingCheckpointNumber,
+      proposedCheckpointData,
+    );
+  }
 
   public getTimeTable() {
     return this.timetable;
