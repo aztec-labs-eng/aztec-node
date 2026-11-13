@@ -1361,6 +1361,84 @@ describe('Archiver Sync', () => {
         await repostAndExtend();
         await expectSyncedToCheckpoint4();
       }, 15_000);
+
+      describe('and replayed by an L1 reorg after both posts were read', () => {
+        /**
+         * Re-posts checkpoint 2 in the L1 block of the invalid post, syncs it, and adds checkpoint 3 on L1. With
+         * `reorg`, an L1 reorg first re-includes both posts in the next L1 block, above the sync point, so the next
+         * pass reads both again.
+         */
+        async function repostAndAddChild({ reorg }: { reorg: boolean }) {
+          await fake.repostCheckpoint(CheckpointNumber(2), { l1BlockNumber: 80n, signers });
+          fake.setL1BlockNumber(100n);
+          await archiver.syncImmediate();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+
+          if (reorg) {
+            fake.moveCheckpointToL1Block(CheckpointNumber(2), 81n);
+            fake.reorgL1BlocksFrom(80n);
+          }
+
+          await fake.addCheckpoint(CheckpointNumber(3), { l1BlockNumber: 120n, numL1ToL2Messages: 0, signers });
+          fake.setL1BlockNumber(125n);
+        }
+
+        async function repostAndSync({ reorg }: { reorg: boolean }) {
+          await repostAndAddChild({ reorg });
+          await archiver.syncImmediate();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
+        }
+
+        /** Replaces checkpoint 3 with a child of checkpoint 2 read in a later pass, and builds two more on top. */
+        async function replaceChildAndExtendTo5() {
+          fake.markCheckpointAsPruned(CheckpointNumber(3));
+          await fake.addCheckpoint(CheckpointNumber(3), {
+            l1BlockNumber: 140n,
+            numL1ToL2Messages: 0,
+            previousArchive: cp2.blocks.at(-1)!.archive,
+            signers,
+          });
+          fake.setL1BlockNumber(145n);
+          await archiver.syncImmediate();
+
+          await fake.addCheckpoint(CheckpointNumber(4), { l1BlockNumber: 150n, numL1ToL2Messages: 0, signers });
+          await fake.addCheckpoint(CheckpointNumber(5), { l1BlockNumber: 165n, numL1ToL2Messages: 0, signers });
+          for (const l1BlockNumber of [155n, 170n, 180n, 200n]) {
+            fake.setL1BlockNumber(l1BlockNumber);
+            await archiver.syncImmediate();
+          }
+
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(5));
+          expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+        }
+
+        it('drops the rejected entry the replay re-creates', async () => {
+          await repostAndSync({ reorg: true });
+          expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toBeUndefined();
+        }, 15_000);
+
+        it('syncs a child of the re-posted checkpoint read in a later pass', async () => {
+          await repostAndSync({ reorg: true });
+          await replaceChildAndExtendTo5();
+        }, 20_000);
+
+        it('drops the rejected entry once a replay pass that failed to persist is retried', async () => {
+          await repostAndAddChild({ reorg: true });
+          blobClient.getBlobSidecar.mockRejectedValueOnce(new Error('blob sidecar unavailable'));
+          await expect(archiver.syncImmediate()).rejects.toThrow();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+
+          await archiver.syncImmediate();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
+          expect(await archiverStore.blocks.getRejectedCheckpoint(cp2.number, cp2.archive.root)).toBeUndefined();
+          await replaceChildAndExtendTo5();
+        }, 20_000);
+
+        it('syncs a child of the re-posted checkpoint read in a later pass without the reorg', async () => {
+          await repostAndSync({ reorg: false });
+          await replaceChildAndExtendTo5();
+        }, 20_000);
+      });
     });
   });
 

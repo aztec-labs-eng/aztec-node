@@ -3450,5 +3450,22 @@ describe('BlockStore', () => {
       await blockStore.removeRejectedCheckpoint(entry.checkpointNumber);
       expect(await blockStore.getRejectedCheckpoint(entry.checkpointNumber, entry.archiveRoot)).toBeUndefined();
     });
+
+    it('removes the rejected entry when an already-stored checkpoint with that number is added again', async () => {
+      const first3 = publishedCheckpoints.slice(0, 3);
+      await blockStore.addCheckpoints(first3);
+      const archiveRoot = first3[2].checkpoint.archive.root;
+      await blockStore.addRejectedCheckpoint(makeEntry({ archiveRoot, checkpointNumber: 3, l1BlockNumber: 998 }));
+
+      const cp3WithNewL1 = new PublishedCheckpoint(
+        first3[2].checkpoint,
+        makeL1PublishedData(999),
+        first3[2].attestations,
+        first3[2].verbatimAttestations,
+      );
+      await expect(blockStore.addCheckpoints([cp3WithNewL1])).resolves.toEqual([]);
+
+      expect(await blockStore.getRejectedCheckpoint(CheckpointNumber(3), archiveRoot)).toBeUndefined();
+    });
   });
 });

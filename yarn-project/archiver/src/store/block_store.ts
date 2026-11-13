@@ -444,7 +444,8 @@ export class BlockStore {
 
   /**
    * Handles checkpoints at the start of a batch that are already stored (e.g. due to L1 reorg).
-   * Verifies the archive root matches, updates L1 metadata, and returns only the new checkpoints.
+   * Verifies the archive root matches, updates L1 metadata, drops any rejected entry at that number, and returns only
+   * the new checkpoints.
    */
   private async skipOrUpdateAlreadyStoredCheckpoints(
     checkpoints: PublishedCheckpoint[],
@@ -485,6 +486,9 @@ export class BlockStore {
         blockCount: incoming.checkpoint.blocks.length,
         feeAssetPriceModifier: incoming.checkpoint.feeAssetPriceModifier.toString(),
       });
+      // A re-read of an earlier invalid post at this number (e.g. after an L1 reorg replayed it) writes a rejected
+      // entry again; L1 still holds this valid checkpoint, so drop it as the insert and promote paths do.
+      await this.removeRejectedCheckpoint(incoming.checkpoint.number);
       // Update the sync point to reflect the new L1 block
       await this.advanceSynchedL1BlockNumber(incoming.l1.blockNumber);
     }
