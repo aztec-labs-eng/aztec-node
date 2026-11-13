@@ -951,6 +951,10 @@ export class CheckpointProposalJob implements Traceable {
    * Sends the slot's votes when the build started on an invalid pending chain but produced no proposal, preceded by an
    * invalidation of whatever invalid checkpoint L1 holds by then, so the next proposer does not inherit it. A failure
    * to create the invalidation must not hold back the votes.
+   *
+   * Known limitation, accepted: the votes wait for the archiver to sync the build slot. If the archiver lags past the
+   * end of the target slot, the invalidation's deadline has already passed and the publisher drops the whole bundle,
+   * votes included. This needs an invalid pending tip, nothing built, votes to send and a lagging archiver at once.
    */
   private async sendRequestsWithInvalidationWithoutProposal(): Promise<SendRequestsResult | undefined> {
     try {
