@@ -436,6 +436,7 @@ export type ArchiverEmitter = TypedEventEmitter<{
     args: DescendentOfInvalidAttestationsCheckpointEvent,
   ) => void;
   [L2BlockSourceEvents.L2BlockSourceUpdated]: (args: L2BlockSourceUpdatedEvent) => void;
+  [L2BlockSourceEvents.L1SyncPointUpdated]: (args: L1SyncPointUpdatedEvent) => void;
 }>;
 export interface L2BlockSourceEventEmitter extends L2BlockSource {
   events: ArchiverEmitter;
@@ -598,6 +599,7 @@ export enum L2BlockSourceEvents {
   CheckpointEquivocationDetected = 'checkpointEquivocationDetected',
   DescendentOfInvalidAttestationsCheckpointDetected = 'descendentOfInvalidAttestationsCheckpointDetected',
   L2BlockSourceUpdated = 'l2BlockSourceUpdated',
+  L1SyncPointUpdated = 'l1SyncPointUpdated',
 }
 
 /**
@@ -612,6 +614,16 @@ export type L2BlockSourceUpdatedEvent = {
   type: 'l2BlockSourceUpdated';
   fromTips: L2Tips;
   toTips: L2Tips;
+};
+
+/**
+ * Emitted at the end of an archiver sync pass, after its writes have committed, when the L1 block the archiver is
+ * synced to has changed since the last announcement. Like {@link L2BlockSourceUpdatedEvent} it only saves latency:
+ * a consumer that reads L1 at the sync point still polls it, so a missed event is caught up on the next poll.
+ */
+export type L1SyncPointUpdatedEvent = {
+  type: 'l1SyncPointUpdated';
+  l1SyncPoint: L1SyncPoint;
 };
 
 export type L2BlockProvenEvent = {
