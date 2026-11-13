@@ -68,7 +68,11 @@ import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/val
 import { DutyType } from '@aztec-labs/validator-ha-signer/types';
 
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
-import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
+import type {
+  InvalidateCheckpointRequest,
+  SendRequestsResult,
+  SequencerPublisher,
+} from '../publisher/sequencer-publisher.js';
 import { hasAttestationManipulation, manipulateAttestations } from './attestation_manipulation.js';
 import { CheckpointInboxConsumption } from './checkpoint_inbox_consumption.js';
 import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal_job_metrics.js';
@@ -173,10 +177,11 @@ export class CheckpointProposalJob implements Traceable {
   private yieldedToHAPeer = false;
 
   /**
-   * Invalidation enqueued by the parent check for a bad checkpoint that landed right above our parent after we started
-   * building. It is sent ahead of our proposal, like the build-time {@link invalidateCheckpoint}.
+   * Invalidation enqueued by the parent check for the bad checkpoint L1 holds right above our parent when the bundle is
+   * about to be sent, whether the build already saw it or it landed later. It is the only invalidation sent ahead of our
+   * proposal: one created at build time could target a checkpoint that was replaced in the meantime.
    */
-  private lateInvalidation: InvalidateCheckpointRequest | undefined;
+  private parentInvalidation: InvalidateCheckpointRequest | undefined;
 
   private getSignatureContext(): CoordinationSignatureContext {
     return this.signatureContext;
@@ -194,7 +199,11 @@ export class CheckpointProposalJob implements Traceable {
     private readonly proposer: EthAddress | undefined,
     private readonly publisher: SequencerPublisher,
     private readonly attestorAddress: EthAddress,
-    private readonly invalidateCheckpoint: InvalidateCheckpointRequest | undefined,
+    /**
+     * The pending tip the build assumes L1 is rolled back to, set when the build started on an invalid pending chain.
+     * The invalidation that performs the rollback is created when the bundle is sent, from L1's state at that point.
+     */
+    private readonly invalidateToPendingCheckpointNumber: CheckpointNumber | undefined,
     private readonly validatorClient: ValidatorClient,
     private readonly globalsBuilder: GlobalVariableBuilder,
     private readonly p2pClient: P2P,
@@ -359,7 +368,10 @@ export class CheckpointProposalJob implements Traceable {
       // signature verification to fail silently inside Multicall3. Delay submission to the
       // start of `targetSlot` so the tx mines in the slot the vote was signed for.
       if (!this.config.fishermanMode) {
-        this.submission = this.publisher.sendRequestsAt(this.targetSlot);
+        this.submission =
+          this.invalidateToPendingCheckpointNumber === undefined
+            ? this.publisher.sendRequestsAt(this.targetSlot)
+            : this.sendRequestsWithInvalidationWithoutProposal();
       }
       return undefined;
     }
@@ -429,15 +441,8 @@ export class CheckpointProposalJob implements Traceable {
       }
 
       // If we failed to collect attestations, at least check if we need to issue an invalidation
-      if (!signedAttestations && (await this.waitForSyncedL2SlotNumber(this.getBuildSlot()))) {
-        const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
-        if (!validationStatus.valid) {
-          this.log.warn(
-            `Checkpoint ${validationStatus.checkpoint.checkpointNumber} has invalid attestations, enqueuing invalidation in spite of attestation collection failure`,
-            { checkpoint: validationStatus.checkpoint, reason: validationStatus.reason },
-          );
-          await this.enqueueInvalidation(validationStatus);
-        }
+      if (!signedAttestations) {
+        await this.enqueueInvalidationIfPendingChainInvalid();
       }
 
       // Send whatever was enqueued: votes + (propose | invalidation | nothing).
@@ -616,11 +621,8 @@ export class CheckpointProposalJob implements Traceable {
       return buildPlan;
     }
     const builder = new SimulationOverridesBuilder();
-    const invalidation = this.config.skipInvalidateBlockAsProposer
-      ? undefined
-      : (this.invalidateCheckpoint ?? this.lateInvalidation);
-    if (invalidation) {
-      builder.withChainTips({ pending: invalidation.forcePendingCheckpointNumber });
+    if (this.parentInvalidation) {
+      builder.withChainTips({ pending: this.parentInvalidation.forcePendingCheckpointNumber });
     }
     const provenPin = buildPlan?.chainTipsOverride?.proven;
     if (provenPin !== undefined && (await this.l2BlockSource.isPruneDueAtSlot(this.targetSlot))) {
@@ -822,6 +824,13 @@ export class CheckpointProposalJob implements Traceable {
       this.log.warn(`Skipping waitForValidParentCheckpointOnL1 due to test configuration`, {
         checkpointNumber: this.checkpointNumber,
       });
+      // The build still assumed L1 rolled back from an invalid tip, so the bundle has to carry the invalidation.
+      if (this.invalidateToPendingCheckpointNumber !== undefined && !this.config.skipInvalidateBlockAsProposer) {
+        const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
+        if (!validationStatus.valid) {
+          this.parentInvalidation = await this.enqueueInvalidation(validationStatus);
+        }
+      }
       return true;
     }
 
@@ -889,14 +898,11 @@ export class CheckpointProposalJob implements Traceable {
         return false;
       }
 
-      // A checkpoint with invalid attestations may have landed on L1 after we started building. The archiver keeps it
-      // off the checkpointed chain, so the check above misses it, but it still sits at L1's pending tip and our
-      // proposal cannot land on top of it. The invalidation enqueued at build time, if any, already removes it.
+      // A checkpoint with invalid attestations may sit at L1's pending tip: the one the build rolled back from, a
+      // different one that replaced it at the same number, or one that landed after we started building. The archiver
+      // keeps it off the checkpointed chain, so the check above misses it, but our proposal cannot land on top of it.
       const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
-      if (
-        validationStatus.valid ||
-        validationStatus.checkpoint.checkpointNumber === this.invalidateCheckpoint?.checkpointNumber
-      ) {
+      if (validationStatus.valid) {
         return true;
       }
 
@@ -908,7 +914,7 @@ export class CheckpointProposalJob implements Traceable {
           `Checkpoint ${invalidCheckpointNumber} with invalid attestations landed on top of our parent ${parentCheckpointNumber}, invalidating it before proposing`,
           { checkpointNumber: this.checkpointNumber, reason: validationStatus.reason },
         );
-        this.lateInvalidation = await this.enqueueInvalidation(validationStatus);
+        this.parentInvalidation = await this.enqueueInvalidation(validationStatus);
         return true;
       }
 
@@ -920,6 +926,45 @@ export class CheckpointProposalJob implements Traceable {
       await this.enqueueInvalidation(validationStatus);
       return false;
     }
+  }
+
+  /** Enqueues an invalidation if the archiver reports an invalid pending chain once it has synced the build slot. */
+  private async enqueueInvalidationIfPendingChainInvalid(): Promise<void> {
+    if (!(await this.waitForSyncedL2SlotNumber(this.getBuildSlot()))) {
+      return;
+    }
+    const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
+    if (!validationStatus.valid) {
+      this.log.warn(
+        `Checkpoint ${validationStatus.checkpoint.checkpointNumber} has invalid attestations, enqueuing invalidation without a proposal`,
+        {
+          checkpointNumber: this.checkpointNumber,
+          checkpoint: validationStatus.checkpoint,
+          reason: validationStatus.reason,
+        },
+      );
+      await this.enqueueInvalidation(validationStatus);
+    }
+  }
+
+  /**
+   * Sends the slot's votes when the build started on an invalid pending chain but produced no proposal, preceded by an
+   * invalidation of whatever invalid checkpoint L1 holds by then, so the next proposer does not inherit it. A failure
+   * to create the invalidation must not hold back the votes.
+   */
+  private async sendRequestsWithInvalidationWithoutProposal(): Promise<SendRequestsResult | undefined> {
+    try {
+      await this.enqueueInvalidationIfPendingChainInvalid();
+    } catch (err) {
+      if (!(err instanceof SequencerInterruptedError)) {
+        this.log.warn(`Failed to enqueue invalidation for slot ${this.targetSlot} without a proposal`, {
+          slot: this.targetSlot,
+          checkpointNumber: this.checkpointNumber,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return await this.publisher.sendRequestsAt(this.targetSlot);
   }
 
   /** Emits the pipelined-checkpoint-discarded event and records the metric. */
@@ -993,11 +1038,6 @@ export class CheckpointProposalJob implements Traceable {
       });
       this.metrics.incOpenSlot(this.targetSlot);
 
-      // Enqueues checkpoint invalidation (constant for the whole slot)
-      if (this.invalidateCheckpoint && !this.config.skipInvalidateBlockAsProposer) {
-        this.publisher.enqueueInvalidateCheckpoint(this.invalidateCheckpoint);
-      }
-
       // Build the simulation plan for this slot. When pipelining, this overrides L1's view of
       // pending/archive/fee-header to "as if the proposed parent had landed", so both the
       // mana-min-fee simulation (in the globals builder) and the pre-gossip
@@ -1009,7 +1049,7 @@ export class CheckpointProposalJob implements Traceable {
       const simulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
         checkpointNumber: this.checkpointNumber,
         proposedCheckpointData: this.proposedCheckpointData,
-        invalidateToPendingCheckpointNumber: this.invalidateCheckpoint?.forcePendingCheckpointNumber,
+        invalidateToPendingCheckpointNumber: this.invalidateToPendingCheckpointNumber,
         checkpointedCheckpointNumber: this.checkpointedCheckpointNumber,
         rollup: this.publisher.rollupContract,
         l1BlockNumber: feeL1BlockNumber,

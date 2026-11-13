@@ -62,7 +62,7 @@ import { DefaultSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
 import { INVALIDATE_REQUIREMENT, getProposeRequirement } from '../publisher/gas_constants.js';
 import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
-import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
+import type { SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { CheckpointProposalJobMetrics } from './checkpoint_proposal_job_metrics.js';
 import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
@@ -724,9 +724,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     cleanup.use(publisher);
     this.log.verbose(`Created publisher at address ${publisher.getSenderAddress()} for attestor ${attestorAddress}`);
 
-    // Prepare invalidation request if the pending chain is invalid (returns undefined if no need).
-    // Only simulate invalidation when there's no proposed parent, since we assume the proposed parent
-    // will invalidate the currently invalid checkpoint on L1.
+    // Simulate an invalidation if the pending chain is invalid (returns undefined if no need). Only done when there's no
+    // proposed parent, since we assume the proposed parent will invalidate the currently invalid checkpoint on L1.
+    // The simulation gates the build: if L1 would refuse the invalidation, a checkpoint built on the rolled-back tip
+    // could never land, so a throw here stops the job before anything is gossiped. The result also supplies the
+    // rollback target and the archive to build on. The request itself is discarded: the job creates the invalidation it
+    // sends from L1's state at publish time, since the invalid checkpoint can be replaced while the job builds.
     const invalidateCheckpoint =
       syncedTo.hasProposedCheckpoint || syncedTo.pendingChainValidationStatus.valid
         ? undefined
@@ -864,7 +867,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       proposer,
       publisher,
       attestorAddress,
-      invalidateCheckpoint,
+      invalidateCheckpoint?.forcePendingCheckpointNumber,
       syncedTo.proposedCheckpointData,
     );
     cleanup.move();
@@ -881,7 +884,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     proposer: EthAddress | undefined,
     publisher: SequencerPublisher,
     attestorAddress: EthAddress,
-    invalidateCheckpoint: InvalidateCheckpointRequest | undefined,
+    invalidateToPendingCheckpointNumber: CheckpointNumber | undefined,
     proposedCheckpointData?: ProposedCheckpointData,
   ): CheckpointProposalJob {
     return new CheckpointProposalJob(
@@ -894,7 +897,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       proposer,
       publisher,
       attestorAddress,
-      invalidateCheckpoint,
+      invalidateToPendingCheckpointNumber,
       this.validatorClient,
       this.globalsBuilder,
       this.p2pClient,
