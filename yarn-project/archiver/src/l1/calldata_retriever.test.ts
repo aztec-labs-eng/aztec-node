@@ -1,7 +1,12 @@
 import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { L1RpcError } from '@aztec-labs/ethereum/client';
-import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';
+import {
+  MULTI_CALL_3_ADDRESS,
+  type ViemCommitteeAttestations,
+  type ViemHeader,
+  computeAttestationsHash,
+} from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -12,6 +17,7 @@ import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { withHexPrefix } from '@aztec-labs/foundation/string';
 import { Signature } from '@aztec-labs/stdlib/block';
+import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -1570,6 +1576,108 @@ describe('CalldataRetriever', () => {
 
       await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, wrongHashes)).rejects.toThrow(
         /hash mismatch/i,
+      );
+    });
+  });
+
+  describe('trace fallback with several propose calls', () => {
+    /** A call frame in a format-neutral shape, converted to either trace format by the helpers below. */
+    type Frame = { to: Hex; input: Hex; error?: string; calls?: Frame[] };
+
+    const wrapperAddress = EthAddress.random().toString();
+    const wrapperInput: Hex = '0xabcd0000';
+    const invalidateSelector = toFunctionSelector(
+      RollupAbi.find(x => x.type === 'function' && x.name === 'invalidateInsufficientAttestations')!,
+    );
+    const invalidateCalldata: Hex = `${invalidateSelector}${'00'.repeat(64)}`;
+
+    /** Builds a propose calldata along with the hashes the rollup would emit for it, computed with the real hashers. */
+    function makeProposal() {
+      const header = CheckpointHeader.random();
+      const archiveRoot = Fr.random();
+      const attestations = makeViemCommitteeAttestations();
+      const feeAssetPriceModifier = 0n;
+      const calldata = encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'propose',
+        args: [
+          {
+            archive: archiveRoot.toString(),
+            oracleInput: { feeAssetPriceModifier },
+            header: header.toViem(),
+            bucketHint: 0n,
+          },
+          attestations,
+          [],
+          Signature.random().toViemSignature(),
+          '0x',
+        ],
+      });
+      const hashes = {
+        attestationsHash: computeAttestationsHash(attestations),
+        payloadDigest: computeCheckpointPayloadDigest({
+          header,
+          archiveRoot,
+          feeAssetPriceModifier,
+          signatureContext: { chainId: 1, rollupAddress },
+        }).toString(),
+      };
+      return { calldata, archiveRoot, attestations, hashes };
+    }
+
+    function rollupFrame(calldata: Hex, extra: Partial<Frame> = {}): Frame {
+      return { to: rollupAddress.toString(), input: calldata, ...extra };
+    }
+
+    function wrapperFrame(calls: Frame[]): Frame {
+      return { to: wrapperAddress, input: wrapperInput, calls };
+    }
+
+    function toParityTrace(frame: Frame, traceAddress: number[] = []): object[] {
+      const calls = frame.calls ?? [];
+      return [
+        {
+          type: 'call',
+          action: {
+            from: EthAddress.random().toString(),
+            to: frame.to,
+            callType: 'call',
+            input: frame.input,
+            value: '0x0',
+            gas: '0x100000',
+          },
+          result: frame.error ? null : { output: '0x', gasUsed: '0x5208' },
+          error: frame.error,
+          subtraces: calls.length,
+          traceAddress,
+        },
+        ...calls.flatMap((call, i) => toParityTrace(call, [...traceAddress, i])),
+      ];
+    }
+
+    function mockWrapperTx() {
+      publicClient.getTransaction.mockResolvedValue({
+        input: wrapperInput,
+        to: wrapperAddress,
+        blockHash,
+        hash: txHash,
+      } as Transaction);
+    }
+
+    it('returns the propose call matching the event from a tx with propose, invalidate, propose', async () => {
+      const first = makeProposal();
+      const second = makeProposal();
+      mockWrapperTx();
+      debugClient.request.mockResolvedValueOnce(
+        toParityTrace(
+          wrapperFrame([rollupFrame(first.calldata), rollupFrame(invalidateCalldata), rollupFrame(second.calldata)]),
+        ),
+      );
+
+      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+
+      expect(result).toEqual(
+        expect.objectContaining({ archiveRoot: second.archiveRoot, verbatimAttestations: second.attestations }),
       );
     });
   });
