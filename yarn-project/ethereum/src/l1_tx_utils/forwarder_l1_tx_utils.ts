@@ -12,7 +12,7 @@ import { resolveSignerSource } from './factory.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
 import { L1TxUtils } from './l1_tx_utils.js';
 import { Delayer } from './tx_delayer.js';
-import type { L1BlobInputs, L1TxConfig, L1TxRequest, SigningCallback } from './types.js';
+import type { L1BlobInputs, L1TxConfig, L1TxRequest, SendAndMonitorOpts, SigningCallback } from './types.js';
 
 /**
  * Extends L1TxUtils to wrap all transactions through a forwarder contract.
@@ -69,10 +69,15 @@ export class ForwarderL1TxUtils extends L1TxUtils {
   /**
    * Override sendAndMonitorTransaction to wrap the request in a forwarder call.
    */
-  public override sendAndMonitorTransaction(request: L1TxRequest, gasConfig?: L1TxConfig, blobInputs?: L1BlobInputs) {
+  public override sendAndMonitorTransaction(
+    request: L1TxRequest,
+    gasConfig?: L1TxConfig,
+    blobInputs?: L1BlobInputs,
+    opts?: SendAndMonitorOpts,
+  ) {
     this.logger.debug(`Wrapping transaction to ${request.to} in forwarder at ${this.forwarderAddress.toString()}`);
     const wrappedRequest = this.wrapInForwarder(request);
-    return super.sendAndMonitorTransaction(wrappedRequest, gasConfig, blobInputs);
+    return super.sendAndMonitorTransaction(wrappedRequest, gasConfig, blobInputs, opts);
   }
 }
 
