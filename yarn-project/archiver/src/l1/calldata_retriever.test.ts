@@ -1597,9 +1597,7 @@ describe('CalldataRetriever', () => {
     const invalidateCalldata: Hex = `${invalidateSelector}${'00'.repeat(64)}`;
 
     /** Builds a propose calldata along with the hashes the rollup would emit for it, computed with the real hashers. */
-    function makeProposal() {
-      const header = CheckpointHeader.random();
-      const archiveRoot = Fr.random();
+    function makeProposal({ header = CheckpointHeader.random(), archiveRoot = Fr.random() } = {}) {
       const attestations = makeViemCommitteeAttestations();
       const feeAssetPriceModifier = 0n;
       const calldata = encodeFunctionData({
@@ -1627,7 +1625,7 @@ describe('CalldataRetriever', () => {
           signatureContext: { chainId: 1, rollupAddress },
         }).toString(),
       };
-      return { calldata, archiveRoot, attestations, hashes };
+      return { calldata, header, archiveRoot, attestations, hashes };
     }
 
     function rollupFrame(calldata: Hex, extra: Partial<Frame> = {}): Frame {
@@ -1660,6 +1658,34 @@ describe('CalldataRetriever', () => {
       ];
     }
 
+    function toGethTrace(frame: Frame): object {
+      return {
+        type: 'CALL',
+        from: EthAddress.random().toString(),
+        to: frame.to,
+        input: frame.input,
+        value: '0x0',
+        gas: '0x100000',
+        gasUsed: '0x5208',
+        output: '0x',
+        error: frame.error,
+        calls: frame.calls?.map(toGethTrace),
+      };
+    }
+
+    const traceFormats = ['trace_transaction', 'debug_traceTransaction'] as const;
+
+    /** Mocks one trace of the tx, served by trace_transaction or, when that fails, by debug_traceTransaction. */
+    function mockTrace(format: (typeof traceFormats)[number], root: Frame) {
+      if (format === 'trace_transaction') {
+        debugClient.request.mockResolvedValueOnce(toParityTrace(root));
+      } else {
+        debugClient.request
+          .mockRejectedValueOnce(new Error('trace_transaction not supported'))
+          .mockResolvedValueOnce(toGethTrace(root));
+      }
+    }
+
     function mockWrapperTx() {
       publicClient.getTransaction.mockResolvedValue({
         input: wrapperInput,
@@ -1669,20 +1695,87 @@ describe('CalldataRetriever', () => {
       } as Transaction);
     }
 
-    it('returns the propose call matching the event from a tx with propose, invalidate, propose', async () => {
-      const first = makeProposal();
-      const second = makeProposal();
-      mockWrapperTx();
-      debugClient.request.mockResolvedValueOnce(
-        toParityTrace(
+    it.each(traceFormats)(
+      'returns the propose call matching the event from a tx with propose, invalidate, propose via %s',
+      async format => {
+        const first = makeProposal();
+        const second = makeProposal();
+        mockWrapperTx();
+        mockTrace(
+          format,
           wrapperFrame([rollupFrame(first.calldata), rollupFrame(invalidateCalldata), rollupFrame(second.calldata)]),
-        ),
-      );
+        );
 
-      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+        const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+
+        expect(result).toEqual(
+          expect.objectContaining({ archiveRoot: second.archiveRoot, verbatimAttestations: second.attestations }),
+        );
+      },
+    );
+
+    it('gives each event its own call when a tx posts the same checkpoint twice with different attestations', async () => {
+      const first = makeProposal();
+      const second = makeProposal({ header: first.header, archiveRoot: first.archiveRoot });
+      const root = wrapperFrame([
+        rollupFrame(first.calldata),
+        rollupFrame(invalidateCalldata),
+        rollupFrame(second.calldata),
+      ]);
+      mockWrapperTx();
+      mockTrace('trace_transaction', root);
+      mockTrace('trace_transaction', root);
+
+      const forFirst = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, first.hashes);
+      const forSecond = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+
+      expect(forFirst.verbatimAttestations).toEqual(first.attestations);
+      expect(forSecond.verbatimAttestations).toEqual(second.attestations);
+    });
+
+    it('returns the checkpoint when two traced propose calls both match the event', async () => {
+      const proposal = makeProposal();
+      mockWrapperTx();
+      mockTrace('trace_transaction', wrapperFrame([rollupFrame(proposal.calldata), rollupFrame(proposal.calldata)]));
+
+      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, proposal.hashes);
 
       expect(result).toEqual(
-        expect.objectContaining({ archiveRoot: second.archiveRoot, verbatimAttestations: second.attestations }),
+        expect.objectContaining({ archiveRoot: proposal.archiveRoot, verbatimAttestations: proposal.attestations }),
+      );
+    });
+
+    it('throws a hash mismatch when no traced propose call matches the event', async () => {
+      const [first, second, other] = times(3, () => makeProposal());
+      mockWrapperTx();
+      mockTrace('trace_transaction', wrapperFrame([rollupFrame(first.calldata), rollupFrame(second.calldata)]));
+
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, other.hashes)).rejects.toThrow(
+        'Hash mismatch for traced propose calldata',
+      );
+    });
+
+    it.each(traceFormats)('ignores a propose call under a reverted frame via %s', async format => {
+      const reverted = makeProposal();
+      const kept = makeProposal();
+      const root = wrapperFrame([
+        {
+          to: EthAddress.random().toString(),
+          input: '0x12345678',
+          error: 'execution reverted',
+          calls: [rollupFrame(reverted.calldata)],
+        },
+        rollupFrame(kept.calldata),
+      ]);
+      mockWrapperTx();
+      mockTrace(format, root);
+      mockTrace(format, root);
+
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, reverted.hashes)).rejects.toThrow(
+        'Hash mismatch for traced propose calldata',
+      );
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, kept.hashes)).resolves.toEqual(
+        expect.objectContaining({ archiveRoot: kept.archiveRoot, verbatimAttestations: kept.attestations }),
       );
     });
   });
