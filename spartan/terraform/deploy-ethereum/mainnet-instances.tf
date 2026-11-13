@@ -140,6 +140,6 @@ output "mainnet_serving_urls" {
 }
 
 output "mainnet_instances" {
-  description = "Isolated blue/green mainnet endpoints and storage; production routes remain unchanged."
+  description = "Blue/green mainnet endpoints and storage; the mainnet_serving_slot instance serves production traffic."
   value       = { for slot, instance in module.mainnet_instances : slot => instance.clients }
 }

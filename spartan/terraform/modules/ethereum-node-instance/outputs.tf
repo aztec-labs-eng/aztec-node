@@ -1,5 +1,5 @@
 output "clients" {
-  description = "Instance-local Services, endpoints, claims, and disks. These Services are not registered with Kong."
+  description = "Instance-local Services, endpoints, claims, and disks. The module creates no Kong routes; the root routes Kong to the serving slot's Services."
   value = {
     for client, release in local.release_names : client => {
       release_name = helm_release.client[client].name

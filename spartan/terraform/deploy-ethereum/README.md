@@ -9,8 +9,9 @@ Do not run Terraform, Helm upgrades, or another snapshot/restore concurrently.
 Mainnet can run more than one Reth/Lighthouse pair side by side:
 
 - `mainnet` is the legacy pair from `modules/ethereum-node`. Its module address,
-  Helm releases, PVCs, internal LoadBalancers, and Kong routes are unchanged by
-  the instance mechanism below. Do not rename it.
+  Helm releases, PVCs, and internal LoadBalancers are unchanged by the instance
+  mechanism below; its Kong routes follow `local.mainnet_serving_slot`. Do not
+  rename it.
 - `mainnet-blue` and `mainnet-green` come from `modules/ethereum-node-instance`
   and are declared in `local.mainnet_instances` in `mainnet-instances.tf`.
 
