@@ -1,0 +1,85 @@
+name: Public API report
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-api-report-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  public-api-report:
+    name: Public API changes (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Keep this separate from CI3 and its required statuses. A failed report must not fail the workflow.
+    continue-on-error: true
+    steps:
+      - name: Checkout merged candidate and parents
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24
+
+      - name: Install only the existing TypeScript parser
+        run: |
+          parser_version=$(node -e '
+            const lock = require("fs").readFileSync("yarn-project/yarn.lock", "utf8");
+            const version = lock.match(/^"typescript@npm:[^\n]+":\n  version: ([0-9.]+)$/m)?.[1];
+            if (!version) throw new Error("Cannot resolve TypeScript version from yarn.lock");
+            process.stdout.write(version);
+          ')
+          npm install --prefix "$RUNNER_TEMP/public-api-parser" --ignore-scripts --no-package-lock \
+            --no-audit --no-fund "typescript@$parser_version"
+
+      - name: Compare public APIs against PR merge-base
+        id: report
+        env:
+          NODE_PATH: ${{ runner.temp }}/public-api-parser/node_modules
+        run: |
+          node yarn-project/scripts/public-api/report.mjs --base HEAD^1 --head HEAD \
+            --output "$RUNNER_TEMP/public-api-report"
+
+      - name: Explain operational failure
+        if: failure()
+        run: |
+          if [[ -f "$RUNNER_TEMP/public-api-report/report.md" ]]; then exit 0; fi
+          echo '## Public API analysis failed' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The checkout, parser setup, or report command failed before writing a report. No API comparison was produced; inspect the failed step.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach pull request context
+        if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import path from 'node:path';
+          const output = path.join(process.env.RUNNER_TEMP, 'public-api-report');
+          mkdirSync(output, { recursive: true });
+          writeFileSync(path.join(output, 'pull-request.json'), JSON.stringify({
+            number: Number(process.env.PR_NUMBER),
+            headSha: process.env.PR_HEAD_SHA,
+            baseRef: process.env.PR_BASE_REF,
+          }));
+          NODE
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: public-api-report
+          path: ${{ runner.temp }}/public-api-report/
+          if-no-files-found: warn
+          retention-days: 14
