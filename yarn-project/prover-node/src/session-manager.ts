@@ -230,12 +230,11 @@ export class SessionManager {
       return existingPartial.getId();
     }
 
-    await this.scheduleReconcile({ kind: 'start-proof', spec });
-    const created = this.getPartialSession(spec);
-    if (!created) {
+    const session = await this.reconcileQueue.put(() => this.reconcile({ kind: 'start-proof', spec }));
+    if (!session) {
       throw new Error(`Failed to schedule partial proof for epoch ${epoch}`);
     }
-    return created.getId();
+    return session.getId();
   }
 
   /** Stops the tick, drains the reconcile queue, and cancels every live session. */
@@ -250,11 +249,12 @@ export class SessionManager {
 
   // ---------------- reconcile ----------------
 
-  private scheduleReconcile(trigger: ReconcileTrigger): Promise<void> {
-    return this.reconcileQueue.put(() => this.reconcile(trigger));
+  private async scheduleReconcile(trigger: ReconcileTrigger): Promise<void> {
+    await this.reconcileQueue.put(() => this.reconcile(trigger));
   }
 
-  private async reconcile(trigger: ReconcileTrigger): Promise<void> {
+  /** Runs one reconcile pass. For a `start-proof` trigger, returns the partial session that proves the request. */
+  private async reconcile(trigger: ReconcileTrigger): Promise<EpochSession | undefined> {
     this.log.debug(`Reconciling`, { trigger });
 
     this.replaceInvalidSessions();
@@ -269,9 +269,7 @@ export class SessionManager {
       }
     }
 
-    if (trigger.kind === 'start-proof') {
-      this.openPartialSession(trigger.spec);
-    }
+    return trigger.kind === 'start-proof' ? this.openPartialSession(trigger.spec) : undefined;
   }
 
   /**
@@ -422,14 +420,18 @@ export class SessionManager {
     return { spec: { kind: 'full', epochNumber: epoch, fromSlot, toSlot }, checkpoints };
   }
 
-  private openPartialSession(spec: SessionSpec): void {
+  /**
+   * Returns the partial session that proves the spec's checkpoints: a running one if it exists, otherwise a new
+   * one. Returns undefined when no session can be built over them.
+   */
+  private openPartialSession(spec: SessionSpec): EpochSession | undefined {
     const canonical = this.deps.checkpointStore.listInSlotRange(spec.fromSlot, spec.toSlot);
-    if (canonical.length === 0 || this.hasFailedProver(canonical)) {
-      return;
+    if (!this.canBuildOver(canonical)) {
+      return undefined;
     }
-    // Reuse a live partial session for this epoch whose checkpoint set already matches the
-    // canonical content — e.g. a repeated `startProof` with no new checkpoints mined since the
-    // last one. Reconstructing would re-prove identical content and burn a pending-job slot.
+    // A running partial session of this epoch may already prove exactly these checkpoints under another slot range:
+    // a session replaced after a prune keeps the range it was first requested with. Proving them again would do the
+    // same work twice and take a second session slot.
     const existing = Array.from(this.partialSessions.values()).find(
       s =>
         s.getSpec().epochNumber === spec.epochNumber &&
@@ -437,7 +439,7 @@ export class SessionManager {
         this.checkpointsMatch(s.getCheckpoints(), canonical),
     );
     if (existing) {
-      return;
+      return existing;
     }
     if (this.atMaxSessionLimit()) {
       throw new Error(`Maximum pending proving jobs ${this.deps.config.maxPendingJobs} reached.`);
@@ -445,6 +447,7 @@ export class SessionManager {
     const session = this.constructSession(spec, canonical);
     this.partialSessions.set(specKey(spec), session);
     void this.runSession(session);
+    return session;
   }
 
   // ---------------- session construction ----------------
