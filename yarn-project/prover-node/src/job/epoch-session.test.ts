@@ -410,6 +410,29 @@ describe('EpochSession', () => {
     });
   });
 
+  describe('before proving starts', () => {
+    it('does not start top-tree proving when cancelled during the finalization delay', async () => {
+      const session = new TestEpochSession(makeSpec(), [stubProver], {
+        ...makeDeps(),
+        config: { finalizationDelayMs: 50 },
+      });
+      const startResult = session.start();
+      await session.cancel();
+
+      await expect(startResult).resolves.toBe('cancelled');
+      expect(proverFactory.createTopTreeOrchestrator).not.toHaveBeenCalled();
+      expect(publishingService.submit).not.toHaveBeenCalled();
+    });
+
+    it('ends in "failed" without submitting when its checkpoint numbers are not contiguous', async () => {
+      const gapCheckpoint = await Checkpoint.random(CheckpointNumber(3), { numBlocks: 1 });
+      const session = new TestEpochSession(makeSpec(), [stubProver, makeStubProver(gapCheckpoint)], makeDeps());
+
+      await expect(session.start()).resolves.toBe('failed');
+      expect(publishingService.submit).not.toHaveBeenCalled();
+    });
+  });
+
   // ---------------- hooks ----------------
 
   describe('hooks', () => {
