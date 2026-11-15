@@ -869,11 +869,16 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
 }
 
 /**
- * Relative priority of each proof type. Proofs higher up on the list are more important and should be prioritized
- * over proofs lower on the list.
+ * Relative priority of each proof type within one epoch. Proofs higher up on the list are picked first.
  *
- * The aim is that this will speed up block proving as the closer we get to a block's root proof the more likely it
- * is to get picked up by agents
+ * The order follows two rules:
+ *
+ * - Within a block, the job closest to the block root goes first, so a started block finishes before another one
+ *   takes its agents.
+ * - Everything a checkpoint root waits for (the block-level types and the inbox parity proof) outranks the
+ *   checkpoint roots themselves. A checkpoint root is a long job, and a partial epoch proof makes the roots of all
+ *   earlier checkpoints runnable at once. If they went first, the newest checkpoint's transactions would wait until
+ *   every one of them had an agent, and the newest checkpoint is the one the whole proof waits for.
  */
 export const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
   ProvingRequestType.ROOT_ROLLUP,
@@ -881,14 +886,14 @@ export const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
   ProvingRequestType.BLOCK_ROOT_SINGLE_TX_ROLLUP,
   ProvingRequestType.BLOCK_ROOT_NO_TXS_ROLLUP,
   ProvingRequestType.BLOCK_MERGE_ROLLUP,
-  ProvingRequestType.CHECKPOINT_ROOT_ROLLUP,
-  ProvingRequestType.CHECKPOINT_ROOT_SINGLE_BLOCK_ROLLUP,
-  ProvingRequestType.CHECKPOINT_MERGE_ROLLUP,
-  ProvingRequestType.CHECKPOINT_PADDING_ROLLUP,
   ProvingRequestType.TX_MERGE_ROLLUP,
   ProvingRequestType.PUBLIC_TX_BASE_ROLLUP,
   ProvingRequestType.PRIVATE_TX_BASE_ROLLUP,
   ProvingRequestType.PUBLIC_VM,
   ProvingRequestType.PUBLIC_CHONK_VERIFIER,
   ProvingRequestType.INBOX_PARITY,
+  ProvingRequestType.CHECKPOINT_ROOT_ROLLUP,
+  ProvingRequestType.CHECKPOINT_ROOT_SINGLE_BLOCK_ROLLUP,
+  ProvingRequestType.CHECKPOINT_MERGE_ROLLUP,
+  ProvingRequestType.CHECKPOINT_PADDING_ROLLUP,
 ];
