@@ -33,6 +33,7 @@ import {
 import { CheckpointFollower } from './checkpoint-follower.js';
 import { CheckpointStore } from './checkpoint-store.js';
 import type { SpecificProverNodeConfig } from './config.js';
+import { EarlyBlockProver } from './early-block-prover.js';
 import { EpochExpirySweep } from './epoch-expiry-sweep.js';
 import { EpochProofStatus } from './epoch-proof-status.js';
 import { FailureUploader } from './failure-uploader.js';
@@ -65,6 +66,7 @@ const PUBLISHING_SERVICE_STOP_TIMEOUT_MS = 30_000;
  * - `ProofPublishingService` submits finished epoch proofs to L1.
  * - `EpochExpirySweep` drops the state of epochs that can no longer be proven.
  * - `FailureUploader` uploads the data of failed proving attempts.
+ * - `EarlyBlockProver`, when enabled, starts proving blocks before their checkpoint lands.
  */
 export class ProverNode implements ProverNodeApi, Traceable {
   private log = createLogger('prover-node');
@@ -75,6 +77,8 @@ export class ProverNode implements ProverNodeApi, Traceable {
   protected readonly checkpointFollower: CheckpointFollower;
   protected readonly expirySweep: EpochExpirySweep;
   protected readonly failureUploader: FailureUploader;
+  /** Set only when early block proving is enabled. */
+  protected readonly earlyBlockProver: EarlyBlockProver | undefined;
   protected sessionManager: SessionManager | undefined;
   protected publishingService: ProofPublishingService | undefined;
 
@@ -141,20 +145,22 @@ export class ProverNode implements ProverNodeApi, Traceable {
       bindings,
     });
     this.chonkCache = new ChonkCache(bindings);
+    const publicProcessorFactory = new PublicProcessorFactory(
+      this.contractDataSource,
+      this.avmSimulator,
+      this.dateProvider,
+      this.telemetryClient,
+      bindings,
+    );
+    const txProvider = this.p2pClient.getTxProvider();
     this.checkpointStore = new CheckpointStore(
       this.l2BlockSource,
       {
         proverFactory: this.prover,
         chonkCache: this.chonkCache,
-        publicProcessorFactory: new PublicProcessorFactory(
-          this.contractDataSource,
-          this.avmSimulator,
-          this.dateProvider,
-          this.telemetryClient,
-          bindings,
-        ),
+        publicProcessorFactory,
         dbProvider: this.worldState,
-        txProvider: this.p2pClient.getTxProvider(),
+        txProvider,
         dateProvider: this.dateProvider,
         proverId: this.prover.getProverId(),
         metrics: this.jobMetrics,
@@ -165,6 +171,24 @@ export class ProverNode implements ProverNodeApi, Traceable {
       },
       bindings,
     );
+    if (this.config.proverNodeEarlyBlockProving) {
+      this.earlyBlockProver = new EarlyBlockProver({
+        l2BlockSource: this.l2BlockSource,
+        l1ToL2MessageSource: this.l1ToL2MessageSource,
+        worldState: this.worldState,
+        proverFactory: this.prover,
+        chonkCache: this.chonkCache,
+        publicProcessorFactory,
+        dbProvider: this.worldState,
+        txProvider,
+        dateProvider: this.dateProvider,
+        proverId: this.prover.getProverId(),
+        txGatheringTimeoutMs: this.config.txGatheringTimeoutMs,
+        deadline: undefined,
+        bindings,
+      });
+    }
+    const earlyBlockProver = this.earlyBlockProver;
     this.checkpointFollower = new CheckpointFollower({
       l2BlockSource: this.l2BlockSource,
       l1ToL2MessageSource: this.l1ToL2MessageSource,
@@ -181,6 +205,9 @@ export class ProverNode implements ProverNodeApi, Traceable {
           await this.sessionManager?.onPrune(affectedEpochs);
         },
         onChainProven: block => this.publishingService?.onChainProven(block),
+        onChainProposed: earlyBlockProver && (block => earlyBlockProver.onChainProposed(block)),
+        onChainCheckpointed: earlyBlockProver && (block => earlyBlockProver.onChainCheckpointed(block)),
+        onChainPruned: earlyBlockProver && (block => earlyBlockProver.onChainPruned(block)),
       },
       config: {
         pollIntervalMs: this.config.proverNodePollingIntervalMs,
@@ -284,6 +311,7 @@ export class ProverNode implements ProverNodeApi, Traceable {
     this.jobMetrics.stopObservingState();
     await this.checkpointFollower.stop();
     await this.expirySweep.stop();
+    await this.earlyBlockProver?.stop();
     if (this.sessionManager) {
       await this.sessionManager.stop();
     }
