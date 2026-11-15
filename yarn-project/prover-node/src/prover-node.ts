@@ -307,7 +307,7 @@ export class ProverNode implements ProverNodeApi, Traceable {
     this.log.info('Stopped ProverNode');
   }
 
-  /** Constructs the session manager. Extracted so a test harness can swap the implementation. */
+  /** Constructs the session manager with the node's components and the failure-upload callback. */
   protected createSessionManager(publishingService: ProofPublishingService): SessionManager {
     return new SessionManager({
       checkpointStore: this.checkpointStore,
