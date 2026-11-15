@@ -150,25 +150,33 @@ describe('CheckpointStore', () => {
   });
 
   it('stop cancels the remaining provers and waits for provers removed earlier to tear down', async () => {
-    const pruned = await Checkpoint.random(CheckpointNumber(2), { numBlocks: 1, startBlockNumber: 2 });
     const kept = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, startBlockNumber: 1 });
+    const pruned = await Checkpoint.random(CheckpointNumber(2), { numBlocks: 1, startBlockNumber: 2 });
     await store.addOrUpdate(kept, makeRegisterData());
-    await store.addOrUpdate(pruned, makeRegisterData());
-    const [keptStub, prunedStub] = stubs;
-    const prunedTeardown = promiseWithResolvers<void>();
-    prunedStub.whenDone = () => prunedTeardown.promise;
 
-    store.cancelAndRemoveAboveBlock(BlockNumber(1));
+    // The same checkpoint is pruned, registered again and pruned again while its first teardown is still running,
+    // so two teardowns for one prover id are in flight.
+    const teardowns = [promiseWithResolvers<void>(), promiseWithResolvers<void>()];
+    for (const teardown of teardowns) {
+      await store.addOrUpdate(pruned, makeRegisterData());
+      stubs.at(-1)!.whenDone = () => teardown.promise;
+      store.cancelAndRemoveAboveBlock(BlockNumber(1));
+    }
 
     let stopped = false;
     const stopPromise = store.stop().then(() => {
       stopped = true;
     });
-    await new Promise<void>(resolve => setImmediate(resolve));
-    expect(keptStub.isCancelled()).toBe(true);
+    const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+    await settle();
+    expect(stubs[0].isCancelled()).toBe(true);
     expect(stopped).toBe(false);
 
-    prunedTeardown.resolve();
+    teardowns[0].resolve();
+    await settle();
+    expect(stopped).toBe(false);
+
+    teardowns[1].resolve();
     await stopPromise;
     expect(stopped).toBe(true);
   });
