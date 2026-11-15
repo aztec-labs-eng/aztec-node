@@ -34,7 +34,9 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ### `PROVER_NODE_EARLY_BLOCK_PROVING` starts block-level proving before the checkpoint lands (PR link pending)
 
-A prover node started block-level proving for a block only once the block's checkpoint had landed on L1. With `PROVER_NODE_EARLY_BLOCK_PROVING=true` it starts as soon as the block is proposed, so more of a checkpoint's block proofs are done when a partial epoch proof is requested. When the checkpoint lands, the node proves it as before and the proving broker serves the jobs that were already started. A proposed block that is pruned before its checkpoint lands is dropped; its proofs are never used.
+A prover node started block-level proving for a block only once the block's checkpoint had landed on L1. With `PROVER_NODE_EARLY_BLOCK_PROVING=true` it starts as soon as the block is proposed, so more of a checkpoint's block proofs are done when a partial epoch proof is requested. When the checkpoint lands, the node proves it as before and the proving broker serves the jobs that were already started. A proposed block that is pruned before its checkpoint lands is dropped; its proofs are used only if a block with the same inputs is proposed again.
+
+The node's archiver has to hold proposed blocks for this to have any effect. A node that does not re-execute block proposals only learns of blocks from their checkpoints.
 
 The node logs `Block-level proofs ready for block N ahead of its checkpoint` with a `durationMs` field: the time from the block reaching the prover to its block root proof. The line appears only for blocks whose proofs are ready before their checkpoint lands.
 
