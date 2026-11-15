@@ -7,6 +7,7 @@ import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 
 import type { CheckpointStore } from './checkpoint-store.js';
 
+/** What the sweep reads the chain position from, and what it clears for an expired epoch. */
 export type EpochExpirySweepDeps = {
   l2BlockSource: Pick<L2BlockSource, 'getSyncedL2SlotNumber' | 'getL1Constants' | 'getBlocks'>;
   checkpointStore: Pick<CheckpointStore, 'reapExpired'>;
@@ -80,7 +81,7 @@ export class EpochExpirySweep {
         this.deps.chonkCache.releaseForBlocks(blocks);
       }
     } catch (err) {
-      this.log.warn(`Could not release chonk-cache entries for expired epoch ${epoch}`, err);
+      this.log.warn(`Could not release chonk-cache entries for expired epoch ${epoch}`, { epoch, err });
     }
     this.deps.checkpointStore.reapExpired(epoch);
   }
