@@ -41,9 +41,12 @@ The prover node's chain following, expiry sweep and failure uploads moved out of
 - `prover-node:failure-uploader`: failed-epoch and failed-checkpoint uploads.
 - `prover-node:epoch-proof-status`: failed reads of the prover's own full-epoch proof registration, previously logged by `prover-node:session-manager`.
 
-The messages are unchanged except for one debug line: `Skipping checkpoint N for unprovable epoch E` is now `Skipping checkpoint N: epoch E is not to be proven`.
+The messages are unchanged except for these debug lines:
 
-**Migration**: update any log filter or alert that selects these lines by the `prover-node` or `prover-node:session-manager` logger name, or by that message.
+- `Skipping checkpoint N for unprovable epoch E` is now `Skipping checkpoint N: epoch E is not to be proven`.
+- The session manager's `Skipping full-session open for epoch N: <reason>` lines are now `Not opening a full session for epoch N: <blocker>`, with the blocker also in a `blocker` field. Three more reasons are logged this way: the deadline has passed, a covered epoch is waiting for the tick, and the archiver has no checkpoints for the epoch.
+
+**Migration**: update any log filter or alert that selects these lines by the `prover-node` or `prover-node:session-manager` logger name, or by those messages.
 
 ### The node stops sending L1 requests to RPC URLs that fall behind ([#587](https://github.com/aztec-labs-eng/aztec-node/pull/587))
 
