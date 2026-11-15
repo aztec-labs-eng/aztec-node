@@ -46,6 +46,7 @@ export type SpecificProverNodeConfig = {
   proverNodeEpochProvingDelayMs: number | undefined;
   proverNodeDisableProofPublish?: boolean;
   proverNodeDisableFullEpochProving?: boolean;
+  proverNodeEarlyBlockProving?: boolean;
   txGatheringTimeoutMs: number;
   txGatheringIntervalMs: number;
   txGatheringBatchSize: number;
@@ -109,6 +110,13 @@ export const specificProverNodeConfigMappings: ConfigMappingsType<SpecificProver
     description:
       'Whether the prover node skips proving complete epochs on its own. It still proves partial epochs requested ' +
       'through the startProof admin API, e.g. by a sidecar that pays for early withdrawal proofs.',
+    ...booleanConfigHelper(false),
+  },
+  proverNodeEarlyBlockProving: {
+    env: 'PROVER_NODE_EARLY_BLOCK_PROVING',
+    description:
+      'Whether the prover node starts block-level proving for a block as soon as it is proposed, without waiting ' +
+      'for its checkpoint to land on L1. Shortens the wait for partial epoch proofs.',
     ...booleanConfigHelper(false),
   },
   proofSubmissionTargetAddress: {
