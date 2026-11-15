@@ -374,7 +374,7 @@ export class CheckpointProver {
           // prover is retained for the whole proof-submission window. Dropping it here is what stops that
           // retention from accumulating across every proven checkpoint. Post-completion consumers (the
           // top-tree job, a rebuilt EpochSession, failure upload) read only `whenSubTreeProofsReady()` and
-          // this prover's own fields (`checkpoint`, `txs`, headers, sibling paths), never the sub-tree.
+          // this prover's own fields (`checkpoint`, headers, sibling paths), never the sub-tree.
           this.teardownPromise = this.teardownSubTree();
         },
         err => this.failSubTreeProofs(err instanceof Error ? err : new Error(String(err))),

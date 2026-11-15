@@ -145,7 +145,7 @@ export class SessionManager {
 
   // ---------------- read-only views ----------------
 
-  /** Every live (non-terminal) session. */
+  /** Every session the manager holds: the running ones, and finished ones that have not been dropped. */
   public allSessions(): EpochSession[] {
     return [...this.fullSessions.values(), ...this.partialSessions.values()];
   }
