@@ -105,10 +105,9 @@ export class SessionManager {
   private readonly fullSessions: Map<EpochNumber, EpochSession> = new Map();
   private readonly partialSessions: Map<string, EpochSession> = new Map();
   /**
-   * Serialises every reconcile call. The trigger sources (L2BlockStream events, the
-   * periodic tick, JSON-RPC `startProof`) run independently, so without this queue two
-   * reconciles could interleave on the `await session.cancel(...)` step and orphan a
-   * freshly-constructed session.
+   * Serialises every reconcile call. The trigger sources (chain events, the periodic tick, `startProof`) run
+   * independently, and a reconcile awaits archiver and L1 reads between looking at the session maps and changing
+   * them. Without this queue two reconciles could open a session for the same epoch.
    */
   private readonly reconcileQueue = new SerialQueue();
   /** Cached L1 constants, populated on first read. */
@@ -172,18 +171,18 @@ export class SessionManager {
 
   // ---------------- event entry points ----------------
 
-  /** Called by ProverNode after a chain-checkpointed event has been added to the store. */
+  /** Called when a checkpoint of the epoch is in the store: newly registered, or seen again on a retry. */
   public onCheckpointAdded(epoch: EpochNumber): Promise<void> {
     return this.scheduleReconcile({ kind: 'checkpoint', epoch });
   }
 
-  /** Called by ProverNode after a chain-pruned event has removed provers from the store. */
+  /** Called after a prune has removed provers of these epochs from the store. */
   public onPrune(affectedEpochs: EpochNumber[]): Promise<void> {
     return this.scheduleReconcile({ kind: 'prune', affectedEpochs });
   }
 
   /**
-   * Called periodically by ProverNode's ticker. Picks up epochs that have become complete
+   * Called by the periodic tick that `start()` arms. Picks up epochs that have become complete
    * by time without a fresh checkpoint event (e.g. the epoch's last slots are empty), and
    * advances to the next epoch once the previous one is proven on L1. Also revisits epochs the
    * proven tip already covers, which this prover still proves if it holds no full-epoch proof of them.
