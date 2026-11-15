@@ -38,8 +38,11 @@ export type EarlyBlockProverDeps = BlockExecutionDeps & {
  *
  * The proofs it starts are not handed to anything. When the checkpoint lands, the node proves it through the
  * usual `CheckpointProver`, which requests proving jobs with the same inputs. The proving broker identifies a job
- * by its inputs, so it serves those requests from the jobs started here. A block that is pruned before its
- * checkpoint lands is never requested again, so its jobs are never used.
+ * by its inputs, so it serves those requests from the jobs started here. The jobs of a block that is pruned before
+ * its checkpoint lands are used only if a block with the same inputs is proposed again.
+ *
+ * The archiver must hold proposed blocks for this to do anything. A node that does not re-execute block proposals
+ * only learns of blocks from their checkpoints, and then no block is ever proven early.
  *
  * Early proving never aborts a broker job. A `CheckpointProver` may be waiting on the same job, and an abort would
  * fail it. The jobs of a pruned block therefore run to completion on the agents.
@@ -336,12 +339,16 @@ class SlotInProgress {
 
     // Logged only when the block root proof is ready before the slot is released. A block whose checkpoint lands
     // first has its proofs reported by its `CheckpointProver`.
-    void subTree.whenBlockRootProven(block.number).then(() =>
+    void subTree.whenBlockRootProven(block.number).then(() => {
+      // The slot is released when its checkpoint lands. A proof that arrives while that is under way is not early.
+      if (signal.aborted) {
+        return;
+      }
       this.log.info(`Block-level proofs ready for block ${block.number} ahead of its checkpoint`, {
         ...context,
         // Time from the block reaching this prover to its block root proof.
         durationMs: sinceAdded.ms(),
-      }),
-    );
+      });
+    });
   }
 }

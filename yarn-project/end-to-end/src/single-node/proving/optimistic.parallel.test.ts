@@ -263,6 +263,47 @@ describe('single-node/proving/optimistic', () => {
     });
   });
 
+  describe('early block proving', () => {
+    beforeEach(async () => {
+      // The gossip network delivers block proposals to the prover node, so its archiver holds blocks before their
+      // checkpoint lands. Without it the prover node learns of blocks only from checkpoints.
+      test = await setupWithProver({
+        numberOfAccounts: 1,
+        mockGossipSubNetwork: true,
+        proverNodeConfig: { proverNodeEarlyBlockProving: true },
+      });
+      ({ rollup, logger, context } = test);
+      ({ L2_SLOT_DURATION_IN_S } = test);
+      node = context.aztecNode;
+    });
+
+    it('proves an epoch whose blocks were proven ahead of their checkpoints', async () => {
+      const proverNode = test.proverNodes[0].getProverNode() as TestProverNode;
+      // Each call starts block-level proving for the proposed blocks of one slot, before the slot's checkpoint lands.
+      const startEarlyProving = jest.spyOn(proverNode.getProver(), 'createBlocksOnlySubTreeOrchestrator');
+
+      await test.waitUntilNextEpochStarts();
+
+      const contract = await test.registerTestContract(context.wallet);
+      const provenTx = await proveInteraction(context.wallet, contract.methods.emit_nullifier(new Fr(1)), {
+        from: context.accounts[0],
+      });
+      const txReceipt = await provenTx.send();
+      const txCheckpoint = (await node.getBlock(txReceipt.blockNumber!))!.checkpointNumber;
+      const txEpoch = await epochOfCheckpoint(txCheckpoint);
+
+      await waitForProverToRegisterEpoch(proverNode, txEpoch);
+      await test.warpToEpochStart(txEpoch + 1);
+      const epochEndCheckpointNumber = (await test.monitor.run(true)).checkpointNumber;
+
+      // The checkpoints are proven through the usual path, which requests the jobs the early proving started.
+      await test.waitUntilProvenCheckpointNumber(epochEndCheckpointNumber, 240);
+      await test.waitForNodeToSync(await lastBlockOfCheckpoint(epochEndCheckpointNumber), 'proven');
+      expect((await node.getTxReceipt(txReceipt.txHash)).executionResult).toEqual(TxExecutionResult.SUCCESS);
+      expect(startEarlyProving).toHaveBeenCalled();
+    });
+  });
+
   describe('mid-epoch checkpoint reorg with replacement', () => {
     beforeEach(async () => {
       test = await setupWithProver({
