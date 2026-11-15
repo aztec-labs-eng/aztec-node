@@ -89,8 +89,6 @@ These run concurrently, and each is serialised on its own:
 
 ## Proving one epoch
 
-This is what happens when nothing goes wrong.
-
 1. The archiver reports a new checkpointed tip. `CheckpointFollower` receives a `chain-checkpointed` event.
 2. The follower walks from its cursor to the tip. For each checkpoint it collects what proving needs (the previous
    block header, the checkpoint's L1-to-L2 messages, the previous archive sibling path) and registers the
@@ -144,7 +142,7 @@ A prover can be `completed` and later `failed` or `cancelled`. A cancelled prove
 | `stopped` | The attempt failed while one of its provers was failed or cancelled |
 | `failed` | The attempt failed while every prover was healthy |
 
-The last six are final. `stopped` and `failed` differ in cause. A prover fails the same way for a genuine fault and
+The last six are final. `stopped` and `failed` differ in cause. A prover fails the same way for a proving fault and
 for a prune that removed its base block, so a `stopped` session says nothing about the epoch. A `failed` session
 means the top tree or the L1 submission failed on its own.
 
@@ -229,8 +227,8 @@ proof of. The manager still opens a full session for such an epoch, with three d
 - Before opening, the manager reads from L1 whether this prover's full proof of the epoch is registered. It skips
   the epoch if it is, or if L1 cannot be read. Those two answers are reused for one L2 slot. "Not registered" is
   read again each time, since it leads to a session.
-- The next unproven epoch goes first. While that epoch is complete and has no session, covered epochs leave one
-  session slot free for it.
+- The next unproven epoch goes first. While that epoch is complete and has no session, covered epochs leave
+  capacity for one session free for it.
 
 ### The node restarts
 
@@ -282,7 +280,7 @@ the provers.
 id at once and does not wait for the proof.
 
 - It creates a partial session from the epoch's first slot to the slot of the last stored checkpoint.
-- If a running session already proves exactly that, it returns that session's id.
+- If a running session already proves those checkpoints, it returns that session's id.
 - It throws when the store holds no checkpoint of the epoch, when the proven tip already covers them, when one of
   their provers has failed, or when the session limit is reached.
 
@@ -310,19 +308,24 @@ proposals learns of blocks only from their checkpoints, and then nothing is prov
 3. When the checkpoint lands, the node proves it through a `CheckpointProver` as usual. That prover requests jobs
    with the same inputs, and the broker serves them from the work already started.
 
-The early proofs are never handed to anything else, which is what keeps the rest of the node unaffected:
+Early proofs reach an epoch proof only when a `CheckpointProver` requests the same broker jobs:
 
 - A block pruned before its checkpoint lands has its slot dropped. Its jobs can reach an epoch proof only if a
   block with the same inputs is proposed again. The slot is proven again from its first block when the proposed
   tip moves.
-- A failure in early proving is logged and the slot is left to its checkpoint.
+- A failure in early proving is logged and the slot is left to its checkpoint. That covers a block that cannot be
+  executed and a proving job that fails after its block was executed.
 - Early proving never aborts a broker job, because a `CheckpointProver` may be waiting on the same one.
 - At most four slots are in progress. A slot normally leaves when its checkpoint lands.
+- A block is proven early only once a checkpoint of its epoch has landed. A block can be proposed shortly before
+  its epoch starts. The broker drops the jobs of old epochs when it sees a job of a newer epoch, so proving that
+  block early would drop jobs of an epoch that can still be proven.
 
 What it costs:
 
 - Each block's transactions are executed once more when the checkpoint lands.
-- The jobs of a pruned block run to completion on the agents.
+- The jobs of a pruned block run to completion on the agents. A proposer that proposes blocks and never posts
+  their checkpoint makes the agents prove blocks nobody pays for.
 - The broker keeps a job that failed after all its retries. If a job started early fails that way, the
   `CheckpointProver`'s request for the same job fails with it, and the prover is marked failed.
 
@@ -393,28 +396,41 @@ together with a world-state and archiver backup.
 
 ## Design decisions
 
-**A session is defined by slots, not by checkpoint numbers.** A reorg can replace the checkpoints of a slot range.
-The range itself does not change, so a replaced session keeps it.
+### A session is defined by slots
 
-**Every session starts at the first slot of its epoch.** L1 accepts a proof when the checkpoint before its first
-checkpoint is proven, and it accepts a range whose beginning is already proven. A proof that starts at the epoch's
-first slot meets both conditions wherever the proven tip is by the time it is submitted.
+A reorg can replace the checkpoints of a slot range. The range itself does not change, so a replaced session keeps
+it. Checkpoint numbers would not survive the reorg.
 
-**A pruned prover is removed, not kept.** Its re-execution reads world-state forks that the prune invalidates. What
-is expensive, the finished proving jobs, survives in the broker.
+### Every session starts at the first slot of its epoch
 
-**The publishing service owns L1 submission.** Several sessions can hold a proof of the same epoch. Choosing between
-them and reading the proven tip happen in one serial queue, so only one transaction is sent.
+L1 accepts a proof when the checkpoint before its first checkpoint is proven. It also accepts a range whose
+beginning is already proven. A proof that starts at the epoch's first slot meets both conditions wherever the proven
+tip is by the time it is submitted.
 
-**`stopped` and `failed` are told apart by the provers.** A prune reaches the node twice: as a chain event, and as a
-failed world-state read inside a prover. The two are not ordered. The session does not ask which came first. It
-asks whether any of its provers failed or was cancelled.
+### A pruned prover is removed
+
+Its re-execution reads world-state forks that the prune invalidates. The expensive part, the proving jobs, stays
+with the broker.
+
+### The publishing service owns L1 submission
+
+Several sessions can hold a proof of the same epoch. Choosing between them and reading the proven tip happen in one
+serial queue, so only one transaction is sent.
+
+### `stopped` and `failed` are told apart by the provers
+
+A prune reaches the node twice: as a chain event, and as a failed world-state read inside a prover. The two are not
+ordered. The session does not ask which came first. It asks whether any of its provers failed or was cancelled.
 
 ## Known limitations
 
 - A failed `CheckpointProver` is not retried. A transaction fetch that times out leaves the epoch unproven by this
   node until a prune or a restart.
 - A `failed` full session is not retried either, including when the cause was a transient L1 or archiver error.
+- A `completed` full session is kept without checking L1 again. If an L1 reorg removes the proof transaction and
+  leaves the epoch's checkpoints in place, the node does not submit the proof again.
+- The publisher looks up its registration on L1 under the prover id in the proof's public inputs, which the
+  proving agent returns. It does not compare that id with the node's own.
 - The tick opens the next unproven epoch and covered epochs. A later epoch that ended without a new checkpoint
   waits until the epoch before it is proven.
 - A full session and a partial session over the same checkpoints can both prove the top tree. The publishing
