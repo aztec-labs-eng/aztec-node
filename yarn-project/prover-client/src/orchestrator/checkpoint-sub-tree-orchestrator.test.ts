@@ -7,6 +7,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { L1ToL2MessageSponge, ScopedL2ToL1Message, computeBlockOutHash } from '@aztec-labs/stdlib/messaging';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
 import { jest } from '@jest/globals';
+import { createHash } from 'node:crypto';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
@@ -169,6 +170,96 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
     } finally {
       await subTree.stop();
     }
+  });
+
+  describe('blocks-only sub-tree', () => {
+    /** Records every proof the prover is asked for, as its method name and a hash of its inputs. */
+    function recordProofRequests(): Set<string>[] {
+      const runs: Set<string>[] = [new Set()];
+      const prover = context.prover as unknown as Record<string, (...args: any[]) => unknown>;
+      const proofMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(prover)).filter(
+        name => name.startsWith('get') && name.endsWith('Proof'),
+      );
+      for (const method of proofMethods) {
+        const original = prover[method].bind(prover);
+        jest.spyOn(prover, method).mockImplementation((...args: any[]) => {
+          const inputsHash = createHash('sha256').update(args[0].toBuffer()).digest('hex');
+          runs.at(-1)!.add(`${method}:${inputsHash}`);
+          return original(...args);
+        });
+      }
+      return runs;
+    }
+
+    it('requests the same block-level proofs as the sub-tree of the landed checkpoint', async () => {
+      const numBlocks = 3;
+      const { constants, blocks, l1ToL2Messages, previousBlockHeader } = await context.makeCheckpoint(numBlocks, {
+        numTxsPerBlock: 2,
+      });
+      const messagesOf = (blockIndex: number) => (blockIndex === 0 ? l1ToL2Messages : []);
+      const runs = recordProofRequests();
+
+      // The first two blocks are proven as they are proposed, before the checkpoint's block count is known.
+      const early = await CheckpointSubTreeOrchestrator.startBlocksOnly(
+        context.worldState,
+        context.prover,
+        EthAddress.ZERO,
+        new ChonkCache(),
+        EpochNumber(1),
+        makeTestDeferredJobQueue(),
+        constants,
+        previousBlockHeader,
+      );
+      const proposed = blocks.slice(0, 2);
+      for (const [blockIndex, block] of proposed.entries()) {
+        const { blockNumber, timestamp } = block.header.globalVariables;
+        await early.startNewBlock(blockNumber, timestamp, block.txs.length, messagesOf(blockIndex));
+        await early.addTxs(block.txs);
+        await early.setBlockCompleted(blockNumber, block.header);
+      }
+      await Promise.all(proposed.map(block => early.whenBlockRootProven(block.header.globalVariables.blockNumber)));
+      await early.stop();
+      const earlyRequests = runs[0];
+
+      // The checkpoint lands with three blocks and is proven from scratch by a regular sub-tree.
+      runs.push(new Set());
+      const subTree = await CheckpointSubTreeOrchestrator.start(
+        context.worldState,
+        context.prover,
+        EthAddress.ZERO,
+        chonkCache,
+        EpochNumber(1),
+        false,
+        makeTestDeferredJobQueue(),
+        constants,
+        l1ToL2Messages,
+        Fr.ZERO,
+        numBlocks,
+        previousBlockHeader,
+      );
+      try {
+        for (const [blockIndex, block] of blocks.entries()) {
+          const { blockNumber, timestamp } = block.header.globalVariables;
+          await subTree.startNewBlock(blockNumber, timestamp, block.txs.length, messagesOf(blockIndex));
+          await subTree.addTxs(block.txs);
+          await subTree.setBlockCompleted(blockNumber, block.header);
+        }
+        await subTree.getSubTreeResult();
+      } finally {
+        await subTree.stop();
+      }
+      const landedRequests = runs[1];
+
+      // Every job of the early run is requested again with identical inputs, so the broker can serve it.
+      expect([...earlyRequests].filter(request => !landedRequests.has(request))).toEqual([]);
+      const methodsOf = (requests: Set<string>) => [...requests].map(request => request.split(':')[0]);
+      expect(methodsOf(earlyRequests).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(2);
+      // The early run stops at the block roots: merges and parity need the final checkpoint.
+      expect(methodsOf(earlyRequests)).not.toContain('getBlockMergeRollupProof');
+      expect(methodsOf(earlyRequests)).not.toContain('getInboxParityProof');
+      expect(methodsOf(landedRequests)).toContain('getBlockMergeRollupProof');
+      expect(methodsOf(landedRequests)).toContain('getInboxParityProof');
+    });
   });
 
   it('proves a checkpoint carrying L1-to-L2 messages', async () => {
