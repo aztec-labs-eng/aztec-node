@@ -27,7 +27,10 @@ import { L1Metrics } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
+import type { CheckpointFollower } from './checkpoint-follower.js';
+import type { EpochExpirySweep } from './epoch-expiry-sweep.js';
 import type { EpochProofStatus } from './epoch-proof-status.js';
+import type { FailureUploader } from './failure-uploader.js';
 import type { ProofPublishingService } from './proof-publishing-service.js';
 import type { ProverNodePublisher } from './prover-node-publisher.js';
 import { ProverNode } from './prover-node.js';
@@ -36,6 +39,8 @@ import { SessionManager } from './session-manager.js';
 
 describe('ProverNode', () => {
   let proverNode: TestProverNode;
+  /** The node's chain follower, which handles block stream events. */
+  let follower: CheckpointFollower;
 
   let prover: ReturnType<typeof mock<EpochProverManager & EpochProverFactory>>;
   let publisherFactory: ReturnType<typeof mock<ProverPublisherFactory>>;
@@ -100,7 +105,7 @@ describe('ProverNode', () => {
     setupNotFullyProven();
     const event = mineCheckpoint(makeCheckpoint(1, 1, 1));
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     expect(proverNode.getCheckpointStore().listAll().length).toBe(1);
     expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(1));
@@ -112,14 +117,14 @@ describe('ProverNode', () => {
   ])('ignores a checkpointed tip $where the catch-up cursor', async ({ tip }) => {
     setupNotFullyProven();
     const event = mineCheckpoint(makeCheckpoint(tip, tip, tip));
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(3));
+    setCursor(CheckpointNumber(3));
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     // Nothing is fetched: a tip below the cursor would otherwise ask the archiver for a negative count.
     expect(l2BlockSource.getCheckpointsData).not.toHaveBeenCalled();
     expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('registers the first checkpoint with a zero previous inbox rolling hash', async () => {
@@ -129,7 +134,7 @@ describe('ProverNode', () => {
     serveMessageRange([Fr.random()], inboxRollingHash);
     const event = mineCheckpoint(makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash, 1));
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     const [registered] = proverNode.getCheckpointStore().listAll();
     expect(registered.previousInboxRollingHash).toEqual(Fr.ZERO);
@@ -137,11 +142,11 @@ describe('ProverNode', () => {
 
   it('resets the catch-up cursor to zero on a prune to genesis without reading block data', async () => {
     setupNotFullyProven();
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
     l2BlockSource.getBlockData.mockRejectedValue(new Error('block data must not be read for a prune to genesis'));
 
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(0), hash: '0x00' },
       checkpointed: makeTipId(0),
@@ -150,7 +155,7 @@ describe('ProverNode', () => {
 
     expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
     expect(sessionManager.onPrune).toHaveBeenCalledWith([EpochNumber(1)]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(0));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(0));
   });
 
   it('caps the catch-up fetch at two epochs when resyncing far behind the checkpointed tip', async () => {
@@ -163,9 +168,9 @@ describe('ProverNode', () => {
     const fetchSpy = l2BlockSource.getCheckpointsData;
     mineCheckpoint(makeCheckpoint(99, 99, 99));
     const event = mineCheckpoint(makeCheckpoint(100, 100, 100));
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber.ZERO);
+    setCursor(CheckpointNumber.ZERO);
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     // Only the most recent two epochs' worth were fetched and registered; the cursor lands at the tip.
     const fetchRanges = fetchSpy.mock.calls.map(([q]) => q as any).filter(q => 'from' in q);
@@ -176,12 +181,12 @@ describe('ProverNode', () => {
         .listAll()
         .map(p => p.id),
     ).toHaveLength(2);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(100));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(100));
   });
 
   it('dispatches chain-pruned through cancelAndRemoveAboveBlock and notifies the session manager only when affected', async () => {
     // No registered checkpoints — nothing to prune.
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(0), hash: '0x00' },
       checkpointed: makeTipId(0),
@@ -192,18 +197,18 @@ describe('ProverNode', () => {
     // Register a checkpoint (cp 2 at block 2), then prune to block 1. The checkpoint's only block (2) is above the
     // prune target, so it is cancelled and removed and its epoch (2) is reported.
     setupNotFullyProven();
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 2, 2)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 2, 2)));
     // The prune target (block 1) resolves to checkpoint 1, clamping the cursor to checkpoint 0.
     l2BlockSource.getBlockData.mockResolvedValue({ checkpointNumber: CheckpointNumber(1) } as any);
 
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(1), hash: '0x01' },
       checkpointed: makeTipId(1),
       proven: makeTipId(1),
     });
     expect(sessionManager.onPrune).toHaveBeenCalledWith([EpochNumber(2)]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(0));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(0));
   });
 
   it('marks an orphaned checkpoint and reprocesses its same-number rebuild despite an inflated checkpointed tip', async () => {
@@ -216,8 +221,8 @@ describe('ProverNode', () => {
     // reprocesses.
     setupNotFullyProven();
     const original = makeCheckpoint(3, 3, 3, Fr.random());
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(original));
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    await follower.handleBlockStreamEvent(mineCheckpoint(original));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
     const originalProver = proverNode.getCheckpointStore().listAll()[0];
 
     // The prune target is block 2 (in checkpoint 2), but the event's checkpointed tip is inflated to the rebuilt 3.
@@ -226,7 +231,7 @@ describe('ProverNode', () => {
       checkpointNumber: CheckpointNumber(2),
       header: { lastArchive: { root: Fr.ZERO }, state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } } },
     } as any);
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(2), hash: '0x02' },
       checkpointed: makeTipId(3),
@@ -236,29 +241,29 @@ describe('ProverNode', () => {
     // The orphaned prover for checkpoint 3 is cancelled and removed from the store, and the cursor was clamped below 3.
     expect(originalProver.isCancelled()).toBe(true);
     expect(proverNode.getCheckpointStore().getByCheckpoint(original)).toBeUndefined();
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
 
     // The rebuilt checkpoint 3 (distinct archive root) is now served by the source. A fresh chain-checkpointed(3)
     // re-registers it because the cursor sits below 3.
     sessionManager.onCheckpointAdded.mockClear();
     const rebuilt = makeCheckpoint(3, 3, 3, Fr.random());
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(rebuilt));
+    await follower.handleBlockStreamEvent(mineCheckpoint(rebuilt));
     expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(3));
     expect(proverNode.getCheckpointStore().getByCheckpoint(rebuilt)).toBeDefined();
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('throws on a prune whose target block data is missing, leaving provers and cursor untouched for retry', async () => {
     // The cursor floor is resolved before any prover is removed, so a missing-data prune throws without side effects
     // and the next pass retries the whole handler (the tips cursor only advances on success).
     setupNotFullyProven();
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
     const registeredProver = proverNode.getCheckpointStore().listAll()[0];
 
     l2BlockSource.getBlockData.mockResolvedValue(undefined);
     await expect(
-      proverNode.handleBlockStreamEvent({
+      follower.handleBlockStreamEvent({
         type: 'chain-pruned',
         block: { number: BlockNumber(2), hash: '0x02' },
         checkpointed: makeTipId(3),
@@ -269,11 +274,11 @@ describe('ProverNode', () => {
     expect(registeredProver.isCancelled()).toBe(false);
     expect(proverNode.getCheckpointStore().listAll()).toContain(registeredProver);
     expect(sessionManager.onPrune).not.toHaveBeenCalled();
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('dispatches chain-proven to publishingService.onChainProven', async () => {
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-proven',
       block: { number: BlockNumber(7), hash: '0x07' },
       checkpoint: { number: CheckpointNumber(7), hash: '0x07' },
@@ -298,7 +303,7 @@ describe('ProverNode', () => {
 
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
 
     expect(cache.get(txHash)).toBeUndefined();
     // Three expired epochs ⇒ reapExpired called once per epoch.
@@ -310,12 +315,12 @@ describe('ProverNode', () => {
     l2BlockSource.getCheckpointsData.mockResolvedValue([]);
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
     expect(reapSpy.mock.calls.length).toBe(3);
     reapSpy.mockClear();
 
     // Same latest slot ⇒ nothing new should expire on a subsequent sweep.
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
     expect(reapSpy).not.toHaveBeenCalled();
   });
 
@@ -323,7 +328,7 @@ describe('ProverNode', () => {
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(undefined);
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
     expect(reapSpy).not.toHaveBeenCalled();
   });
 
@@ -332,7 +337,7 @@ describe('ProverNode', () => {
   it('expireEpoch reaps the store but never uploads a post-mortem', async () => {
     // The post-mortem upload fires from the session-failure path (onSessionFailed)
     setupNotFullyProven();
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
     expect(proverNode.getCheckpointStore().listAll().length).toBe(1);
 
     const uploadSpy = jest.spyOn(proverNode, 'tryUploadEpochFailure');
@@ -340,7 +345,7 @@ describe('ProverNode', () => {
     l2BlockSource.getBlocks.mockResolvedValue([]);
 
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(5));
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
 
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(reapSpy.mock.calls.map(([e]) => Number(e))).toEqual([0, 1, 2, 3]);
@@ -355,14 +360,14 @@ describe('ProverNode', () => {
 
     const event = mineCheckpoint(makeCheckpoint(1, 1, 1));
 
-    await expect(proverNode.handleBlockStreamEvent(event)).rejects.toThrow('boom');
+    await expect(follower.handleBlockStreamEvent(event)).rejects.toThrow('boom');
 
     // Tips left unadvanced; nothing was registered, the session manager wasn't notified, and the catch-up
     // cursor stays behind so the next pass retries this checkpoint.
     expect(await proverNode.getTipsStore().getL2BlockHash(1)).toBeUndefined();
     expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
   });
 
   it('refuses a checkpoint whose messages do not match its inbox rolling hash, then registers it once they do', async () => {
@@ -375,16 +380,16 @@ describe('ProverNode', () => {
     const event = mineCheckpoint(checkpoint);
 
     serveMessageRange([Fr.random(), Fr.random()], Fr.random());
-    await expect(proverNode.handleBlockStreamEvent(event)).rejects.toThrow(/do not match its inbox rolling hash/);
+    await expect(follower.handleBlockStreamEvent(event)).rejects.toThrow(/do not match its inbox rolling hash/);
     expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)).toBeUndefined();
     expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
 
     const corrected = [Fr.random(), Fr.random()];
     serveMessageRange(corrected, inboxRollingHash);
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
     expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)?.l1ToL2Messages).toEqual(corrected);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
   it('registers a checkpoint with the messages whose end hash matches its inbox rolling hash', async () => {
@@ -394,10 +399,10 @@ describe('ProverNode', () => {
     const messages = [Fr.random(), Fr.random()];
     serveMessageRange(messages, inboxRollingHash);
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(checkpoint));
+    await follower.handleBlockStreamEvent(mineCheckpoint(checkpoint));
 
     expect(proverNode.getCheckpointStore().getByCheckpoint(checkpoint)?.l1ToL2Messages).toEqual(messages);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
   it('leaves the tips store unadvanced when a handler propagates an error', async () => {
@@ -413,7 +418,7 @@ describe('ProverNode', () => {
       proven: makeTipId(1),
     };
 
-    await expect(proverNode.handleBlockStreamEvent(event)).rejects.toThrow(/cannot clamp checkpoint cursor/);
+    await expect(follower.handleBlockStreamEvent(event)).rejects.toThrow(/cannot clamp checkpoint cursor/);
 
     // Tips left unadvanced so the L2BlockStream re-emits this event on its next poll.
     expect(await proverNode.getTipsStore().getL2BlockHash(1)).toBeUndefined();
@@ -434,12 +439,12 @@ describe('ProverNode', () => {
       Promise.resolve(epoch === EpochNumber(1) && length === 1),
     );
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
     expect(proverNode.getCheckpointStore().listAll().length).toBe(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
     // The whole-epoch skip still advances the cursor so we don't re-evaluate it next pass.
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
   });
 
   it.each([
@@ -456,7 +461,7 @@ describe('ProverNode', () => {
       Promise.resolve(epoch === EpochNumber(1) && length === 1 ? registration : true),
     );
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
     expect(proverNode.getCheckpointStore().listAll().length).toBe(1);
     expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(1));
@@ -469,7 +474,7 @@ describe('ProverNode', () => {
     setupEpochOneFullyProven();
     readOwnFullEpochProof.mockResolvedValue(false);
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
     expect(proverNode.getCheckpointStore().listAll().length).toBe(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
@@ -482,12 +487,12 @@ describe('ProverNode', () => {
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
     mockOldestHistoricBlock(3);
     readOwnFullEpochProof.mockResolvedValue(false);
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+    setCursor(CheckpointNumber(2));
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
 
     expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('skips epoch 0 when a snapshot after genesis has been pruned, and catches up past it', async () => {
@@ -510,7 +515,7 @@ describe('ProverNode', () => {
     mineCheckpoint(makeCheckpoint(2, 2, 2));
     const event = mineCheckpoint(makeCheckpoint(3, 4, 3));
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     expect(
       proverNode
@@ -518,7 +523,7 @@ describe('ProverNode', () => {
         .listAll()
         .map(p => p.checkpoint.number),
     ).toEqual([CheckpointNumber(3)]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('skips epoch 0 when a snapshot inside its first multi-block checkpoint has been pruned', async () => {
@@ -533,7 +538,7 @@ describe('ProverNode', () => {
     mineCheckpoint({ ...first, blocks: [1, 2, 3].map(n => makeCheckpoint(1, 1, n).blocks[0]) } as Checkpoint);
     const event = mineCheckpoint(makeCheckpoint(2, 4, 4));
 
-    await proverNode.handleBlockStreamEvent(event);
+    await follower.handleBlockStreamEvent(event);
 
     expect(
       proverNode
@@ -552,12 +557,12 @@ describe('ProverNode', () => {
     mockChain({ provenBlock: 1, blockSlots: [0, 1, 4, 5] });
     readOwnFullEpochProof.mockResolvedValue(false);
     mineCheckpoint(makeCheckpoint(1, 1, 1));
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)));
+    setCursor(CheckpointNumber(1));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)));
 
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 4, 5] });
     mockOldestHistoricBlock(2);
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
 
     expect(
       proverNode
@@ -577,8 +582,8 @@ describe('ProverNode', () => {
     readOwnFullEpochProof.mockResolvedValue(false);
     sessionManager.onCheckpointAdded.mockRejectedValueOnce(new Error('archiver unavailable'));
     mineCheckpoint(makeCheckpoint(1, 1, 1));
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
-    await expect(proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)))).rejects.toThrow();
+    setCursor(CheckpointNumber(1));
+    await expect(follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)))).rejects.toThrow();
 
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 4, 5] });
     mockOldestHistoricBlock(2);
@@ -589,7 +594,7 @@ describe('ProverNode', () => {
       }
       return snapshot;
     });
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 5, 3)));
 
     expect(
       proverNode
@@ -597,7 +602,7 @@ describe('ProverNode', () => {
         .listAll()
         .map(p => p.checkpoint.number),
     ).toEqual([CheckpointNumber(2), CheckpointNumber(3)]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('skips a fully-proven epoch with our full-epoch proof on L1 while world state cannot report its history', async () => {
@@ -606,19 +611,19 @@ describe('ProverNode', () => {
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
     worldState.status.mockRejectedValue(new Error('world state unavailable'));
     readOwnFullEpochProof.mockResolvedValue(true);
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+    setCursor(CheckpointNumber(2));
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
 
     expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('content-addresses the prover by the checkpoint archive root', async () => {
     setupNotFullyProven();
     const archiveRoot = Fr.random();
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 2, archiveRoot)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 2, archiveRoot)));
 
     const prover = proverNode.getCheckpointStore().listAll()[0];
     expect(prover.id).toContain(archiveRoot.toString());
@@ -630,7 +635,7 @@ describe('ProverNode', () => {
     setupNotFullyProven();
     const uploadSpy = jest.spyOn(proverNode, 'tryUploadCheckpointFailure').mockResolvedValue(undefined);
 
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
     const prover = proverNode.getCheckpointStore().listAll()[0];
     // Wait for the eager pipeline to settle (it fails at gather), then the onFailed hook has fired.
     await prover.whenDone();
@@ -645,28 +650,33 @@ describe('ProverNode', () => {
       const checkpoint = makeCheckpoint(3, 3, 3, archiveRoot);
       l2BlockSource.getBlock.mockResolvedValue({ archive: { root: archiveRoot } } as unknown as L2Block);
 
-      await expect(proverNode.callIsCheckpointCanonical(checkpoint)).resolves.toBe(true);
+      await expect(proverNode.getFailureUploader().isCheckpointCanonical(checkpoint)).resolves.toBe(true);
     });
 
     it('is false when the checkpoint tip block was pruned out (archiver returns nothing)', async () => {
       const checkpoint = makeCheckpoint(3, 3, 3);
       l2BlockSource.getBlock.mockResolvedValue(undefined);
 
-      await expect(proverNode.callIsCheckpointCanonical(checkpoint)).resolves.toBe(false);
+      await expect(proverNode.getFailureUploader().isCheckpointCanonical(checkpoint)).resolves.toBe(false);
     });
 
     it('is false when the tip block was replaced by a reorg (archive root differs)', async () => {
       const checkpoint = makeCheckpoint(3, 3, 3, Fr.random());
       l2BlockSource.getBlock.mockResolvedValue({ archive: { root: Fr.random() } } as unknown as L2Block);
 
-      await expect(proverNode.callIsCheckpointCanonical(checkpoint)).resolves.toBe(false);
+      await expect(proverNode.getFailureUploader().isCheckpointCanonical(checkpoint)).resolves.toBe(false);
     });
   });
 
   it('tryUploadCheckpointFailure skips the upload for a checkpoint pruned out of the canonical chain', async () => {
     // A prune-induced fork fault reaches onFailed just like a genuine sub-tree failure, but the pruned
     // checkpoint no longer exists on-chain — the expensive full snapshot must not be produced for it.
-    (proverNode as any).config.proverNodeFailedEpochStore = 'file:///tmp/does-not-matter';
+    proverNode = createProverNode({
+      proverNodeFailedEpochStore: 'file:///tmp/does-not-matter',
+      dataDirectory: '/tmp/does-not-matter',
+      l1ChainId: 1,
+      rollupVersion: 1,
+    });
     const checkpoint = makeCheckpoint(3, 3, 3);
     l2BlockSource.getBlock.mockResolvedValue(undefined);
     const failedProver = { id: 'prover-3', checkpoint } as unknown as Parameters<
@@ -710,7 +720,7 @@ describe('ProverNode', () => {
   it("'chain-proposed' invokes no event handler but records the tip", async () => {
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-proposed',
       block: { number: BlockNumber(1), hash: '0x01' },
       header: BlockHeader.empty(),
@@ -732,11 +742,11 @@ describe('ProverNode', () => {
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(1));
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
 
     expect(reapSpy).not.toHaveBeenCalled();
     // High-water mark stays untouched.
-    expect(proverNode.getLastExpiredEpoch()).toBeUndefined();
+    expect(proverNode.getExpirySweep().getLastExpiredEpoch()).toBeUndefined();
   });
 
   // ---------------- expireEpoch swallows getBlocks errors ----------------
@@ -748,10 +758,10 @@ describe('ProverNode', () => {
     l2BlockSource.getBlocks.mockRejectedValue(new Error('archiver unavailable'));
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
-    await proverNode.callCheckEpochExpiry();
+    await proverNode.getExpirySweep().sweep();
 
     expect(reapSpy.mock.calls.map(([e]) => Number(e))).toEqual([0, 1, 2]);
-    expect(proverNode.getLastExpiredEpoch()).toEqual(EpochNumber(2));
+    expect(proverNode.getExpirySweep().getLastExpiredEpoch()).toEqual(EpochNumber(2));
   });
 
   // ---------------- handlePruneEvent dedupes affected epochs ----------------
@@ -765,13 +775,13 @@ describe('ProverNode', () => {
     setupRegistrationSuccess();
 
     // Register two checkpoints at slots 6 and 7 (both in epoch 3).
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 6, 6)));
-    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 7, 7)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 6, 6)));
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 7, 7)));
     expect(proverNode.getCheckpointStore().listAll().length).toBe(2);
 
     // Pruning to block 0 (genesis) marks both as pruned — onPrune must receive [EpochNumber(3)], not [3, 3].
     sessionManager.onPrune.mockClear();
-    await proverNode.handleBlockStreamEvent({
+    await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(0), hash: '0x00' },
       checkpointed: makeTipId(0),
@@ -781,7 +791,7 @@ describe('ProverNode', () => {
     expect(sessionManager.onPrune).toHaveBeenCalledWith([EpochNumber(3)]);
   });
 
-  describe('resolveCatchUpStartEpoch', () => {
+  describe('the epoch a restart resumes after', () => {
     // epochDuration=1 and proofSubmissionEpochs=1: at synced slot N, epochs up to N-2 can no longer be proven.
     it.each([
       { lastFullyProven: 5, syncedSlot: 6, expected: 4, why: 'lowers a proven epoch still in its window' },
@@ -803,14 +813,16 @@ describe('ProverNode', () => {
       l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(
         syncedSlot === undefined ? undefined : SlotNumber(syncedSlot),
       );
-      const result = await proverNode.callResolveCatchUpStartEpoch(
-        lastFullyProven === undefined ? undefined : EpochNumber(lastFullyProven),
-      );
+      jest
+        .spyOn(proverNode.getEpochProofStatus(), 'getLastFullyProvenEpoch')
+        .mockResolvedValue(lastFullyProven === undefined ? undefined : EpochNumber(lastFullyProven));
+      l2BlockSource.getCheckpointsData.mockResolvedValue([]);
+      const result = await follower.seedCursor();
       expect(result).toEqual(expected === undefined ? undefined : EpochNumber(expected));
     });
   });
 
-  it('seedCatchUp resumes before a fully-proven epoch that is still in its proof window', async () => {
+  it('a restart resumes before a fully-proven epoch that is still in its proof window', async () => {
     // epochDuration=1, proofSubmissionEpochs=1. Checkpoints 3, 4 and 5 sit at slots 3, 4 and 5. The proven tip is
     // block 5, the last block of epoch 5, and the chain is at slot 6, so only epochs up to 4 can no longer be proven.
     // The catch-up must revisit checkpoint 5 rather than resume after it.
@@ -837,13 +849,14 @@ describe('ProverNode', () => {
       );
     });
 
-    await proverNode.callSeedCatchUp();
+    const resumeAfterEpoch = await follower.seedCursor();
 
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(4));
-    expect(proverNode.getLastExpiredEpoch()).toEqual(EpochNumber(4));
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(4));
+    // The node hands this epoch to the expiry sweep as already expired.
+    expect(resumeAfterEpoch).toEqual(EpochNumber(4));
   });
 
-  it('computeStartingCheckpoint seeds from the last checkpoint before an empty start epoch', async () => {
+  it('a restart seeds the cursor from the last checkpoint before an empty start epoch', async () => {
     // epochDuration=1: checkpoints sit at slots 2 and 3; the start epoch 5 holds none.
     const checkpointSlots = [
       { checkpointNumber: CheckpointNumber(1), slot: SlotNumber(2) },
@@ -859,10 +872,21 @@ describe('ProverNode', () => {
       );
     });
 
-    expect(await proverNode.callComputeStartingCheckpoint(EpochNumber(5))).toEqual(CheckpointNumber(2));
+    // The restart resumes after epoch 5: it is fully proven and, at slot 7, past its proof-submission window.
+    jest.spyOn(proverNode.getEpochProofStatus(), 'getLastFullyProvenEpoch').mockResolvedValue(EpochNumber(5));
+    l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(7));
+
+    await follower.seedCursor();
+
+    expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(2));
   });
 
   // ---------------- helpers ----------------
+
+  /** Places the follower's catch-up cursor directly, as if it had already processed up to this checkpoint. */
+  function setCursor(checkpoint: CheckpointNumber) {
+    (follower as any).lastProcessedCheckpoint = checkpoint;
+  }
 
   function createProverNode(config: ConstructorParameters<typeof TestProverNode>[10]): TestProverNode {
     const node = new TestProverNode(
@@ -884,6 +908,7 @@ describe('ProverNode', () => {
     node.setSessionManager(sessionManager);
     node.setPublishingService(publishingService);
     readOwnFullEpochProof = jest.spyOn(node.getEpochProofStatus(), 'readOwnFullEpochProof').mockResolvedValue(false);
+    follower = node.getCheckpointFollower();
     return node;
   }
 
@@ -1085,44 +1110,20 @@ class TestProverNode extends ProverNode {
     return this.epochProofStatus;
   }
 
+  public getCheckpointFollower(): CheckpointFollower {
+    return this.checkpointFollower;
+  }
+
+  public getExpirySweep(): EpochExpirySweep {
+    return this.expirySweep;
+  }
+
+  public getFailureUploader(): FailureUploader {
+    return this.failureUploader;
+  }
+
   public getTipsStore() {
-    // tipsStore is private; reach in for the A-1041 assertion.
-
-    return (this as any).tipsStore;
-  }
-
-  // ---------------- direct access for unit tests ----------------
-
-  public callResolveCatchUpStartEpoch(lastFullyProvenEpoch: EpochNumber | undefined) {
-    return this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
-  }
-
-  public callSeedCatchUp() {
-    return this.seedCatchUp();
-  }
-
-  public callComputeStartingCheckpoint(startEpoch: EpochNumber | undefined) {
-    return this.computeStartingCheckpoint(startEpoch);
-  }
-
-  /** Drives the expiry sweep directly, as the periodic ticker does in production. */
-  public callCheckEpochExpiry() {
-    return (this as any).checkEpochExpiry();
-  }
-
-  public callIsCheckpointCanonical(checkpoint: Checkpoint) {
-    return this.isCheckpointCanonical(checkpoint);
-  }
-
-  public getLastExpiredEpoch(): EpochNumber | undefined {
-    return this.lastExpiredEpoch;
-  }
-
-  public getLastProcessedCheckpoint(): CheckpointNumber {
-    return this.lastProcessedCheckpoint;
-  }
-
-  public setLastProcessedCheckpoint(checkpoint: CheckpointNumber): void {
-    this.lastProcessedCheckpoint = checkpoint;
+    // The follower's tips store is private; reach in for the A-1041 assertion.
+    return (this.checkpointFollower as any).tipsStore;
   }
 }
