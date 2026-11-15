@@ -1286,7 +1286,7 @@ describe('SessionManager', () => {
     const running = stubs[1];
     expect(running.provers).toEqual([first]);
 
-    // The same request now computes a shorter slot range, but asks for exactly what is already being proven.
+    // The same request now computes a shorter slot range, but asks for the checkpoints already being proven.
     await expect(manager.startProof(epoch)).resolves.toBe(running.uuid);
     expect(stubs).toHaveLength(2);
   });
