@@ -879,6 +879,11 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
  *   checkpoint roots themselves. A checkpoint root is a long job, and a partial epoch proof makes the roots of all
  *   earlier checkpoints runnable at once. If they went first, the newest checkpoint's transactions would wait until
  *   every one of them had an agent, and the newest checkpoint is the one the whole proof waits for.
+ *
+ * The second rule has a cost. Checkpoints that land in the same epoch after a partial proof was requested also bring
+ * block-level jobs, and those outrank the checkpoint roots the request is waiting for. While agents have spare
+ * capacity the delay is the time to prove those blocks. With every agent busy, the roots wait until the block-level
+ * work of the epoch runs out.
  */
 export const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
   ProvingRequestType.ROOT_ROLLUP,

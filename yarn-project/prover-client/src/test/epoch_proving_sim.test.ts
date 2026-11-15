@@ -649,18 +649,12 @@ function handleCheckpointMergeComplete(level: number, index: number, state: SimS
   tryEnqueueCheckpointMerge(level, index, state, queues);
 }
 
-function assignWork(
-  queues: Queues,
-  workers: Worker[],
-  start: number,
-  availableWorkers: number,
-  priorityOrder: ProvingRequestType[],
-): void {
+function assignWork(queues: Queues, workers: Worker[], start: number, availableWorkers: number): void {
   while (workers.length < availableWorkers) {
     let assigned = false;
 
     // try to find a job in one of the queues. If all queues are empty we exit the other loop early
-    for (const proofType of priorityOrder) {
+    for (const proofType of PROOF_TYPES_IN_PRIORITY_ORDER) {
       const job = queues[proofType].shift();
       if (!job) {
         continue;
@@ -707,11 +701,8 @@ type SimulationResult = {
   };
 };
 
-/** Simulates proving the checkpoints as one epoch. Workers take jobs in `priorityOrder`, the broker's by default. */
-function runSimulationWithConfig(
-  config: TestConfig,
-  priorityOrder: ProvingRequestType[] = PROOF_TYPES_IN_PRIORITY_ORDER,
-): SimulationResult {
+/** Simulates proving the checkpoints as one epoch. Workers take jobs in the broker's priority order. */
+function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const { name, workers: workerCount, checkpoints } = config;
   const state = initializeState(checkpoints);
   const queues: Queues = times(Object.values(ProvingRequestType).length, () => []) as any;
@@ -726,7 +717,7 @@ function runSimulationWithConfig(
   const workerActivity: WorkerActivityPoint[] = [];
 
   // Initial assignment
-  assignWork(queues, workerPool, time, workerCount, priorityOrder);
+  assignWork(queues, workerPool, time, workerCount);
 
   // Record initial worker activity
   workerActivity.push({
@@ -759,7 +750,7 @@ function runSimulationWithConfig(
     }
 
     // Assign available workers to new jobs
-    assignWork(queues, workerPool, time, workerCount, priorityOrder);
+    assignWork(queues, workerPool, time, workerCount);
 
     // Record worker activity at this time step
     workerActivity.push({
