@@ -248,6 +248,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
    * The proving jobs of a block depend on the block, on the checkpoint constants and on the blocks before it in the
    * same checkpoint, and on nothing else. A regular sub-tree started later for the landed checkpoint therefore
    * requests the same jobs, which the proving broker serves from the work already done.
+   *
+   * Cancelling a blocks-only sub-tree never aborts its broker jobs. A regular sub-tree may be waiting on the same
+   * jobs by then, and an abort would fail it.
    */
   public static async startBlocksOnly(
     dbProvider: ReadonlyWorldStateAccess & ForkMerkleTreeOperations,
@@ -567,13 +570,12 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
   // ---------------- lifecycle ----------------
 
   /**
-   * Cancels any further proving. Aborts all pending broker jobs if `abortJobs` is set, which defaults to the
-   * `cancelJobsOnStop` this sub-tree was created with. Jobs that are not aborted stay with the broker, where an
-   * identical request reuses them.
+   * Cancels any further proving. If `cancelJobsOnStop` was set, aborts all pending broker jobs
+   * (used on reorg). Otherwise jobs remain in the broker queue and can be reused on restart.
    */
-  public cancel({ abortJobs = this.cancelJobsOnStop }: { abortJobs?: boolean } = {}) {
+  public cancel() {
     this.cancelled = true;
-    this.resetSchedulerState(abortJobs);
+    this.resetSchedulerState(this.cancelJobsOnStop);
     // Reject the proving state (and hence subTreeResult) so anyone awaiting the sub-tree result
     // is released rather than hanging — matching TopTreeOrchestrator.cancel().
     this.provingState?.cancel();
