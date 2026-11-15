@@ -177,7 +177,7 @@ export class SessionManager {
     return this.scheduleReconcile({ kind: 'checkpoint', epoch });
   }
 
-  /** Called by ProverNode after a chain-pruned event has flipped store provers to pruned. */
+  /** Called by ProverNode after a chain-pruned event has removed provers from the store. */
   public onPrune(affectedEpochs: EpochNumber[]): Promise<void> {
     return this.scheduleReconcile({ kind: 'prune', affectedEpochs });
   }
