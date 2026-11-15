@@ -233,8 +233,6 @@ export class ProverNode implements ProverNodeApi, Traceable {
     return this.prover;
   }
 
-  // ---------------- ProverNodeApi ----------------
-
   /** Lists the proving sessions the node holds, with their state. */
   public getJobs(): Promise<{ uuid: string; status: EpochProvingJobState; epochNumber: EpochNumber }[]> {
     return Promise.resolve(this.sessionManager?.getJobs() ?? []);
@@ -333,8 +331,6 @@ export class ProverNode implements ProverNodeApi, Traceable {
       bindings: this.log.getBindings(),
     });
   }
-
-  // ---------------- test hooks ----------------
 
   /**
    * Installs session hooks for the e2e harness to interpose around top-tree proving

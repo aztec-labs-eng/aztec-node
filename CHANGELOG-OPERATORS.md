@@ -34,14 +34,16 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ### Prover node log lines moved to new logger names (PR link pending)
 
-The prover node's chain following, expiry sweep and failure uploads moved out of the `prover-node` logger. Their log lines keep their messages and now come from:
+The prover node's chain following, expiry sweep and failure uploads moved out of the `prover-node` logger. Their log lines now come from:
 
 - `prover-node:checkpoint-follower`: new checkpoints, skipped checkpoints, prunes.
 - `prover-node:epoch-expiry-sweep`: expired epochs.
 - `prover-node:failure-uploader`: failed-epoch and failed-checkpoint uploads.
 - `prover-node:epoch-proof-status`: failed reads of the prover's own full-epoch proof registration, previously logged by `prover-node:session-manager`.
 
-**Migration**: update any log filter or alert that selects these lines by the `prover-node` or `prover-node:session-manager` logger name.
+The messages are unchanged except for one debug line: `Skipping checkpoint N for unprovable epoch E` is now `Skipping checkpoint N: epoch E is not to be proven`.
+
+**Migration**: update any log filter or alert that selects these lines by the `prover-node` or `prover-node:session-manager` logger name, or by that message.
 
 ### The node stops sending L1 requests to RPC URLs that fall behind ([#587](https://github.com/aztec-labs-eng/aztec-node/pull/587))
 
