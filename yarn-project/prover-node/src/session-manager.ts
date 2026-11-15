@@ -44,7 +44,7 @@ type FullSessionBlocker =
   | 'deadline-passed'
   | 'checkpoint-prover-failed'
   | 'covered-epoch-waits-for-tick'
-  | 'own-proof-registration-unread'
+  | 'own-proof-registration-unavailable'
   | 'own-proof-already-on-l1'
   | 'archiver-has-no-checkpoints'
   | 'checkpoints-missing-from-store';
@@ -398,7 +398,7 @@ export class SessionManager {
       }
       const registered = await this.deps.proofStatus.readOwnFullEpochProof(epoch, checkpoints.length);
       if (registered === undefined) {
-        return { blocker: 'own-proof-registration-unread' };
+        return { blocker: 'own-proof-registration-unavailable' };
       }
       if (registered) {
         return { blocker: 'own-proof-already-on-l1' };
@@ -494,11 +494,9 @@ export class SessionManager {
     const state = await session.start();
     this.log.info(`Session ${session.getId()} exited with state ${state}`);
 
-    // A full session that failed on its own account (top-tree/submit failed with every prover healthy)
-    // is a genuine, race-free failure: upload its post-mortem once. `judgeSession` keeps
-    // the terminal session so this fires exactly once (it is never re-run over the same content). A
-    // `stopped` session (a prover under it failed) is not uploaded — it may be a prune, and recovers on
-    // re-add.
+    // A full session that ended `failed` had healthy provers, so the failure was not caused by a prune. Its
+    // data is uploaded once: `judgeSession` keeps the session, so the same checkpoints are not run again. A
+    // `stopped` session may have failed because of a prune and is not uploaded.
     if (session.getKind() === 'full' && session.hasFailed() && this.deps.onSessionFailed) {
       try {
         await this.deps.onSessionFailed(session);
