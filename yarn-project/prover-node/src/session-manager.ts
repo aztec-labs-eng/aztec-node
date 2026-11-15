@@ -49,6 +49,7 @@ type FullSessionBlocker =
   | 'archiver-has-no-checkpoints'
   | 'checkpoints-missing-from-store';
 
+/** How a reconcile trigger may open a full session. */
 type FullSessionOptions = {
   /** Whether an epoch the proven tip already covers may be opened. Only the tick sets this. */
   openCovered: boolean;
@@ -340,11 +341,9 @@ export class SessionManager {
   private async openFullSessionIfReady(epoch: EpochNumber, opts: FullSessionOptions): Promise<void> {
     const result = await this.checkFullSession(epoch, opts);
     if ('blocker' in result) {
-      if (result.blocker !== 'session-exists') {
-        this.log.debug(`Not opening a full session for epoch ${epoch}: ${result.blocker}`, {
-          epoch,
-          blocker: result.blocker,
-        });
+      // These two hold for most epochs on most ticks, so logging them would drown the others.
+      if (result.blocker !== 'session-exists' && result.blocker !== 'epoch-incomplete') {
+        this.log.debug(`Not opening a full session for epoch ${epoch}: ${result.blocker}`, { epoch, ...result });
       }
       return;
     }
@@ -355,13 +354,17 @@ export class SessionManager {
 
   /**
    * Returns the checkpoints a full session for the epoch would prove, or the first reason it cannot be opened now.
-   * The checks that read only the store come first: a covered epoch that stays stored without a session is visited
-   * on every tick, and a restart catch-up registers one checkpoint at a time.
+   * Every check that can reject the epoch from the store and the cached registration read runs before the epoch's
+   * checkpoints are loaded from the archiver: a covered epoch that stays stored without a session is visited on
+   * every tick, and a restart catch-up registers one checkpoint at a time.
    */
   private async checkFullSession(
     epoch: EpochNumber,
     opts: FullSessionOptions,
-  ): Promise<{ blocker: FullSessionBlocker } | { spec: SessionSpec; checkpoints: CheckpointProver[] }> {
+  ): Promise<
+    | { blocker: FullSessionBlocker; archiverCount?: number; storeCount?: number }
+    | { spec: SessionSpec; checkpoints: CheckpointProver[] }
+  > {
     // A session present here is running, or is a finished session kept by `judgeSession`.
     if (this.fullSessions.has(epoch)) {
       return { blocker: 'session-exists' };
@@ -406,7 +409,11 @@ export class SessionManager {
       return { blocker: 'archiver-has-no-checkpoints' };
     }
     if (!this.archiverFullyCovered(archiverCps, checkpoints)) {
-      return { blocker: 'checkpoints-missing-from-store' };
+      return {
+        blocker: 'checkpoints-missing-from-store',
+        archiverCount: archiverCps.length,
+        storeCount: checkpoints.length,
+      };
     }
     return { spec: { kind: 'full', epochNumber: epoch, fromSlot, toSlot }, checkpoints };
   }
