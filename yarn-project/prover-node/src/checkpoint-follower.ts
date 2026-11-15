@@ -36,8 +36,8 @@ export type CheckpointFollowerHandlers = {
   onPruned(affectedEpochs: EpochNumber[]): Promise<void>;
   /** The proven tip moved. Must not block on L1 work. */
   onChainProven(block: BlockNumber): void;
-  /** The proposed tip moved to this block. Must not throw. */
-  onChainProposed?(block: BlockNumber): Promise<void>;
+  /** The proposed tip moved to this block. Must not throw or block. */
+  onChainProposed?(block: BlockNumber): void;
   /** The checkpointed tip moved to this block, and every checkpoint up to it has been registered or skipped. */
   onChainCheckpointed?(block: BlockNumber): void;
   /** The chain was pruned back to this block. Called for every prune, whether or not it removed a prover. */
@@ -128,7 +128,7 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
         this.deps.handlers.onChainProven(BlockNumber(event.block.number));
         break;
       case 'chain-proposed':
-        await this.deps.handlers.onChainProposed?.(BlockNumber(event.block.number));
+        this.deps.handlers.onChainProposed?.(BlockNumber(event.block.number));
         break;
       // `blocks-added` is never emitted in tips-only mode, and `chain-finalized` carries nothing to act on. Both
       // are still recorded in the tips store below.

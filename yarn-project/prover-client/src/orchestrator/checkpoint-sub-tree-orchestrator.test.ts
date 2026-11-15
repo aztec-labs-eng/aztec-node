@@ -173,9 +173,13 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
   });
 
   describe('blocks-only sub-tree', () => {
-    /** Records every proof the prover is asked for, as its method name and a hash of its inputs. */
-    function recordProofRequests(): Set<string>[] {
-      const runs: Set<string>[] = [new Set()];
+    /**
+     * Records every proof the agents compute, as its method name and a hash of its inputs. The sub-trees below
+     * request proofs through the broker, as a prover node does, so a request the broker has already served does
+     * not reach an agent and is not recorded again.
+     */
+    function recordComputedProofs(): string[] {
+      const computed: string[] = [];
       const prover = context.prover as unknown as Record<string, (...args: any[]) => unknown>;
       const proofMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(prover)).filter(
         name => name.startsWith('get') && name.endsWith('Proof'),
@@ -184,27 +188,29 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
         const original = prover[method].bind(prover);
         jest.spyOn(prover, method).mockImplementation((...args: any[]) => {
           const inputsHash = createHash('sha256').update(args[0].toBuffer()).digest('hex');
-          runs.at(-1)!.add(`${method}:${inputsHash}`);
+          computed.push(`${method}:${inputsHash}`);
           return original(...args);
         });
       }
-      return runs;
+      return computed;
     }
 
-    it('requests the same block-level proofs as the sub-tree of the landed checkpoint', async () => {
+    const methodsOf = (proofs: string[]) => proofs.map(proof => proof.split(':')[0]);
+
+    it('leaves the sub-tree of the landed checkpoint nothing to prove for the blocks it proved', async () => {
       const numBlocks = 3;
       const { constants, blocks, l1ToL2Messages, previousBlockHeader } = await context.makeCheckpoint(numBlocks, {
         numTxsPerBlock: 2,
       });
       const messagesOf = (blockIndex: number) => (blockIndex === 0 ? l1ToL2Messages : []);
-      const runs = recordProofRequests();
+      const computed = recordComputedProofs();
 
       // The first two blocks are proven as they are proposed, before the checkpoint's block count is known.
       const early = await CheckpointSubTreeOrchestrator.startBlocksOnly(
         context.worldState,
-        context.prover,
+        context.brokerProverFacade,
         EthAddress.ZERO,
-        new ChonkCache(),
+        chonkCache,
         EpochNumber(1),
         makeTestDeferredJobQueue(),
         constants,
@@ -219,13 +225,17 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
       }
       await Promise.all(proposed.map(block => early.whenBlockRootProven(block.header.globalVariables.blockNumber)));
       await early.stop();
-      const earlyRequests = runs[0];
+      const computedEarly = [...computed];
 
-      // The checkpoint lands with three blocks and is proven from scratch by a regular sub-tree.
-      runs.push(new Set());
+      // The early run stops at the block roots: merges and parity need the final checkpoint.
+      expect(methodsOf(computedEarly).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(2);
+      expect(methodsOf(computedEarly)).not.toContain('getBlockMergeRollupProof');
+      expect(methodsOf(computedEarly)).not.toContain('getInboxParityProof');
+
+      // The checkpoint lands with three blocks and is proven by a regular sub-tree, which executes all three.
       const subTree = await CheckpointSubTreeOrchestrator.start(
         context.worldState,
-        context.prover,
+        context.brokerProverFacade,
         EthAddress.ZERO,
         chonkCache,
         EpochNumber(1),
@@ -244,21 +254,20 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
           await subTree.addTxs(block.txs);
           await subTree.setBlockCompleted(blockNumber, block.header);
         }
-        await subTree.getSubTreeResult();
+        const result = await subTree.getSubTreeResult();
+        expect(result.blockProofOutputs).toBeDefined();
       } finally {
         await subTree.stop();
       }
-      const landedRequests = runs[1];
+      const computedAfterLanding = computed.slice(computedEarly.length);
 
-      // Every job of the early run is requested again with identical inputs, so the broker can serve it.
-      expect([...earlyRequests].filter(request => !landedRequests.has(request))).toEqual([]);
-      const methodsOf = (requests: Set<string>) => [...requests].map(request => request.split(':')[0]);
-      expect(methodsOf(earlyRequests).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(2);
-      // The early run stops at the block roots: merges and parity need the final checkpoint.
-      expect(methodsOf(earlyRequests)).not.toContain('getBlockMergeRollupProof');
-      expect(methodsOf(earlyRequests)).not.toContain('getInboxParityProof');
-      expect(methodsOf(landedRequests)).toContain('getBlockMergeRollupProof');
-      expect(methodsOf(landedRequests)).toContain('getInboxParityProof');
+      // Every job of the two early blocks was requested again with the same id, so no agent proved it twice. Only
+      // the third block, the block merges and the inbox parity proof were left.
+      expect(computedAfterLanding.filter(proof => computedEarly.includes(proof))).toEqual([]);
+      expect(new Set(computed).size).toBe(computed.length);
+      expect(methodsOf(computedAfterLanding).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(1);
+      expect(methodsOf(computedAfterLanding)).toContain('getBlockMergeRollupProof');
+      expect(methodsOf(computedAfterLanding)).toContain('getInboxParityProof');
     });
   });
 
