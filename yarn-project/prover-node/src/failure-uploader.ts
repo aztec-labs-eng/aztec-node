@@ -18,6 +18,7 @@ export type FailureUploadConfig = {
   failedEpochStore: string | undefined;
 } & Partial<Pick<DataStoreConfig, 'dataDirectory'> & Pick<ChainConfig, 'l1ChainId' | 'rollupVersion'>>;
 
+/** What an upload is built from: the archiver and world state to back up, and where to send it. */
 export type FailureUploaderDeps = {
   l2BlockSource: L2BlockSource;
   worldState: WorldStateSynchronizer;
@@ -65,7 +66,10 @@ export class FailureUploader {
       }
       return await this.upload(prover.id, await buildProvingData([prover]));
     } catch (err) {
-      this.log.error(`Error uploading checkpoint failure for ${prover.id}`, err);
+      this.log.error(`Error uploading checkpoint failure for ${prover.id}`, err, {
+        proverId: prover.id,
+        checkpointNumber: prover.checkpoint.number,
+      });
       return undefined;
     }
   }

@@ -10,6 +10,7 @@ import {
   type L2BlockSource,
   type L2BlockStreamEvent,
   type L2Tips,
+  type L2TipsMemoryStore,
 } from '@aztec-labs/stdlib/block';
 import type { Checkpoint, CheckpointData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
@@ -313,7 +314,7 @@ describe('ProverNode', () => {
     expect(reapSpy.mock.calls.map(([e]) => Number(e))).toEqual([0, 1, 2]);
   });
 
-  it('checkExpiry advances the high-water mark — does not re-reap already-expired epochs', async () => {
+  it('the expiry sweep does not expire an epoch twice', async () => {
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(4));
     l2BlockSource.getCheckpointsData.mockResolvedValue([]);
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
@@ -327,7 +328,30 @@ describe('ProverNode', () => {
     expect(reapSpy).not.toHaveBeenCalled();
   });
 
-  it('checkExpiry no-ops when archiver has no synced slot yet', async () => {
+  it('the expiry sweep leaves alone the epochs it was started after', async () => {
+    // At slot 4, epochs 0 to 2 are expired. A sweep started after epoch 1 only has epoch 2 left to expire.
+    l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(4));
+    l2BlockSource.getBlocks.mockResolvedValue([]);
+    const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
+    const sweep = proverNode.getExpirySweep();
+
+    sweep.start(EpochNumber(1));
+    await sweep.stop();
+
+    expect(reapSpy.mock.calls.map(([e]) => Number(e))).toEqual([2]);
+  });
+
+  it('starts the expiry sweep after the epoch the follower resumes after', async () => {
+    jest.spyOn(follower, 'start').mockResolvedValue(EpochNumber(4));
+    const sweepStart = jest.spyOn(proverNode.getExpirySweep(), 'start').mockReturnValue();
+
+    await proverNode.start();
+    await proverNode.stop();
+
+    expect(sweepStart).toHaveBeenCalledWith(EpochNumber(4));
+  });
+
+  it('the expiry sweep does nothing while the archiver has no synced slot', async () => {
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(undefined);
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
 
@@ -337,7 +361,7 @@ describe('ProverNode', () => {
 
   // ---------------- expiry only reaps; the failure upload is not on this path ----------------
 
-  it('expireEpoch reaps the store but never uploads a post-mortem', async () => {
+  it('the expiry sweep reaps the store but uploads nothing', async () => {
     // The post-mortem upload fires from the session-failure path (onSessionFailed)
     setupNotFullyProven();
     await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
@@ -671,7 +695,7 @@ describe('ProverNode', () => {
     });
   });
 
-  it('tryUploadCheckpointFailure skips the upload for a checkpoint pruned out of the canonical chain', async () => {
+  it('does not upload a failed checkpoint that was pruned out of the canonical chain', async () => {
     // A prune-induced fork fault reaches onFailed just like a genuine sub-tree failure, but the pruned
     // checkpoint no longer exists on-chain — the expensive full snapshot must not be produced for it.
     proverNode = createProverNode({
@@ -740,7 +764,7 @@ describe('ProverNode', () => {
 
   // ---------------- checkEpochExpiry: latestEpoch < offset is a no-op ----------------
 
-  it('checkEpochExpiry no-ops when latestEpoch is below the submission-window offset', async () => {
+  it('the expiry sweep does nothing before the first proof-submission window has closed', async () => {
     // proofSubmissionEpochs=1 ⇒ offset=2. latestSlot=1 ⇒ latestEpoch=1 < 2.
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(1));
     const reapSpy = jest.spyOn(proverNode.getCheckpointStore(), 'reapExpired');
@@ -754,7 +778,7 @@ describe('ProverNode', () => {
 
   // ---------------- expireEpoch swallows getBlocks errors ----------------
 
-  it('expireEpoch still reaps the store when the chonk-release block fetch throws', async () => {
+  it('the expiry sweep still reaps the store when the chonk-release block fetch throws', async () => {
     // Three epochs would expire (latestSlot=4 ⇒ epochs 0..2). getBlocks throws for every call,
     // but reapExpired must still be invoked for each epoch and the high-water mark must still advance.
     l2BlockSource.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(4));
@@ -769,7 +793,7 @@ describe('ProverNode', () => {
 
   // ---------------- handlePruneEvent dedupes affected epochs ----------------
 
-  it('handlePruneEvent dedupes affected epochs when multiple provers share one epoch', async () => {
+  it('a prune reports each affected epoch once when several provers share it', async () => {
     // Suite default is epochDuration=1 (one slot per epoch ⇒ at most one prover per epoch).
     // To exercise dedup we need an epoch that holds multiple slots — override l1Constants
     // for this test to epochDuration=2 so slots 6 and 7 both live in epoch 3.
@@ -888,7 +912,7 @@ describe('ProverNode', () => {
 
   /** Places the follower's catch-up cursor directly, as if it had already processed up to this checkpoint. */
   function setCursor(checkpoint: CheckpointNumber) {
-    (follower as any).lastProcessedCheckpoint = checkpoint;
+    (follower as unknown as { lastProcessedCheckpoint: CheckpointNumber }).lastProcessedCheckpoint = checkpoint;
   }
 
   function createProverNode(config: ConstructorParameters<typeof TestProverNode>[10]): TestProverNode {
@@ -1125,8 +1149,8 @@ class TestProverNode extends ProverNode {
     return this.failureUploader;
   }
 
-  public getTipsStore() {
-    // The follower's tips store is private; reach in for the A-1041 assertion.
-    return (this.checkpointFollower as any).tipsStore;
+  /** The follower's private tips store, which shows whether a chain event was acknowledged. */
+  public getTipsStore(): L2TipsMemoryStore {
+    return (this.checkpointFollower as unknown as { tipsStore: L2TipsMemoryStore }).tipsStore;
   }
 }
