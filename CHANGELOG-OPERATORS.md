@@ -36,7 +36,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 A prover node started block-level proving for a block only once the block's checkpoint had landed on L1. With `PROVER_NODE_EARLY_BLOCK_PROVING=true` it starts as soon as the block is proposed, so more of a checkpoint's block proofs are done when a partial epoch proof is requested. When the checkpoint lands, the node proves it as before and the proving broker serves the jobs that were already started. A proposed block that is pruned before its checkpoint lands is dropped; its proofs are used only if a block with the same inputs is proposed again.
 
-The node's archiver has to hold proposed blocks for this to have any effect. A node that does not re-execute block proposals only learns of blocks from their checkpoints.
+The node's archiver has to hold proposed blocks for this to have any effect. A node that does not re-execute block proposals only learns of blocks from their checkpoints. A block is proven early only once a checkpoint of its epoch has landed, so the first slot of each epoch is not.
 
 The node logs `Block-level proofs ready for block N ahead of its checkpoint` with a `durationMs` field: the time from the block reaching the prover to its block root proof. The line appears only for blocks whose proofs are ready before their checkpoint lands.
 
@@ -50,7 +50,7 @@ The default is `false`, which keeps the previous behaviour. With the flag on:
 
 ### The proving broker hands out block-level jobs before checkpoint roots (PR link pending)
 
-Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs (transaction merges, base rollups, AVM, chonk verifier), and gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once, so the newest checkpoint's transactions and parity proof waited until every one of those roots had an agent.
+Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs: transaction merges, base rollups, AVM and chonk verifier. It gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once. The newest checkpoint's transactions and parity proof then waited until every one of those roots had an agent.
 
 Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, the root rollup stays first, and jobs of an older epoch still go before jobs of a newer one.
 
@@ -60,13 +60,13 @@ The effect depends on load. A partial proof whose newest checkpoint is still bei
 
 ### The prover node no longer publishes the proof of a cancelled proving session (PR link pending)
 
-A proving session is cancelled when a prune changes its checkpoints or when its proof-submission window closes. Its epoch proof could still be sent to L1 in two cases: the session was cancelled just as its proof became ready, or its queued proof was withdrawn or expired while the node was acquiring a publisher. After a prune, the stale proof could also be chosen over the replacement session's proof and then fail L1's checks. Neither happens any more.
+A proving session is cancelled when a prune changes its checkpoints or when its proof-submission window closes. Its epoch proof could still be sent to L1 in two cases. In the first, the session was cancelled just as its proof became ready. In the second, its queued proof was withdrawn or expired while the node was acquiring a publisher. After a prune, the stale proof could also be chosen over the replacement session's proof and then fail L1's checks. Cancelled sessions no longer submit these proofs.
 
 **Migration**: none.
 
 ### `startProof` no longer fails after a prune shortened a running partial proof (PR link pending)
 
-The prover node's `startProof` admin method threw `Failed to schedule partial proof` when a partial proof of the epoch was already running and a prune had removed the last checkpoint it was requested with. The node was proving exactly the requested checkpoints, but the call looked the session up under a different slot range. It now returns the id of the running session.
+The prover node's `startProof` admin method threw `Failed to schedule partial proof` in one case: a partial proof of the epoch was already running, and a prune had removed the last checkpoint it was requested with. The node was proving the requested checkpoints, but the call looked the session up under a different slot range. It now returns the id of the running session.
 
 **Migration**: none.
 
