@@ -763,7 +763,7 @@ describe('ProverNode', () => {
   it('passes proposed, checkpointed and pruned tips to the early block prover when it is enabled', async () => {
     proverNode = createProverNode({ proverNodeEarlyBlockProving: true });
     const earlyBlockProver = proverNode.getEarlyBlockProver()!;
-    const onChainProposed = jest.spyOn(earlyBlockProver, 'onChainProposed').mockResolvedValue();
+    const onChainProposed = jest.spyOn(earlyBlockProver, 'onChainProposed').mockReturnValue();
     const onChainCheckpointed = jest.spyOn(earlyBlockProver, 'onChainCheckpointed').mockReturnValue();
     const onChainPruned = jest.spyOn(earlyBlockProver, 'onChainPruned').mockReturnValue();
     setupNotFullyProven();

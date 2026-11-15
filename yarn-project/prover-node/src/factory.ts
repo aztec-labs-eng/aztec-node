@@ -144,6 +144,7 @@ export async function createProverNode(
       'proverNodeFailedEpochStore',
       'proverNodeDisableProofPublish',
       'proverNodeDisableFullEpochProving',
+      'proverNodeEarlyBlockProving',
       'dataDirectory',
       'l1ChainId',
       'rollupVersion',

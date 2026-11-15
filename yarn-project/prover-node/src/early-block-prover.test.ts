@@ -1,19 +1,21 @@
 import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { CheckpointSubTreeOrchestrator, ChonkCache } from '@aztec-labs/prover-client/orchestrator';
-import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
-import { L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import { type BlockData, L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type {
   ForkMerkleTreeOperations,
   ITxProvider,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import { TxHash } from '@aztec-labs/stdlib/tx';
+import type { InboxMessageRange, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { type ProcessedTx, type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { EarlyBlockProver } from './early-block-prover.js';
@@ -23,6 +25,7 @@ describe('EarlyBlockProver', () => {
   let proverFactory: MockProxy<EpochProverFactory>;
   let txProvider: MockProxy<ITxProvider>;
   let chonkCache: MockProxy<ChonkCache>;
+  let publicProcessorFactory: MockProxy<PublicProcessorFactory>;
   let prover: EarlyBlockProver;
 
   /** Blocks the archiver holds, by number. Block 0 is the genesis block, in slot 0. */
@@ -39,7 +42,7 @@ describe('EarlyBlockProver', () => {
     chonkCache = mock<ChonkCache>();
     const l1ToL2MessageSource = mock<L1ToL2MessageSource>();
     const worldState = mock<WorldStateSynchronizer>();
-    const publicProcessorFactory = mock<PublicProcessorFactory>();
+    publicProcessorFactory = mock<PublicProcessorFactory>();
     const dbProvider = mock<Pick<ForkMerkleTreeOperations, 'fork'>>();
 
     chain = new Map([[0, await makeBlock(0, 0)]]);
@@ -48,19 +51,21 @@ describe('EarlyBlockProver', () => {
 
     l2BlockSource.getL1Constants.mockResolvedValue({ ...EmptyL1RollupConstants, epochDuration: 4 });
     l2BlockSource.getBlockNumber.mockImplementation(() => Promise.resolve(BlockNumber(checkpointedBlock)));
-    l2BlockSource.getBlocks.mockImplementation((query: any) =>
-      Promise.resolve(
-        [...chain.values()].filter(block => block.number >= query.from && block.number < query.from + query.limit),
-      ),
-    );
-    l2BlockSource.getBlockData.mockImplementation((query: any) => {
-      const block = chain.get(Number(query.number));
-      return Promise.resolve(block && ({ header: block.header } as any));
+    l2BlockSource.getBlocks.mockImplementation(query => {
+      const { from, limit } = query as { from: BlockNumber; limit: number };
+      return Promise.resolve([...chain.values()].filter(block => block.number >= from && block.number < from + limit));
     });
-    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({ messages: [] } as any);
+    l2BlockSource.getBlockData.mockImplementation(query => {
+      const block = 'number' in query ? chain.get(Number(query.number)) : undefined;
+      // A plain object: a mock would wrap the header, and the prover reads its real slot and block number.
+      return Promise.resolve(block && ({ header: block.header } as BlockData));
+    });
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue(mock<InboxMessageRange>({ messages: [] }));
     txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
-    dbProvider.fork.mockResolvedValue({ appendLeaves: () => Promise.resolve(), close: () => Promise.resolve() } as any);
-    publicProcessorFactory.create.mockReturnValue({ process: () => Promise.resolve([[], []]) } as any);
+    dbProvider.fork.mockResolvedValue(mock<MerkleTreeWriteOperations>());
+    publicProcessorFactory.create.mockReturnValue(
+      mock<PublicProcessor>({ process: () => Promise.resolve([[], [], [], [], []]) as never }),
+    );
     proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementation(() => {
       const subTree = mock<CheckpointSubTreeOrchestrator>();
       subTree.whenBlockRootProven.mockReturnValue(new Promise(() => {}));
@@ -91,7 +96,7 @@ describe('EarlyBlockProver', () => {
   it('starts proving a block when it is proposed', async () => {
     const block = await propose(1, 5);
 
-    await prover.onChainProposed(BlockNumber(1));
+    prover.onChainProposed(BlockNumber(1));
     await provenBlocks(subTrees, 0, [1]);
 
     const [, , constants, previousHeader] = proverFactory.createBlocksOnlySubTreeOrchestrator.mock.calls[0];
@@ -106,7 +111,7 @@ describe('EarlyBlockProver', () => {
     await propose(2, 5);
     await propose(3, 6);
 
-    await prover.onChainProposed(BlockNumber(3));
+    prover.onChainProposed(BlockNumber(3));
     await provenBlocks(subTrees, 0, [1, 2]);
     await provenBlocks(subTrees, 1, [3]);
 
@@ -120,7 +125,7 @@ describe('EarlyBlockProver', () => {
     await propose(2, 6);
     checkpointedBlock = 1;
 
-    await prover.onChainProposed(BlockNumber(2));
+    prover.onChainProposed(BlockNumber(2));
     await provenBlocks(subTrees, 0, [2]);
 
     expect(subTrees).toHaveLength(1);
@@ -150,44 +155,47 @@ describe('EarlyBlockProver', () => {
     for (const blockNumber of [2, 3, 4]) {
       await propose(blockNumber, 4 + blockNumber);
     }
-    await prover.onChainProposed(BlockNumber(4));
+    prover.onChainProposed(BlockNumber(4));
     await provenBlocks(subTrees, 2, [4]);
     expect(oldestAborted).toBe(false);
 
     await propose(5, 9);
-    await prover.onChainProposed(BlockNumber(5));
+    prover.onChainProposed(BlockNumber(5));
 
     await retryFastUntil(() => oldestAborted, 'oldest slot dropped');
   });
 
   it('stops proving a slot once its checkpoint lands', async () => {
     await propose(1, 5);
-    await prover.onChainProposed(BlockNumber(1));
+    prover.onChainProposed(BlockNumber(1));
     await provenBlocks(subTrees, 0, [1]);
 
     checkpointedBlock = 1;
     prover.onChainCheckpointed(BlockNumber(1));
     await retryFastUntil(() => subTrees[0].stop.mock.calls.length > 0, 'sub-tree stopped');
 
-    // The same proposed tip again starts nothing: the block is checkpointed.
-    await prover.onChainProposed(BlockNumber(1));
-    expect(subTrees).toHaveLength(1);
+    // A later block of another slot is proven; the checkpointed block is not started again.
+    await propose(2, 6);
+    prover.onChainProposed(BlockNumber(2));
+    await provenBlocks(subTrees, 1, [2]);
+    expect(subTrees).toHaveLength(2);
   });
 
   it('drops a slot when one of its blocks is pruned, and proves the slot again from its first block', async () => {
     await propose(1, 5);
     const pruned = await propose(2, 5);
-    await prover.onChainProposed(BlockNumber(2));
+    prover.onChainProposed(BlockNumber(2));
     await provenBlocks(subTrees, 0, [1, 2]);
 
     prover.onChainPruned(BlockNumber(1));
-    await retryFastUntil(() => subTrees[0].stop.mock.calls.length > 0, 'sub-tree stopped');
+    await retryFastUntil(() => chonkCache.releaseForBlocks.mock.calls.length > 0, 'chonk proofs released');
+    expect(subTrees[0].stop).toHaveBeenCalled();
     expect(chonkCache.releaseForBlocks).toHaveBeenCalledWith([pruned]);
 
     // A different block 2 replaces the pruned one. The surviving block 1 is proven again ahead of it, because
     // block 2's proving inputs depend on it.
     const replacement = await propose(2, 5);
-    await prover.onChainProposed(BlockNumber(2));
+    prover.onChainProposed(BlockNumber(2));
     await provenBlocks(subTrees, 1, [1, 2]);
     expect(subTrees[1].setBlockCompleted).toHaveBeenCalledWith(BlockNumber(2), replacement.header);
   });
@@ -199,18 +207,90 @@ describe('EarlyBlockProver', () => {
       Promise.resolve({ txs: [], missingTxs: block === unavailable ? [TxHash.random()] : [] }),
     );
 
-    await prover.onChainProposed(BlockNumber(2));
+    prover.onChainProposed(BlockNumber(2));
     await provenBlocks(subTrees, 0, [2]);
 
     expect(subTrees).toHaveLength(1);
   });
 
-  it('does not throw when the archiver cannot be read', async () => {
-    l2BlockSource.getBlocks.mockRejectedValue(new Error('archiver unavailable'));
+  it('picks a block up on the next proposed tip after the archiver could not be read', async () => {
     await propose(1, 5);
+    l2BlockSource.getBlocks.mockRejectedValueOnce(new Error('archiver unavailable'));
+    prover.onChainProposed(BlockNumber(1));
 
-    await expect(prover.onChainProposed(BlockNumber(1))).resolves.toBeUndefined();
-    expect(subTrees).toHaveLength(0);
+    await propose(2, 5);
+    prover.onChainProposed(BlockNumber(2));
+
+    await provenBlocks(subTrees, 0, [1, 2]);
+  });
+
+  it('fetches a long run of proposed blocks in several reads', async () => {
+    // More blocks than one read returns, all in one slot.
+    const blockNumbers = times(150, i => i + 1);
+    for (const blockNumber of blockNumbers) {
+      await propose(blockNumber, 5);
+    }
+
+    prover.onChainProposed(BlockNumber(150));
+
+    await provenBlocks(subTrees, 0, blockNumbers);
+  });
+
+  it('re-executes a block with transactions and hands them to the sub-tree in block order', async () => {
+    const block = await L2Block.random(BlockNumber(1), { txsPerBlock: 3, slotNumber: SlotNumber(5) });
+    chain.set(1, block);
+    // The second transaction has a public part, so its chonk verifier proof is started.
+    const txs = block.body.txEffects.map((txEffect, index) =>
+      mock<Tx>({
+        getTxHash: () => txEffect.txHash,
+        data: mock<Tx['data']>({ forPublic: index === 1 ? mock() : undefined }),
+      }),
+    );
+    const processed = txs.map(() => mock<ProcessedTx>());
+    // The provider returns the transactions out of order.
+    txProvider.getTxsForBlock.mockResolvedValue({ txs: [txs[2], txs[0], txs[1]], missingTxs: [] });
+    publicProcessorFactory.create.mockReturnValue(
+      mock<PublicProcessor>({ process: () => Promise.resolve([processed, [], [], [], []]) as never }),
+    );
+
+    prover.onChainProposed(BlockNumber(1));
+    await provenBlocks(subTrees, 0, [1]);
+
+    expect(subTrees[0].startChonkVerifierCircuits).toHaveBeenCalledWith([txs[1]]);
+    expect(subTrees[0].addTxs).toHaveBeenCalledWith(processed);
+  });
+
+  it('stops the sub-tree of a slot whose block fails to execute', async () => {
+    await propose(1, 5);
+    proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementationOnce(() => {
+      const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.startNewBlock.mockRejectedValue(new Error('world state unavailable'));
+      subTrees.push(subTree);
+      return Promise.resolve(subTree);
+    });
+
+    prover.onChainProposed(BlockNumber(1));
+
+    await retryFastUntil(() => subTrees[0]?.stop.mock.calls.length > 0, 'failed sub-tree stopped');
+  });
+
+  it('waits on stop for a slot that was released just before', async () => {
+    await propose(1, 5);
+    prover.onChainProposed(BlockNumber(1));
+    await provenBlocks(subTrees, 0, [1]);
+    const subTreeStopped = promiseWithResolvers<void>();
+    subTrees[0].stop.mockReturnValue(subTreeStopped.promise);
+
+    prover.onChainCheckpointed(BlockNumber(1));
+    let stopped = false;
+    const stopPromise = prover.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(stopped).toBe(false);
+
+    subTreeStopped.resolve();
+    await stopPromise;
   });
 
   /** Adds a block with no transactions to the archiver's chain. */
