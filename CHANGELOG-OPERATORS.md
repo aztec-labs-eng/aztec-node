@@ -47,6 +47,7 @@ The default is `false`, which keeps the previous behaviour. With the flag on:
 - If a proving job started early fails after all its retries, the broker keeps that failure, and the checkpoint's own request for the same job fails with it.
 
 **Migration**: none. Set the variable to turn the feature on.
+
 ### The proving broker hands out block-level jobs before checkpoint roots (PR link pending)
 
 Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs (transaction merges, base rollups, AVM, chonk verifier), and gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once, so the newest checkpoint's transactions and parity proof waited until every one of those roots had an agent.
