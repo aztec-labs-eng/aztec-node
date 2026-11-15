@@ -388,7 +388,7 @@ describe('ProverNode', () => {
 
     // Tips left unadvanced; nothing was registered, the session manager wasn't notified, and the catch-up
     // cursor stays behind so the next pass retries this checkpoint.
-    expect(await proverNode.getTipsStore().getL2BlockHash(1)).toBeUndefined();
+    expect(await proverNode.getTipsStore().getL2BlockHash(BlockNumber(1))).toBeUndefined();
     expect(proverNode.getCheckpointStore().listAll()).toHaveLength(0);
     expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
     expect(follower.getLastProcessedCheckpoint()).toEqual(CheckpointNumber.ZERO);
@@ -445,7 +445,7 @@ describe('ProverNode', () => {
     await expect(follower.handleBlockStreamEvent(event)).rejects.toThrow(/cannot clamp checkpoint cursor/);
 
     // Tips left unadvanced so the L2BlockStream re-emits this event on its next poll.
-    expect(await proverNode.getTipsStore().getL2BlockHash(1)).toBeUndefined();
+    expect(await proverNode.getTipsStore().getL2BlockHash(BlockNumber(1))).toBeUndefined();
   });
 
   // ---------------- handleCheckpointEvent gating ----------------
@@ -756,7 +756,7 @@ describe('ProverNode', () => {
     expect(publishingService.onChainProven).not.toHaveBeenCalled();
     expect(reapSpy).not.toHaveBeenCalled();
     // The tips store recorded the proposed tip (it is the walk-back history in tips-only mode).
-    expect(await proverNode.getTipsStore().getL2BlockHash(1)).toEqual('0x01');
+    expect(await proverNode.getTipsStore().getL2BlockHash(BlockNumber(1))).toEqual('0x01');
   });
 
   // ---------------- checkEpochExpiry: latestEpoch < offset is a no-op ----------------
