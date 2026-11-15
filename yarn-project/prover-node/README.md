@@ -33,6 +33,8 @@ An epoch proof covers the first `k` checkpoints of an epoch.
 - A **partial proof** covers a prefix of an epoch that may still be open. It moves the proven tip. L1 does not count
   it as that prover's full proof.
 
+L1 decides which of the two a proof is when the proof is submitted, from the epoch and the checkpoints it covers.
+
 Because of partial proofs, the proven tip can pass an epoch for which this prover holds no full proof. This document
 calls that a **covered epoch**. The prover node still proves it in full while the window is open.
 
@@ -76,12 +78,14 @@ archiver ──events──▶ CheckpointFollower ──▶ CheckpointStore ─�
                                        ProofPublishingService ──▶ ProverNodePublisher ──▶ L1
 ```
 
-Four things run concurrently, and each is serialised on its own:
+These run concurrently, and each is serialised on its own:
 
 - The block stream delivers one event at a time to `CheckpointFollower`.
 - `SessionManager` runs every reconcile on one queue.
 - `ProofPublishingService` runs every drain on another queue, so at most one L1 submission is in flight.
 - `EpochExpirySweep` and the session manager's tick each run on a timer that never overlaps itself.
+- `EarlyBlockProver`, when enabled, handles chain events on its own queue and proves the blocks of each slot in
+  order.
 
 ## Proving one epoch
 
@@ -96,8 +100,9 @@ This is what happens when nothing goes wrong.
 4. The follower tells `SessionManager` that the epoch has a new checkpoint. The manager runs a reconcile. The epoch
    has not ended, so no session is created.
 5. Steps 1 to 4 repeat for each checkpoint. Block-level proving runs while the epoch is still open.
-6. The epoch ends. On the next checkpoint event or tick, the manager finds that the epoch is complete and that the
-   store holds every checkpoint the archiver reports for it. It creates a full `EpochSession` over those provers.
+6. The epoch ends. The manager tries an epoch when one of its own checkpoints is registered and on every tick, so
+   an epoch whose last slots are empty is picked up by the tick. Once the epoch is complete and the store holds
+   every checkpoint the archiver reports for it, the manager creates a full `EpochSession` over those provers.
 7. The session runs a `TopTreeJob`, which proves each checkpoint root as that checkpoint's block-level proofs
    arrive, and then the merges and the epoch root.
 8. The session hands the epoch proof to `ProofPublishingService`.
@@ -150,7 +155,7 @@ A proof handed to the publishing service ends with one of these outcomes.
 | Outcome | Meaning | Session state |
 | --- | --- | --- |
 | `published` | L1 accepted the proof | `completed` |
-| `already-submitted` | L1 already held this prover's proof of this length | `completed` |
+| `already-submitted` | L1 already held this prover's proof of this length. For a full proof only a full-proof registration counts; a non-full one is replaced | `completed` |
 | `superseded` | A longer proof of the epoch was chosen, or the proven tip passed a partial proof | `superseded` |
 | `withdrawn` | The session was cancelled while the proof was queued | `cancelled` |
 | `expired` | The window closed while the proof was queued | `timed-out` |
@@ -169,11 +174,19 @@ The follower receives `chain-pruned` with the highest surviving block.
 - The store cancels and removes every prover whose last block is above that block.
 - The follower moves its cursor back to one below the checkpoint that holds that block, so a replacement checkpoint
   with the same number is registered again.
-- The manager cancels every session that used a removed prover. If a session can be built over what is left, it
-  starts one with the same slot range.
+- The manager cancels every session that used a removed prover. If what is left is not empty and holds no failed
+  prover, it starts a session over it at once, with the same slot range. The checks for opening a new full session
+  do not apply to this replacement.
 
-When the replacement checkpoint arrives it gets a new prover, even if its content is identical. Jobs the broker has
-already finished for identical content are reused. The session is replaced once more, now including the new prover.
+When the replacement checkpoint arrives it gets a new prover, even if its content is identical. The session is
+replaced once more, now including the new prover.
+
+What happens to the proving jobs:
+
+- Block-level jobs of a removed prover are left with the broker, finished or not, unless `PROVER_CANCEL_JOBS_ON_STOP`
+  is set. A new prover for identical content requests the same jobs and gets them.
+- The top-tree jobs of a cancelled session are aborted. The replacement session requests them again where its
+  checkpoints are the same, and the broker starts them again.
 
 If the archiver has no data for the surviving block, the prune throws before changing anything, and the block stream
 delivers it again.
@@ -185,6 +198,7 @@ Registration throws when any of its steps fails:
 - The checkpoint or its predecessor is missing from the archiver.
 - The message source returns messages that do not match the checkpoint's inbox rolling hash.
 - World state cannot sync to the checkpoint.
+- The store already holds a different checkpoint for the same slot. A prune has to remove that one first.
 
 The follower leaves its cursor before that checkpoint and does not acknowledge the event. The block stream delivers
 the event again on its next poll, and the follower retries from the same checkpoint.
@@ -199,8 +213,12 @@ The prover is marked failed and its checkpoint data is uploaded (see [failure up
 
 ### The top tree or the L1 submission fails
 
-The session ends `failed`. The manager keeps a `failed` full session, so the same checkpoints are not proven again to
-the same failure, and uploads the session's data once. A change to the epoch's checkpoints replaces it.
+The session ends `failed`.
+
+- The manager keeps a `failed` full session, so the same checkpoints are not proven again to the same failure, and
+  uploads the session's data once. A change to the epoch's checkpoints replaces it.
+- A `failed` partial session is dropped on the next reconcile and nothing is uploaded. `startProof` can request it
+  again.
 
 ### A proof lands before the epoch ends
 
@@ -209,9 +227,10 @@ proof of. The manager still opens a full session for such an epoch, with three d
 
 - Only the tick opens it. A checkpoint or prune event does not.
 - Before opening, the manager reads from L1 whether this prover's full proof of the epoch is registered. It skips
-  the epoch if it is, or if L1 cannot be read. The answer is reused for one L2 slot.
-- The next unproven epoch goes first. While that epoch is complete and has no session, one session slot is kept
-  free for it.
+  the epoch if it is, or if L1 cannot be read. Those two answers are reused for one L2 slot. "Not registered" is
+  read again each time, since it leads to a session.
+- The next unproven epoch goes first. While that epoch is complete and has no session, covered epochs leave one
+  session slot free for it.
 
 ### The node restarts
 
@@ -236,19 +255,23 @@ are skipped without being fetched.
 ### The proof-submission window closes
 
 - A session's own timer cancels it, and it ends `timed-out`.
-- A queued proof resolves `expired`. A submission already sent to L1 is given until the same moment to be mined.
+- A queued proof resolves `expired`.
+- A submission already sent to L1 is not withdrawn. The publisher stops retrying it at the same moment. If the
+  transaction is mined after all, L1 holds the proof while the session reports `timed-out`.
 - No new session is opened for the epoch.
 - `EpochExpirySweep` removes the epoch's provers and releases its chonk-verifier cache entries. The sweep runs on a
   timer, so it also runs while no chain events arrive.
 
 ### Too many sessions
 
-`PROVER_NODE_MAX_PENDING_JOBS` limits how many sessions run at once. At the limit, the manager does not open a full
-session and tries again on a later reconcile. `startProof` throws.
+`PROVER_NODE_MAX_PENDING_JOBS` limits how many sessions run at once. Finished sessions do not count. At the limit,
+the manager does not open a full session and tries again on a later reconcile, and `startProof` throws. A session
+that replaces another one after a prune is not held back by the limit.
 
 ### Shutdown
 
-`ProverNode.stop` stops the follower and the sweep first, then the sessions, then publishing, then the provers.
+`ProverNode.stop` stops the follower, the sweep and the early prover first, then the sessions, then publishing, then
+the provers.
 
 - Sessions are cancelled without aborting their broker jobs, so a restarted node reuses them.
 - The publishing service waits up to 30 seconds for a submission in flight.
@@ -263,16 +286,23 @@ id at once and does not wait for the proof.
 - It throws when the store holds no checkpoint of the epoch, when the proven tip already covers them, when one of
   their provers has failed, or when the session limit is reached.
 
-`getJobs()` lists the sessions the manager holds, with their state. That includes full sessions that ended
-`completed` or `failed`, until their checkpoints change or expire.
+`getJobs()` lists the sessions the manager holds, with their state.
 
-`PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` makes the node prove only what `startProof` asks for.
+- A full session that ended `completed` or `failed` stays listed until its checkpoints change or expire.
+- Any other finished session, and every finished partial session, leaves the list on the next reconcile, which is
+  at most one tick later. A caller that polls `getJobs()` for the outcome of `startProof` can therefore miss it.
+
+`PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` stops the node from opening full sessions on its own, so only `startProof`
+produces epoch proofs. Checkpoints are still registered, and their block-level proving still starts as they land.
 
 ## Proving blocks before their checkpoint lands
 
 A partial proof is usually requested right after a checkpoint lands, and then waits for that checkpoint's block-level
 proofs. With `PROVER_NODE_EARLY_BLOCK_PROVING` set, `EarlyBlockProver` starts those proofs when each block is
 proposed.
+
+The node's archiver has to hold proposed blocks for this to do anything. A node that does not re-execute block
+proposals learns of blocks only from their checkpoints, and then nothing is proven early.
 
 1. The follower passes each move of the proposed tip to the early prover.
 2. The early prover fetches the new blocks. For each slot it runs the blocks, in order, through a blocks-only
@@ -282,8 +312,9 @@ proposed.
 
 The early proofs are never handed to anything else, which is what keeps the rest of the node unaffected:
 
-- A block pruned before its checkpoint lands has its slot dropped. Its jobs are never requested again, so they
-  cannot reach an epoch proof. The slot is proven again from its first block when the proposed tip moves.
+- A block pruned before its checkpoint lands has its slot dropped. Its jobs can reach an epoch proof only if a
+  block with the same inputs is proposed again. The slot is proven again from its first block when the proposed
+  tip moves.
 - A failure in early proving is logged and the slot is left to its checkpoint.
 - Early proving never aborts a broker job, because a `CheckpointProver` may be waiting on the same one.
 - At most four slots are in progress. A slot normally leaves when its checkpoint lands.
@@ -310,6 +341,8 @@ before their checkpoint lands.
 | `PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` | false | Prove only the epochs requested through `startProof` |
 | `PROVER_NODE_EARLY_BLOCK_PROVING` | false | Start block-level proving when a block is proposed |
 | `PROVER_NODE_PROOF_SUBMISSION_TARGET_ADDRESS` | rollup address | L1 address the proof transaction is sent to |
+| `PROVER_NODE_TX_GATHERING_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_PARALLEL_REQUESTS_PER_NODE` | 1000, 10, 100 | How transactions are fetched from peers |
+| `PROVER_CANCEL_JOBS_ON_STOP` | false | Abort the block-level jobs of a prover when it is removed |
 
 `PROVER_NODE_FAILED_EPOCH_STORE` also needs a data directory, the L1 chain id and the rollup version. The node refuses
 to start without them.
@@ -322,7 +355,7 @@ to start without them.
 | --- | --- |
 | `prover-node` | Start and stop |
 | `prover-node:checkpoint-follower` | New checkpoints, skipped epochs, prunes |
-| `prover-node:checkpoint-store` | Provers created and removed |
+| `prover-node:checkpoint-store` | Provers created and removed, and everything a `CheckpointProver` logs: checkpoint processing, block-level proofs ready, failures |
 | `prover-node:session-manager` | Sessions opened, replaced and dropped, and why a full session was not opened |
 | `prover-node:epoch-session` | One session's progress |
 | `prover-node:proof-publishing-service` | Proofs queued, published, expired |
@@ -336,12 +369,12 @@ to start without them.
 
 | Metric | Recorded by |
 | --- | --- |
-| `aztec.prover_node.job_duration`, `job_checkpoints`, `job_blocks`, `job_transactions` | A session that published a proof |
+| `aztec.prover_node.job_duration`, `job_checkpoints`, `job_blocks`, `job_transactions` | A session whose proof was published, or estimated when publishing is disabled |
 | `aztec.prover_node.checkpoint_processing.duration`, `checkpoint_blocks`, `checkpoint_transactions` | A prover that finished re-executing its checkpoint |
 | `aztec.prover_node.block_processing.duration` | A prover, per block |
 | `aztec.prover_node.checkpoint_proving.duration` | A prover whose block-level proofs are ready |
 | `aztec.prover_node.blob_processing.last_duration` | A top-tree job |
-| `aztec.prover_node.active_checkpoints`, `active_epoch_sessions` | Gauges of the store and the manager |
+| `aztec.prover_node.active_checkpoints`, `active_epoch_sessions` | Gauges: provers in the store, and running sessions by kind |
 | `aztec.prover_node.proof_submission_unaffordable_count` | The publishing service, when no publisher can pay |
 | `aztec.prover_node.estimated_submission.*` | The publisher, when publishing is disabled |
 | `aztec.prover_node.rewards_per_epoch`, `rewards_total` | Read from the rollup contract |
@@ -389,6 +422,9 @@ asks whether any of its provers failed or was cancelled.
 - The publishing service marks the other proofs of an epoch `superseded` before the chosen one is on L1. If the
   chosen one then fails, nothing is published for the epoch.
 - If the session manager throws while handling a prune, the prune is delivered again, finds no prover left to
-  remove, and does not reach the session manager a second time.
+  remove, and does not reach the session manager a second time. The next tick still replaces the affected
+  sessions. What is lost is the attempt to open a full session for the affected epochs on the prune itself.
+- Cancelling a session aborts its top-tree jobs. A replacement session that already requested the same jobs gets
+  the abort too and ends `failed`.
 - The broker proves block-level jobs before checkpoint roots. Checkpoints that land in the same epoch after a
   partial proof was requested therefore delay that proof's checkpoint roots.
