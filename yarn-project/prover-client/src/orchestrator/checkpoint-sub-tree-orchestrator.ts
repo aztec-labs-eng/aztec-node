@@ -2,6 +2,7 @@ import type { SpongeBlob } from '@aztec-labs/blob-lib/types';
 import {
   type ARCHIVE_HEIGHT,
   L1_TO_L2_MSG_TREE_HEIGHT,
+  MAX_BLOCKS_PER_CHECKPOINT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
@@ -149,6 +150,15 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
   /** Tracks whether `cancel()` has been called; flows into the checkpoint state's isAlive hook. */
   private cancelled = false;
 
+  /**
+   * True for a sub-tree created with `startBlocksOnly`: it proves each block up to its block root and stops there.
+   * It proves no block merges and no inbox parity, and its sub-tree result never resolves.
+   */
+  private blocksOnly = false;
+
+  /** Resolved when a block's root proof is ready, keyed by block number. */
+  private readonly blockRootProven = new Map<BlockNumber, PromiseWithResolvers<void>>();
+
   public get tracer(): Tracer {
     return this.metrics.tracer;
   }
@@ -227,6 +237,69 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       await subTree.stop().catch(() => {});
       throw err;
     }
+  }
+
+  /**
+   * Constructs and starts a sub-tree that proves the blocks of a checkpoint whose final shape is not known yet:
+   * blocks are added as they are proposed, before the checkpoint lands on L1. Each block is proven up to its block
+   * root. Block merges and the inbox parity proof are left out, because they depend on the final block count and
+   * message list.
+   *
+   * The proving jobs of a block depend on the block, on the checkpoint constants and on the blocks before it in the
+   * same checkpoint, and on nothing else. A regular sub-tree started later for the landed checkpoint therefore
+   * requests the same jobs, which the proving broker serves from the work already done.
+   */
+  public static async startBlocksOnly(
+    dbProvider: ReadonlyWorldStateAccess & ForkMerkleTreeOperations,
+    prover: ServerCircuitProver,
+    proverId: EthAddress,
+    chonkCache: ChonkCache,
+    epochNumber: EpochNumber,
+    deferredJobQueue: SerialQueue,
+    checkpointConstants: CheckpointConstantData,
+    headerOfLastBlockInPreviousCheckpoint: BlockHeader,
+    telemetryClient: TelemetryClient = getTelemetryClient(),
+    bindings?: LoggerBindings,
+  ): Promise<CheckpointSubTreeOrchestrator> {
+    const subTree = new CheckpointSubTreeOrchestrator(
+      dbProvider,
+      prover,
+      proverId,
+      chonkCache,
+      epochNumber,
+      /* cancelJobsOnStop */ false,
+      deferredJobQueue,
+      telemetryClient,
+      bindings,
+    );
+    subTree.blocksOnly = true;
+    try {
+      await subTree.startCheckpoint(
+        checkpointConstants,
+        /* l1ToL2Messages */ [],
+        /* startInboxRollingHash */ Fr.ZERO,
+        MAX_BLOCKS_PER_CHECKPOINT,
+        headerOfLastBlockInPreviousCheckpoint,
+      );
+      return subTree;
+    } catch (err) {
+      await subTree.stop().catch(() => {});
+      throw err;
+    }
+  }
+
+  /** Resolves once the block's root proof is ready. Stays pending if the sub-tree is cancelled first. */
+  public whenBlockRootProven(blockNumber: BlockNumber): Promise<void> {
+    return this.getBlockRootProven(blockNumber).promise;
+  }
+
+  private getBlockRootProven(blockNumber: BlockNumber): PromiseWithResolvers<void> {
+    let proven = this.blockRootProven.get(blockNumber);
+    if (!proven) {
+      proven = promiseWithResolvers<void>();
+      this.blockRootProven.set(blockNumber, proven);
+    }
+    return proven;
   }
 
   /**
@@ -494,12 +567,13 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
   // ---------------- lifecycle ----------------
 
   /**
-   * Cancels any further proving. If `cancelJobsOnStop` was set, aborts all pending broker jobs
-   * (used on reorg). Otherwise jobs remain in the broker queue and can be reused on restart.
+   * Cancels any further proving. Aborts all pending broker jobs if `abortJobs` is set, which defaults to the
+   * `cancelJobsOnStop` this sub-tree was created with. Jobs that are not aborted stay with the broker, where an
+   * identical request reuses them.
    */
-  public cancel() {
+  public cancel({ abortJobs = this.cancelJobsOnStop }: { abortJobs?: boolean } = {}) {
     this.cancelled = true;
-    this.resetSchedulerState(this.cancelJobsOnStop);
+    this.resetSchedulerState(abortJobs);
     // Reject the proving state (and hence subTreeResult) so anyone awaiting the sub-tree result
     // is released rather than hanging — matching TopTreeOrchestrator.cancel().
     this.provingState?.cancel();
@@ -559,8 +633,10 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     );
 
     // Parity now gates the checkpoint root (not the first block root); prove the single sized InboxParity per
-    // checkpoint up front.
-    this.enqueueInboxParityCircuit(this.provingState);
+    // checkpoint up front. A blocks-only sub-tree does not know the checkpoint's messages.
+    if (!this.blocksOnly) {
+      this.enqueueInboxParityCircuit(this.provingState);
+    }
   }
 
   // ---------------- private: per-block proof orchestration ----------------
@@ -769,6 +845,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         // Verification is called from both here and setBlockCompleted. Whichever runs last
         // will be the first to see all three pieces (header, proof output, archive) and run the checks.
         await this.verifyBuiltBlockAgainstSyncedState(provingState);
+
+        this.getBlockRootProven(provingState.blockNumber).resolve();
+        if (this.blocksOnly) {
+          return;
+        }
 
         if (checkpointProvingState.totalNumBlocks === 1) {
           this.checkAndEnqueueSubTreeResolution(checkpointProvingState);
