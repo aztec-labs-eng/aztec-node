@@ -429,7 +429,7 @@ export class SessionManager {
     if (!this.canBuildOver(canonical)) {
       return undefined;
     }
-    // A running partial session of this epoch may already prove exactly these checkpoints under another slot range:
+    // A running partial session of this epoch may already prove the same checkpoints under another slot range:
     // a session replaced after a prune keeps the range it was first requested with. Proving them again would do the
     // same work twice and take a second session slot.
     const existing = Array.from(this.partialSessions.values()).find(
