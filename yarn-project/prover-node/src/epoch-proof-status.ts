@@ -6,6 +6,7 @@ import type { DateProvider } from '@aztec-labs/foundation/timer';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 
+/** What `EpochProofStatus` reads from: the archiver for the proven tip, the rollup contract for registrations. */
 export type EpochProofStatusDeps = {
   l2BlockSource: Pick<L2BlockSource, 'getBlockNumber' | 'getBlockData' | 'isEpochComplete' | 'getL1Constants'>;
   rollupContract: Pick<RollupContract, 'getHasSubmittedFullEpochProof'>;
