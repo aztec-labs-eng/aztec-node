@@ -279,8 +279,21 @@ describe('single-node/proving/optimistic', () => {
 
     it('proves an epoch whose blocks were proven ahead of their checkpoints', async () => {
       const proverNode = test.proverNodes[0].getProverNode() as TestProverNode;
-      // Each call starts block-level proving for the proposed blocks of one slot, before the slot's checkpoint lands.
-      const startEarlyProving = jest.spyOn(proverNode.getProver(), 'createBlocksOnlySubTreeOrchestrator');
+      // Each call to the factory starts block-level proving for the proposed blocks of one slot, before the slot's
+      // checkpoint lands. Record the blocks whose block root proof that early proving completes.
+      const prover = proverNode.getProver();
+      const createEarlySubTree = prover.createBlocksOnlySubTreeOrchestrator.bind(prover);
+      const blocksProvenEarly: BlockNumber[] = [];
+      jest.spyOn(prover, 'createBlocksOnlySubTreeOrchestrator').mockImplementation(async (...args) => {
+        const subTree = await createEarlySubTree(...args);
+        const whenBlockRootProven = subTree.whenBlockRootProven.bind(subTree);
+        jest.spyOn(subTree, 'whenBlockRootProven').mockImplementation(blockNumber => {
+          const proven = whenBlockRootProven(blockNumber);
+          void proven.then(() => blocksProvenEarly.push(blockNumber));
+          return proven;
+        });
+        return subTree;
+      });
 
       await test.waitUntilNextEpochStarts();
 
@@ -300,7 +313,9 @@ describe('single-node/proving/optimistic', () => {
       await test.waitUntilProvenCheckpointNumber(epochEndCheckpointNumber, 240);
       await test.waitForNodeToSync(await lastBlockOfCheckpoint(epochEndCheckpointNumber), 'proven');
       expect((await node.getTxReceipt(txReceipt.txHash)).executionResult).toEqual(TxExecutionResult.SUCCESS);
-      expect(startEarlyProving).toHaveBeenCalled();
+      // Early proving does not start for a block until a checkpoint of its epoch has landed, so not every block is
+      // proven early, but some are.
+      expect(blocksProvenEarly.length).toBeGreaterThan(0);
     });
   });
 
