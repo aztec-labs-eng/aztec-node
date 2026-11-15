@@ -27,6 +27,7 @@ import { L1Metrics } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
+import type { EpochProofStatus } from './epoch-proof-status.js';
 import type { ProofPublishingService } from './proof-publishing-service.js';
 import type { ProverNodePublisher } from './prover-node-publisher.js';
 import { ProverNode } from './prover-node.js';
@@ -49,6 +50,8 @@ describe('ProverNode', () => {
   let avmSimulator: ReturnType<typeof mock<AvmSimulator>>;
   let sessionManager: ReturnType<typeof mock<SessionManager>>;
   let publishingService: ReturnType<typeof mock<ProofPublishingService>>;
+  /** Stands in for the L1 read of this prover's full-epoch proof registration. */
+  let readOwnFullEpochProof: jest.SpiedFunction<EpochProofStatus['readOwnFullEpochProof']>;
 
   // epochDuration=1 ⇒ slot N lives in epoch N. proofSubmissionEpochs=1 ⇒ deadline for
   // epoch E is the start of epoch E+2, so epoch E expires once latestEpoch >= E+2.
@@ -427,7 +430,7 @@ describe('ProverNode', () => {
       Promise.resolve(Number(query.number) === 1 ? ({ header: { getSlot: () => SlotNumber(1) } } as any) : undefined),
     );
     l2BlockSource.isEpochComplete.mockResolvedValue(true);
-    sessionManager.readOwnFullEpochProof.mockImplementation((epoch, length) =>
+    readOwnFullEpochProof.mockImplementation((epoch, length) =>
       Promise.resolve(epoch === EpochNumber(1) && length === 1),
     );
 
@@ -449,7 +452,7 @@ describe('ProverNode', () => {
     setupRegistrationSuccess();
     setupEpochOneFullyProven();
     // Only the epoch's real checkpoint count gets this answer; any other count reads as registered and would skip.
-    sessionManager.readOwnFullEpochProof.mockImplementation((epoch, length) =>
+    readOwnFullEpochProof.mockImplementation((epoch, length) =>
       Promise.resolve(epoch === EpochNumber(1) && length === 1 ? registration : true),
     );
 
@@ -464,7 +467,7 @@ describe('ProverNode', () => {
     // checkpoints would be wasted even though our full-epoch proof of it is not on L1.
     proverNode = createProverNode({ proverNodeDisableFullEpochProving: true });
     setupEpochOneFullyProven();
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
 
@@ -478,7 +481,7 @@ describe('ProverNode', () => {
     setupRegistrationSuccess();
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
     mockOldestHistoricBlock(3);
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
     proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
@@ -502,7 +505,7 @@ describe('ProverNode', () => {
       }
       return snapshot;
     });
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
     mineCheckpoint(makeCheckpoint(1, 1, 1));
     mineCheckpoint(makeCheckpoint(2, 2, 2));
     const event = mineCheckpoint(makeCheckpoint(3, 4, 3));
@@ -525,7 +528,7 @@ describe('ProverNode', () => {
     setupRegistrationSuccess();
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 1, 1, 4] });
     mockOldestHistoricBlock(2);
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
     const first = makeCheckpoint(1, 1, 1);
     mineCheckpoint({ ...first, blocks: [1, 2, 3].map(n => makeCheckpoint(1, 1, n).blocks[0]) } as Checkpoint);
     const event = mineCheckpoint(makeCheckpoint(2, 4, 4));
@@ -547,7 +550,7 @@ describe('ProverNode', () => {
     l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
     setupRegistrationSuccess();
     mockChain({ provenBlock: 1, blockSlots: [0, 1, 4, 5] });
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
     mineCheckpoint(makeCheckpoint(1, 1, 1));
     proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(2, 4, 2)));
@@ -571,7 +574,7 @@ describe('ProverNode', () => {
     l2BlockSource.getL1Constants.mockResolvedValue({ ...l1Constants, epochDuration: 4 });
     setupRegistrationSuccess();
     mockChain({ provenBlock: 1, blockSlots: [0, 1, 4, 5] });
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(false);
+    readOwnFullEpochProof.mockResolvedValue(false);
     sessionManager.onCheckpointAdded.mockRejectedValueOnce(new Error('archiver unavailable'));
     mineCheckpoint(makeCheckpoint(1, 1, 1));
     proverNode.setLastProcessedCheckpoint(CheckpointNumber(1));
@@ -602,7 +605,7 @@ describe('ProverNode', () => {
     // needed, so a world-state status failure must not stall the catch-up on it.
     mockChain({ provenBlock: 3, blockSlots: [0, 1, 2, 3] });
     worldState.status.mockRejectedValue(new Error('world state unavailable'));
-    sessionManager.readOwnFullEpochProof.mockResolvedValue(true);
+    readOwnFullEpochProof.mockResolvedValue(true);
     proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
@@ -778,171 +781,6 @@ describe('ProverNode', () => {
     expect(sessionManager.onPrune).toHaveBeenCalledWith([EpochNumber(3)]);
   });
 
-  // ---------------- isEpochFullyProven branches ----------------
-
-  describe('isEpochFullyProven', () => {
-    it('returns false when no block is proven yet', async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(undefined);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(3), l1Constants)).resolves.toBe(false);
-    });
-
-    it('returns false when the proven block has no header in the archiver', async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue(undefined);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(3), l1Constants)).resolves.toBe(false);
-    });
-
-    it("returns true for any epoch strictly below the proven tip's epoch", async () => {
-      // Proven block at slot 5 ⇒ provenEpoch = 5 (epochDuration=1).
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue({ header: { getSlot: () => SlotNumber(5) } } as any);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(3), l1Constants)).resolves.toBe(true);
-    });
-
-    it("returns false for any epoch strictly above the proven tip's epoch", async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue({ header: { getSlot: () => SlotNumber(5) } } as any);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(7), l1Constants)).resolves.toBe(false);
-    });
-
-    it('returns true on the equality case when the proven block is the last of its epoch (next block is in a later epoch)', async () => {
-      // provenEpoch=2, next block in epoch 3 ⇒ last of epoch.
-      const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2 };
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // epoch 2
-        }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(6) } } as any); // epoch 3
-        }
-        return Promise.resolve(undefined);
-      });
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(2), l1ConstantsTwo)).resolves.toBe(true);
-    });
-
-    it('returns false on the equality case when the proven block is mid-epoch (next block is in the same epoch)', async () => {
-      const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2 };
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(4) } } as any); // epoch 2
-        }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // also epoch 2
-        }
-        return Promise.resolve(undefined);
-      });
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(2), l1ConstantsTwo)).resolves.toBe(false);
-    });
-
-    it('falls back to isEpochComplete when there is no next-block header', async () => {
-      // No next-block header ⇒ isProvenBlockLastOfItsEpoch defers to isEpochComplete.
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
-        }
-        return Promise.resolve(undefined); // no next block yet
-      });
-      l2BlockSource.isEpochComplete.mockResolvedValueOnce(true);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(5), l1Constants)).resolves.toBe(true);
-
-      l2BlockSource.isEpochComplete.mockResolvedValueOnce(false);
-      await expect(proverNode.callIsEpochFullyProven(EpochNumber(5), l1Constants)).resolves.toBe(false);
-    });
-  });
-
-  // ---------------- resolveLastFullyProvenEpoch branches ----------------
-
-  describe('resolveLastFullyProvenEpoch', () => {
-    it('returns no fully-proven epoch when nothing is proven', async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(undefined);
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: undefined,
-      });
-    });
-
-    it('returns no fully-proven epoch when the proven block has no archiver header', async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue(undefined);
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: undefined,
-      });
-    });
-
-    it('returns provenEpoch when the proven block is the last of its epoch', async () => {
-      // epochDuration=1: slot 5 ⇒ epoch 5; next slot 6 ⇒ epoch 6 > 5 ⇒ last of epoch.
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
-        }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(6) } } as any);
-        }
-        return Promise.resolve(undefined);
-      });
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: EpochNumber(5),
-      });
-    });
-
-    it('returns provenEpoch via the isEpochComplete fallback when there is no next-block header', async () => {
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
-        }
-        return Promise.resolve(undefined);
-      });
-      l2BlockSource.isEpochComplete.mockResolvedValue(true);
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: EpochNumber(5),
-      });
-    });
-
-    it('returns provenEpoch-1 when proven is mid-epoch', async () => {
-      // epochDuration=2: slot 5 ⇒ epoch 2; next slot 5 ⇒ same epoch ⇒ mid-epoch.
-      const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2, proofSubmissionEpochs: 1 };
-      l2BlockSource.getL1Constants.mockResolvedValue(l1ConstantsTwo);
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(4) } } as any); // epoch 2
-        }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // epoch 2
-        }
-        return Promise.resolve(undefined);
-      });
-
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: EpochNumber(1),
-      });
-    });
-
-    it('returns lastFullyProvenEpoch=undefined when proven is mid-epoch within epoch 0', async () => {
-      // The provenEpoch=0 edge case: there is no "previous" epoch to claim as fully proven.
-      const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2, proofSubmissionEpochs: 1 };
-      l2BlockSource.getL1Constants.mockResolvedValue(l1ConstantsTwo);
-      l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 1) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(0) } } as any); // epoch 0
-        }
-        if (q.number === 2) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(1) } } as any); // still epoch 0
-        }
-        return Promise.resolve(undefined);
-      });
-
-      await expect(proverNode.callResolveLastFullyProvenEpoch()).resolves.toEqual({
-        lastFullyProvenEpoch: undefined,
-      });
-    });
-  });
-
   describe('resolveCatchUpStartEpoch', () => {
     // epochDuration=1 and proofSubmissionEpochs=1: at synced slot N, epochs up to N-2 can no longer be proven.
     it.each([
@@ -1045,6 +883,7 @@ describe('ProverNode', () => {
     // exercise.
     node.setSessionManager(sessionManager);
     node.setPublishingService(publishingService);
+    readOwnFullEpochProof = jest.spyOn(node.getEpochProofStatus(), 'readOwnFullEpochProof').mockResolvedValue(false);
     return node;
   }
 
@@ -1242,6 +1081,10 @@ class TestProverNode extends ProverNode {
     this.publishingService = svc;
   }
 
+  public getEpochProofStatus(): EpochProofStatus {
+    return this.epochProofStatus;
+  }
+
   public getTipsStore() {
     // tipsStore is private; reach in for the A-1041 assertion.
 
@@ -1249,10 +1092,6 @@ class TestProverNode extends ProverNode {
   }
 
   // ---------------- direct access for unit tests ----------------
-
-  public callResolveLastFullyProvenEpoch() {
-    return this.resolveLastFullyProvenEpoch();
-  }
 
   public callResolveCatchUpStartEpoch(lastFullyProvenEpoch: EpochNumber | undefined) {
     return this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
@@ -1269,18 +1108,6 @@ class TestProverNode extends ProverNode {
   /** Drives the expiry sweep directly, as the periodic ticker does in production. */
   public callCheckEpochExpiry() {
     return (this as any).checkEpochExpiry();
-  }
-
-  public callIsEpochFullyProven(epoch: EpochNumber, l1Constants: { epochDuration: number }) {
-    return this.isEpochFullyProven(epoch, l1Constants as any);
-  }
-
-  public callIsProvenBlockLastOfItsEpoch(
-    provenBlock: BlockNumber,
-    provenEpoch: EpochNumber,
-    l1Constants: { epochDuration: number },
-  ) {
-    return this.isProvenBlockLastOfItsEpoch(provenBlock, provenEpoch, l1Constants as any);
   }
 
   public callIsCheckpointCanonical(checkpoint: Checkpoint) {
