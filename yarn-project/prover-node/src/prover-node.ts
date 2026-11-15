@@ -282,7 +282,6 @@ export class ProverNode implements ProverNodeApi, Traceable {
   async stop() {
     this.log.info('Stopping ProverNode');
     this.jobMetrics.stopObservingState();
-    // Stop the sources of new work first, then the sessions, then publishing, then the provers.
     await this.checkpointFollower.stop();
     await this.expirySweep.stop();
     if (this.sessionManager) {
@@ -352,18 +351,12 @@ export class ProverNode implements ProverNodeApi, Traceable {
     this.checkpointStore.setTestHooks(hooks);
   }
 
-  /**
-   * Uploads the proving data of an epoch whose full session failed. Kept as a method of the node so the e2e
-   * harness can intercept it.
-   */
+  /** Uploads the proving data of an epoch whose full session failed. Delegates to `FailureUploader`. */
   public tryUploadEpochFailure(id: string, checkpoints: readonly CheckpointProver[]): Promise<string | undefined> {
     return this.failureUploader.uploadEpochFailure(id, checkpoints);
   }
 
-  /**
-   * Uploads the proving data of a single failed checkpoint prover. Kept as a method of the node so the e2e
-   * harness can intercept it.
-   */
+  /** Uploads the proving data of a single failed checkpoint prover. Delegates to `FailureUploader`. */
   public tryUploadCheckpointFailure(prover: CheckpointProver): Promise<string | undefined> {
     return this.failureUploader.uploadCheckpointFailure(prover);
   }

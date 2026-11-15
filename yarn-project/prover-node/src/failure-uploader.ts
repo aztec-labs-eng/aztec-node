@@ -49,9 +49,9 @@ export class FailureUploader {
   }
 
   /**
-   * Uploads the proving data of a single failed checkpoint prover. A prover fails the same way for a genuine
-   * proving fault and for a prune that removed its base block, so the archiver decides: a checkpoint that is no
-   * longer canonical was pruned, and is not uploaded. Never throws.
+   * Uploads the proving data of a single failed checkpoint prover. A prover fails the same way for a proving fault
+   * and for a prune that removed its base block, so the archiver decides: a checkpoint that is no longer canonical
+   * was pruned, and is not uploaded. Never throws.
    */
   public async uploadCheckpointFailure(prover: CheckpointProver): Promise<string | undefined> {
     if (!this.deps.config.failedEpochStore) {
