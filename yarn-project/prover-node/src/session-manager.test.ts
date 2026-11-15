@@ -9,6 +9,7 @@ import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server'
 import { mock } from 'jest-mock-extended';
 
 import type { CheckpointStore } from './checkpoint-store.js';
+import { EpochProofStatus, type EpochProofStatusDeps } from './epoch-proof-status.js';
 import { CheckpointProver } from './job/checkpoint-prover.js';
 import { EpochSession, type SessionSpec } from './job/epoch-session.js';
 import { ProverNodeJobMetrics } from './metrics.js';
@@ -32,7 +33,8 @@ describe('SessionManager', () => {
     >
   >;
   let publishingService: ReturnType<typeof mock<ProofPublishingService>>;
-  let rollupContract: ReturnType<typeof mock<SessionManagerDeps['rollupContract']>>;
+  let rollupContract: ReturnType<typeof mock<EpochProofStatusDeps['rollupContract']>>;
+  let proofStatus: EpochProofStatus;
   let metrics: ProverNodeJobMetrics;
   let dateProvider: ManualDateProvider;
 
@@ -55,8 +57,9 @@ describe('SessionManager', () => {
         >
       >();
     publishingService = mock<ProofPublishingService>();
-    rollupContract = mock<SessionManagerDeps['rollupContract']>();
+    rollupContract = mock<EpochProofStatusDeps['rollupContract']>();
     dateProvider = new ManualDateProvider(testClockStartMs);
+    proofStatus = new EpochProofStatus({ l2BlockSource, rollupContract, proverId: EthAddress.ZERO, dateProvider });
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
       {
@@ -84,7 +87,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: {} as any,
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -177,7 +180,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: {} as any,
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -230,7 +233,7 @@ describe('SessionManager', () => {
           l2BlockSource,
           proverFactory: mock<SessionManagerDeps['proverFactory']>(),
           proverId: EthAddress.ZERO,
-          rollupContract,
+          proofStatus,
           publishingService,
           metrics,
           dateProvider,
@@ -579,7 +582,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -615,7 +618,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -650,7 +653,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -691,7 +694,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -750,7 +753,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
@@ -1272,7 +1275,7 @@ describe('SessionManager', () => {
         l2BlockSource,
         proverFactory: {} as any,
         proverId: EthAddress.ZERO,
-        rollupContract,
+        proofStatus,
         publishingService,
         metrics,
         dateProvider,
