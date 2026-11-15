@@ -3,27 +3,7 @@ import { insertIntoSortedArray } from '@aztec-labs/foundation/array';
 import { times } from '@aztec-labs/foundation/collection';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
-/**
- * Priority order for proof types - matches the real broker's PROOF_TYPES_IN_PRIORITY_ORDER
- * Lower index = higher priority (gets picked first)
- */
-const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
-  ProvingRequestType.ROOT_ROLLUP,
-  ProvingRequestType.BLOCK_ROOT_ROLLUP,
-  ProvingRequestType.BLOCK_ROOT_SINGLE_TX_ROLLUP,
-  ProvingRequestType.BLOCK_ROOT_NO_TXS_ROLLUP,
-  ProvingRequestType.BLOCK_MERGE_ROLLUP,
-  ProvingRequestType.CHECKPOINT_ROOT_ROLLUP,
-  ProvingRequestType.CHECKPOINT_ROOT_SINGLE_BLOCK_ROLLUP,
-  ProvingRequestType.CHECKPOINT_MERGE_ROLLUP,
-  ProvingRequestType.CHECKPOINT_PADDING_ROLLUP,
-  ProvingRequestType.TX_MERGE_ROLLUP,
-  ProvingRequestType.PUBLIC_TX_BASE_ROLLUP,
-  ProvingRequestType.PRIVATE_TX_BASE_ROLLUP,
-  ProvingRequestType.PUBLIC_VM,
-  ProvingRequestType.PUBLIC_CHONK_VERIFIER,
-  ProvingRequestType.INBOX_PARITY, // Lowest priority
-];
+import { PROOF_TYPES_IN_PRIORITY_ORDER } from '../proving_broker/proving_broker.js';
 
 // Job represents a proving task with its hierarchical context
 type Job = {
@@ -61,6 +41,12 @@ type TestConfig = {
   name: string;
   workers: number;
   checkpoints: Checkpoint[];
+  /**
+   * How many of the leading checkpoints already have their block proofs and inbox parity proof when the simulation
+   * starts. Models a partial epoch proof requested mid-epoch: the earlier checkpoints were proven as they arrived,
+   * so their checkpoint roots are all runnable at once, while the newest checkpoint starts from its transactions.
+   */
+  provenSubTrees?: number;
 };
 
 // State tracking for dependency resolution
@@ -290,9 +276,16 @@ function initializeState(checkpoints: Checkpoint[]): SimState {
   return state;
 }
 
-function fillQueue(queues: Queues, checkpoints: Checkpoint[], state: SimState): void {
+function fillQueue(queues: Queues, checkpoints: Checkpoint[], state: SimState, provenSubTrees: number): void {
   for (let cp = 1; cp <= checkpoints.length; cp++) {
     const blocks = checkpoints[cp - 1];
+
+    if (cp <= provenSubTrees) {
+      state.inboxParityComplete.set(cp, true);
+      state.blockRootComplete.set(cp, true);
+      tryEnqueueCheckpointRoot(cp, state, queues);
+      continue;
+    }
 
     // assume every checkpoint includes cross-chain messages: one InboxParity proof per checkpoint
     queues[ProvingRequestType.INBOX_PARITY].push(createJob(cp, 1, ProvingRequestType.INBOX_PARITY));
@@ -656,12 +649,18 @@ function handleCheckpointMergeComplete(level: number, index: number, state: SimS
   tryEnqueueCheckpointMerge(level, index, state, queues);
 }
 
-function assignWork(queues: Queues, workers: Worker[], start: number, availableWorkers: number): void {
+function assignWork(
+  queues: Queues,
+  workers: Worker[],
+  start: number,
+  availableWorkers: number,
+  priorityOrder: ProvingRequestType[],
+): void {
   while (workers.length < availableWorkers) {
     let assigned = false;
 
     // try to find a job in one of the queues. If all queues are empty we exit the other loop early
-    for (const proofType of PROOF_TYPES_IN_PRIORITY_ORDER) {
+    for (const proofType of priorityOrder) {
       const job = queues[proofType].shift();
       if (!job) {
         continue;
@@ -708,14 +707,18 @@ type SimulationResult = {
   };
 };
 
-function runSimulationWithConfig(config: TestConfig): SimulationResult {
+/** Simulates proving the checkpoints as one epoch. Workers take jobs in `priorityOrder`, the broker's by default. */
+function runSimulationWithConfig(
+  config: TestConfig,
+  priorityOrder: ProvingRequestType[] = PROOF_TYPES_IN_PRIORITY_ORDER,
+): SimulationResult {
   const { name, workers: workerCount, checkpoints } = config;
   const state = initializeState(checkpoints);
   const queues: Queues = times(Object.values(ProvingRequestType).length, () => []) as any;
   const workerPool: Worker[] = [];
   const completed: Completion[] = [];
 
-  fillQueue(queues, checkpoints, state);
+  fillQueue(queues, checkpoints, state, config.provenSubTrees ?? 0);
 
   let time = 0;
   let totalWorkerTime = 0;
@@ -723,7 +726,7 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const workerActivity: WorkerActivityPoint[] = [];
 
   // Initial assignment
-  assignWork(queues, workerPool, time, workerCount);
+  assignWork(queues, workerPool, time, workerCount, priorityOrder);
 
   // Record initial worker activity
   workerActivity.push({
@@ -756,7 +759,7 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
     }
 
     // Assign available workers to new jobs
-    assignWork(queues, workerPool, time, workerCount);
+    assignWork(queues, workerPool, time, workerCount, priorityOrder);
 
     // Record worker activity at this time step
     workerActivity.push({
@@ -934,6 +937,54 @@ function blockTreeReadyAt(result: SimulationResult, checkpoint: number): number 
     .map(c => c.end);
   return Math.max(...ends);
 }
+
+const TX_LEVEL_TYPES = [
+  ProvingRequestType.PUBLIC_CHONK_VERIFIER,
+  ProvingRequestType.PUBLIC_VM,
+  ProvingRequestType.PUBLIC_TX_BASE_ROLLUP,
+  ProvingRequestType.PRIVATE_TX_BASE_ROLLUP,
+  ProvingRequestType.TX_MERGE_ROLLUP,
+];
+
+// A partial epoch proof is requested mid-epoch. The earlier checkpoints were proven as they arrived, so all their
+// checkpoint roots become runnable together. The newest checkpoint has only just landed.
+describe('partial epoch proof requested mid-epoch', () => {
+  const provenCheckpoints = 15;
+  const newest = provenCheckpoints + 1;
+  const workers = 4;
+
+  it('starts on the newest checkpoint transactions without waiting for the other checkpoint roots', () => {
+    const result = runSimulationWithConfig({
+      name: 'newest checkpoint with transactions',
+      workers,
+      checkpoints: [...emptyCheckpoints(provenCheckpoints), [[1, [3, 15_000]]]],
+      provenSubTrees: provenCheckpoints,
+    });
+
+    const txJobs = completionsOf(result, TX_LEVEL_TYPES).filter(c => c.checkpoint === newest);
+    expect(Math.min(...txJobs.map(c => c.start))).toBe(0);
+    // The newest checkpoint is the last one whose root can start, so its block tree bounds the whole request.
+    const otherRootsDone = Math.max(
+      ...completionsOf(result, CHECKPOINT_ROOT_TYPES)
+        .filter(c => c.checkpoint !== newest)
+        .map(c => c.end),
+    );
+    expect(blockTreeReadyAt(result, newest)).toBeLessThan(otherRootsDone);
+  });
+
+  it('starts the newest checkpoint inbox parity without waiting for the other checkpoint roots', () => {
+    const result = runSimulationWithConfig({
+      name: 'newest checkpoint without transactions',
+      workers,
+      checkpoints: emptyCheckpoints(newest),
+      provenSubTrees: provenCheckpoints,
+    });
+
+    const parity = soleCompletion(result, [ProvingRequestType.INBOX_PARITY]);
+    expect(parity.checkpoint).toBe(newest);
+    expect(parity.start).toBe(0);
+  });
+});
 
 describe('checkpoint dependency model', () => {
   it('proves an empty block root without waiting for inbox parity', () => {
