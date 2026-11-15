@@ -103,16 +103,20 @@ describe('ProverNode', () => {
     expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(1));
   });
 
-  it('ignores a checkpointed tip at or below the catch-up cursor', async () => {
+  it.each([
+    { tip: 3, where: 'at' },
+    { tip: 2, where: 'below' },
+  ])('ignores a checkpointed tip $where the catch-up cursor', async ({ tip }) => {
     setupNotFullyProven();
-    const event = mineCheckpoint(makeCheckpoint(2, 2, 2));
-    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+    const event = mineCheckpoint(makeCheckpoint(tip, tip, tip));
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(3));
 
     await proverNode.handleBlockStreamEvent(event);
 
+    // Nothing is fetched: a tip below the cursor would otherwise ask the archiver for a negative count.
+    expect(l2BlockSource.getCheckpointsData).not.toHaveBeenCalled();
     expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
-    expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
-    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(2));
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(3));
   });
 
   it('registers the first checkpoint with a zero previous inbox rolling hash', async () => {
