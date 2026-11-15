@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### `startProof` no longer fails after a prune shortened a running partial proof (PR link pending)
+
+The prover node's `startProof` admin method threw `Failed to schedule partial proof` when a partial proof of the epoch was already running and a prune had removed the last checkpoint it was requested with. The node was proving exactly the requested checkpoints, but the call looked the session up under a different slot range. It now returns the id of the running session.
+
+**Migration**: none.
+
 ### Prover node log lines moved to new logger names (PR link pending)
 
 The prover node's chain following, expiry sweep and failure uploads moved out of the `prover-node` logger. Their log lines now come from:
