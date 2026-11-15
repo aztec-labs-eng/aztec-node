@@ -38,6 +38,7 @@ export type CheckpointFollowerHandlers = {
   onChainProven(block: BlockNumber): void;
 };
 
+/** What the follower reads the chain from, where it registers checkpoints, and whom it reports to. */
 export type CheckpointFollowerDeps = {
   l2BlockSource: L2BlockSource;
   l1ToL2MessageSource: L1ToL2MessageSource;
@@ -133,8 +134,6 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
     await this.tipsStore.handleBlockStreamEvent(event);
   }
 
-  // ---------------- restart ----------------
-
   /**
    * Sets the cursor to the last checkpoint of the epoch the catch-up resumes after, and returns that epoch.
    * `start()` calls this before it starts the block stream.
@@ -183,8 +182,6 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
     return last?.checkpointNumber ?? CheckpointNumber.ZERO;
   }
 
-  // ---------------- new checkpoints ----------------
-
   /**
    * Registers every checkpoint between the cursor and the checkpointed tip. The block stream delivers one tip event
    * per pass, so this walks the gap itself: checkpoint metadata first, to decide per epoch whether to skip it, then
@@ -227,7 +224,10 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
         epochSkippable.set(epochNumber, skippable);
       }
       if (skippable) {
-        this.log.debug(`Skipping checkpoint ${metadata.checkpointNumber} for unprovable epoch ${epochNumber}`);
+        this.log.debug(`Skipping checkpoint ${metadata.checkpointNumber}: epoch ${epochNumber} is not to be proven`, {
+          checkpointNumber: metadata.checkpointNumber,
+          epochNumber,
+        });
       } else {
         await this.registerCheckpoint(metadata.checkpointNumber, epochNumber);
       }
@@ -320,7 +320,7 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
   private async getBlockHeader(blockNumber: BlockNumber) {
     const data = await this.deps.l2BlockSource.getBlockData({ number: blockNumber });
     if (!data?.header) {
-      throw new Error(`Previous block header ${blockNumber} not found`);
+      throw new Error(`Header of block ${blockNumber} not found`);
     }
     return data.header;
   }
@@ -390,8 +390,6 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
     const latestEpoch = getEpochAtSlot(latestSlot, l1Constants);
     return latestEpoch >= getProofSubmissionDeadlineEpoch(epochNumber, l1Constants);
   }
-
-  // ---------------- prune ----------------
 
   /**
    * Removes the provers orphaned by a prune, moves the cursor back below the prune target's checkpoint, and reports
