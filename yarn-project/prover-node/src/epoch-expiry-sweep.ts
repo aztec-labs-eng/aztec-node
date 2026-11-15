@@ -50,7 +50,10 @@ export class EpochExpirySweep {
     return this.lastExpiredEpoch;
   }
 
-  /** Expires every epoch whose window closed since the last sweep. Does nothing while the archiver has no synced slot. */
+  /**
+   * Expires every epoch whose window closed since the last sweep. Does nothing while the archiver has no synced
+   * slot.
+   */
   public async sweep(): Promise<void> {
     const latestSlot = await this.deps.l2BlockSource.getSyncedL2SlotNumber();
     if (latestSlot === undefined) {
