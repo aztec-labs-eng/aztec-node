@@ -351,11 +351,12 @@ export class EpochSession implements Traceable {
       0,
     );
 
-    // Reflect the publish phase. Guard against a terminal state set concurrently by cancel() — the
-    // post-submit isTerminal() check below relies on cancel still winning.
-    if (!this.isTerminal()) {
-      this.state = 'publishing-proof';
+    // cancel() may have run during the read above. It found no candidate to withdraw, so submitting now would
+    // queue a proof that nothing withdraws afterwards.
+    if (this.isTerminal()) {
+      return;
     }
+    this.state = 'publishing-proof';
 
     const outcome = await this.deps.publishingService.submit({
       id: this.uuid,
