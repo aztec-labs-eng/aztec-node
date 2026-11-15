@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### The prover node no longer publishes the proof of a cancelled proving session (PR link pending)
+
+A proving session is cancelled when a prune changes its checkpoints or when its proof-submission window closes. Its epoch proof could still be sent to L1 in two cases: the session was cancelled just as its proof became ready, or its queued proof was withdrawn or expired while the node was acquiring a publisher. After a prune, the stale proof could also be chosen over the replacement session's proof and then fail L1's checks. Neither happens any more.
+
+**Migration**: none.
+
 ### `startProof` no longer fails after a prune shortened a running partial proof (PR link pending)
 
 The prover node's `startProof` admin method threw `Failed to schedule partial proof` when a partial proof of the epoch was already running and a prune had removed the last checkpoint it was requested with. The node was proving exactly the requested checkpoints, but the call looked the session up under a different slot range. It now returns the id of the running session.
