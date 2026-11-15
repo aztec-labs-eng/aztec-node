@@ -1,13 +1,12 @@
 import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { unique } from '@aztec-labs/foundation/collection';
-import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
-import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
@@ -19,7 +18,6 @@ import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server'
 import type { CheckpointStore } from './checkpoint-store.js';
 import type { EpochProofStatus } from './epoch-proof-status.js';
 import { CheckpointProver } from './job/checkpoint-prover.js';
-import type { EpochProvingJobData } from './job/epoch-proving-job-data.js';
 import {
   EpochSession,
   type EpochSessionDeps,
@@ -476,37 +474,6 @@ export class SessionManager {
         this.log.error(`Error in onSessionFailed callback for epoch ${session.getEpochNumber()}`, err);
       }
     }
-  }
-
-  /**
-   * Builds the EpochProvingJobData snapshot for a post-mortem failure upload from a set of
-   * checkpoint provers. Includes every checkpoint regardless of whether sub-tree proving
-   * completed — partial state is still useful for post-mortem analysis.
-   */
-  public static async buildProvingData(checkpoints: readonly CheckpointProver[]): Promise<EpochProvingJobData> {
-    if (checkpoints.length === 0) {
-      throw new Error('Cannot build proving data from an empty checkpoint set');
-    }
-    // Provers no longer cache their txs; re-fetch each checkpoint's txs from the tx pool (concurrently)
-    // for the snapshot. The pool retains them past the proving window (A-1274), so this is durable.
-    const perCheckpoint = await Promise.all(checkpoints.map(async c => ({ c, txs: await c.getTxsForUpload() })));
-    const txs = new Map();
-    const l1ToL2Messages: Record<number, Fr[]> = {};
-    for (const { c, txs: checkpointTxs } of perCheckpoint) {
-      for (const [hash, tx] of checkpointTxs) {
-        txs.set(hash, tx);
-      }
-      l1ToL2Messages[c.checkpoint.number] = c.l1ToL2Messages;
-    }
-    return {
-      epochNumber: checkpoints[0].epochNumber,
-      checkpoints: checkpoints.map(c => c.checkpoint),
-      txs,
-      l1ToL2Messages,
-      previousBlockHeader: checkpoints[0].previousBlockHeader,
-      previousInboxRollingHash: checkpoints[0].previousInboxRollingHash,
-      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
-    };
   }
 
   // ---------------- reconcile helpers ----------------

@@ -18,8 +18,8 @@ import { BlockHeader, type Tx } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
+import { buildProvingData } from '../failure-uploader.js';
 import { ProverNodeJobMetrics } from '../metrics.js';
-import { SessionManager } from '../session-manager.js';
 import { CheckpointProver, type CheckpointProverArgs, type CheckpointProverDeps } from './checkpoint-prover.js';
 
 describe('CheckpointProver', () => {
@@ -760,7 +760,7 @@ describe('CheckpointProver', () => {
       txProvider.getTxsForBlock.mockReset();
       txProvider.getTxsForBlock.mockResolvedValue({ txs: [fakeTx('0xaa')], missingTxs: [] });
 
-      const data = await SessionManager.buildProvingData([prover]);
+      const data = await buildProvingData([prover]);
       expect(data.txs.get('0xaa')).toBeDefined();
       expect(data.checkpoints).toEqual([checkpoint]);
       expect(data.epochNumber).toEqual(prover.epochNumber);
