@@ -3,6 +3,7 @@ import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
@@ -146,6 +147,30 @@ describe('CheckpointStore', () => {
     store.reapExpired(EpochNumber(2));
     const remainingNumbers = store.listAll().map(p => p.checkpoint.number);
     expect(remainingNumbers).toEqual([3]);
+  });
+
+  it('stop cancels the remaining provers and waits for provers removed earlier to tear down', async () => {
+    const pruned = await Checkpoint.random(CheckpointNumber(2), { numBlocks: 1, startBlockNumber: 2 });
+    const kept = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, startBlockNumber: 1 });
+    await store.addOrUpdate(kept, makeRegisterData());
+    await store.addOrUpdate(pruned, makeRegisterData());
+    const [keptStub, prunedStub] = stubs;
+    const prunedTeardown = promiseWithResolvers<void>();
+    prunedStub.whenDone = () => prunedTeardown.promise;
+
+    store.cancelAndRemoveAboveBlock(BlockNumber(1));
+
+    let stopped = false;
+    const stopPromise = store.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(keptStub.isCancelled()).toBe(true);
+    expect(stopped).toBe(false);
+
+    prunedTeardown.resolve();
+    await stopPromise;
+    expect(stopped).toBe(true);
   });
 
   it('listForEpoch returns only provers in the epoch slot range', async () => {

@@ -103,6 +103,52 @@ describe('ProverNode', () => {
     expect(sessionManager.onCheckpointAdded).toHaveBeenCalledWith(EpochNumber(1));
   });
 
+  it('ignores a checkpointed tip at or below the catch-up cursor', async () => {
+    setupNotFullyProven();
+    const event = mineCheckpoint(makeCheckpoint(2, 2, 2));
+    proverNode.setLastProcessedCheckpoint(CheckpointNumber(2));
+
+    await proverNode.handleBlockStreamEvent(event);
+
+    expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
+    expect(sessionManager.onCheckpointAdded).not.toHaveBeenCalled();
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(2));
+  });
+
+  it('registers the first checkpoint with a zero previous inbox rolling hash', async () => {
+    setupNotFullyProven();
+    const event = mineCheckpoint(makeCheckpoint(1, 1, 1));
+    // No checkpoint precedes the first one, so none may be read to source its chain start.
+    l2BlockSource.getCheckpoint.mockImplementation((query: any) =>
+      Promise.resolve(
+        'number' in query && Number(query.number) === 1 ? makePublishedCheckpoint(mined.get(1)!) : undefined,
+      ),
+    );
+
+    await proverNode.handleBlockStreamEvent(event);
+
+    const [registered] = proverNode.getCheckpointStore().listAll();
+    expect(registered.previousInboxRollingHash).toEqual(Fr.ZERO);
+  });
+
+  it('resets the catch-up cursor to zero on a prune to genesis without reading block data', async () => {
+    setupNotFullyProven();
+    await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(1));
+    l2BlockSource.getBlockData.mockRejectedValue(new Error('block data must not be read for a prune to genesis'));
+
+    await proverNode.handleBlockStreamEvent({
+      type: 'chain-pruned',
+      block: { number: BlockNumber(0), hash: '0x00' },
+      checkpointed: makeTipId(0),
+      proven: makeTipId(0),
+    });
+
+    expect(proverNode.getCheckpointStore().listAll()).toEqual([]);
+    expect(sessionManager.onPrune).toHaveBeenCalledWith([EpochNumber(1)]);
+    expect(proverNode.getLastProcessedCheckpoint()).toEqual(CheckpointNumber(0));
+  });
+
   it('caps the catch-up fetch at two epochs when resyncing far behind the checkpointed tip', async () => {
     // epochDuration=1 ⇒ two epochs' worth of checkpoints is 2. Cursor sits at checkpoint 0 while the
     // checkpointed tip has jumped to 100 (e.g. the prover node was offline for a long time). We must not
