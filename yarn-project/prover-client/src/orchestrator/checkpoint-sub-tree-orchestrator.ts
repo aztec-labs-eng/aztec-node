@@ -293,10 +293,10 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
 
   /** Resolves once the block's root proof is ready. Stays pending if the block fails or the sub-tree is cancelled. */
   public whenBlockRootProven(blockNumber: BlockNumber): Promise<void> {
-    return this.getBlockRootProven(blockNumber).promise;
+    return this.getOrCreateBlockRootCompletion(blockNumber).promise;
   }
 
-  private getBlockRootProven(blockNumber: BlockNumber): PromiseWithResolvers<void> {
+  private getOrCreateBlockRootCompletion(blockNumber: BlockNumber): PromiseWithResolvers<void> {
     let proven = this.blockRootProven.get(blockNumber);
     if (!proven) {
       proven = promiseWithResolvers<void>();
@@ -848,9 +848,8 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         // will be the first to see all three pieces (header, proof output, archive) and run the checks.
         await this.verifyBuiltBlockAgainstSyncedState(provingState);
 
-        // The check above rejects the proving state when the proven block does not match the synced chain.
         if (!provingState.getError()) {
-          this.getBlockRootProven(provingState.blockNumber).resolve();
+          this.getOrCreateBlockRootCompletion(provingState.blockNumber).resolve();
         }
         if (this.blocksOnly) {
           return;

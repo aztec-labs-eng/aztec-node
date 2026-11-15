@@ -51,7 +51,8 @@ describe('EarlyBlockProver', () => {
     checkpointedBlock = 0;
     subTrees = [];
 
-    l2BlockSource.getL1Constants.mockResolvedValue({ ...EmptyL1RollupConstants, epochDuration: 4 });
+    // One long epoch, so every slot the tests use is in the epoch of the genesis block.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...EmptyL1RollupConstants, epochDuration: 1000 });
     l2BlockSource.getBlockNumber.mockImplementation(() => Promise.resolve(BlockNumber(checkpointedBlock)));
     l2BlockSource.getBlocks.mockImplementation(query => {
       const { from, limit } = query as { from: BlockNumber; limit: number };
@@ -71,6 +72,7 @@ describe('EarlyBlockProver', () => {
     proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementation(() => {
       const subTree = mock<CheckpointSubTreeOrchestrator>();
       subTree.whenBlockRootProven.mockReturnValue(new Promise(() => {}));
+      subTree.getSubTreeResult.mockReturnValue(new Promise(() => {}));
       subTrees.push(subTree);
       return Promise.resolve(subTree);
     });
@@ -261,7 +263,7 @@ describe('EarlyBlockProver', () => {
         data: mock<Tx['data']>({ forPublic: index === 1 ? mock() : undefined }),
       }),
     );
-    const processedByTx = new Map(txs.map(tx => [tx, mock<ProcessedTx>()]));
+    const processedByTx = new Map<Tx, ProcessedTx>(txs.map(tx => [tx, mock<ProcessedTx>()]));
     // The provider returns the transactions out of order. Execution keeps the order it is given.
     txProvider.getTxsForBlock.mockResolvedValue({ txs: [txs[2], txs[0], txs[1]], missingTxs: [] });
     publicProcessorFactory.create.mockReturnValue(
@@ -290,6 +292,50 @@ describe('EarlyBlockProver', () => {
     prover.onChainProposed(BlockNumber(1));
 
     await retryFastUntil(() => subTrees[0]?.stop.mock.calls.length > 0, 'failed sub-tree stopped');
+  });
+
+  it('leaves alone a block proposed before any checkpoint of its epoch has landed', async () => {
+    // Epochs hold four slots. The checkpointed tip is in epoch 1; block 2 is the first block of epoch 2.
+    l2BlockSource.getL1Constants.mockResolvedValue({ ...EmptyL1RollupConstants, epochDuration: 4 });
+    await propose(1, 5);
+    checkpointedBlock = 1;
+    await propose(2, 8);
+    await propose(3, 8);
+    prover.onChainProposed(BlockNumber(3));
+
+    // The first checkpoint of epoch 2 lands, and the next slot of that epoch is proven early.
+    checkpointedBlock = 3;
+    prover.onChainCheckpointed(BlockNumber(3));
+    await propose(4, 9);
+    prover.onChainProposed(BlockNumber(4));
+    await provenBlocks(subTrees, 0, [4]);
+
+    expect(subTrees).toHaveLength(1);
+  });
+
+  it('stops proving a slot early when one of its proving jobs fails after its block was executed', async () => {
+    await propose(1, 5);
+    const jobFailed = promiseWithResolvers<never>();
+    proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementationOnce(() => {
+      const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.whenBlockRootProven.mockReturnValue(new Promise(() => {}));
+      subTree.getSubTreeResult.mockReturnValue(jobFailed.promise);
+      subTrees.push(subTree);
+      return Promise.resolve(subTree);
+    });
+    prover.onChainProposed(BlockNumber(1));
+    await provenBlocks(subTrees, 0, [1]);
+
+    jobFailed.reject(new Error('agent out of memory'));
+    await retryFastUntil(() => subTrees[0].stop.mock.calls.length > 0, 'sub-tree stopped');
+
+    // The next block of the slot is not executed.
+    await propose(2, 5);
+    prover.onChainProposed(BlockNumber(2));
+    await propose(3, 6);
+    prover.onChainProposed(BlockNumber(3));
+    await provenBlocks(subTrees, 1, [3]);
+    expect(subTrees[0].setBlockCompleted).toHaveBeenCalledTimes(1);
   });
 
   it('waits on stop for a slot that was released just before', async () => {
@@ -323,7 +369,7 @@ describe('EarlyBlockProver', () => {
   }
 });
 
-/** Waits until the sub-tree at `index` has completed exactly these blocks, in this order. */
+/** Waits until the sub-tree at `index` has completed these blocks, in this order. */
 async function provenBlocks(
   subTrees: MockProxy<CheckpointSubTreeOrchestrator>[],
   index: number,

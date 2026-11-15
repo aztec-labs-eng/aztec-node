@@ -1,4 +1,4 @@
-import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
@@ -47,9 +47,13 @@ export type EarlyBlockProverDeps = BlockExecutionDeps & {
  * Early proving never aborts a broker job. A `CheckpointProver` may be waiting on the same job, and an abort would
  * fail it. The jobs of a pruned block therefore run to completion on the agents.
  *
- * Everything here is best-effort. A failure is logged, the affected slot stops being proven early, and its
- * checkpoint is proven the usual way. One failure does reach the checkpoint: the broker stores a job that failed
- * after all its retries, and answers the `CheckpointProver`'s request for the same job with that failure.
+ * A failure here is logged and stops early proving for the affected slot. Its checkpoint is still proven the usual
+ * way. One failure does reach the checkpoint: the broker stores a job that failed after all its retries, and
+ * answers the `CheckpointProver`'s request for the same job with that failure.
+ *
+ * A block is proven early only if a checkpoint of its epoch has already landed. The broker drops the jobs of old
+ * epochs once it sees a job of a newer epoch, and a block can be proposed shortly before its epoch starts. Proving
+ * it then would make the broker drop the jobs of an epoch whose proof-submission window is still open.
  */
 export class EarlyBlockProver {
   private readonly log: Logger;
@@ -100,7 +104,7 @@ export class EarlyBlockProver {
     }
     void this.events.put(fn).catch(err => {
       if (!this.stopped) {
-        this.log.warn(`Early proving could not handle ${what}`, { err });
+        this.log.warn(`Early proving could not handle ${what}`, { event: what, err });
       }
     });
   }
@@ -113,6 +117,13 @@ export class EarlyBlockProver {
     // Checkpointed blocks are proven by their `CheckpointProver`. On the first call this also places the cursor,
     // so a node that starts mid-chain does not walk back through history.
     const checkpointed = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'checkpointed' })) ?? BlockNumber.ZERO;
+    const checkpointedHeader = (await this.deps.l2BlockSource.getBlockData({ number: checkpointed }))?.header;
+    if (!checkpointedHeader) {
+      throw new Error(`Header of checkpointed block ${checkpointed} not found`);
+    }
+    const l1Constants = await this.deps.l2BlockSource.getL1Constants();
+    const checkpointedEpoch = getEpochAtSlot(checkpointedHeader.getSlot(), l1Constants);
+
     let from = BlockNumber(Math.max(this.lastBlock ?? checkpointed, checkpointed) + 1);
     while (from <= tip && !this.stopped) {
       const limit = Math.min(tip - from + 1, BLOCKS_PER_FETCH);
@@ -121,7 +132,15 @@ export class EarlyBlockProver {
         return;
       }
       for (const block of blocks) {
-        await this.addBlock(block);
+        if (getEpochAtSlot(block.slot, l1Constants) > checkpointedEpoch) {
+          this.log.debug(`Not proving block ${block.number} early: no checkpoint of its epoch has landed yet`, {
+            blockNumber: block.number,
+            slot: block.slot,
+            checkpointedEpoch,
+          });
+        } else {
+          await this.addBlock(block);
+        }
         this.lastBlock = block.number;
       }
       from = BlockNumber(blocks.at(-1)!.number + 1);
@@ -138,8 +157,8 @@ export class EarlyBlockProver {
         throw new Error(`Header of block ${block.number - 1} not found`);
       }
       if (previousHeader.getSlot() === slot) {
-        // The slot's early proving was dropped. A block's proving inputs depend on the blocks before it in the
-        // slot, so the rest of the slot is left to its checkpoint.
+        // The slot's first block was not proven early. A block's proving inputs depend on the blocks before it in
+        // the slot, so the rest of the slot is left to its checkpoint.
         this.log.debug(`Not proving block ${block.number} early: slot ${slot} is not being proven from its start`, {
           blockNumber: block.number,
           slot,
@@ -183,7 +202,7 @@ export class EarlyBlockProver {
 
   private dropOldestSlots(): void {
     while (this.slots.size > MAX_SLOTS_IN_PROGRESS) {
-      const oldest = Math.min(...this.slots.keys()) as SlotNumber;
+      const oldest = SlotNumber(Math.min(...this.slots.keys()));
       this.log.warn(`Dropping early proving for slot ${oldest}: too many slots without a checkpoint`, { slot: oldest });
       // Nothing tracks this slot from here on, so nothing would release its chonk proofs if it were pruned later.
       // If it is checkpointed instead, its `CheckpointProver` requests them again and the broker serves them.
@@ -285,6 +304,26 @@ class SlotInProgress {
     }
   }
 
+  /**
+   * A proving job can fail after the block that requested it has been executed. The sub-tree reports that through
+   * its result, which nothing else here reads. Later blocks of the slot would build on the failed one, so the slot
+   * stops being proven early.
+   */
+  private giveUpWhenAJobFails(subTree: CheckpointSubTreeOrchestrator): void {
+    void subTree.getSubTreeResult().catch(async err => {
+      // Stopping the sub-tree also rejects its result.
+      if (this.failed || this.abortController.signal.aborted) {
+        return;
+      }
+      this.failed = true;
+      this.log.warn(`A proving job of slot ${this.slot} failed; leaving the slot to its checkpoint`, {
+        slot: this.slot,
+        err,
+      });
+      await this.stopSubTree();
+    });
+  }
+
   private async stopSubTree(): Promise<void> {
     const subTree = this.subTree;
     this.subTree = undefined;
@@ -321,6 +360,7 @@ class SlotInProgress {
       if (signal.aborted) {
         return;
       }
+      this.giveUpWhenAJobFails(this.subTree);
     }
     const subTree = this.subTree;
 
