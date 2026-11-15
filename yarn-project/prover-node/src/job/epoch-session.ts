@@ -460,9 +460,9 @@ export class EpochSession implements Traceable {
   private toTopTreeHooks(): TopTreeJobHooks {
     const hooks = this.deps.hooks;
     return {
-      // `beforeProve` fires once the sub-tree (checkpoint block) proofs are ready and the root prove is
-      // about to start — the boundary between `awaiting-checkpoints` and proving the top tree. Don't
-      // clobber a terminal state set concurrently by cancel().
+      // `beforeProve` fires once the top-tree job has built its blob challenges and is about to prove. The
+      // block-level proofs of some checkpoints may still be pending then: the top tree takes them as they
+      // arrive. Don't clobber a terminal state set concurrently by cancel().
       beforeProve: async () => {
         if (!this.isTerminal()) {
           this.state = 'awaiting-root';
