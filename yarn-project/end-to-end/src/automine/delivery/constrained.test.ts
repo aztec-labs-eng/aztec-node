@@ -262,7 +262,7 @@ describe('constrained delivery handshake forgery', () => {
       .get_app_siloed_secrets(bob, forgedRecipient)
       .simulate({ from: bob });
 
-    // The forgery announces a different ephemeral key, so the forgery protection makes the two secrets diverge.
+    // The forgery uses a different ephemeral key, so the forgery protection makes the two secrets diverge.
     expect(forgedSecret).not.toEqual(honestSecret);
   });
 });

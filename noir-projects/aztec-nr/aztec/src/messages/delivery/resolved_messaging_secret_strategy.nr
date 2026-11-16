@@ -18,7 +18,8 @@ pub struct ResolvedMessagingSecretStrategy {
 }
 
 impl ResolvedMessagingSecretStrategy {
-    /// A non-interactive handshake: the recipient re-derives the secret from the onchain handshake registry.
+    /// A non-interactive handshake for the contract to establish (see
+    /// [`via_non_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_non_interactive_handshake)).
     pub fn non_interactive_handshake() -> Self {
         Self { kind: NON_INTERACTIVE_HANDSHAKE, secret: 0 }
     }
@@ -29,13 +30,14 @@ impl ResolvedMessagingSecretStrategy {
         Self { kind: UNCONSTRAINED_SECRET, secret }
     }
 
-    /// An interactive handshake: the recipient learns the secret while signing its authorization.
+    /// An interactive handshake for the contract to establish (see
+    /// [`via_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_interactive_handshake)).
     pub fn interactive_handshake() -> Self {
         Self { kind: INTERACTIVE_HANDSHAKE, secret: 0 }
     }
 
-    /// The recipient's messaging secret derived from their tagging key, ready to use. Sound for both delivery modes:
-    /// constrained delivery proves the derivation.
+    /// The recipient's messaging secret derived from their tagging key, ready to use (see
+    /// [`via_recipient_tsk_secret`](super::OnchainUnconstrainedDelivery::via_recipient_tsk_secret)).
     pub fn recipient_tsk(secret: Field) -> Self {
         Self { kind: RECIPIENT_TSK, secret }
     }

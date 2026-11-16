@@ -3,13 +3,10 @@ use crate::sync::cursor::SyncCursor;
 use crate::sync::discovered_handshakes::origin_block_numbers;
 
 use aztec::{
-    messages::delivery::{
-        constrained_delivery::VALIDATE_HANDSHAKE_SELECTOR,
-        handshake::{
-            AppSiloedHandshakeSecrets, forgery_protected_eph_pk, GET_APP_SILOED_SECRETS_SELECTOR,
-            GET_NON_INTERACTIVE_HANDSHAKES_SELECTOR, INTERACTIVE_HANDSHAKE_SELECTOR, MAX_HANDSHAKES_PER_PAGE,
-            NON_INTERACTIVE_HANDSHAKE_SELECTOR,
-        },
+    messages::delivery::handshake::{
+        AppSiloedHandshakeSecrets, forgery_protected_eph_pk, GET_APP_SILOED_SECRETS_SELECTOR,
+        GET_NON_INTERACTIVE_HANDSHAKES_SELECTOR, INTERACTIVE_HANDSHAKE_SELECTOR, MAX_HANDSHAKES_PER_PAGE,
+        NON_INTERACTIVE_HANDSHAKE_SELECTOR, VALIDATE_HANDSHAKE_SELECTOR,
     },
     oracle::shared_secret::get_shared_secret,
     protocol::{
@@ -47,11 +44,11 @@ unconstrained fn setup_with_two_recipients() -> (TestEnvironment, AztecAddress, 
     (env, registry_address, sender, recipient_a, recipient_b)
 }
 
-// The constrained-delivery helpers in aztec-nr cannot import this contract because the contract depends on aztec-nr.
-// Assert their selector constants match this contract's macro-generated interface so a signature change on either side
-// fails here instead of silently drifting.
+// aztec-nr's handshake module cannot import this contract because the contract depends on aztec-nr. Assert its selector
+// constants match this contract's macro-generated interface so a signature change on either side fails here instead of
+// silently drifting.
 #[test]
-unconstrained fn selectors_match_the_constrained_delivery_helper() {
+unconstrained fn selectors_match_the_aztec_nr_handshake_module() {
     let registry = HandshakeRegistry::at(AztecAddress::from_field(1));
     let sender = AztecAddress::from_field(2);
     let recipient = AztecAddress::from_field(3);
@@ -141,7 +138,7 @@ unconstrained fn two_senders_to_same_recipient_share_tag() {
     );
     let expected_siloed_tag = compute_siloed_private_log_first_field(registry_address, raw_tag);
 
-    // The handshake announcement log (index 1) is encrypted and uniformly sized.
+    // The handshake log (index 1) is encrypted and uniformly sized.
     assert_eq(logs_first.get(1).len(), PRIVATE_LOG_SIZE_IN_FIELDS);
     assert_eq(logs_second.get(1).len(), PRIVATE_LOG_SIZE_IN_FIELDS);
     assert_eq(logs_first.get(1).get(0), expected_siloed_tag);
@@ -172,7 +169,7 @@ unconstrained fn rehandshake_replaces_previous_secret_and_returns_latest() {
     );
     let expected_siloed_tag = compute_siloed_private_log_first_field(registry_address, raw_tag);
 
-    // Both handshake announcement logs are encrypted, uniformly sized, and share the same tag.
+    // Both handshake logs are encrypted, uniformly sized, and share the same tag.
     assert_eq(logs_first.get(1).len(), PRIVATE_LOG_SIZE_IN_FIELDS);
     assert_eq(logs_second.get(1).len(), PRIVATE_LOG_SIZE_IN_FIELDS);
     assert_eq(logs_first.get(1).get(0), expected_siloed_tag);
@@ -481,7 +478,8 @@ unconstrained fn non_interactive_handshake_is_discovered_by_recipient() {
     });
     assert_eq(recipient_secret.unwrap(), returned_secrets.shared);
 
-    // The custom sync hook falls through to `do_sync_state`, so default note discovery still works.
+    // The custom sync hook falls through to `do_sync_state_without_handshake_discovery`, so default note discovery
+    // still works.
     let utility_secrets = env
         .execute_utility_opts(
             ExecuteUtilityOptions::new().with_from(sender),

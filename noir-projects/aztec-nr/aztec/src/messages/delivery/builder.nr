@@ -130,15 +130,8 @@ impl MessageDelivery {
     ///
     /// The message itself reveals no information on-chain about sender, recipient, or contents: both obtaining the
     /// plaintext and recognizing that a log was sent between a given sender and recipient require their shared
-    /// messaging secret, which no third party can compute.
-    ///
-    /// The exception is the discovery tag. Reaching a recipient the sender has not handshaked with before establishes,
-    /// by default, a non-interactive handshake. This reveals to anyone who knows the recipient's address that a
-    /// handshake was made with them, but not by whom, nor the contents. An interactive handshake
-    /// ([`OnchainUnconstrainedDelivery::via_interactive_handshake`]) does not leak this, but it requires the
-    /// recipient's cooperation.
-    ///
-    /// Delivering to the sender itself reveals nothing.
+    /// messaging secret. What deriving that secret reveals, and to whom, depends on the derivation: see the `via_*`
+    /// methods of [`OnchainUnconstrainedDelivery`].
     ///
     /// Delivering the message does produce on-chain information in the form of private logs, so transactions that
     /// deliver many messages this way might be identifiable by the large number of logs.
@@ -163,10 +156,22 @@ impl MessageDelivery {
     ///
     /// The message will be stored on-chain in a private log, as part of the transaction's effects, and will be
     /// retrievable in the future without requiring any backups. The ciphertext will be decryptable by the recipient
-    /// using the messaging secret that tags it.
+    /// using the messaging secret that tags it, and the log will be tagged so that the recipient can efficiently find
+    /// it.
     ///
-    /// The log will be tagged in such a way that the recipient will be able to efficiently find it after querying for
-    /// handshakes.
+    /// ## Sequences
+    ///
+    /// So that the recipient finds every message, the messages delivered to a recipient with the same messaging secret
+    /// form a sequence: each one takes the next index, and its delivery proves that the previous one was delivered. The
+    /// recipient scans a sequence's tags in order.
+    ///
+    /// Transactions that deliver on the same sequence must therefore land one after another, as concurrent ones can
+    /// fail, while transactions that deliver to different recipients do not affect each other. Several messages on one
+    /// sequence can share a transaction, provided that the handshake behind it, if any, landed in an earlier
+    /// transaction.
+    ///
+    /// Third parties cannot interfere with a sequence to make these transactions fail: only the sequence's senders can
+    /// extend it.
     ///
     /// ## Costs
     ///
@@ -182,20 +187,9 @@ impl MessageDelivery {
     ///
     /// ## Privacy
     ///
-    /// The message itself reveals no information on-chain about sender, recipient, or contents: both obtaining the
-    /// plaintext and recognizing that a log was sent between a given sender and recipient require their shared
-    /// messaging secret, which no third party can compute.
-    ///
-    /// The exception is the discovery tag. Reaching a recipient the sender has not handshaked with before establishes,
-    /// by default, a non-interactive handshake. A non-interactive handshake reveals to anyone who knows the recipient's
-    /// address that a handshake was made with them, but not by whom. An interactive handshake
-    /// ([`OnchainConstrainedDelivery::via_interactive_handshake`]) does not leak this, but it requires the recipient's
-    /// cooperation.
-    ///
-    /// Delivering to the sender itself reveals nothing.
-    ///
-    /// Delivering the message does produce on-chain information in the form of private logs and nullifiers, so
-    /// transactions that deliver many messages this way might be identifiable by these markers.
+    /// The same as for [`MessageDelivery::onchain_unconstrained`], except that delivery also emits nullifiers, so
+    /// transactions that deliver many messages this way might be identifiable by the large number of logs and
+    /// nullifiers.
     pub fn onchain_constrained() -> OnchainConstrainedDelivery {
         OnchainConstrainedDelivery::new()
     }
@@ -222,10 +216,17 @@ impl MessageDeliveryBuilder for OffchainDelivery {
 
 /// On-chain unconstrained delivery. Returned by [`MessageDelivery::onchain_unconstrained`].
 ///
-/// By default the tag reuses a handshake already registered for the pair, and
-/// otherwise falls back to the wallet-resolved [messaging secret
-/// strategy][`crate::messages::delivery::ResolvedMessagingSecretStrategy`]. The contract can also fix the
-/// derivation, and its choice is honored over this default.
+/// ## Messaging secret
+///
+/// The message is tagged and encrypted with a messaging secret that the sender and the recipient share. By default,
+/// delivery uses the handshake the sender has already registered with the recipient, if any, and otherwise lets the
+/// wallet choose how to derive the secret. PXE's default is the
+/// [recipient's tagging key][`OnchainUnconstrainedDelivery::via_recipient_tsk_secret`] when it can use the recipient's
+/// keys, as it can for the sender itself, and a
+/// [non-interactive handshake][`OnchainUnconstrainedDelivery::via_non_interactive_handshake`] otherwise.
+///
+/// The `via_*` methods choose the derivation instead, overriding the wallet. Each one describes what it reveals and
+/// what it requires.
 pub struct OnchainUnconstrainedDelivery {
     sender_override: Option<AztecAddress>,
     messaging_secret_derivation: Option<MessagingSecretDerivation>,
@@ -236,14 +237,13 @@ impl OnchainUnconstrainedDelivery {
         Self { sender_override: Option::none(), messaging_secret_derivation: Option::none() }
     }
 
-    /// Overrides the sender address used for discovery tag derivation.
+    /// Overrides the sender that the messaging secret is chosen for.
     ///
-    /// On-chain messages are tagged so that the recipient can find them efficiently without scanning all logs. The tag
-    /// is derived from a shared secret between a "sender" and the recipient. By default, the sender is the
-    /// wallet-supplied address (typically the account that initiated the transaction), but some contracts need to
-    /// override it so that recipients can discover the notes correctly. This is the case for account contracts in their
-    /// constructor: the deployer is the one that initiated the transaction, but any notes generated during deployment
-    /// should be tagged by the account contract itself.
+    /// By default, the sender is the wallet-supplied address (typically the account that initiated the transaction),
+    /// but some contracts need to override it so that recipients can discover the notes correctly. This is the case for
+    /// account contracts in their constructor: the deployer is the one that initiated the transaction, but any notes
+    /// generated during deployment should be sent by the account contract itself. See [`OnchainUnconstrainedDelivery`]
+    /// for how the messaging secret is chosen.
     ///
     /// ## Examples
     ///
@@ -255,48 +255,52 @@ impl OnchainUnconstrainedDelivery {
         *self
     }
 
-    /// Derives the discovery tag from a non-interactive handshake for the pair, reusing an existing one and creating a
-    /// fresh one only when none exists.
+    /// Derives the messaging secret from a handshake with the recipient, establishing a non-interactive one if none is
+    /// registered.
+    ///
+    /// Establishing the handshake reveals to anyone who knows the recipient's address that someone performed a
+    /// handshake with them, though not who. As the handshake is established in the transaction that delivers the first
+    /// message, it also reveals that this transaction likely carries a message for them, though nothing about the
+    /// contents of that or any later message. An interactive handshake
+    /// ([`OnchainUnconstrainedDelivery::via_interactive_handshake`]) reveals nothing, but requires the recipient's
+    /// cooperation.
     pub fn via_non_interactive_handshake(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::non_interactive_handshake());
         *self
     }
 
-    /// Derives the discovery tag from an interactive handshake.
+    /// Derives the messaging secret from a handshake with the recipient, establishing an interactive one if none is
+    /// registered.
     ///
-    /// Reuses an existing handshake for the pair, creating a fresh interactive one only when none exists.
-    ///
-    /// Unlike a non-interactive handshake, establishing an interactive one announces nothing onchain, but it requires
-    /// the recipient's cooperation: they must answer the registry's signed-authorization request, so the send fails
-    /// if they cannot be reached.
+    /// Establishing the handshake reveals nothing about the sender or the recipient, unlike a non-interactive handshake
+    /// ([`OnchainUnconstrainedDelivery::via_non_interactive_handshake`]). It does however require the recipient's
+    /// cooperation: they must sign it, so the send fails if they cannot be reached.
     pub fn via_interactive_handshake(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::interactive_handshake());
         *self
     }
 
-    /// Derives the discovery tag from the address-derived secret for the `(sender, recipient)` pair, established via
-    /// Diffie-Hellman between their addresses. Leaves no on-chain trace and never consults the handshake registry.
+    /// Derives the messaging secret from the sender's and the recipient's address keys, via Diffie-Hellman.
     ///
-    /// ## Examples
+    /// Reveals nothing about the sender or the recipient, and needs no handshake. Anyone able to break either party's
+    /// address key, for example with a quantum computer, can however compute the secret, unlike that of
+    /// [`OnchainUnconstrainedDelivery::via_recipient_tsk_secret`].
     ///
-    /// ```noir
-    /// MessageDelivery::onchain_unconstrained().via_address_derived_secret()
-    /// ```
+    /// The recipient only finds the message if their wallet looks for messages from the sender, which it does for the
+    /// recipient's own accounts and for the senders the recipient registers: the recipient must know to expect messages
+    /// from the sender.
     pub fn via_address_derived_secret(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::address_derived());
         *self
     }
 
-    /// Derives the discovery tag from the recipient's tagging key, regardless of the sender. Leaves no on-chain trace.
+    /// Derives the messaging secret from the recipient's tagging key, regardless of the sender.
+    ///
+    /// Reveals nothing about the sender or the recipient, even to someone able to break the recipient's address key,
+    /// for example with a quantum computer, as the tagging key is independent of it.
     ///
     /// The send fails unless the sender's PXE holds the recipient's keys and the recipient is in the execution's
     /// scopes, both of which are typically true when delivering to the sender itself.
-    ///
-    /// ## Examples
-    ///
-    /// ```noir
-    /// MessageDelivery::onchain_unconstrained().via_recipient_tsk_secret()
-    /// ```
     pub fn via_recipient_tsk_secret(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::recipient_tsk());
         *self
@@ -321,9 +325,8 @@ impl From<OnchainUnconstrainedDelivery> for OnchainDeliveryMode {
 
 /// On-chain constrained delivery. Returned by [`MessageDelivery::onchain_constrained`].
 ///
-/// By default the tag reuses a handshake already registered for the pair, and otherwise falls back to the
-/// wallet-resolved [messaging secret strategy][`crate::messages::delivery::ResolvedMessagingSecretStrategy`].
-/// Constrained delivery only supports handshake and recipient-tsk derivations.
+/// The messaging secret is chosen as for [`OnchainUnconstrainedDelivery`], except that not all derivations can be
+/// constrained: delivery fails if the wallet resolves one that cannot.
 pub struct OnchainConstrainedDelivery {
     sender_override: Option<AztecAddress>,
     messaging_secret_derivation: Option<MessagingSecretDerivation>,
@@ -334,7 +337,7 @@ impl OnchainConstrainedDelivery {
         Self { sender_override: Option::none(), messaging_secret_derivation: Option::none() }
     }
 
-    /// Overrides the sender address used for discovery tag derivation.
+    /// Overrides the sender that the messaging secret is chosen for.
     ///
     /// See [`OnchainUnconstrainedDelivery::with_sender`] for details.
     ///
@@ -348,38 +351,27 @@ impl OnchainConstrainedDelivery {
         *self
     }
 
-    /// Derives the discovery tag from a non-interactive handshake for the pair, reusing an existing one and creating a
-    /// fresh one only when none exists. Overrides the wallet's default resolution.
+    /// Derives the messaging secret from a handshake with the recipient, establishing a non-interactive one if none is
+    /// registered.
     ///
-    /// Constrained delivery only supports constrained secrets (e.g., handshake-registry backed derivations)
+    /// See [`OnchainUnconstrainedDelivery::via_non_interactive_handshake`] for details.
     pub fn via_non_interactive_handshake(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::non_interactive_handshake());
         *self
     }
 
-    /// Derives the discovery tag from an interactive handshake.
+    /// Derives the messaging secret from a handshake with the recipient, establishing an interactive one if none is
+    /// registered.
     ///
-    /// Reuses an existing handshake for the pair, creating a fresh interactive one only when none exists. Overrides
-    /// the wallet's default resolution.
-    ///
-    /// Unlike a non-interactive handshake, establishing an interactive one announces nothing onchain, but it requires
-    /// the recipient's cooperation: they must answer the registry's signed-authorization request, so the send fails
-    /// if they cannot be reached.
+    /// See [`OnchainUnconstrainedDelivery::via_interactive_handshake`] for details.
     pub fn via_interactive_handshake(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::interactive_handshake());
         *self
     }
 
-    /// Derives the discovery tag from the recipient's tagging key, regardless of the sender. Overrides the wallet's
-    /// default resolution.
+    /// Derives the messaging secret from the recipient's tagging key, regardless of the sender.
     ///
     /// See [`OnchainUnconstrainedDelivery::via_recipient_tsk_secret`] for details.
-    ///
-    /// ## Examples
-    ///
-    /// ```noir
-    /// MessageDelivery::onchain_constrained().via_recipient_tsk_secret()
-    /// ```
     pub fn via_recipient_tsk_secret(&mut self) -> Self {
         self.messaging_secret_derivation = Option::some(MessagingSecretDerivation::recipient_tsk());
         *self

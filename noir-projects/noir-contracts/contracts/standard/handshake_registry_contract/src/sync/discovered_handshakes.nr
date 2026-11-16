@@ -20,9 +20,9 @@ global HANDSHAKE_DISCOVERED: Field = sha256_to_field("HANDSHAKE_REGISTRY::HANDSH
 
 /// Records a discovered handshake for `recipient`.
 ///
-/// The handshake originates at the block its announcement log landed in, so a reorg pruning that block makes the
-/// handshake invisible again. Fact identity covers the payload and origin block, so re-recording the same handshake
-/// at the same origin is a no-op.
+/// The handshake originates at the block its handshake log landed in, so a reorg pruning that block makes the handshake
+/// invisible again. Fact identity covers the payload and origin block, so re-recording the same handshake at the same
+/// origin is a no-op.
 pub(crate) unconstrained fn record_discovered_handshake(
     contract_address: AztecAddress,
     recipient: AztecAddress,

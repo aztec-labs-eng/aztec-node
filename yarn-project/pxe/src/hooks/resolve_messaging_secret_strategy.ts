@@ -4,49 +4,65 @@ import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
+import type { PXE } from '../pxe.js';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
 
 /**
- * How a message's messaging secret is chosen: the wallet's strategy, returned by the `resolveMessagingSecretStrategy`
- * hook when no onchain handshake has been registered for the sender/recipient pair. This is intent (plus, for an
- * arbitrary secret, the raw material); PXE resolves it into the secret it hands the contract.
+ * The wallet's choice of how to derive a message's messaging secret, returned by
+ * {@link ResolveMessagingSecretStrategy}. This is intent (plus, for an arbitrary secret, the raw material) - PXE
+ * resolves it into either a handshake for the contract to establish or a messaging secret ready to use.
  */
 export type MessagingSecretStrategy =
   | {
-      /** Establish a fresh non-interactive handshake via the onchain registry; reveals the recipient onchain. */
+      /**
+       * Establish a non-interactive handshake through the onchain handshake registry. Backs both delivery modes.
+       * Establishing it reveals to anyone who knows the recipient's address that someone performed a handshake with
+       * them, though not who. As the handshake is established in the transaction that delivers the first message, it
+       * also reveals that this transaction likely carries a message for them, though nothing about the contents of that
+       * or any later message. An `interactive-handshake` reveals nothing, but requires the recipient's cooperation.
+       */
       type: 'non-interactive-handshake';
     }
   | {
       /**
-       * Establish a fresh interactive handshake via the onchain registry. Reveals nothing about the recipient
-       * onchain, but requires the recipient to answer the registry's signed-authorization request (served through
-       * the {@link ResolveCustomRequest} hook), so the send fails when it cannot be served.
+       * Establish an interactive handshake through the onchain handshake registry. Backs both delivery modes.
+       * Establishing it reveals nothing about the sender or the recipient, unlike a `non-interactive-handshake`, but
+       * requires the recipient to sign the handshake (served through the {@link ResolveCustomRequest} hook), so the
+       * send fails when that request cannot be served.
        */
       type: 'interactive-handshake';
     }
   | {
-      /** Derive the secret from the sender's and recipient's address keys via ECDH. PXE computes and silos it. */
+      /**
+       * Derive the secret from the sender's and the recipient's address keys, via Diffie-Hellman. Only backs
+       * unconstrained delivery: constrained delivery fails with it. Reveals nothing about the sender or the recipient,
+       * and needs no handshake. Anyone able to break either party's address key, for example with a quantum computer,
+       * can however compute the secret, unlike that of a `recipient-tsk` one.
+       *
+       * The recipient only finds the message if their PXE looks for messages from the sender, which it does for its own
+       * accounts and for the senders registered with {@link PXE.registerMessagingSecretSource}: the recipient must know
+       * to expect messages from the sender.
+       */
       type: 'address-derived';
     }
   | {
       /**
-       * Derive the secret from the recipient's tagging secret key, regardless of the sender. PXE computes and silos
-       * it. Only usable when {@link MessagingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
-       * account such as the sender itself - the send fails otherwise. Sound for both delivery modes, as constrained
-       * delivery proves that the secret comes from that key. Contracts built against an Aztec.nr version that cannot
-       * prove it get a non-interactive handshake for constrained delivery instead.
+       * Derive the secret from the recipient's tagging key, regardless of the sender. Backs both delivery modes.
+       * Reveals nothing about the sender or the recipient, even to someone able to break the recipient's address key,
+       * for example with a quantum computer, as the tagging key is independent of it.
        *
-       * Unlike an address-derived tag, this tag cannot be computed by an attacker able to break the recipient's address
-       * key, for example with a quantum computer. The tagging key `tsk` is independent of the address key, and its
-       * public counterpart `tpk` is never shared with untrusted contracts, only its hash.
+       * Only usable when {@link MessagingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
+       * account such as the sender itself - the send fails otherwise. Contracts built against an Aztec.nr version that
+       * cannot constrain it get a non-interactive handshake for constrained delivery instead.
        */
       type: 'recipient-tsk';
     }
   | {
       /**
        * A raw shared secret point the two parties already share offchain (e.g. coordinated out-of-band), supplied by
-       * the wallet. PXE app-silos it before use. Only sound for unconstrained delivery, since nothing onchain proves
-       * the recipient knows it.
+       * the wallet. Only backs unconstrained delivery: constrained delivery fails with it, since nothing onchain proves
+       * the recipient knows it. Reveals nothing about the sender or the recipient.
        */
       type: 'arbitrary-secret';
       /** The raw (un-siloed) shared secret point to derive the tag from. */
@@ -58,7 +74,7 @@ export type TaggingSecretStrategy = MessagingSecretStrategy;
 
 /**
  * The strategy PXE applies when no {@link ResolveMessagingSecretStrategy} hook is configured, for a hook to fall back
- * to.
+ * to: `recipient-tsk` when `recipientTskAvailable` is set, and `non-interactive-handshake` otherwise.
  */
 export function defaultMessagingSecretStrategy({
   recipientTskAvailable,
@@ -92,8 +108,9 @@ export type TaggingSecretStrategyRequest = MessagingSecretStrategyRequest;
 /**
  * Hook returning the {@link MessagingSecretStrategy} for an outgoing message.
  *
- * PXE applies the returned strategy to every message without a registered handshake, including self-sends. A hook
- * with no policy for some messages can return {@link defaultMessagingSecretStrategy} for them.
+ * PXE applies the returned strategy to every message without a handshake from the sender to the recipient in the
+ * handshake registry, including self-sends, except when the contract chooses the derivation itself. A hook with no
+ * policy for some messages can return {@link defaultMessagingSecretStrategy} for them.
  */
 export type ResolveMessagingSecretStrategy = (
   request: MessagingSecretStrategyRequest,

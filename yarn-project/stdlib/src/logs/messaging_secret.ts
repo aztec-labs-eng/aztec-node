@@ -41,11 +41,9 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  * - **Arbitrary secret** ({@link computeFromArbitrarySecret}): the raw secret is a point the two parties agreed on
  *   themselves. It is app-siloed and directed to `recipient`. It only backs unconstrained delivery.
  * - **Handshake** ({@link computeFromHandshakeSecret}): the raw secret is the point the handshake registry stores for
- *   the pair. It is app-siloed, and backs both delivery modes. The registry validates it, by recomputing the app-siloed
- *   secret from the point for the calling contract.
+ *   the pair. It is app-siloed, and backs both delivery modes.
  * - **Recipient tsk** ({@link computeFromRecipientTsk}): the raw secret is the recipient's master tagging secret key
- *   `tsk_m`. It is app-siloed into `tsk_app` and directed to `recipient`, and backs both delivery modes. Constrained
- *   delivery has the kernel validate `tsk_app`, by recomputing it from `tsk_m` for the calling contract.
+ *   `tsk_m`. It is app-siloed into `tsk_app` and hashed with `recipient`'s address, and backs both delivery modes.
  *
  * ## From messaging secret to tag
  *
@@ -73,9 +71,6 @@ export class MessagingSecret {
 
   /**
    * Derives the messaging secret for an arbitrary shared secret point.
-   *
-   * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. The sender and the recipient
-   * agree on the point themselves.
    *
    * @param sharedSecretPoint - The shared secret point
    * @param app - Contract address to silo the secret to
@@ -107,8 +102,7 @@ export class MessagingSecret {
   /**
    * Derives the messaging secret two addresses share through ECDH.
    *
-   * The secret is app-siloed and directed to `recipient`, for unconstrained delivery. Each party derives the same
-   * secret using its own keys as the local side of the exchange.
+   * Each party derives the same secret using its own keys as the local side of the exchange.
    *
    * @returns The secret, or undefined if `externalAddress` is not a valid address.
    */
@@ -142,9 +136,7 @@ export class MessagingSecret {
    * Derives the messaging secret from the recipient's tagging secret key.
    *
    * The secret is the recipient's app-siloed tagging key hashed with their address, under the given delivery mode.
-   * Hashing in the address gives accounts that share a tagging key separate tag streams. The secret is a property of
-   * the recipient alone, so whoever sends the log has to know `recipientTsk`, and the recipient finds the log without
-   * knowing who sent it.
+   * Hashing in the address gives accounts that share a tagging key separate tag streams.
    */
   static async computeFromRecipientTsk(
     recipientTsk: Fq,

@@ -1,30 +1,45 @@
 //! Sender-side helpers for constrained message delivery.
 //!
-//! Constrained messages form sequences at an incrementing index, each anchored at index 0 and chained to its
-//! predecessor through a sequence nullifier after that. There are two kinds of sequences:
+//! [`MessageDelivery::onchain_constrained`](super::MessageDelivery::onchain_constrained) describes the sequences that
+//! constrained messages form, and what they mean for the transactions that deliver them. This explains how they are
+//! enforced.
 //!
-//! - per-`(sender, recipient, handshake secrets)`, anchored to the handshake registry. A pre-existing handshake's
-//!   secrets are anchored by [`constrain_preexisting_handshake_secrets`] before its constrained tag is emitted; every
-//!   send then emits the sequence nullifier via [`emit_handshake_sequence_nullifier`].
-//! - per-`(recipient, recipient-tsk messaging secret)`, anchored to the recipient's tagging key by
-//!   [`constrain_recipient_tsk_secret`]. Every send then emits the sequence nullifier via
-//!   [`emit_recipient_tsk_sequence_nullifier`]. The secret already belongs to the recipient alone, so every sender to
-//!   that recipient extends the same sequence.
+//! ## Sequences
 //!
-//! Two consequences shape the whole flow: sends on one sequence are strictly ordered across transactions (parallel
-//! sends collide or fail the predecessor check, while distinct recipients are distinct sequences and parallelize), and
-//! batching several sends onto one handshake sequence within a transaction requires an already-committed handshake.
+//! The send at index 0 anchors the sequence's messaging secret, proving that the recipient can derive it. Every send
+//! emits a sequence nullifier for its index, and every later send proves that its predecessor's exists. There are two
+//! kinds of sequences:
+//!
+//! - per `(sender, recipient, handshake secrets)`, anchored to the handshake registry by
+//!   [`constrain_preexisting_handshake_secrets`], or by the registry call that creates the handshake.
+//! - per `(recipient, recipient-tsk messaging secret)`, anchored to the recipient's tagging key by
+//!   [`constrain_recipient_tsk_secret`]. Every sender to the recipient extends the same sequence.
+//!
+//! Concurrent sends on one sequence collide on its nullifiers or fail the predecessor check. Concurrent first sends on
+//! different sequences can collide too: anchoring an existing handshake calls the registry's `validate_handshake`,
+//! which nullifies and recreates the handshake's note, so first sends for the same `(sender, recipient)` from different
+//! contracts collide on that note. Batching onto a handshake sequence needs a committed handshake, as a send only finds
+//! handshakes from earlier transactions (see
+//! [`get_existing_app_siloed_handshake_secrets`](super::handshake::get_existing_app_siloed_handshake_secrets)).
+//!
+//! ## Protection from third parties
+//!
+//! Anyone who could emit a sequence's next nullifier first would make the legitimate send fail as a duplicate, and
+//! could keep doing so on every retry. Each sequence nullifier therefore includes a secret that only the sequence's
+//! senders know: the handshake's sender-only secret for a handshake sequence (see
+//! [`compute_handshake_sequence_nullifier`]), and the messaging secret itself for a recipient-tsk sequence (see
+//! [`compute_recipient_tsk_sequence_nullifier`]).
+//!
+//! The handshake registry also keeps a recipient from forging a second handshake with the same messaging secret (see
+//! [`protect_from_forgery`](crate::messages::delivery::handshake::protect_from_forgery)).
 
 use crate::context::PrivateContext;
 use crate::keys::getters::get_public_keys;
-use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
+use crate::messages::delivery::handshake::{AppSiloedHandshakeSecrets, VALIDATE_HANDSHAKE_SELECTOR};
 use crate::messages::delivery::messaging_secret_derivation::compute_recipient_tsk_messaging_secret;
 use crate::nullifier::utils::compute_nullifier_existence_request;
 
-use crate::protocol::{
-    abis::function_selector::FunctionSelector, address::AztecAddress, hash::poseidon2_hash_with_separator,
-    traits::ToField,
-};
+use crate::protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, traits::ToField};
 
 /// Domain separator for the sequence nullifiers of constrained delivery with a handshake from the registry.
 ///
@@ -36,12 +51,6 @@ pub(crate) global DOM_SEP__CONSTRAINED_MSG_NULLIFIER: u32 = 3723577546;
 
 /// Domain separator for the sequence nullifiers of constrained delivery with a recipient-tsk messaging secret.
 pub(crate) global DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER: u32 = 3135815231;
-
-// The helper cannot import the handshake registry interface because the registry contract depends on aztec-nr. The
-// registry's test suite compares this against its macro-generated `HandshakeRegistry::at(...).method(...).selector`
-// value so signature drift fails in tests.
-pub global VALIDATE_HANDSHAKE_SELECTOR: FunctionSelector =
-    comptime { FunctionSelector::from_signature("validate_handshake((Field),(Field),(Field,Field))") };
 
 /// Anchors a pre-existing handshake's untrusted `(secrets, index)` to the registry before its constrained tag is
 /// emitted.
@@ -81,12 +90,10 @@ pub(crate) fn emit_handshake_sequence_nullifier(
     context.push_nullifier_unsafe(compute_handshake_sequence_nullifier(sender, recipient, secrets, index));
 }
 
-/// Computes a constrained send's sequence nullifier.
+/// Computes a handshake sequence's nullifier at `index`.
 ///
-/// Every constrained send emits this nullifier so the next send under the same sequence can prove its predecessor
-/// exists. The nullifier folds in both the app-siloed shared secret and sender-only secret: the shared secret binds
-/// the sequence to the discovery messaging secret, and the sender-only secret prevents a recipient who can
-/// reconstruct the shared secret from forging a sender's nullifier and griefing the sequence.
+/// The shared secret binds the sequence to its tag stream, and the sender-only secret is the one only the sender knows
+/// (see [`AppSiloedHandshakeSecrets::sender_only`] and this module's documentation).
 pub(crate) fn compute_handshake_sequence_nullifier(
     sender: AztecAddress,
     recipient: AztecAddress,
@@ -136,12 +143,13 @@ pub(crate) fn emit_recipient_tsk_sequence_nullifier(
     context.push_nullifier_unsafe(compute_recipient_tsk_sequence_nullifier(recipient, secret, index));
 }
 
-/// Computes a constrained recipient-tsk send's sequence nullifier.
+/// Computes a recipient-tsk sequence's nullifier at `index`.
 ///
-/// Unlike [`compute_handshake_sequence_nullifier`], it binds no sender: the senders to a recipient share one sequence,
-/// and only a holder of the recipient's tagging key can anchor it. It does bind the recipient, as nothing checks the
-/// secret against the recipient after index 0: without it, a sender could continue the sequence of another account
-/// whose keys it holds, tagging the message for that account so that the recipient never discovers it.
+/// The messaging secret is the one only the sequence's senders know (see this module's documentation), as deriving it
+/// takes the recipient's tagging key. It binds no sender, so every sender to the recipient extends one sequence. It
+/// does bind the recipient, as nothing checks the secret against the recipient after index 0: without it, a sender
+/// could continue the sequence of another account whose keys it holds, tagging the message for that account so that the
+/// recipient never discovers it.
 pub(crate) fn compute_recipient_tsk_sequence_nullifier(recipient: AztecAddress, secret: Field, index: u32) -> Field {
     poseidon2_hash_with_separator(
         [recipient.to_field(), secret, index as Field],
@@ -153,14 +161,14 @@ mod test {
     use crate::hash::hash_args;
     use crate::history::nullifier::assert_nullifier_existed_by;
     use crate::keys::getters::get_public_keys;
-    use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
+    use crate::messages::delivery::handshake::{AppSiloedHandshakeSecrets, VALIDATE_HANDSHAKE_SELECTOR};
     use crate::messages::delivery::messaging_secret_derivation::get_recipient_tsk_messaging_secret;
     use crate::protocol::{address::AztecAddress, hash::compute_siloed_nullifier, traits::{FromField, ToField}};
     use crate::test::helpers::test_environment::TestEnvironment;
     use super::{
         compute_handshake_sequence_nullifier, compute_recipient_tsk_sequence_nullifier,
         constrain_preexisting_handshake_secrets, constrain_recipient_tsk_secret, emit_handshake_sequence_nullifier,
-        emit_recipient_tsk_sequence_nullifier, VALIDATE_HANDSHAKE_SELECTOR,
+        emit_recipient_tsk_sequence_nullifier,
     };
     use std::test::OracleMock;
 
@@ -266,9 +274,8 @@ mod test {
         );
     }
 
-    // The sender-only secret keeps the recipient from forging the sender's chain: the recipient can reconstruct the
-    // shared secret via ECDH but not `sender_only`, so binding it prevents a recipient from advancing (and griefing)
-    // the sequence.
+    // The sender-only secret is what keeps the recipient, who knows the shared secret, from emitting the sequence's
+    // nullifiers.
     #[test]
     fn sender_only_secret_changes_sequence_nullifier() {
         let sender = AztecAddress::from_field(2);

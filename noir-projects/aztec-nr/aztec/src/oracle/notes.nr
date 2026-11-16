@@ -263,11 +263,10 @@ unconstrained fn get_next_tagging_index_oracle(_secret: Field, _mode: OnchainDel
 
 /// Gets the sender for tags.
 ///
-/// This unconstrained value is used as the sender when computing an unconstrained shared secret for a tag in order to
-/// emit a log. Constrained tagging should not use this as there is no guarantee that the recipient knows about the
-/// sender, and hence about the shared secret.
-///
-/// Returns the wallet-supplied default sender for tags, or `None` if no default was provided.
+/// Returns the wallet-supplied default sender that on-chain messages are delivered from when the delivery sets no
+/// sender override (see
+/// [`with_sender`](crate::messages::delivery::OnchainUnconstrainedDelivery::with_sender)), in either delivery mode, or
+/// `None` if no default was provided.
 pub(crate) unconstrained fn get_sender_for_tags() -> Option<AztecAddress> {
     get_sender_for_tags_oracle()
 }

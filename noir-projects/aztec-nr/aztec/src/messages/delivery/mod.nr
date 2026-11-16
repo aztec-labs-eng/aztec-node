@@ -4,8 +4,8 @@ mod resolved_messaging_secret_strategy;
 mod tag;
 pub(crate) mod messaging_secret_derivation;
 pub(crate) mod delivery_messaging_secret;
+pub(crate) mod constrained_delivery;
 
-pub mod constrained_delivery;
 pub mod handshake;
 
 use crate::{
@@ -36,9 +36,7 @@ pub type ResolvedTaggingStrategy = ResolvedMessagingSecretStrategy;
 ///
 /// `maybe_note_hash_counter` is only relevant for on-chain delivery modes (i.e. via protocol logs): if a newly created
 /// note hash's side effect counter is passed and constrained tagging is not in use, then the log will be squashed
-/// alongside the note should its nullifier be emitted in the current transaction. Constrained-tagged logs are not tied
-/// to note squashing, because recipient discovery scans those tags sequentially and a removed log would break the
-/// per-secret index sequence.
+/// alongside the note should its nullifier be emitted in the current transaction.
 ///
 /// ## Privacy
 ///

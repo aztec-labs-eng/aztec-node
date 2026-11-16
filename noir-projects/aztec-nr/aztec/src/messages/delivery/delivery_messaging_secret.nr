@@ -23,18 +23,19 @@ pub(crate) struct DeliveryMessagingSecret {
     kind: u8,
     /// The secret the message's tag and encryption derive from. Every kind resolves to exactly one.
     secret: Field,
-    /// The handshake sender-only secret, folded into the constrained-delivery sequence nullifier. Only meaningful
-    /// for handshake-backed kinds.
-    sender_only: Field,
+    /// The handshake's [sender-only secret][`AppSiloedHandshakeSecrets::sender_only`], for the kinds that are
+    /// handshakes.
+    sender_only: Option<Field>,
 }
 
 impl DeliveryMessagingSecret {
-    /// Reuses the secrets of a handshake already registered for the pair (mode-agnostic).
+    /// Reuses the secrets of a handshake already registered for the pair.
     pub(crate) fn existing_handshake(secrets: AppSiloedHandshakeSecrets) -> Self {
-        Self { kind: EXISTING_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
+        Self { kind: EXISTING_HANDSHAKE, secret: secrets.shared, sender_only: Option::some(secrets.sender_only) }
     }
 
-    /// Establishes a fresh non-interactive handshake, publishing information about the recipient onchain.
+    /// Establishes a fresh non-interactive handshake (see
+    /// [`via_non_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_non_interactive_handshake)).
     pub(crate) fn new_non_interactive_handshake(
         context: &mut PrivateContext,
         sender: AztecAddress,
@@ -46,10 +47,15 @@ impl DeliveryMessagingSecret {
             sender,
             recipient,
         );
-        Self { kind: NEW_NON_INTERACTIVE_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
+        Self {
+            kind: NEW_NON_INTERACTIVE_HANDSHAKE,
+            secret: secrets.shared,
+            sender_only: Option::some(secrets.sender_only),
+        }
     }
 
-    /// Establishes a fresh interactive handshake, publishing nothing about the recipient onchain.
+    /// Establishes a fresh interactive handshake (see
+    /// [`via_interactive_handshake`](super::OnchainUnconstrainedDelivery::via_interactive_handshake)).
     pub(crate) fn new_interactive_handshake(
         context: &mut PrivateContext,
         sender: AztecAddress,
@@ -61,22 +67,19 @@ impl DeliveryMessagingSecret {
             sender,
             recipient,
         );
-        Self { kind: NEW_INTERACTIVE_HANDSHAKE, secret: secrets.shared, sender_only: secrets.sender_only }
+        Self { kind: NEW_INTERACTIVE_HANDSHAKE, secret: secrets.shared, sender_only: Option::some(secrets.sender_only) }
     }
 
-    /// A ready-to-use unconstrained secret the wallet resolved. Sound only for unconstrained delivery, which never
-    /// anchors a sequence, so no sender-only secret is involved.
+    /// A secret the contract cannot verify, which can only back unconstrained delivery (see
+    /// [`unconstrained_secret`](super::ResolvedMessagingSecretStrategy::unconstrained_secret)).
     pub(crate) fn unconstrained_secret(secret: Field) -> Self {
-        Self { kind: UNCONSTRAINED_SECRET, secret, sender_only: 0 }
+        Self { kind: UNCONSTRAINED_SECRET, secret, sender_only: Option::none() }
     }
 
-    /// The recipient's messaging secret derived from their tagging key, which backs both delivery modes.
-    ///
-    /// Its constrained-delivery sequence nullifier contains no sender-only secret, as the recipient's `tsk` is expected
-    /// to only be known by them, and as such a third party using the same tag stream and emitting the same nullifiers
-    /// (possibly causing legitimate transactions to be dropped due to duplicate nullifiers) is not possible.
+    /// The recipient's messaging secret derived from their tagging key (see
+    /// [`via_recipient_tsk_secret`](super::OnchainUnconstrainedDelivery::via_recipient_tsk_secret)).
     pub(crate) fn recipient_tsk(secret: Field) -> Self {
-        Self { kind: RECIPIENT_TSK, secret, sender_only: 0 }
+        Self { kind: RECIPIENT_TSK, secret, sender_only: Option::none() }
     }
 
     /// The secret the message's tag and encryption derive from.
@@ -101,8 +104,10 @@ impl DeliveryMessagingSecret {
             panic(
                 "an unconstrained messaging secret cannot back constrained delivery",
             );
-        } else {
-            let secrets = AppSiloedHandshakeSecrets::from(self);
+        } else if (self.kind == EXISTING_HANDSHAKE)
+            | (self.kind == NEW_NON_INTERACTIVE_HANDSHAKE)
+            | (self.kind == NEW_INTERACTIVE_HANDSHAKE) {
+            let secrets = self.handshake_secrets();
             if self.kind == EXISTING_HANDSHAKE {
                 constrain_preexisting_handshake_secrets(
                     context,
@@ -112,24 +117,25 @@ impl DeliveryMessagingSecret {
                     secrets,
                     index,
                 );
-            } else if (self.kind == NEW_NON_INTERACTIVE_HANDSHAKE) | (self.kind == NEW_INTERACTIVE_HANDSHAKE) {
+            } else {
                 // The secrets were already obtained in a constrained manner, so we only need to verify that the index
                 // is 0.
-                assert(index == 0, "freshly bootstrapped secret must start at index 0");
-            } else {
-                let kind = self.kind;
-                panic(f"unknown delivery messaging secret kind: {kind}");
+                assert(index == 0, "newly established handshake secret must start at index 0");
             }
             emit_handshake_sequence_nullifier(context, sender, recipient, secrets, index);
+        } else {
+            let kind = self.kind;
+            panic(f"unknown delivery messaging secret kind: {kind}");
         }
     }
-}
 
-/// The handshake-secrets view of a delivery messaging secret, used by the constrained delivery of handshake-backed
-/// kinds. For any other kind the sender-only secret is a filler zero.
-impl From<DeliveryMessagingSecret> for AppSiloedHandshakeSecrets {
-    fn from(delivery_messaging_secret: DeliveryMessagingSecret) -> Self {
-        Self { shared: delivery_messaging_secret.secret, sender_only: delivery_messaging_secret.sender_only }
+    /// The secrets of a kind that is a handshake.
+    fn handshake_secrets(self) -> AppSiloedHandshakeSecrets {
+        let kind = self.kind;
+        AppSiloedHandshakeSecrets {
+            shared: self.secret,
+            sender_only: self.sender_only.expect(f"delivery messaging secret kind {kind} is not a handshake"),
+        }
     }
 }
 
@@ -195,7 +201,7 @@ mod test {
     }
 
     #[test]
-    unconstrained fn new_non_interactive_handshake_creates_and_constrains_the_bootstrapped_secrets() {
+    unconstrained fn new_non_interactive_handshake_creates_and_constrains_the_newly_established_secrets() {
         let env = TestEnvironment::new();
         let secrets = AppSiloedHandshakeSecrets { shared: 7, sender_only: 9 };
 
@@ -212,7 +218,7 @@ mod test {
     }
 
     #[test]
-    unconstrained fn new_interactive_handshake_creates_and_constrains_the_bootstrapped_secrets() {
+    unconstrained fn new_interactive_handshake_creates_and_constrains_the_newly_established_secrets() {
         let env = TestEnvironment::new();
         let secrets = AppSiloedHandshakeSecrets { shared: 12, sender_only: 34 };
 
@@ -228,8 +234,8 @@ mod test {
         });
     }
 
-    // A freshly bootstrapped handshake secret is the source of truth, so its sequence must start at index 0.
-    #[test(should_fail_with = "freshly bootstrapped secret must start at index 0")]
+    // A newly established handshake secret is the source of truth, so its sequence must start at index 0.
+    #[test(should_fail_with = "newly established handshake secret must start at index 0")]
     unconstrained fn fresh_handshake_secret_must_start_at_index_zero() {
         let env = TestEnvironment::new();
         env.private_context(|context| {
@@ -247,7 +253,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "freshly bootstrapped secret must start at index 0")]
+    #[test(should_fail_with = "newly established handshake secret must start at index 0")]
     unconstrained fn fresh_interactive_handshake_secret_must_start_at_index_zero() {
         let env = TestEnvironment::new();
         env.private_context(|context| {

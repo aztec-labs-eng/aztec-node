@@ -185,11 +185,8 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   /**
    * Get the sender for tags.
    *
-   * This unconstrained value is used as the sender when computing an unconstrained shared secret
-   * for a tag in order to emit a log. Constrained tagging should not use this as there is no
-   * guarantee that the recipient knows about the sender, and hence about the shared secret.
-   *
-   * Returns the wallet-supplied default sender for tags, or `None` if no default was provided.
+   * Returns the wallet-supplied default sender that onchain messages are delivered from when the contract sets no
+   * sender override (`with_sender`), in either delivery mode, or `None` if no default was provided.
    */
   public getSenderForTags(): Promise<Option<AztecAddress>> {
     return Promise.resolve(this.defaultSenderForTags ? Option.some(this.defaultSenderForTags) : Option.none());
@@ -257,7 +254,10 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     return classId;
   }
 
-  /** Resolves a wallet-provided {@link MessagingSecretStrategy} into the app-siloed secret handed to the contract. */
+  /**
+   * Resolves a wallet-provided {@link MessagingSecretStrategy} into either a handshake for the contract to establish or
+   * a messaging secret ready to use.
+   */
   async #toResolvedMessagingSecretStrategy(
     strategy: MessagingSecretStrategy,
     sender: AztecAddress,
