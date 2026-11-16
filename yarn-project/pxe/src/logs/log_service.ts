@@ -249,7 +249,7 @@ export class LogService {
     };
   }
 
-  /** Computes the recipient-tsk secret and one address-derived secret per known sender. */
+  /** Computes the recipient-tsk secret for each delivery mode and one address-derived secret per known sender. */
   async #getSecretsDerivedFromRecipientKeys(
     recipientKeys: RecipientKeys,
     contractAddress: AztecAddress,
@@ -261,10 +261,13 @@ export class LogService {
       ...(await this.keyStore.getAccounts()),
     ];
 
-    const recipientTskSecret = MessagingSecret.computeFromRecipientTsk(
-      recipientKeys.tsk,
-      contractAddress,
-      recipientKeys.completeAddress.address,
+    const recipientTskSecrets = [OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED].map(deliveryMode =>
+      MessagingSecret.computeFromRecipientTsk(
+        recipientKeys.tsk,
+        contractAddress,
+        recipientKeys.completeAddress.address,
+        deliveryMode,
+      ),
     );
     const addressDerivedSecrets = allSenders.map(async sender => {
       const secret = await MessagingSecret.computeAddressDerived({
@@ -285,7 +288,7 @@ export class LogService {
       return secret;
     });
 
-    return allToCompletion([recipientTskSecret, ...addressDerivedSecrets]);
+    return allToCompletion([...recipientTskSecrets, ...addressDerivedSecrets]);
   }
 
   /**

@@ -1,18 +1,32 @@
 use crate::context::PrivateContext;
+use crate::keys::constants::TAGGING_INDEX;
 use crate::messages::delivery::{
     delivery_messaging_secret::DeliveryMessagingSecret, handshake::get_existing_app_siloed_handshake_secrets,
 };
-use crate::oracle::notes::get_address_derived_messaging_secret;
-use crate::oracle::random::random;
-use crate::protocol::address::AztecAddress;
+use crate::oracle::{
+    key_validation_request::get_key_validation_request, keys::get_public_keys_and_partial_address,
+    notes::get_address_derived_messaging_secret, random::random,
+};
+use crate::protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, traits::ToField};
 use crate::standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS;
 
 global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
 global ADDRESS_DERIVED: u8 = 2;
 global INTERACTIVE_HANDSHAKE: u8 = 3;
+global RECIPIENT_TSK: u8 = 4;
 
 /// Domain separator for the messaging secret derived from a recipient's app-siloed tagging key.
 pub(crate) global DOM_SEP__RECIPIENT_TSK_SECRET: u32 = 1256167324;
+
+/// Computes `recipient`'s recipient-tsk messaging secret from their app-siloed tagging secret key `tsk_app`.
+///
+/// Hashing in the address gives accounts that share a tagging key separate secrets.
+pub(crate) fn compute_recipient_tsk_messaging_secret(tsk_app: Field, recipient: AztecAddress) -> Field {
+    poseidon2_hash_with_separator(
+        [tsk_app, recipient.to_field()],
+        DOM_SEP__RECIPIENT_TSK_SECRET,
+    )
+}
 
 /// A contract's choice of messaging-secret derivation.
 ///
@@ -41,6 +55,12 @@ impl MessagingSecretDerivation {
     /// between their addresses).
     pub(crate) fn address_derived() -> Self {
         Self { kind: ADDRESS_DERIVED }
+    }
+
+    /// Derives the tag from the recipient's tagging key, regardless of the sender. Requires PXE to hold the recipient's
+    /// keys, with the recipient in the execution's scopes.
+    pub(crate) fn recipient_tsk() -> Self {
+        Self { kind: RECIPIENT_TSK }
     }
 
     /// Asserts this choice's `kind` is a compile-time constant.
@@ -73,6 +93,11 @@ impl MessagingSecretDerivation {
             // to a random (undiscoverable) secret rather than failing the send.
             let secret = unsafe { get_address_derived_messaging_secret(sender, recipient).unwrap_or_else(|| random()) };
             DeliveryMessagingSecret::unconstrained_secret(secret)
+        } else if self.kind == RECIPIENT_TSK {
+            // Safety: the secret is untrusted. Constrained delivery anchors it to the recipient's tagging key before
+            // emitting the tag, and in unconstrained delivery a wrong secret only yields an undiscoverable tag.
+            let secret = unsafe { get_recipient_tsk_messaging_secret(recipient) };
+            DeliveryMessagingSecret::recipient_tsk(secret)
         } else {
             let kind = self.kind;
             panic(f"unknown messaging secret derivation kind: {kind}")
@@ -95,12 +120,23 @@ pub(crate) fn existing_handshake_secrets_or_else<Env>(
     existing.map_or_else(fallback, |secrets| DeliveryMessagingSecret::existing_handshake(secrets))
 }
 
+/// Derives `recipient`'s recipient-tsk messaging secret for the executing contract.
+///
+/// Fails if PXE does not hold `recipient`'s keys or `recipient` is not in the execution's scopes.
+pub(crate) unconstrained fn get_recipient_tsk_messaging_secret(recipient: AztecAddress) -> Field {
+    let (public_keys, _) = get_public_keys_and_partial_address(recipient);
+    let tsk_app = get_key_validation_request(public_keys.tpk_m_hash, TAGGING_INDEX).sk_app;
+    compute_recipient_tsk_messaging_secret(tsk_app, recipient)
+}
+
 mod test {
     use crate::context::PrivateContext;
     use crate::hash::hash_args;
-    use crate::messages::delivery::delivery_messaging_secret::DeliveryMessagingSecret;
-    use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
+    use crate::messages::delivery::{
+        delivery_messaging_secret::DeliveryMessagingSecret, handshake::AppSiloedHandshakeSecrets, OnchainDeliveryMode,
+    };
     use crate::oracle::execution_cache;
+    use crate::oracle::resolve_messaging_secret_strategy::resolve_messaging_secret_strategy;
     use crate::protocol::{address::AztecAddress, traits::{FromField, Serialize}};
     use crate::test::helpers::test_environment::TestEnvironment;
     use super::MessagingSecretDerivation;
@@ -135,6 +171,37 @@ mod test {
             let delivery_messaging_secret = MessagingSecretDerivation::address_derived()
                 .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
             assert_eq(delivery_messaging_secret, DeliveryMessagingSecret::unconstrained_secret(random_secret));
+        });
+    }
+
+    // PXE resolves the recipient-tsk secret it scans for, so aztec-nr's own derivation must match it.
+    #[test]
+    unconstrained fn recipient_tsk_derives_the_secret_pxe_resolves() {
+        let mut env = TestEnvironment::new();
+        let app = env.create_contract_account();
+        let recipient = env.create_light_account();
+
+        env.private_context_at(app, |context| {
+            let resolved = resolve_messaging_secret_strategy(
+                SENDER,
+                recipient,
+                OnchainDeliveryMode::onchain_unconstrained(),
+            );
+
+            assert_eq(
+                MessagingSecretDerivation::recipient_tsk().into_delivery_messaging_secret(context, SENDER, recipient),
+                resolved.into_delivery_messaging_secret(context, SENDER, recipient),
+            );
+        });
+    }
+
+    #[test(should_fail_with = "Public keys not registered")]
+    unconstrained fn recipient_tsk_fails_for_a_recipient_whose_keys_are_not_held() {
+        let env = TestEnvironment::new();
+
+        env.private_context(|context| {
+            let _ =
+                MessagingSecretDerivation::recipient_tsk().into_delivery_messaging_secret(context, SENDER, RECIPIENT);
         });
     }
 

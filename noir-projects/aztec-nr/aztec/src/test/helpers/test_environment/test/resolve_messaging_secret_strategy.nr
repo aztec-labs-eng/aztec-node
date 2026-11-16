@@ -1,19 +1,10 @@
 use crate::{
-    keys::{constants::TAGGING_INDEX, getters::try_get_public_keys},
     messages::delivery::{
-        MessageDelivery, messaging_secret_derivation::DOM_SEP__RECIPIENT_TSK_SECRET, OnchainDeliveryMode,
+        MessageDelivery, messaging_secret_derivation::get_recipient_tsk_messaging_secret, OnchainDeliveryMode,
         ResolvedMessagingSecretStrategy,
     },
-    oracle::{
-        key_validation_request::get_key_validation_request,
-        resolve_messaging_secret_strategy::resolve_messaging_secret_strategy,
-    },
-    protocol::{
-        address::AztecAddress,
-        hash::poseidon2_hash_with_separator,
-        point::EmbeddedCurvePoint,
-        traits::{FromField, ToField},
-    },
+    oracle::resolve_messaging_secret_strategy::resolve_messaging_secret_strategy,
+    protocol::{address::AztecAddress, point::EmbeddedCurvePoint, traits::FromField},
     test::helpers::{
         messaging_secret_strategy::{compute_directional_app_secret, MessagingSecretStrategy},
         test_environment::{TestEnvironment, TestEnvironmentOptions},
@@ -23,13 +14,13 @@ use crate::{
 #[test]
 unconstrained fn an_unset_constrained_mode_falls_back_to_the_default_strategy() {
     // Only the unconstrained mode is configured: the constrained mode falls back to the default non-interactive
-    // handshake strategy.
+    // handshake strategy for an external recipient.
     let mut env = TestEnvironment::new_opts(TestEnvironmentOptions::new().with_default_messaging_secret_strategy(
         MessageDelivery::onchain_unconstrained(),
         MessagingSecretStrategy::arbitrary_secret(EmbeddedCurvePoint { x: 7, y: 11 }),
     ));
     let app = env.create_contract_account();
-    let recipient = env.create_light_account();
+    let recipient = AztecAddress::from_field(8);
 
     env.private_context_at(app, |_| {
         let resolved = resolve_messaging_secret_strategy(
@@ -72,7 +63,10 @@ unconstrained fn defaults_an_unconstrained_self_send_to_the_recipient_tsk() {
     env.private_context_at(app, |_| {
         let resolved = resolve_messaging_secret_strategy(sender, sender, OnchainDeliveryMode::onchain_unconstrained());
 
-        assert_eq(resolved, ResolvedMessagingSecretStrategy::unconstrained_secret(recipient_tsk_secret(sender)));
+        assert_eq(
+            resolved,
+            ResolvedMessagingSecretStrategy::recipient_tsk(get_recipient_tsk_messaging_secret(sender)),
+        );
     });
 }
 
@@ -91,7 +85,10 @@ unconstrained fn defaults_an_unconstrained_send_to_another_own_account_to_the_re
         );
 
         // The recipient's tsk is known and that account is in scope in this call - the sender is irrelevant.
-        assert_eq(resolved, ResolvedMessagingSecretStrategy::unconstrained_secret(recipient_tsk_secret(recipient)));
+        assert_eq(
+            resolved,
+            ResolvedMessagingSecretStrategy::recipient_tsk(get_recipient_tsk_messaging_secret(recipient)),
+        );
     });
 }
 
@@ -117,14 +114,52 @@ unconstrained fn defaults_an_unconstrained_external_send_to_a_non_interactive_ha
 }
 
 #[test]
-unconstrained fn defaults_constrained_delivery_to_a_non_interactive_handshake() {
+unconstrained fn defaults_a_constrained_self_send_to_the_recipient_tsk() {
     let mut env = TestEnvironment::new();
     let app = env.create_contract_account();
+    let sender = env.create_light_account();
+
+    env.private_context_at(app, |_| {
+        let resolved = resolve_messaging_secret_strategy(sender, sender, OnchainDeliveryMode::onchain_constrained());
+
+        assert_eq(
+            resolved,
+            ResolvedMessagingSecretStrategy::recipient_tsk(get_recipient_tsk_messaging_secret(sender)),
+        );
+    });
+}
+
+#[test]
+unconstrained fn defaults_a_constrained_send_to_another_own_account_to_the_recipient_tsk() {
+    let mut env = TestEnvironment::new();
+    let app = env.create_contract_account();
+    let sender = env.create_light_account();
     let recipient = env.create_light_account();
 
     env.private_context_at(app, |_| {
         let resolved = resolve_messaging_secret_strategy(
-            AztecAddress::from_field(1),
+            sender,
+            recipient,
+            OnchainDeliveryMode::onchain_constrained(),
+        );
+
+        assert_eq(
+            resolved,
+            ResolvedMessagingSecretStrategy::recipient_tsk(get_recipient_tsk_messaging_secret(recipient)),
+        );
+    });
+}
+
+#[test]
+unconstrained fn defaults_a_constrained_external_send_to_a_non_interactive_handshake() {
+    let mut env = TestEnvironment::new();
+    let app = env.create_contract_account();
+    let sender = env.create_light_account();
+    let recipient = AztecAddress::from_field(8);
+
+    env.private_context_at(app, |_| {
+        let resolved = resolve_messaging_secret_strategy(
+            sender,
             recipient,
             OnchainDeliveryMode::onchain_constrained(),
         );
@@ -185,7 +220,10 @@ unconstrained fn applies_a_configured_recipient_tsk_strategy() {
             OnchainDeliveryMode::onchain_unconstrained(),
         );
 
-        assert_eq(resolved, ResolvedMessagingSecretStrategy::unconstrained_secret(recipient_tsk_secret(recipient)));
+        assert_eq(
+            resolved,
+            ResolvedMessagingSecretStrategy::recipient_tsk(get_recipient_tsk_messaging_secret(recipient)),
+        );
     });
 }
 
@@ -254,12 +292,4 @@ unconstrained fn applies_a_configured_arbitrary_secret_to_an_unconstrained_self_
         let arbitrary_secret = compute_directional_app_secret(point, app, sender);
         assert_eq(resolved, ResolvedMessagingSecretStrategy::unconstrained_secret(arbitrary_secret));
     });
-}
-
-/// The messaging secret of `account` for the executing contract, built from the app-siloed key the kernel validates.
-// TODO(F-948): use aztec-nr's own derivation of this secret once it has one, e.g. once delivery can constrain it.
-unconstrained fn recipient_tsk_secret(account: AztecAddress) -> Field {
-    let tpk_m_hash = try_get_public_keys(account).unwrap().tpk_m_hash;
-    let tsk_app = get_key_validation_request(tpk_m_hash, TAGGING_INDEX).sk_app;
-    poseidon2_hash_with_separator([tsk_app, account.to_field()], DOM_SEP__RECIPIENT_TSK_SECRET)
 }

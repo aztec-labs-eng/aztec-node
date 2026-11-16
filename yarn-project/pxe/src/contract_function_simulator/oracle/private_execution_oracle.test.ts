@@ -132,14 +132,17 @@ describe('PrivateExecutionOracle', () => {
       recipient = await AztecAddress.random();
     });
 
-    it('defaults an unconstrained self-send to the recipient tsk', async () => {
-      const account = await makeAccount();
-      const oracle = makeOracle(account.oracleArgs);
+    it.each([OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED])(
+      'defaults a %s self-send to the recipient tsk',
+      async deliveryMode => {
+        const account = await makeAccount();
+        const oracle = makeOracle(account.oracleArgs);
 
-      await expect(
-        oracle.resolveMessagingSecretStrategy(account.address, account.address, OnchainDeliveryMode.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
-    });
+        await expect(
+          oracle.resolveMessagingSecretStrategy(account.address, account.address, deliveryMode),
+        ).resolves.toEqual({ type: 'recipient-tsk', secret: await recipientTskSecret(account) });
+      },
+    );
 
     it('defaults to a non-interactive handshake for a held recipient outside the execution scopes', async () => {
       const account = await makeAccount();
@@ -170,7 +173,7 @@ describe('PrivateExecutionOracle', () => {
 
       await expect(
         oracle.resolveMessagingSecretStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
+      ).resolves.toEqual({ type: 'recipient-tsk', secret: await recipientTskSecret(account) });
     });
 
     it('keeps a hooked interactive handshake on an unconstrained self-send', async () => {
@@ -209,14 +212,18 @@ describe('PrivateExecutionOracle', () => {
       ).rejects.toThrow(`invalid recipient ${INVALID_ADDRESS}`);
     });
 
-    it('resolves a recipient-tsk strategy to the unconstrained secret whoever the sender is', async () => {
-      const account = await makeAccount();
-      const { oracle } = makeHookedOracle({ strategy: { type: 'recipient-tsk' }, ...account.oracleArgs });
+    it.each([OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED])(
+      'resolves a %s recipient-tsk strategy to the recipient tsk secret whoever the sender is',
+      async deliveryMode => {
+        const account = await makeAccount();
+        const { oracle } = makeHookedOracle({ strategy: { type: 'recipient-tsk' }, ...account.oracleArgs });
 
-      await expect(
-        oracle.resolveMessagingSecretStrategy(sender, account.address, OnchainDeliveryMode.UNCONSTRAINED),
-      ).resolves.toEqual({ type: 'unconstrained-secret', secret: await recipientTskSecret(account) });
-    });
+        await expect(oracle.resolveMessagingSecretStrategy(sender, account.address, deliveryMode)).resolves.toEqual({
+          type: 'recipient-tsk',
+          secret: await recipientTskSecret(account),
+        });
+      },
+    );
 
     it('rejects a recipient-tsk strategy for a recipient outside the execution scopes', async () => {
       const account = await makeAccount();
@@ -308,8 +315,16 @@ describe('PrivateExecutionOracle', () => {
       return secret!.secret;
     };
 
+    // The secret does not depend on the delivery mode, which only labels the tag stream it backs.
     const recipientTskSecret = async (account: Account) =>
-      (await MessagingSecret.computeFromRecipientTsk(account.tsk, contractAddress, account.address)).secret;
+      (
+        await MessagingSecret.computeFromRecipientTsk(
+          account.tsk,
+          contractAddress,
+          account.address,
+          OnchainDeliveryMode.UNCONSTRAINED,
+        )
+      ).secret;
   });
 
   describe('getNullifierStatuses', () => {

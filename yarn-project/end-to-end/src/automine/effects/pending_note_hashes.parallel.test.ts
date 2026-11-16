@@ -147,28 +147,6 @@ describe('automine/effects/pending_note_hashes', () => {
     const insertConstrainedSelector = await deployedContract.methods.insert_note_constrained.selector();
     const getThenNullifySelector = await deployedContract.methods.get_then_nullify_note.selector();
 
-    // The first constrained send to a fresh sender/recipient sequence bootstraps the HandshakeRegistry. Assert that
-    // separately so the reused-sequence assertions below only observe the app note inserted and nullified in the
-    // measured tx.
-    await deployedContract.methods
-      .test_insert_then_get_then_nullify_all_in_nested_calls(
-        1n,
-        owner,
-        sender,
-        insertConstrainedSelector,
-        getThenNullifySelector,
-      )
-      .send({ from: owner });
-    // Bootstrap emits a registry note hash, a registry initialization nullifier, and a constrained-delivery sequence
-    // nullifier. The app note hash and app note nullifier are still squashed.
-    await expectNoteHashesSquashedExcept(1);
-    await expectNullifiersSquashedExcept(2);
-    // It also emits three private logs:
-    // 1. registry HandshakeNote delivery log;
-    // 2. registry recipient-discovery log;
-    // 3. app constrained note-delivery log.
-    await expectNoteLogsSquashedExcept(3);
-
     await deployedContract.methods
       .test_insert_then_get_then_nullify_all_in_nested_calls(
         mintAmount,

@@ -1,17 +1,24 @@
 //! Sender-side helpers for constrained message delivery.
 //!
-//! Constrained messages form per-`(sender, recipient, handshake secrets)` sequences, each send anchored to the
-//! handshake registry at an incrementing index. Two consequences shape the whole flow: sends on one sequence are
-//! strictly ordered across transactions (parallel sends collide or fail the predecessor check, while distinct
-//! recipients are distinct sequences and parallelize), and batching several sends onto one sequence within a
-//! transaction requires an already-committed handshake.
+//! Constrained messages form sequences at an incrementing index, each anchored at index 0 and chained to its
+//! predecessor through a sequence nullifier after that. There are two kinds of sequences:
 //!
-//! A pre-existing handshake's secrets are anchored to the registry by [`constrain_preexisting_handshake_secrets`]
-//! before its constrained tag is emitted; every constrained send then emits the same sequence nullifier via
-//! [`emit_sequence_nullifier`].
+//! - per-`(sender, recipient, handshake secrets)`, anchored to the handshake registry. A pre-existing handshake's
+//!   secrets are anchored by [`constrain_preexisting_handshake_secrets`] before its constrained tag is emitted; every
+//!   send then emits the sequence nullifier via [`emit_handshake_sequence_nullifier`].
+//! - per-`(recipient, recipient-tsk messaging secret)`, anchored to the recipient's tagging key by
+//!   [`constrain_recipient_tsk_secret`]. Every send then emits the sequence nullifier via
+//!   [`emit_recipient_tsk_sequence_nullifier`]. The secret already belongs to the recipient alone, so every sender to
+//!   that recipient extends the same sequence.
+//!
+//! Two consequences shape the whole flow: sends on one sequence are strictly ordered across transactions (parallel
+//! sends collide or fail the predecessor check, while distinct recipients are distinct sequences and parallelize), and
+//! batching several sends onto one handshake sequence within a transaction requires an already-committed handshake.
 
 use crate::context::PrivateContext;
+use crate::keys::getters::get_public_keys;
 use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
+use crate::messages::delivery::messaging_secret_derivation::compute_recipient_tsk_messaging_secret;
 use crate::nullifier::utils::compute_nullifier_existence_request;
 
 use crate::protocol::{
@@ -19,8 +26,16 @@ use crate::protocol::{
     traits::ToField,
 };
 
-/// Domain separator for nullifiers used during constrained delivery.
+/// Domain separator for the sequence nullifiers of constrained delivery with a handshake from the registry.
+///
+/// Without backwards compatibility it would be named `DOM_SEP__HANDSHAKE_SEQUENCE_NULLIFIER`, after
+/// [`compute_handshake_sequence_nullifier`]. Its value is derived from its name, so renaming it would change the
+/// nullifiers of every existing handshake sequence, and the next send on each would fail its predecessor check.
+// TODO(F-961): rename to `DOM_SEP__HANDSHAKE_SEQUENCE_NULLIFIER`.
 pub(crate) global DOM_SEP__CONSTRAINED_MSG_NULLIFIER: u32 = 3723577546;
+
+/// Domain separator for the sequence nullifiers of constrained delivery with a recipient-tsk messaging secret.
+pub(crate) global DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER: u32 = 3135815231;
 
 // The helper cannot import the handshake registry interface because the registry contract depends on aztec-nr. The
 // registry's test suite compares this against its macro-generated `HandshakeRegistry::at(...).method(...).selector`
@@ -48,7 +63,7 @@ pub(crate) fn constrain_preexisting_handshake_secrets(
             [sender.to_field(), recipient.to_field(), secrets.shared, secrets.sender_only],
         );
     } else {
-        let prev_nullifier = compute_constrained_msg_nullifier(sender, recipient, secrets, index - 1);
+        let prev_nullifier = compute_handshake_sequence_nullifier(sender, recipient, secrets, index - 1);
         let caller = context.this_address();
         context.assert_nullifier_exists(compute_nullifier_existence_request(prev_nullifier, caller));
     }
@@ -56,14 +71,14 @@ pub(crate) fn constrain_preexisting_handshake_secrets(
 
 /// Emits a constrained send's sequence nullifier, so the next send under the same `(sender, recipient, secrets)`
 /// sequence can prove its predecessor exists.
-pub(crate) fn emit_sequence_nullifier(
+pub(crate) fn emit_handshake_sequence_nullifier(
     context: &mut PrivateContext,
     sender: AztecAddress,
     recipient: AztecAddress,
     secrets: AppSiloedHandshakeSecrets,
     index: u32,
 ) {
-    context.push_nullifier_unsafe(compute_constrained_msg_nullifier(sender, recipient, secrets, index));
+    context.push_nullifier_unsafe(compute_handshake_sequence_nullifier(sender, recipient, secrets, index));
 }
 
 /// Computes a constrained send's sequence nullifier.
@@ -72,7 +87,7 @@ pub(crate) fn emit_sequence_nullifier(
 /// exists. The nullifier folds in both the app-siloed shared secret and sender-only secret: the shared secret binds
 /// the sequence to the discovery messaging secret, and the sender-only secret prevents a recipient who can
 /// reconstruct the shared secret from forging a sender's nullifier and griefing the sequence.
-pub(crate) fn compute_constrained_msg_nullifier(
+pub(crate) fn compute_handshake_sequence_nullifier(
     sender: AztecAddress,
     recipient: AztecAddress,
     secrets: AppSiloedHandshakeSecrets,
@@ -84,19 +99,73 @@ pub(crate) fn compute_constrained_msg_nullifier(
     )
 }
 
+/// Anchors an untrusted recipient-tsk `(secret, index)` before its constrained tag is emitted.
+///
+/// - at index 0: the secret must be the one derived from `recipient`'s app-siloed tagging key, which the kernel
+///   validates against the tagging public key in `recipient`'s address preimage.
+/// - at index > 0: the prior sequence nullifier for `recipient` must exist, anchoring back to the index-0 check for
+///   that same recipient.
+pub(crate) fn constrain_recipient_tsk_secret(
+    context: &mut PrivateContext,
+    recipient: AztecAddress,
+    secret: Field,
+    index: u32,
+) {
+    if index == 0 {
+        let tsk_app = context.request_tsk_app(get_public_keys(recipient).tpk_m_hash);
+        assert_eq(
+            secret,
+            compute_recipient_tsk_messaging_secret(tsk_app, recipient),
+            "messaging secret does not derive from the recipient's tagging key",
+        );
+    } else {
+        let prev_nullifier = compute_recipient_tsk_sequence_nullifier(recipient, secret, index - 1);
+        let caller = context.this_address();
+        context.assert_nullifier_exists(compute_nullifier_existence_request(prev_nullifier, caller));
+    }
+}
+
+/// Emits a constrained recipient-tsk send's sequence nullifier, so the next send under the same `(recipient, secret)`
+/// can prove its predecessor exists.
+pub(crate) fn emit_recipient_tsk_sequence_nullifier(
+    context: &mut PrivateContext,
+    recipient: AztecAddress,
+    secret: Field,
+    index: u32,
+) {
+    context.push_nullifier_unsafe(compute_recipient_tsk_sequence_nullifier(recipient, secret, index));
+}
+
+/// Computes a constrained recipient-tsk send's sequence nullifier.
+///
+/// Unlike [`compute_handshake_sequence_nullifier`], it binds no sender: the senders to a recipient share one sequence,
+/// and only a holder of the recipient's tagging key can anchor it. It does bind the recipient, as nothing checks the
+/// secret against the recipient after index 0: without it, a sender could continue the sequence of another account
+/// whose keys it holds, tagging the message for that account so that the recipient never discovers it.
+pub(crate) fn compute_recipient_tsk_sequence_nullifier(recipient: AztecAddress, secret: Field, index: u32) -> Field {
+    poseidon2_hash_with_separator(
+        [recipient.to_field(), secret, index as Field],
+        DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER,
+    )
+}
+
 mod test {
     use crate::hash::hash_args;
+    use crate::history::nullifier::assert_nullifier_existed_by;
+    use crate::keys::getters::get_public_keys;
     use crate::messages::delivery::handshake::AppSiloedHandshakeSecrets;
+    use crate::messages::delivery::messaging_secret_derivation::get_recipient_tsk_messaging_secret;
     use crate::protocol::{address::AztecAddress, hash::compute_siloed_nullifier, traits::{FromField, ToField}};
     use crate::test::helpers::test_environment::TestEnvironment;
     use super::{
-        compute_constrained_msg_nullifier, constrain_preexisting_handshake_secrets, emit_sequence_nullifier,
-        VALIDATE_HANDSHAKE_SELECTOR,
+        compute_handshake_sequence_nullifier, compute_recipient_tsk_sequence_nullifier,
+        constrain_preexisting_handshake_secrets, constrain_recipient_tsk_secret, emit_handshake_sequence_nullifier,
+        emit_recipient_tsk_sequence_nullifier, VALIDATE_HANDSHAKE_SELECTOR,
     };
     use std::test::OracleMock;
 
     #[test]
-    unconstrained fn emit_sequence_nullifier_pushes_the_sequence_nullifier() {
+    unconstrained fn emit_handshake_sequence_nullifier_pushes_the_sequence_nullifier() {
         let env = TestEnvironment::new();
         let sender = AztecAddress::from_field(2);
         let recipient = AztecAddress::from_field(4);
@@ -104,12 +173,12 @@ mod test {
         let index: u32 = 0;
 
         env.private_context(|context| {
-            emit_sequence_nullifier(context, sender, recipient, secrets, index);
+            emit_handshake_sequence_nullifier(context, sender, recipient, secrets, index);
 
             assert_eq(context.nullifiers.len(), 1);
             assert_eq(
                 context.nullifiers.get(0).inner.value,
-                compute_constrained_msg_nullifier(sender, recipient, secrets, index),
+                compute_handshake_sequence_nullifier(sender, recipient, secrets, index),
             );
             assert_eq(context.private_call_requests.len(), 0);
             assert_eq(context.nullifier_read_requests.len(), 0);
@@ -175,7 +244,7 @@ mod test {
                 read_request.inner.inner,
                 compute_siloed_nullifier(
                     context.this_address(),
-                    compute_constrained_msg_nullifier(sender, recipient, secrets, index - 1),
+                    compute_handshake_sequence_nullifier(sender, recipient, secrets, index - 1),
                 ),
             );
         });
@@ -192,8 +261,8 @@ mod test {
         let secrets_b = AppSiloedHandshakeSecrets { shared: 8765, sender_only: secrets_a.sender_only };
 
         assert(
-            compute_constrained_msg_nullifier(sender, recipient, secrets_a, 0)
-                != compute_constrained_msg_nullifier(sender, recipient, secrets_b, 0),
+            compute_handshake_sequence_nullifier(sender, recipient, secrets_a, 0)
+                != compute_handshake_sequence_nullifier(sender, recipient, secrets_b, 0),
         );
     }
 
@@ -208,8 +277,8 @@ mod test {
         let secrets_b = AppSiloedHandshakeSecrets { shared: secrets_a.shared, sender_only: 9012 };
 
         assert(
-            compute_constrained_msg_nullifier(sender, recipient, secrets_a, 0)
-                != compute_constrained_msg_nullifier(sender, recipient, secrets_b, 0),
+            compute_handshake_sequence_nullifier(sender, recipient, secrets_a, 0)
+                != compute_handshake_sequence_nullifier(sender, recipient, secrets_b, 0),
         );
     }
 
@@ -222,8 +291,149 @@ mod test {
         let secrets = AppSiloedHandshakeSecrets { shared: 1234, sender_only: 5678 };
 
         assert(
-            compute_constrained_msg_nullifier(sender, recipient, secrets, 0)
-                != compute_constrained_msg_nullifier(sender, recipient, secrets, 1),
+            compute_handshake_sequence_nullifier(sender, recipient, secrets, 0)
+                != compute_handshake_sequence_nullifier(sender, recipient, secrets, 1),
+        );
+    }
+
+    #[test]
+    unconstrained fn recipient_tsk_secret_at_index_zero_validates_the_recipient_tagging_key() {
+        let mut env = TestEnvironment::new();
+        let app = env.create_contract_account();
+        let recipient = env.create_light_account();
+
+        env.private_context_at(app, |context| {
+            let secret = get_recipient_tsk_messaging_secret(recipient);
+
+            constrain_recipient_tsk_secret(context, recipient, secret, 0);
+
+            assert_eq(context.nullifier_read_requests.len(), 0);
+            assert_eq(context.key_validation_requests_and_separators.len(), 1);
+            assert_eq(
+                context.key_validation_requests_and_separators.get(0).request.pk_m_hash,
+                get_public_keys(recipient).tpk_m_hash,
+            );
+        });
+    }
+
+    #[test(should_fail_with = "messaging secret does not derive from the recipient's tagging key")]
+    unconstrained fn recipient_tsk_secret_at_index_zero_rejects_a_secret_not_derived_from_the_tagging_key() {
+        let mut env = TestEnvironment::new();
+        let app = env.create_contract_account();
+        let recipient = env.create_light_account();
+
+        env.private_context_at(app, |context| {
+            let secret = get_recipient_tsk_messaging_secret(recipient) + 1;
+
+            constrain_recipient_tsk_secret(context, recipient, secret, 0);
+        });
+    }
+
+    #[test(should_fail_with = "messaging secret does not derive from the recipient's tagging key")]
+    unconstrained fn recipient_tsk_secret_at_index_zero_rejects_another_account_secret() {
+        let mut env = TestEnvironment::new();
+        let app = env.create_contract_account();
+        let recipient = env.create_light_account();
+        let other_account = env.create_light_account();
+
+        env.private_context_at(app, |context| {
+            let secret = get_recipient_tsk_messaging_secret(other_account);
+
+            constrain_recipient_tsk_secret(context, recipient, secret, 0);
+        });
+    }
+
+    #[test]
+    unconstrained fn recipient_tsk_secret_above_index_zero_reads_the_previous_nullifier() {
+        let env = TestEnvironment::new();
+        let recipient = AztecAddress::from_field(4);
+        let secret = 1234;
+        let index: u32 = 3;
+
+        env.private_context(|context| {
+            let _ = OracleMock::mock("aztec_prv_isNullifierPending").returns(false).times(1);
+
+            constrain_recipient_tsk_secret(context, recipient, secret, index);
+
+            assert_eq(context.key_validation_requests_and_separators.len(), 0);
+            assert_eq(context.nullifier_read_requests.len(), 1);
+
+            let read_request = context.nullifier_read_requests.get(0);
+            assert_eq(read_request.contract_address, AztecAddress::zero());
+            assert_eq(
+                read_request.inner.inner,
+                compute_siloed_nullifier(
+                    context.this_address(),
+                    compute_recipient_tsk_sequence_nullifier(recipient, secret, index - 1),
+                ),
+            );
+        });
+    }
+
+    // A sender holding another account's keys can hint that account's anchored secret for a different recipient. The
+    // message would then be tagged for that account, and the recipient would never discover it.
+    #[test(should_fail_with = "Nullifier membership witness not found")]
+    unconstrained fn recipient_tsk_secret_above_index_zero_rejects_a_sequence_anchored_for_another_recipient() {
+        let mut env = TestEnvironment::new();
+        let app = env.create_contract_account();
+        let recipient = env.create_light_account();
+        let other_recipient = env.create_light_account();
+
+        let anchored_secret = env.private_context_at(app, |context| {
+            let secret = get_recipient_tsk_messaging_secret(other_recipient);
+            constrain_recipient_tsk_secret(context, other_recipient, secret, 0);
+            emit_recipient_tsk_sequence_nullifier(context, other_recipient, secret, 0);
+            secret
+        });
+
+        env.private_context_at(app, |context| {
+            constrain_recipient_tsk_secret(context, recipient, anchored_secret, 1);
+
+            // The kernel accepts the predecessor read only if the nullifier it names exists.
+            let predecessor_read = context.nullifier_read_requests.get(0);
+            assert_nullifier_existed_by(
+                context.get_anchor_block_header(),
+                predecessor_read.inner.inner,
+            );
+        });
+    }
+
+    #[test]
+    unconstrained fn emit_recipient_tsk_sequence_nullifier_pushes_the_sequence_nullifier() {
+        let env = TestEnvironment::new();
+        let recipient = AztecAddress::from_field(4);
+        let secret = 1234;
+        let index: u32 = 0;
+
+        env.private_context(|context| {
+            emit_recipient_tsk_sequence_nullifier(context, recipient, secret, index);
+
+            assert_eq(context.nullifiers.len(), 1);
+            assert_eq(
+                context.nullifiers.get(0).inner.value,
+                compute_recipient_tsk_sequence_nullifier(recipient, secret, index),
+            );
+        });
+    }
+
+    // The secret binds the sequence to the tag stream it discovers.
+    #[test]
+    fn secret_changes_recipient_tsk_sequence_nullifier() {
+        let recipient = AztecAddress::from_field(4);
+
+        assert(
+            compute_recipient_tsk_sequence_nullifier(recipient, 1234, 0)
+                != compute_recipient_tsk_sequence_nullifier(recipient, 8765, 0),
+        );
+    }
+
+    #[test]
+    fn index_changes_recipient_tsk_sequence_nullifier() {
+        let recipient = AztecAddress::from_field(4);
+
+        assert(
+            compute_recipient_tsk_sequence_nullifier(recipient, 1234, 0)
+                != compute_recipient_tsk_sequence_nullifier(recipient, 1234, 1),
         );
     }
 }

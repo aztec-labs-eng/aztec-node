@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 const NON_INTERACTIVE_HANDSHAKE = 1;
 const UNCONSTRAINED_SECRET = 2;
 const INTERACTIVE_HANDSHAKE = 3;
+const RECIPIENT_TSK = 4;
 
 /**
  * The outcome of the wallet's {@link MessagingSecretStrategy}.
@@ -28,10 +29,20 @@ export type ResolvedMessagingSecretStrategy =
     }
   | {
       /**
-       * An app-siloed, recipient-directional secret, ready to use. Only sound for unconstrained delivery.
+       * A messaging secret ready to use, whose derivation the contract cannot verify. Only sound for unconstrained
+       * delivery.
        */
       type: 'unconstrained-secret';
-      /** The app-siloed directional messaging secret. */
+      /** The messaging secret. */
+      secret: Fr;
+    }
+  | {
+      /**
+       * The recipient's messaging secret derived from their tagging key, ready to use. Sound for both delivery modes:
+       * constrained delivery proves the derivation.
+       */
+      type: 'recipient-tsk';
+      /** The recipient-tsk messaging secret. */
       secret: Fr;
     };
 
@@ -47,6 +58,8 @@ export function resolvedMessagingSecretStrategyToFields(resolved: ResolvedMessag
       return [new Fr(UNCONSTRAINED_SECRET), resolved.secret];
     case 'interactive-handshake':
       return [new Fr(INTERACTIVE_HANDSHAKE), Fr.ZERO];
+    case 'recipient-tsk':
+      return [new Fr(RECIPIENT_TSK), resolved.secret];
   }
 }
 
@@ -61,6 +74,8 @@ export function resolvedMessagingSecretStrategyFromFields(kind: number, secret: 
       return { type: 'interactive-handshake' };
     case UNCONSTRAINED_SECRET:
       return { type: 'unconstrained-secret', secret };
+    case RECIPIENT_TSK:
+      return { type: 'recipient-tsk', secret };
     default:
       throw new Error(`Unrecognized resolved messaging secret strategy kind: ${kind}`);
   }

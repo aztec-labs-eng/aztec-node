@@ -1,7 +1,7 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
+import type { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
 import type { ResolveCustomRequest } from './resolve_custom_request.js';
@@ -32,8 +32,9 @@ export type MessagingSecretStrategy =
       /**
        * Derive the secret from the recipient's tagging secret key, regardless of the sender. PXE computes and silos
        * it. Only usable when {@link MessagingSecretStrategyRequest.recipientTskAvailable} is set, typically for a local
-       * account such as the sender itself - the send fails otherwise. Only sound for unconstrained delivery, since
-       * nothing proves that the secret comes from that key.
+       * account such as the sender itself - the send fails otherwise. Sound for both delivery modes, as constrained
+       * delivery proves that the secret comes from that key. Contracts built against an Aztec.nr version that cannot
+       * prove it get a non-interactive handshake for constrained delivery instead.
        *
        * Unlike an address-derived tag, this tag cannot be computed by an attacker able to break the recipient's address
        * key, for example with a quantum computer. The tagging key `tsk` is independent of the address key, and its
@@ -60,12 +61,9 @@ export type TaggingSecretStrategy = MessagingSecretStrategy;
  * to.
  */
 export function defaultMessagingSecretStrategy({
-  deliveryMode,
   recipientTskAvailable,
-}: Pick<MessagingSecretStrategyRequest, 'deliveryMode' | 'recipientTskAvailable'>): MessagingSecretStrategy {
-  return deliveryMode === OnchainDeliveryMode.UNCONSTRAINED && recipientTskAvailable
-    ? { type: 'recipient-tsk' }
-    : { type: 'non-interactive-handshake' };
+}: Pick<MessagingSecretStrategyRequest, 'recipientTskAvailable'>): MessagingSecretStrategy {
+  return recipientTskAvailable ? { type: 'recipient-tsk' } : { type: 'non-interactive-handshake' };
 }
 
 /** @deprecated Use {@link defaultMessagingSecretStrategy}. */

@@ -393,14 +393,17 @@ describe('LogService', () => {
       expect(txHashes).not.toContainEqual(directionalLog.txHash);
     });
 
-    it('scans the secret derived from the recipient tsk without registering a sender', async () => {
-      const log = randomPrivateLogResult({ includeEffects: true });
-      servePrivateLogsByTag(aztecNode, new Map([[(await recipientTskTag(recipient)).toString(), log]]));
+    it.each([OnchainDeliveryMode.UNCONSTRAINED, OnchainDeliveryMode.CONSTRAINED])(
+      'scans the %s secret derived from the recipient tsk without registering a sender',
+      async deliveryMode => {
+        const log = randomPrivateLogResult({ includeEffects: true });
+        servePrivateLogsByTag(aztecNode, new Map([[(await recipientTskTag(recipient, deliveryMode)).toString(), log]]));
 
-      const logs = await logService.fetchTaggedLogs(contractAddress, recipient, []);
+        const logs = await logService.fetchTaggedLogs(contractAddress, recipient, []);
 
-      expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
-    });
+        expect(logs.map(l => l.txHash)).toEqual([log.txHash]);
+      },
+    );
 
     it('keeps the messages of accounts that share a tsk apart', async () => {
       const keys = await deriveKeys(Fr.random());
@@ -411,7 +414,10 @@ describe('LogService', () => {
       scopes.push(firstAccount.address, secondAccount.address);
 
       const log = randomPrivateLogResult({ includeEffects: true });
-      servePrivateLogsByTag(aztecNode, new Map([[(await recipientTskTag(secondAccount.address)).toString(), log]]));
+      servePrivateLogsByTag(
+        aztecNode,
+        new Map([[(await recipientTskTag(secondAccount.address, OnchainDeliveryMode.UNCONSTRAINED)).toString(), log]]),
+      );
 
       expect(await logService.fetchTaggedLogs(contractAddress, firstAccount.address, [])).toEqual([]);
 
@@ -445,7 +451,7 @@ describe('LogService', () => {
       servePrivateLogsByTag(
         aztecNode,
         new Map([
-          [(await recipientTskTag(recipient)).toString(), tskLog],
+          [(await recipientTskTag(recipient, OnchainDeliveryMode.UNCONSTRAINED)).toString(), tskLog],
           [(await SiloedTag.compute({ extendedSecret: providedSecret, index: 0 })).toString(), providedLog],
         ]),
       );
@@ -456,6 +462,7 @@ describe('LogService', () => {
         await keyStore.getMasterTaggingSecretKey(recipient),
         contractAddress,
         recipient,
+        OnchainDeliveryMode.UNCONSTRAINED,
       );
       expect(logs.map(l => [l.txHash, l.messagingSecret])).toEqual(
         expect.arrayContaining([
@@ -511,11 +518,15 @@ describe('LogService', () => {
       return SiloedTag.compute({ extendedSecret: directionalSecret, index: 0 });
     }
 
-    async function recipientTskTag(taggedRecipient: AztecAddress): Promise<SiloedTag> {
+    async function recipientTskTag(
+      taggedRecipient: AztecAddress,
+      deliveryMode: OnchainDeliveryMode,
+    ): Promise<SiloedTag> {
       const extendedSecret = await MessagingSecret.computeFromRecipientTsk(
         await keyStore.getMasterTaggingSecretKey(taggedRecipient),
         contractAddress,
         taggedRecipient,
+        deliveryMode,
       );
       return SiloedTag.compute({ extendedSecret, index: 0 });
     }

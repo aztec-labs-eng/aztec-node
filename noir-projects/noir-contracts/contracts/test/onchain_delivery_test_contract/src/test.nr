@@ -183,6 +183,45 @@ unconstrained fn interactive_handshake_reuses_an_existing_registry_handshake() {
     assert_eq(next_index, 1);
 }
 
+#[test]
+unconstrained fn recipient_tsk_secret_derivation_overrides_the_wallet_strategy() {
+    // The wallet would establish a handshake, which the contract's derivation must bypass.
+    let options = TestEnvironmentOptions::new().with_default_messaging_secret_strategy(
+        MessageDelivery::onchain_constrained(),
+        MessagingSecretStrategy::non_interactive_handshake(),
+    );
+    let (env, registry_address, test_address, sender, _) = setup_opts(options);
+    let test_contract = OnchainDeliveryTest::at(test_address);
+    let registry = HandshakeRegistry::at(registry_address);
+
+    // The second send extends the sequence the first one anchored.
+    env.call_private(sender, test_contract.emit_event_via_recipient_tsk_secret(sender, 1));
+    env.call_private(sender, test_contract.emit_event_via_recipient_tsk_secret(sender, 2));
+
+    let maybe_handshake = env.execute_utility_opts(
+        ExecuteUtilityOptions::new().with_from(test_address),
+        registry.get_app_siloed_secrets(sender, sender),
+    );
+    assert(maybe_handshake.is_none());
+}
+
+#[test(should_fail_with = "Public keys not registered")]
+unconstrained fn recipient_tsk_secret_derivation_fails_for_a_recipient_whose_keys_are_not_held() {
+    let (env, _, test_address, sender, _) = setup();
+    let test_contract = OnchainDeliveryTest::at(test_address);
+
+    env.call_private(sender, test_contract.emit_event_via_recipient_tsk_secret(external_recipient(), 1));
+}
+
+// The environment holds the recipient's keys, but only the sender is in the call's scopes.
+#[test(should_fail_with = "Key validation request denied")]
+unconstrained fn recipient_tsk_secret_derivation_fails_for_a_recipient_outside_the_scopes() {
+    let (env, _, test_address, sender, recipient) = setup();
+    let test_contract = OnchainDeliveryTest::at(test_address);
+
+    env.call_private(sender, test_contract.emit_event_via_recipient_tsk_secret(recipient, 1));
+}
+
 #[test(should_fail_with = "reading an unknown nullifier")]
 unconstrained fn fails_at_index_above_zero_without_prior_nullifier() {
     let (env, registry_address, test_address, sender, recipient) = setup();

@@ -1,7 +1,7 @@
 use crate::{
     context::{inputs::PrivateContextInputs, NoteExistenceRequest, NullifierExistenceRequest, ReturnsHash},
     hash::{hash_args, hash_calldata_array},
-    keys::constants::{NULLIFIER_INDEX, NUM_KEY_TYPES, OUTGOING_INDEX, public_key_domain_separators},
+    keys::constants::{NULLIFIER_INDEX, NUM_KEY_TYPES, OUTGOING_INDEX, public_key_domain_separators, TAGGING_INDEX},
     messaging::process_l1_to_l2_message,
     oracle::{
         block_header::get_block_header_at,
@@ -151,7 +151,7 @@ pub struct PrivateContext {
 
     pub(crate) note_hash_read_requests: BoundedVec<Scoped<Counted<Field>>, MAX_NOTE_HASH_READ_REQUESTS_PER_CALL>,
     pub(crate) nullifier_read_requests: BoundedVec<Scoped<Counted<Field>>, MAX_NULLIFIER_READ_REQUESTS_PER_CALL>,
-    key_validation_requests_and_separators: BoundedVec<KeyValidationRequestAndSeparator, MAX_KEY_VALIDATION_REQUESTS_PER_CALL>,
+    pub(crate) key_validation_requests_and_separators: BoundedVec<KeyValidationRequestAndSeparator, MAX_KEY_VALIDATION_REQUESTS_PER_CALL>,
 
     pub(crate) note_hashes: BoundedVec<Counted<NoteHash>, MAX_NOTE_HASHES_PER_CALL>,
     pub(crate) nullifiers: BoundedVec<Counted<Nullifier>, MAX_NULLIFIERS_PER_CALL>,
@@ -782,6 +782,15 @@ impl PrivateContext {
     ///
     pub fn request_ovsk_app(&mut self, ovpk_m_hash: Field) -> Field {
         self.request_sk_app(ovpk_m_hash, OUTGOING_INDEX)
+    }
+
+    /// Requests the app-siloed tagging secret key (tsk_app) for `tpk_m_hash`.
+    ///
+    /// `tpk_m_hash` is the hash of the master tagging public key (tpk_m) the key is validated against.
+    ///
+    /// See `request_nhk_app` and `request_sk_app` for more info.
+    pub(crate) fn request_tsk_app(&mut self, tpk_m_hash: Field) -> Field {
+        self.request_sk_app(tpk_m_hash, TAGGING_INDEX)
     }
 
     /// Pushes a Key Validation Request to the kernel.

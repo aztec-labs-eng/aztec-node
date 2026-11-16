@@ -83,7 +83,7 @@ function buildCurrentAndLegacyOracleCallbacks(
       const legacyArgs = paramSource.deserializeParams(inputs).map(p => p.value);
       const positional = paramOverride ? await paramOverride.mapping(legacyArgs) : legacyArgs;
       const result = await (handler as any)[methodName](...positional);
-      return returnSource.serializeReturn(returnOverride ? returnOverride.mapping(result) : result);
+      return returnSource.serializeReturn(returnOverride ? returnOverride.mapping(result, positional) : result);
     };
   }
 
