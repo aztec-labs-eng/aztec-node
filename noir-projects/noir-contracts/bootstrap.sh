@@ -293,6 +293,18 @@ function bench_cmds {
       "^noir-projects/aztec-nr/" \
       "^noir-projects/noir-contracts/scripts/bench_artifact_sizes.sh"))
   echo "$hash noir-projects/noir-contracts/scripts/bench_artifact_sizes.sh"
+
+  # Time the TXE on the account-scaling workload. Keyed on what the run executes: the TXE's dependency closure, the
+  # contracts and aztec-nr it deploys and calls, the benchmark package and the script. Four reserved CPUs keep it clear
+  # of the benches running alongside it.
+  local txe_hash=$(hash_str \
+    $AZTEC_TOOLCHAIN_HASH \
+    $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts) \
+    $(cache_content_hash \
+      "^noir-projects/noir-contracts/" \
+      "^noir-projects/aztec-nr/" \
+      "^noir-projects/txe-bench/"))
+  echo "$txe_hash:CPUS=4 noir-projects/noir-contracts/scripts/bench_txe.sh"
 }
 
 # Force-builds standard contracts and tar-balls their artifacts into pinned-standard-contracts.tar.gz.
