@@ -11,6 +11,7 @@
 use crate::authwit::account::DOM_SEP__TX_NULLIFIER;
 use crate::authwit::auth::DOM_SEP__AUTHWIT_NULLIFIER;
 use crate::keys::ecdh_shared_secret::{DOM_SEP__ECDH_FIELD_MASK, DOM_SEP__ECDH_SUBKEY};
+use crate::keys::post_quantum::registry::DOM_SEP__POST_QUANTUM_PUBLIC_KEY_REGISTRY_LOG_TAG;
 use crate::macros::functions::initialization_utils::DOM_SEP__INITIALIZATION_NULLIFIER;
 use crate::messages::delivery::constrained_delivery::{
     DOM_SEP__CONSTRAINED_MSG_NULLIFIER, DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER,
@@ -155,6 +156,10 @@ unconstrained fn domain_separators_are_valid() {
             ),
         );
     all = all.push_back(derived(DOM_SEP__SALTED_MESSAGING_SECRET, "salted_messaging_secret"));
+    all = all.push_back(derived(
+        DOM_SEP__POST_QUANTUM_PUBLIC_KEY_REGISTRY_LOG_TAG,
+        "post_quantum_public_key_registry_log_tag",
+    ));
 
     assert_all_unique(all);
 }

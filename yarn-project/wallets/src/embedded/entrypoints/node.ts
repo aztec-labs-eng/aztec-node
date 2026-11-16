@@ -5,6 +5,7 @@ import { type PXE, type PXECreationOptions, createPXE, openStore } from '@aztec-
 import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
 import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry';
 import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import { getStandardPostQuantumPublicKeyRegistry } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 import { BundleAccountContractsProvider } from '../account-contract-providers/bundle.js';
@@ -54,6 +55,7 @@ export class NodeEmbeddedWallet extends EmbeddedWallet {
           await getStandardMultiCallEntrypoint(),
           await getStandardAuthRegistry(),
           await getStandardHandshakeRegistry(),
+          await getStandardPostQuantumPublicKeyRegistry(),
         ],
       },
       loggers: {

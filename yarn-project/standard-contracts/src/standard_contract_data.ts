@@ -8,6 +8,7 @@ export const standardContractNames = [
   'MultiCallEntrypoint',
   'PublicChecks',
   'HandshakeRegistry',
+  'PostQuantumPublicKeyRegistry',
 ] as const;
 
 export type StandardContractName = (typeof standardContractNames)[number];
@@ -17,6 +18,7 @@ export const StandardContractSalt: Record<StandardContractName, Fr> = {
   MultiCallEntrypoint: new Fr(1),
   PublicChecks: new Fr(1),
   HandshakeRegistry: new Fr(1),
+  PostQuantumPublicKeyRegistry: new Fr(1),
 };
 
 export const StandardContractAddress: Record<StandardContractName, AztecAddress> = {
@@ -28,6 +30,9 @@ export const StandardContractAddress: Record<StandardContractName, AztecAddress>
   HandshakeRegistry: AztecAddress.fromStringUnsafe(
     '0x20dfae8b5be70f13680b37dd346752517db43ebfc02bd5686fc11b3c5cba32b9',
   ),
+  PostQuantumPublicKeyRegistry: AztecAddress.fromStringUnsafe(
+    '0x21927b480566a7cd39035c2833fd6d74bf6d3d28a4436e9e2933efe8495c3750',
+  ),
 };
 
 export const StandardContractClassId: Record<StandardContractName, Fr> = {
@@ -35,6 +40,7 @@ export const StandardContractClassId: Record<StandardContractName, Fr> = {
   MultiCallEntrypoint: Fr.fromString('0x1f658f0f5874d1f073e85182e9fe96d3f6fcf5501ee05988eccb63b655213906'),
   PublicChecks: Fr.fromString('0x0bcfd8eb97de32bf835c2202ce8dbbb61db9820c267f4d43200341840590e8b9'),
   HandshakeRegistry: Fr.fromString('0x2169bdbbeb4bebbf99687e0683f6661028a16a1308bdf58ce0df0cb5c4bed15e'),
+  PostQuantumPublicKeyRegistry: Fr.fromString('0x2bd5e20af29bf5461017b87c19836626e9342679d1390970f87c62f328fb157b'),
 };
 
 export const StandardContractClassIdPreimage: Record<
@@ -61,6 +67,11 @@ export const StandardContractClassIdPreimage: Record<
     privateFunctionsRoot: Fr.fromString('0x0b411cc64d47cc476c8526b3e31a10a6e83cb506d4a5150aeb538cb2d9cb9aa9'),
     publicBytecodeCommitment: Fr.fromString('0x0ce4c618c3ed7f3a20410e618c06bb701e150af7fe28a3e92f68e7733809f33e'),
   },
+  PostQuantumPublicKeyRegistry: {
+    artifactHash: Fr.fromString('0x00a1861216db3fe116a6de868264c0cf438431487d119819eaf0f58ea9d106b1'),
+    privateFunctionsRoot: Fr.fromString('0x049f924d2ef131d364875fc0b5813f2ee10d1c8e19596c96841b0b859e011cac'),
+    publicBytecodeCommitment: Fr.fromString('0x0ce4c618c3ed7f3a20410e618c06bb701e150af7fe28a3e92f68e7733809f33e'),
+  },
 };
 
 export const StandardContractInitializationHash: Record<StandardContractName, Fr> = {
@@ -68,6 +79,7 @@ export const StandardContractInitializationHash: Record<StandardContractName, Fr
   MultiCallEntrypoint: Fr.fromString('0x0000000000000000000000000000000000000000000000000000000000000000'),
   PublicChecks: Fr.fromString('0x0000000000000000000000000000000000000000000000000000000000000000'),
   HandshakeRegistry: Fr.fromString('0x0000000000000000000000000000000000000000000000000000000000000000'),
+  PostQuantumPublicKeyRegistry: Fr.fromString('0x0000000000000000000000000000000000000000000000000000000000000000'),
 };
 
 export const StandardContractPrivateFunctions: Record<
@@ -109,6 +121,14 @@ export const StandardContractPrivateFunctions: Record<
         Fr.fromString('0x00000000000000000000000000000000000000000000000000000000f1ff839b'),
       ),
       vkHash: Fr.fromString('0x178a8d87cb1d7a7319f8237377a82a8abbe568e139cf66dc7216976623ceb158'),
+    },
+  ],
+  PostQuantumPublicKeyRegistry: [
+    {
+      selector: FunctionSelector.fromField(
+        Fr.fromString('0x000000000000000000000000000000000000000000000000000000004ce4ec64'),
+      ),
+      vkHash: Fr.fromString('0x07b6266b9580d7cd37e92d2a1e0d3db471fcb68c6b1efeb74e0a66c17b23b9c0'),
     },
   ],
 };

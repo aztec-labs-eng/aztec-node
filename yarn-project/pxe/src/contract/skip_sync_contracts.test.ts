@@ -2,6 +2,7 @@ import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry/constants';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint/constants';
+import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import { STANDARD_PUBLIC_CHECKS_ADDRESS } from '@aztec-labs/standard-contracts/public-checks/constants';
 import type { FunctionCall } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -15,10 +16,11 @@ import { syncScope } from './helpers.js';
 import { isSkipSyncContract } from './skip_sync_contracts.js';
 
 describe('isSkipSyncContract', () => {
-  it('skips the protocol contracts, the auth registry, the multicall entrypoint and the public checks', () => {
+  it('skips the protocol contracts and the standard contracts that hold no private state', () => {
     const skipped = [
       ...Object.values(ProtocolContractAddress),
       STANDARD_AUTH_REGISTRY_ADDRESS,
+      STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS,
       STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS,
       STANDARD_PUBLIC_CHECKS_ADDRESS,
     ];

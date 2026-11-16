@@ -66,6 +66,11 @@ export const standardContracts: { name: string; src: string; nrConst: string | n
     src: 'handshake_registry_contract-HandshakeRegistry',
     nrConst: 'STANDARD_HANDSHAKE_REGISTRY_ADDRESS',
   },
+  {
+    name: 'PostQuantumPublicKeyRegistry',
+    src: 'post_quantum_public_key_registry_contract-PostQuantumPublicKeyRegistry',
+    nrConst: 'STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS',
+  },
 ];
 
 /** Everything derived from a compiled standard-contract artifact that the generator emits. */

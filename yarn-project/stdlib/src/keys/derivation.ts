@@ -1,15 +1,25 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
-import { sha512ToGrumpkinScalar } from '@aztec-labs/foundation/crypto/sha512';
+import { sha512, sha512ToGrumpkinScalar } from '@aztec-labs/foundation/crypto/sha512';
 import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem.js';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import type { KeyPrefix } from './key_types.js';
+import { PostQuantumPublicKey } from './post_quantum_public_key.js';
 import { PublicKey, hashPublicKey } from './public_key.js';
 import { PublicKeys } from './public_keys.js';
 import { getKeyGenerator } from './utils.js';
+
+/**
+ * Domain separator for the seed of an account's post-quantum key pair, derived from its name like every domain
+ * separator.
+ */
+const DOM_SEP__POST_QUANTUM_KEY_PAIR_SEED = 3053071212;
 
 export function computeAppNullifierHidingKey(
   masterNullifierHidingSecretKey: GrumpkinScalar,
@@ -53,6 +63,26 @@ export function deriveMasterMessageSigningSecretKey(secretKey: Fr): GrumpkinScal
 
 export function deriveMasterFallbackSecretKey(secretKey: Fr): GrumpkinScalar {
   return sha512ToGrumpkinScalar([secretKey, DomainSeparator.FBSK_M]);
+}
+
+/**
+ * Derives an account's post-quantum key pair, an ML-KEM-768 one, from its master tagging secret key.
+ *
+ * The pair is deterministic, so it needs no backup: anyone holding the account's privacy keys derives the same pair.
+ */
+export function derivePostQuantumKeyPair(masterTaggingSecretKey: GrumpkinScalar): {
+  publicKey: PostQuantumPublicKey;
+  secretKey: Buffer;
+} {
+  // TODO(F-961): handle this pair like the other master keys: with wallets deriving it as they see fit (e.g. from the
+  // account's secret key) and then handing it to PXE's key store. It is derived from `tsk_m` for now because PXE
+  // already holds every account's `tsk_m`, so it can derive any account's pair itself, including accounts in stores
+  // written by earlier PXE versions (before this key existed), with no store migration. The derivation is safe, since
+  // `tpk_m` is only ever shared as a hash and so a post-quantum attacker cannot recover `tsk_m`, but less flexible,
+  // since wallets cannot choose how the pair is derived.
+  const seed = sha512(serializeToBuffer([masterTaggingSecretKey, DOM_SEP__POST_QUANTUM_KEY_PAIR_SEED]));
+  const { publicKey, secretKey } = mlKem768.keygen(seed);
+  return { publicKey: PostQuantumPublicKey.fromBuffer(Buffer.from(publicKey)), secretKey: Buffer.from(secretKey) };
 }
 
 export function computePreaddress(publicKeysHash: Fr, partialAddress: Fr) {

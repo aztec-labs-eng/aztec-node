@@ -1,7 +1,6 @@
-use crate::sync::rewindable_register::{deserialize_payload, serialize_payload};
 use aztec::{
     ephemeral::EphemeralArray,
-    facts::{FactScope, get_fact_collection, record_retractable_fact},
+    facts::{deserialize_payload, FactScope, get_fact_collection, record_retractable_fact, serialize_payload},
     messages::delivery::handshake::DiscoveredHandshake,
     oracle::block_reference::BlockReference,
     protocol::{address::AztecAddress, hash::sha256_to_field},

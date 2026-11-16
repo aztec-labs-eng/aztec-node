@@ -8,6 +8,7 @@ import { LazyProtocolContractsProvider } from '@aztec-labs/protocol-contracts/pr
 import { ContractStore } from '@aztec-labs/pxe/client/lazy';
 import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry/lazy';
 import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry/lazy';
+import { getStandardPostQuantumPublicKeyRegistry } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/lazy';
 import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
 import { existsSync } from 'node:fs';
 import { cpus } from 'node:os';
@@ -23,8 +24,8 @@ void BarretenbergSync.initSingleton({ backend: BackendType.Wasm });
 
 /**
  * Opens a fresh LMDB in a tmp dir and writes the protocol contracts in
- * {@link TXE_REQUIRED_PROTOCOL_CONTRACTS} plus the standard AuthRegistry, HandshakeRegistry, and the SchnorrAccount artifact,
- * returning the directory path and the SchnorrAccount class id (hex). The store handle is intentionally kept
+ * {@link TXE_REQUIRED_PROTOCOL_CONTRACTS} plus the standard AuthRegistry, HandshakeRegistry and
+ * PostQuantumPublicKeyRegistry, and the SchnorrAccount artifact, returning the directory path and the SchnorrAccount class id (hex). The store handle is intentionally kept
  * alive: closing it would trigger the ephemeral-store cleanup hook and remove the tmp
  * directory, so any worker that has not yet cloned would find it missing.
  */
@@ -35,7 +36,7 @@ export async function buildSharedContractStore(): Promise<{ dataDir: string; sch
   const provider = new LazyProtocolContractsProvider();
   const [protocolContracts, standardContracts, schnorrArtifact] = await Promise.all([
     Promise.all(TXE_REQUIRED_PROTOCOL_CONTRACTS.map(name => provider.getProtocolContractArtifact(name))),
-    Promise.all([getStandardAuthRegistry(), getStandardHandshakeRegistry()]),
+    Promise.all([getStandardAuthRegistry(), getStandardHandshakeRegistry(), getStandardPostQuantumPublicKeyRegistry()]),
     getSchnorrAccountContractArtifact(),
   ]);
   const schnorrClass = await getContractClassFromArtifact(schnorrArtifact);
