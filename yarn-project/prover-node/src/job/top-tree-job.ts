@@ -166,6 +166,11 @@ export class TopTreeJob {
 
   private async run() {
     try {
+      const lastSlot = this.snapshot.at(-1)?.slotNumber;
+      if (lastSlot !== undefined) {
+        // Before the blob challenges are computed, so the broker holds back later slots from the start.
+        this.topTree.registerProof(this.epochNumber, lastSlot);
+      }
       const blobTimer = new Timer();
       const blobFieldsPerCheckpoint = this.snapshot.map(j => j.checkpoint.toBlobFields());
       const finalBlobBatchingChallenges = await buildFinalBlobChallenges(blobFieldsPerCheckpoint);
@@ -188,7 +193,13 @@ export class TopTreeJob {
       }));
 
       const defaultProve = (): Promise<TopTreeProof> =>
-        this.topTree.prove(this.epochNumber, this.snapshot.length, finalBlobBatchingChallenges, checkpointData);
+        this.topTree.prove(
+          this.epochNumber,
+          this.snapshot.length,
+          finalBlobBatchingChallenges,
+          checkpointData,
+          lastSlot,
+        );
 
       await this.deps.hooks?.beforeProve?.();
       const proveTimer = new Timer();

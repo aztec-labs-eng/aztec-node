@@ -457,5 +457,21 @@ synchronous method.
   sessions. What is lost is the attempt to open a full session for the affected epochs on the prune itself.
 - Cancelling a session aborts its top-tree jobs. A replacement session that already requested the same jobs gets
   the abort too and ends `failed`.
-- The broker proves block-level jobs before checkpoint roots. Checkpoints that land in the same epoch after a
-  partial proof was requested therefore delay that proof's checkpoint roots.
+- The broker holds back the blocks of later slots while an epoch proof that ends earlier is outstanding. An agent
+  with nothing else to do still takes one of those blocks' jobs and finishes it. A job of the proof that becomes
+  ready meanwhile waits for an agent, for at most the length of one such job. This can happen again each time the
+  proof moves to its next job, so with few agents the waits add up along the proof's chain of jobs.
+- The broker does not look at which agents are idle. An agent that accepts every proof type can take a job of the
+  outstanding proof that an agent restricted to that type could have taken, and leave a later slot's job waiting.
+- The root rollup of an epoch proof is never held back, because it finishes a proof that covers the slots of every
+  proof that ends before it. A shorter proof of the same epoch waits for the root rollups of all longer proofs of
+  the epoch that are ready at the same time.
+- The top tree does not wait for the broker to answer the registration. Until the broker has processed it, later
+  slots are not held back.
+- A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
+  same epoch keeps the slot it was first requested for.
+- The broker keeps at most 1024 registered epoch proofs and drops the oldest one beyond that.
+- The broker keeps the epoch proofs it was told about in memory. After a broker restart, the blocks of later
+  slots are not held back for a proof that was already running.
+- A prover node that is killed does not unregister its epoch proofs. If a reorg then replaces checkpoints of such
+  a proof, the jobs of the replaced checkpoints stay queued and go ahead of later slots until they are proven.

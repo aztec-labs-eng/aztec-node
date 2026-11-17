@@ -1,4 +1,4 @@
-import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { ProvingRequestType } from '../proofs/proving_request_type.js';
 import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from './proving-job.js';
@@ -31,6 +31,24 @@ export interface ProvingJobProducer {
    * @param ids - The set of job ids to check for completion
    */
   getCompletedJobs(ids: ProvingJobId[]): Promise<ProvingJobId[]>;
+
+  /**
+   * Tells the broker that an epoch proof is being worked on. Until it is unregistered, the broker holds back the
+   * jobs of that epoch whose `prioritySlot` is above `lastSlot` while a job at or below it is available.
+   * @param lastSlot - Slot of the last checkpoint the proof covers
+   * @param proofId - Identifies this proof to `unregisterEpochProof`
+   */
+  registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void>;
+
+  /** Tells the broker that an epoch proof registered with `registerEpochProof` is done or was given up. */
+  unregisterEpochProof(proofId: string): Promise<void>;
+
+  /**
+   * Orders a job that is queued or in progress by `prioritySlot` if that is lower than the slot it has. Does
+   * nothing for a job the broker does not know or that has settled, so unlike `enqueueProvingJob` it cannot
+   * bring back a cancelled job.
+   */
+  lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void>;
 }
 
 export type ProvingJobFilter = {

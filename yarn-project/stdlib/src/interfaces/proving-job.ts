@@ -4,7 +4,12 @@ import {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import {
+  EpochNumber,
+  EpochNumberSchema,
+  type SlotNumber,
+  SlotNumberSchema,
+} from '@aztec-labs/foundation/branded-types';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
@@ -346,6 +351,16 @@ type ProvingJobShape = {
   type: ProvingRequestType;
   epochNumber: EpochNumber;
   inputsUri: ProofUri;
+  /**
+   * The slot the job belongs to. A block-level job carries the slot of its block. A job of the top tree carries the
+   * slot of the last checkpoint its epoch proof covers. It is not part of the job id.
+   *
+   * The broker uses it to hold back work an outstanding epoch proof does not need: while a proof that ends at slot
+   * `k` is registered with `ProvingJobProducer.registerEpochProof`, jobs of that epoch with a higher slot wait for
+   * the jobs at or below `k`. A job without a slot is never held back, and neither is a root rollup. Between jobs
+   * of the same proof type, the lower slot goes first.
+   */
+  prioritySlot?: SlotNumber;
 };
 
 export const ProvingJob: z.ZodType<ProvingJobShape, any> = z.object({
@@ -353,6 +368,7 @@ export const ProvingJob: z.ZodType<ProvingJobShape, any> = z.object({
   type: z.nativeEnum(ProvingRequestType),
   epochNumber: EpochNumberSchema,
   inputsUri: ProofUri,
+  prioritySlot: SlotNumberSchema.optional(),
 });
 
 export const makeProvingJobId = (epochNumber: EpochNumber, type: ProvingRequestType, inputsHash: string) => {

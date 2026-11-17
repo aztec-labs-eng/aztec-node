@@ -188,12 +188,14 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
   }
 
   public createTopTreeOrchestrator(): TopTreeOrchestrator {
+    const facade = this.getFacade();
     return new TopTreeOrchestrator(
-      this.getFacade(),
+      facade,
       this.config.proverId,
       this.getDeferredJobQueue(),
       this.telemetry,
       this.log.getBindings(),
+      facade,
     );
   }
 
