@@ -1,3 +1,4 @@
+import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Buffer } from 'buffer';
 
@@ -61,7 +62,7 @@ describe('buffer', () => {
   });
 
   it.each([0, 1, 31, 32, 63])('round-trips a %i-byte buffer through one field per 31-byte chunk', length => {
-    const buffer = Buffer.from(Array.from({ length }, (_, i) => i + 1));
+    const buffer = Buffer.from(times(length, i => i + 1));
 
     const fields = bufferToFieldChunks(buffer);
 
