@@ -1,7 +1,7 @@
 import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -119,6 +119,22 @@ describe('EpochSession', () => {
       expect(session.getState()).toBe('completed');
       expect(session.isTerminal()).toBe(true);
       await expect(session.whenDone()).resolves.toBe('completed');
+    });
+
+    it('registers and proves the top tree under the slot of the last checkpoint', async () => {
+      publishingService.submit.mockResolvedValue('published');
+      topTree.prove.mockResolvedValue(synthProof);
+      const lastCp = await Checkpoint.random(CheckpointNumber(2), {
+        numBlocks: 1,
+        slotNumber: SlotNumber(cp.header.slotNumber + 1),
+      });
+      const spec = { ...makeSpec(), toSlot: lastCp.header.slotNumber };
+      const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
+      await new TestEpochSession(spec, [stubProver, makeStubProver(lastCp)], deps).start();
+
+      const lastSlot = topTree.prove.mock.calls[0][4];
+      expect(lastSlot).toEqual(lastCp.header.slotNumber);
+      expect(topTree.registerProof).toHaveBeenCalledWith(spec.epochNumber, lastCp.header.slotNumber);
     });
 
     it('submits a candidate whose id, kind, range, and checkpoint bounds come from the session', async () => {

@@ -4,6 +4,7 @@ import type {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { AvmCircuitInputs } from '../avm/avm.js';
 import type { InboxParityPrivateInputs } from '../parity/inbox_parity_private_inputs.js';
@@ -47,12 +48,14 @@ export interface ServerCircuitProver {
     inputs: InboxParityPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<ParityPublicInputs, typeof RECURSIVE_PROOF_LENGTH>>;
 
   getPublicChonkVerifierProof(
     inputs: PublicChonkVerifierPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<PublicChonkVerifierPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
@@ -65,12 +68,14 @@ export interface ServerCircuitProver {
     baseRollupInput: PrivateTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   getPublicTxBaseRollupProof(
     inputs: PublicTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   /**
@@ -81,6 +86,7 @@ export interface ServerCircuitProver {
     input: TxMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   /**
@@ -91,18 +97,21 @@ export interface ServerCircuitProver {
     input: BlockRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   getBlockRootSingleTxRollupProof(
     input: BlockRootSingleTxRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   getBlockRootNoTxsRollupProof(
     input: BlockRootNoTxsRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   /**
@@ -113,12 +122,14 @@ export interface ServerCircuitProver {
     input: BlockMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
   getCheckpointRootRollupProof(
     input: CheckpointRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
@@ -127,6 +138,7 @@ export interface ServerCircuitProver {
     input: CheckpointRootSingleBlockRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
@@ -135,6 +147,7 @@ export interface ServerCircuitProver {
     input: CheckpointPaddingRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
@@ -143,6 +156,7 @@ export interface ServerCircuitProver {
     input: CheckpointMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
@@ -155,6 +169,7 @@ export interface ServerCircuitProver {
     input: RootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<RootRollupPublicInputs, typeof NESTED_RECURSIVE_PROOF_LENGTH>>;
 
   /**
@@ -165,6 +180,7 @@ export interface ServerCircuitProver {
     inputs: AvmCircuitInputs,
     signal?: AbortSignal,
     epochNumber?: number,
+    prioritySlot?: SlotNumber,
   ): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>>;
 }
 

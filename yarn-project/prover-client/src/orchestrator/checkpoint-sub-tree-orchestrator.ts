@@ -5,7 +5,7 @@ import {
   MAX_BLOCKS_PER_CHECKPOINT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AbortError } from '@aztec-labs/foundation/error';
 import { inspect } from '@aztec-labs/foundation/inspect';
@@ -161,6 +161,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
 
   public get tracer(): Tracer {
     return this.metrics.tracer;
+  }
+
+  /** Every job of the sub-tree is ordered at the broker by the slot of its checkpoint. */
+  private get prioritySlot(): SlotNumber | undefined {
+    return this.provingState?.constants.slotNumber;
   }
 
   public getProverId(): EthAddress {
@@ -329,7 +334,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       // Fire and forget — getOrEnqueueChonkVerifier later picks up the cached promise
       // when the tx is processed inside its block.
       void this.chonkCache.getOrCompute(txHash, signal =>
-        this.prover.getPublicChonkVerifierProof(inputs, signal, this.epochNumber),
+        this.prover.getPublicChonkVerifierProof(inputs, signal, this.epochNumber, this.prioritySlot),
       );
     }
     return Promise.resolve();
@@ -718,9 +723,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
           : 'getPublicTxBaseRollupProof',
         signal => {
           if (inputs instanceof PrivateTxBaseRollupPrivateInputs) {
-            return this.prover.getPrivateTxBaseRollupProof(inputs, signal, provingState.epochNumber);
+            return this.prover.getPrivateTxBaseRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
           } else {
-            return this.prover.getPublicTxBaseRollupProof(inputs, signal, provingState.epochNumber);
+            return this.prover.getPublicTxBaseRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
           }
         },
         { [Attributes.TX_HASH]: processedTx.hash.toString(), [Attributes.PROTOCOL_CIRCUIT_NAME]: rollupType },
@@ -769,6 +774,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         txProvingState.getPublicChonkVerifierPrivateInputs(),
         signal,
         this.epochNumber,
+        this.prioritySlot,
       ),
     );
     void promise.then(handleResult).catch(err => {
@@ -802,7 +808,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       provingState,
       this.wrapCircuitCall(
         'getTxMergeRollupProof',
-        signal => this.prover.getTxMergeRollupProof(inputs, signal, provingState.epochNumber),
+        signal => this.prover.getTxMergeRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: 'rollup-tx-merge' satisfies CircuitName },
       ),
       result => {
@@ -837,11 +843,26 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         signal => {
           switch (rollup.rollupType) {
             case 'rollup-block-root-no-txs':
-              return this.prover.getBlockRootNoTxsRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootNoTxsRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
             case 'rollup-block-root-single-tx':
-              return this.prover.getBlockRootSingleTxRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootSingleTxRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
             case 'rollup-block-root':
-              return this.prover.getBlockRootRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
           }
         },
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: rollupType },
@@ -893,7 +914,8 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       checkpointProvingState,
       this.wrapCircuitCall(
         'getInboxParityProof',
-        signal => this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber),
+        signal =>
+          this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber, this.prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: circuitName },
       ),
       result => {
@@ -920,7 +942,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       provingState,
       this.wrapCircuitCall(
         'getBlockMergeRollupProof',
-        signal => this.prover.getBlockMergeRollupProof(inputs, signal, provingState.epochNumber),
+        signal => this.prover.getBlockMergeRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: 'rollup-block-merge' satisfies CircuitName },
       ),
       result => {
@@ -1013,7 +1035,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         'getAvmProof',
         async (signal: AbortSignal) => {
           const inputs = txProvingState.getAvmInputs();
-          return await this.prover.getAvmProof(inputs, signal, provingState.epochNumber);
+          return await this.prover.getAvmProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
         },
         { [Attributes.TX_HASH]: txProvingState.processedTx.hash.toString() },
       ),
