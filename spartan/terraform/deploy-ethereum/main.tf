@@ -59,7 +59,7 @@ locals {
       reth_p2p_port       = 32200
       lighthouse_p2p_port = 32201
       reth_storage        = "1.75Ti"
-      lighthouse_storage  = "512Gi"
+      lighthouse_storage  = "1Ti"
       reth_resources = {
         requests = { cpu = "1", memory = "12Gi" }
         limits   = { cpu = "4", memory = "24Gi" }
