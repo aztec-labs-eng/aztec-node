@@ -4,7 +4,7 @@ import type {
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { chunk, compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -60,6 +60,12 @@ type ProvingJob = {
   deferred: PromiseWithResolvers<any>;
   abortFn: () => void;
   signal?: AbortSignal;
+  /** The lowest slot the broker has for the job, see `ProvingJob.prioritySlot` of the broker interface. */
+  prioritySlot?: SlotNumber;
+  /** Whether the request that enqueues the job has left for the broker. */
+  enqueueSent?: boolean;
+  /** Settles once the broker has answered that request. */
+  sentToBroker: PromiseWithResolvers<void>;
 };
 
 export class BrokerCircuitProverFacade implements ServerCircuitProver {
@@ -121,6 +127,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       deferred: promise,
       abortFn,
       signal,
+      sentToBroker: promiseWithResolvers<void>(),
     };
 
     this.jobs.set(id, job);
@@ -133,11 +140,21 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     inputs: ProvingJobInputsMap[T],
     epochNumber = EpochNumber.ZERO,
     signal?: AbortSignal,
+    prioritySlot?: SlotNumber,
   ): Promise<ProvingJobResultsMap[T]> {
     const { job: job, isEnqueued } = this.getOrCreateProvingJob(id, type, signal);
     if (isEnqueued) {
+      // The same job requested again for an earlier slot: the broker has to order it by that slot.
+      if (prioritySlot !== undefined && job.prioritySlot !== undefined && prioritySlot < job.prioritySlot) {
+        if (job.enqueueSent) {
+          void this.lowerPrioritySlot(job, prioritySlot);
+        } else {
+          job.prioritySlot = prioritySlot;
+        }
+      }
       return job.deferred.promise;
     }
+    job.prioritySlot = prioritySlot;
 
     try {
       const inputsUri = await this.proofStore.saveProofInput(id, type, inputs);
@@ -151,7 +168,16 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       }
 
       // Send the job to the broker
-      const jobStatus = await this.broker.enqueueProvingJob({ id, type, inputsUri, epochNumber });
+      // The slot is read here: a request for a lower one may have come in while the inputs were saved.
+      job.enqueueSent = true;
+      const jobStatus = await this.broker.enqueueProvingJob({
+        id,
+        type,
+        inputsUri,
+        epochNumber,
+        prioritySlot: job.prioritySlot,
+      });
+      job.sentToBroker.resolve();
 
       const jobLogText = `id=${id} type=${ProvingRequestType[type]} epochNumber=${epochNumber}`;
       const jobLogData = {
@@ -186,10 +212,52 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       }
     } catch (err) {
       this.jobs.delete(job.id);
+      job.sentToBroker.resolve();
       job.deferred.reject(err);
     }
 
     return job.deferred.promise as Promise<ProvingJobResultsMap[T]>;
+  }
+
+  /**
+   * Registers an epoch proof with the broker, see `ProvingJobProducer.registerEpochProof`. A broker that cannot
+   * take the registration still proves the jobs, in its own order, so a failure is only logged.
+   */
+  public async registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
+    try {
+      await this.broker.registerEpochProof(epochNumber, lastSlot, proofId);
+    } catch (err) {
+      this.log.warn(`Could not register epoch proof ${proofId} with the broker`, { epochNumber, lastSlot, err });
+    }
+  }
+
+  public async unregisterEpochProof(proofId: string): Promise<void> {
+    try {
+      await this.broker.unregisterEpochProof(proofId);
+    } catch (err) {
+      this.log.warn(`Could not unregister epoch proof ${proofId} from the broker`, { proofId, err });
+    }
+  }
+
+  private async lowerPrioritySlot(job: ProvingJob, prioritySlot: SlotNumber): Promise<void> {
+    try {
+      // The broker ignores a slot for a job it does not have yet.
+      await job.sentToBroker.promise;
+      if (job.signal?.aborted || this.jobs.get(job.id) !== job) {
+        return;
+      }
+      await this.broker.lowerProvingJobPrioritySlot(job.id, prioritySlot);
+      // Recorded only now, so a request that failed is sent again the next time the job is requested.
+      if (job.prioritySlot === undefined || prioritySlot < job.prioritySlot) {
+        job.prioritySlot = prioritySlot;
+      }
+    } catch (err) {
+      this.log.warn(`Could not lower the priority slot of job id=${job.id}`, {
+        provingJobId: job.id,
+        prioritySlot,
+        err,
+      });
+    }
   }
 
   public start() {
@@ -397,6 +465,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     inputs: AvmCircuitInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.PUBLIC_VM, inputs, epochNumber),
@@ -404,6 +473,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       inputs,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -411,6 +481,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     inputs: InboxParityPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<ParityPublicInputs, typeof RECURSIVE_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.INBOX_PARITY, inputs, epochNumber),
@@ -418,6 +489,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       inputs,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -425,6 +497,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: TxMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.TX_MERGE_ROLLUP, input, epochNumber),
@@ -432,6 +505,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -439,6 +513,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     inputs: PublicChonkVerifierPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<PublicChonkVerifierPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
@@ -448,6 +523,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       inputs,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -455,6 +531,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     baseRollupInput: PrivateTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, baseRollupInput, epochNumber),
@@ -462,6 +539,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       baseRollupInput,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -469,6 +547,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     inputs: PublicTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.PUBLIC_TX_BASE_ROLLUP, inputs, epochNumber),
@@ -476,6 +555,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       inputs,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -483,6 +563,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: BlockRootNoTxsRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.BLOCK_ROOT_NO_TXS_ROLLUP, input, epochNumber),
@@ -490,6 +571,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -497,6 +579,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: BlockRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.BLOCK_ROOT_ROLLUP, input, epochNumber),
@@ -504,6 +587,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -511,6 +595,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: BlockRootSingleTxRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.BLOCK_ROOT_SINGLE_TX_ROLLUP, input, epochNumber),
@@ -518,6 +603,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -525,6 +611,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: BlockMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.BLOCK_MERGE_ROLLUP, input, epochNumber),
@@ -532,6 +619,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -539,6 +627,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: CheckpointRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
@@ -548,6 +637,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -555,6 +645,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: CheckpointRootSingleBlockRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
@@ -564,6 +655,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -571,6 +663,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: CheckpointPaddingRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
@@ -580,6 +673,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -587,6 +681,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: CheckpointMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
@@ -596,6 +691,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 
@@ -603,6 +699,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     input: RootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
+    prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<RootRollupPublicInputs, typeof RECURSIVE_PROOF_LENGTH>> {
     return this.enqueueJob(
       this.generateId(ProvingRequestType.ROOT_ROLLUP, input, epochNumber),
@@ -610,6 +707,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       input,
       epochNumber,
       signal,
+      prioritySlot,
     );
   }
 

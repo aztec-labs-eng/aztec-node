@@ -1,5 +1,6 @@
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from '@aztec-labs/stdlib/interfaces/server';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
@@ -559,6 +560,260 @@ describe.each([
       // epoch's remaining jobs must complete rather than starve behind newer epochs' work.
       await getAndAssertNextJobId(publicVm1, ProvingRequestType.PUBLIC_VM, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP);
       await getAndAssertNextJobId(baseRollup2, ProvingRequestType.PUBLIC_VM, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP);
+    });
+
+    describe('priority slots', () => {
+      const epoch = EpochNumber(1);
+      const enqueue = async (type: ProvingRequestType, prioritySlot?: number, id = makeRandomProvingJobId()) => {
+        await broker.enqueueProvingJob({
+          id,
+          type,
+          epochNumber: epoch,
+          inputsUri: makeInputsUri(),
+          prioritySlot: prioritySlot === undefined ? undefined : SlotNumber(prioritySlot),
+        });
+        return id;
+      };
+      const nextJobId = async (...allowList: ProvingRequestType[]) =>
+        (await broker.getProvingJob({ allowList }))?.job.id;
+      const nextJobIds = async (count: number) => {
+        const ids: (ProvingJobId | undefined)[] = [];
+        for (let i = 0; i < count; i++) {
+          ids.push(await nextJobId());
+        }
+        return ids;
+      };
+
+      it('holds back the blocks of a later slot while an epoch proof that ends earlier is registered', async () => {
+        // The proof ends at slot 5 and has no checkpoint root yet: its last checkpoint is still proving its blocks.
+        // The block root of slot 6 belongs to a checkpoint that landed after the proof was requested.
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+        const neededVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        expect(await nextJobIds(2)).toEqual([neededVm, laterBlockRoot]);
+      });
+
+      it('still gives the blocks the proof needs before its checkpoint roots', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        const laterBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+        const checkpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const neededBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+
+        expect(await nextJobIds(3)).toEqual([neededBase, checkpointRoot, laterBase]);
+      });
+
+      it('orders jobs by proof type alone once the proof is unregistered', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        await broker.unregisterEpochProof('proof');
+        const earlierVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+
+        expect(await nextJobIds(2)).toEqual([laterBlockRoot, earlierVm]);
+      });
+
+      it('keeps holding back for a proof while another registration of the same slot remains', async () => {
+        // A session replaced after a prune keeps its slot range. The old one unregisters after the new one registers.
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'old');
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'replacement');
+        await broker.unregisterEpochProof('old');
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+        const neededVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        expect(await nextJobIds(2)).toEqual([neededVm, laterBlockRoot]);
+      });
+
+      it('serves the epoch proof that ends first', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'earlier');
+        await broker.registerEpochProof(epoch, SlotNumber(6), 'later');
+        const laterRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 6);
+        const earlierMerge = await enqueue(ProvingRequestType.CHECKPOINT_MERGE_ROLLUP, 5);
+
+        expect(await nextJobIds(2)).toEqual([earlierMerge, laterRoot]);
+      });
+
+      it('ignores a registered proof that has no job left at or below its last slot', async () => {
+        // The proof ending at slot 5 was abandoned without being unregistered. The proof ending at slot 8 is live.
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'abandoned');
+        await broker.registerEpochProof(epoch, SlotNumber(8), 'live');
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 9);
+        const neededVm = await enqueue(ProvingRequestType.PUBLIC_VM, 7);
+
+        expect(await nextJobIds(2)).toEqual([neededVm, laterBlockRoot]);
+      });
+
+      it('does not hold back the jobs of another epoch', async () => {
+        await broker.registerEpochProof(EpochNumber(2), SlotNumber(5), 'proof');
+        const earlierVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+
+        expect(await nextJobIds(2)).toEqual([laterBlockRoot, earlierVm]);
+      });
+
+      it('gives a held-back job to an agent that accepts nothing else', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const laterBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect(await nextJobId(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP)).toEqual(laterBase);
+      });
+
+      it('does not hold back a job without a slot', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const unslottedBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP);
+
+        expect(await nextJobId()).toEqual(unslottedBase);
+      });
+
+      it('orders a job that two requests share by the lower of their slots', async () => {
+        // The inbox parity proof of slot 6 has the same inputs as the one the proof ending at slot 5 needs.
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'proof');
+        const parity = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
+        const checkpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        await enqueue(ProvingRequestType.INBOX_PARITY, 5, parity);
+
+        expect(await nextJobIds(3)).toEqual([parity, checkpointRoot, undefined]);
+      });
+
+      it('orders a shared job by its lower slot when saving that slot fails', async () => {
+        const shared = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
+        const other = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
+        jest.spyOn(database, 'addProvingJob').mockRejectedValueOnce(new Error('db down'));
+        await enqueue(ProvingRequestType.INBOX_PARITY, 5, shared);
+
+        expect(await nextJobIds(3)).toEqual([shared, other, undefined]);
+      });
+
+      it('orders a queued job by a lower slot requested for it', async () => {
+        const lowered = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
+        const other = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
+        await broker.lowerProvingJobPrioritySlot(lowered, SlotNumber(5));
+
+        expect(await nextJobIds(3)).toEqual([lowered, other, undefined]);
+      });
+
+      it('does not bring back a cancelled job when a lower slot is requested for it', async () => {
+        const cancelled = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
+        await broker.cancelProvingJob(cancelled);
+        await broker.lowerProvingJobPrioritySlot(cancelled, SlotNumber(5));
+
+        expect(await nextJobId()).toBeUndefined();
+        await assertJobStatus(cancelled, 'aborted');
+      });
+
+      it('skips the queue entry a cancelled job left behind once it is revived with another slot', async () => {
+        const revived = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+        await broker.cancelProvingJob(revived);
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, revived);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7);
+
+        expect(await nextJobIds(3)).toEqual([other, revived, undefined]);
+      });
+
+      it('hands out a job once when a lower slot arrives while it is being saved', async () => {
+        const id = makeRandomProvingJobId();
+        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
+        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const beforeSaved = await nextJobId();
+        await Promise.all([saving, lowering]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect([beforeSaved, ...(await nextJobIds(3))]).toEqual([undefined, id, other, undefined]);
+      });
+
+      it('does not hand out a cancelled job again before its revival is saved', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        const reviving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+        const beforeRevived = await nextJobId();
+        await reviving;
+
+        expect([beforeRevived, ...(await nextJobIds(2))]).toEqual([undefined, id, undefined]);
+      });
+
+      it('revives a cancelled job on the next request when saving the first revival fails', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        jest.spyOn(database, 'deleteProvingJobResult').mockRejectedValueOnce(new Error('db down'));
+        await expect(enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id)).rejects.toThrow('db down');
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+
+        expect(await nextJobIds(2)).toEqual([id, undefined]);
+      });
+
+      it('hands out a job once when a lower slot arrives while it is being revived', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        const reviving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const beforeRevived = await nextJobId();
+        await Promise.all([reviving, lowering]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7);
+
+        expect([beforeRevived, ...(await nextJobIds(3))]).toEqual([undefined, id, other, undefined]);
+      });
+
+      it('does not hold back the root rollup of a proof that ends later', async () => {
+        // The proof ending at slot 6 is one job from done and covers the slots of the proof ending at slot 5.
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'earlier');
+        await broker.registerEpochProof(epoch, SlotNumber(6), 'later');
+        const earlierCheckpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const laterRoot = await enqueue(ProvingRequestType.ROOT_ROLLUP, 6);
+
+        expect(await nextJobIds(2)).toEqual([laterRoot, earlierCheckpointRoot]);
+      });
+
+      it('keeps handing out jobs when far more proofs are registered than a producer has in flight', async () => {
+        for (let i = 0; i < 150_000; i++) {
+          await broker.registerEpochProof(epoch, SlotNumber(5), `proof-${i}`);
+        }
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+        const neededVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        expect(await nextJobIds(2)).toEqual([neededVm, laterBlockRoot]);
+      });
+
+      it('forgets the oldest registered proof once far more are registered than a producer has in flight', async () => {
+        await broker.registerEpochProof(epoch, SlotNumber(5), 'oldest');
+        for (let i = 0; i < 150_000; i++) {
+          await broker.registerEpochProof(epoch, SlotNumber(8), `proof-${i}`);
+        }
+        const blockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+        const vm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        // With the proof ending at slot 5 still registered, the block root of slot 6 would wait for the VM proof.
+        expect(await nextJobIds(2)).toEqual([blockRoot, vm]);
+      });
+
+      it('saves the lowest slot when two requests lower a job at once', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        const inputs = database.getProvingJobInputs.bind(database);
+        const firstRead = promiseWithResolvers<void>();
+        jest.spyOn(database, 'getProvingJobInputs').mockImplementationOnce(async jobId => {
+          await firstRead.promise;
+          return inputs(jobId);
+        });
+        const saved: (number | undefined)[] = [];
+        const add = database.addProvingJob.bind(database);
+        jest.spyOn(database, 'addProvingJob').mockImplementation(job => {
+          saved.push(job.prioritySlot);
+          return add(job);
+        });
+
+        const slower = broker.lowerProvingJobPrioritySlot(id, SlotNumber(7));
+        await broker.lowerProvingJobPrioritySlot(id, SlotNumber(5));
+        firstRead.resolve();
+        await slower;
+
+        expect(saved.at(-1)).toEqual(5);
+      });
+
+      it('hands the slot to the agent with the job', async () => {
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+
+        expect((await broker.getProvingJob())?.job.prioritySlot).toEqual(SlotNumber(5));
+      });
     });
 
     it('returns any job if filter is empty', async () => {

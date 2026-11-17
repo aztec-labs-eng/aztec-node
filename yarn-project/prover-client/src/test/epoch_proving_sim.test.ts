@@ -1,9 +1,14 @@
 import { PROOF_DELAY_MS, WITGEN_DELAY_MS } from '@aztec-labs/bb-prover/test';
 import { insertIntoSortedArray } from '@aztec-labs/foundation/array';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
-import { PROOF_TYPES_IN_PRIORITY_ORDER } from '../proving_broker/proving_broker.js';
+import {
+  type OutstandingEpochProof,
+  PROOF_TYPES_IN_PRIORITY_ORDER,
+  pickNextProvingJob,
+} from '../proving_broker/proving_broker.js';
 
 // Job represents a proving task with its hierarchical context
 type Job = {
@@ -47,6 +52,18 @@ type TestConfig = {
    * so their checkpoint roots are all runnable at once, while the newest checkpoint starts from its transactions.
    */
   provenSubTrees?: number;
+  /**
+   * How many of the leading checkpoints the epoch proof covers. The rest only have their blocks proven, as
+   * checkpoints that land after a partial proof was requested do. Defaults to all of them.
+   */
+  requestedCheckpoints?: number;
+  /** When each checkpoint lands, by checkpoint index. A checkpoint with no entry is there from the start. */
+  arrivalMs?: number[];
+  /**
+   * How long after a proof finishes its dependent jobs are enqueued. The agent that finished takes its next job at
+   * once, and the producer only learns of the result when it next polls the broker. Defaults to 0.
+   */
+  producerDelayMs?: number;
 };
 
 // State tracking for dependency resolution
@@ -276,47 +293,51 @@ function initializeState(checkpoints: Checkpoint[]): SimState {
   return state;
 }
 
-function fillQueue(queues: Queues, checkpoints: Checkpoint[], state: SimState, provenSubTrees: number): void {
-  for (let cp = 1; cp <= checkpoints.length; cp++) {
-    const blocks = checkpoints[cp - 1];
+function enqueueCheckpoint(
+  cp: number,
+  queues: Queues,
+  checkpoints: Checkpoint[],
+  state: SimState,
+  provenSubTrees: number,
+): void {
+  const blocks = checkpoints[cp - 1];
 
-    if (cp <= provenSubTrees) {
-      state.inboxParityComplete.set(cp, true);
-      state.blockRootComplete.set(cp, true);
-      tryEnqueueCheckpointRoot(cp, state, queues);
-      continue;
+  if (cp <= provenSubTrees) {
+    state.inboxParityComplete.set(cp, true);
+    state.blockRootComplete.set(cp, true);
+    tryEnqueueCheckpointRoot(cp, state, queues);
+    return;
+  }
+
+  // assume every checkpoint includes cross-chain messages: one InboxParity proof per checkpoint
+  queues[ProvingRequestType.INBOX_PARITY].push(createJob(cp, 1, ProvingRequestType.INBOX_PARITY));
+
+  for (let b = 1; b <= blocks.length; b++) {
+    const block = blocks[b - 1];
+    const privateTxs = block[0];
+    const publicGroups = block.slice(1) as PublicTxGroup[];
+
+    // A block with no txs has no base or merge proof whose completion would queue its block root, so it is queued
+    // as soon as the block starts. This holds wherever the block sits in the checkpoint.
+    if (getBlockTxCount(block).totalTxs === 0) {
+      tryEnqueueBlockRoot(cp, b, state, queues);
     }
 
-    // assume every checkpoint includes cross-chain messages: one InboxParity proof per checkpoint
-    queues[ProvingRequestType.INBOX_PARITY].push(createJob(cp, 1, ProvingRequestType.INBOX_PARITY));
+    // Add private tx base rollups
+    if (privateTxs > 0) {
+      queues[ProvingRequestType.PRIVATE_TX_BASE_ROLLUP].push(
+        ...times(privateTxs, () => createJob(cp, b, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP)),
+      );
+    }
 
-    for (let b = 1; b <= blocks.length; b++) {
-      const block = blocks[b - 1];
-      const privateTxs = block[0];
-      const publicGroups = block.slice(1) as PublicTxGroup[];
-
-      // A block with no txs has no base or merge proof whose completion would queue its block root, so it is queued
-      // as soon as the block starts. This holds wherever the block sits in the checkpoint.
-      if (getBlockTxCount(block).totalTxs === 0) {
-        tryEnqueueBlockRoot(cp, b, state, queues);
-      }
-
-      // Add private tx base rollups
-      if (privateTxs > 0) {
-        queues[ProvingRequestType.PRIVATE_TX_BASE_ROLLUP].push(
-          ...times(privateTxs, () => createJob(cp, b, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP)),
-        );
-      }
-
-      // Add public tx jobs (VM + Chonk for each group)
-      for (const [count, avmDuration] of publicGroups) {
-        queues[ProvingRequestType.PUBLIC_VM].push(
-          ...times(count, () => createJob(cp, b, ProvingRequestType.PUBLIC_VM, undefined, undefined, avmDuration)),
-        );
-        queues[ProvingRequestType.PUBLIC_CHONK_VERIFIER].push(
-          ...times(count, () => createJob(cp, b, ProvingRequestType.PUBLIC_CHONK_VERIFIER)),
-        );
-      }
+    // Add public tx jobs (VM + Chonk for each group)
+    for (const [count, avmDuration] of publicGroups) {
+      queues[ProvingRequestType.PUBLIC_VM].push(
+        ...times(count, () => createJob(cp, b, ProvingRequestType.PUBLIC_VM, undefined, undefined, avmDuration)),
+      );
+      queues[ProvingRequestType.PUBLIC_CHONK_VERIFIER].push(
+        ...times(count, () => createJob(cp, b, ProvingRequestType.PUBLIC_CHONK_VERIFIER)),
+      );
     }
   }
 }
@@ -584,6 +605,11 @@ function tryEnqueueCheckpointRoot(checkpoint: number, state: SimState, queues: Q
     return;
   }
 
+  // A checkpoint beyond the requested ones is not part of the epoch proof: only its blocks are proven.
+  if (checkpoint > state.totalCheckpoints) {
+    return;
+  }
+
   state.checkpointRootEnqueued.set(checkpoint, true);
 
   const numBlocks = state.blocksPerCheckpoint.get(checkpoint)!;
@@ -649,27 +675,49 @@ function handleCheckpointMergeComplete(level: number, index: number, state: SimS
   tryEnqueueCheckpointMerge(level, index, state, queues);
 }
 
-function assignWork(queues: Queues, workers: Worker[], start: number, availableWorkers: number): void {
+const TOP_TREE_TYPES = [
+  ProvingRequestType.CHECKPOINT_ROOT_ROLLUP,
+  ProvingRequestType.CHECKPOINT_ROOT_SINGLE_BLOCK_ROLLUP,
+  ProvingRequestType.CHECKPOINT_MERGE_ROLLUP,
+  ProvingRequestType.CHECKPOINT_PADDING_ROLLUP,
+  ProvingRequestType.ROOT_ROLLUP,
+];
+
+/**
+ * Picks jobs with the broker's `pickNextProvingJob`. As in the broker, each proof type offers the job of its queue
+ * with the lowest priority slot.
+ */
+function assignWork(
+  queues: Queues,
+  workers: Worker[],
+  start: number,
+  availableWorkers: number,
+  prioritySlotOf: (job: Job) => SlotNumber,
+  outstandingProofs: () => OutstandingEpochProof[],
+): void {
+  const schedulable = (job: Job) => ({
+    job,
+    type: job.type,
+    epochNumber: EpochNumber(1),
+    prioritySlot: prioritySlotOf(job),
+  });
   while (workers.length < availableWorkers) {
-    let assigned = false;
-
-    // try to find a job in one of the queues. If all queues are empty we exit the other loop early
-    for (const proofType of PROOF_TYPES_IN_PRIORITY_ORDER) {
-      const job = queues[proofType].shift();
-      if (!job) {
-        continue;
-      }
-      const duration = getJobDuration(job);
-      const end = start + duration;
-      assigned = true;
-      insertIntoSortedArray(workers, { job, start, end }, cmpWorkerByEnd);
-
+    const heads = PROOF_TYPES_IN_PRIORITY_ORDER.flatMap(proofType => {
+      const queue = queues[proofType].map(schedulable);
+      const lowestSlot = Math.min(...queue.map(job => job.prioritySlot));
+      return queue.filter(job => job.prioritySlot === lowestSlot).slice(0, 1);
+    });
+    const selected = pickNextProvingJob(heads, outstandingProofs());
+    if (!selected) {
       break;
     }
-
-    if (!assigned) {
-      break;
-    }
+    const queue = queues[selected.job.type];
+    queue.splice(queue.indexOf(selected.job), 1);
+    insertIntoSortedArray(
+      workers,
+      { job: selected.job, start, end: start + getJobDuration(selected.job) },
+      cmpWorkerByEnd,
+    );
   }
 }
 
@@ -704,12 +752,35 @@ type SimulationResult = {
 /** Simulates proving the checkpoints as one epoch. Workers take jobs in the broker's priority order. */
 function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const { name, workers: workerCount, checkpoints } = config;
+  const requested = config.requestedCheckpoints ?? checkpoints.length;
   const state = initializeState(checkpoints);
+  state.totalCheckpoints = requested;
   const queues: Queues = times(Object.values(ProvingRequestType).length, () => []) as any;
   const workerPool: Worker[] = [];
   const completed: Completion[] = [];
 
-  fillQueue(queues, checkpoints, state, config.provenSubTrees ?? 0);
+  // A block-level job carries its own checkpoint, a top-tree job the last checkpoint the proof covers.
+  const prioritySlotOf = (job: Job) => SlotNumber(TOP_TREE_TYPES.includes(job.type) ? requested : job.checkpoint);
+  // The producer registers the epoch proof when it starts on it and unregisters it when the root rollup is proven.
+  const outstandingProofs = () =>
+    state.rootRollupComplete ? [] : [{ epochNumber: EpochNumber(1), lastSlot: SlotNumber(requested) }];
+
+  // Jobs enter the queues at these times: when a checkpoint lands, and when the producer learns that a proof
+  // finished and enqueues the jobs that depend on it.
+  const arrivals: { time: number; enqueue: () => void }[] = [];
+  const addArrival = (time: number, enqueue: () => void) =>
+    insertIntoSortedArray(arrivals, { time, enqueue }, (a, b) => (a.time < b.time ? -1 : a.time === b.time ? 0 : 1));
+  for (let cp = 1; cp <= checkpoints.length; cp++) {
+    addArrival(config.arrivalMs?.[cp - 1] ?? 0, () =>
+      enqueueCheckpoint(cp, queues, checkpoints, state, config.provenSubTrees ?? 0),
+    );
+  }
+  const enqueueArrivalsUpTo = (now: number) => {
+    while (arrivals.length > 0 && arrivals[0].time <= now) {
+      arrivals.shift()!.enqueue();
+    }
+  };
+  enqueueArrivalsUpTo(0);
 
   let time = 0;
   let totalWorkerTime = 0;
@@ -717,7 +788,7 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const workerActivity: WorkerActivityPoint[] = [];
 
   // Initial assignment
-  assignWork(queues, workerPool, time, workerCount);
+  assignWork(queues, workerPool, time, workerCount, prioritySlotOf, outstandingProofs);
 
   // Record initial worker activity
   workerActivity.push({
@@ -727,9 +798,9 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
     cumulativeWorkerMs: 0,
   });
 
-  while (workerPool.length > 0) {
-    // Find next completion time
-    const nextTime = workerPool[0].end;
+  while (workerPool.length > 0 || arrivals.length > 0) {
+    // Find the next completion or the next checkpoint to land
+    const nextTime = Math.min(workerPool[0]?.end ?? Infinity, arrivals[0]?.time ?? Infinity);
 
     // Calculate worker utilization for this time slice
     const timeSlice = nextTime - time;
@@ -746,11 +817,14 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
     // Process completions and enqueue dependent jobs
     for (const worker of justCompleted) {
       completed.push({ ...worker.job, start: worker.start, end: worker.end });
-      enqueueDependentJobs(worker.job, state, queues, checkpoints.length);
+      addArrival(time + (config.producerDelayMs ?? 0), () =>
+        enqueueDependentJobs(worker.job, state, queues, requested),
+      );
     }
+    enqueueArrivalsUpTo(time);
 
     // Assign available workers to new jobs
-    assignWork(queues, workerPool, time, workerCount);
+    assignWork(queues, workerPool, time, workerCount, prioritySlotOf, outstandingProofs);
 
     // Record worker activity at this time step
     workerActivity.push({
@@ -961,6 +1035,85 @@ describe('partial epoch proof requested mid-epoch', () => {
         .map(c => c.end),
     );
     expect(blockTreeReadyAt(result, newest)).toBeLessThan(otherRootsDone);
+  });
+
+  // Checkpoints keep landing in the epoch after the request. Their blocks are not part of the requested proof.
+  describe('with checkpoints landing after the request', () => {
+    const laterCheckpoints = 4;
+    const slotMs = 72_000;
+    const busyCheckpoint: Checkpoint = [[4, [3, 15_000]]];
+    const run = (later: number, everyMs = slotMs) =>
+      runSimulationWithConfig({
+        name: `${later} checkpoints after the request`,
+        workers,
+        checkpoints: [...emptyCheckpoints(provenCheckpoints), busyCheckpoint, ...times(later, () => busyCheckpoint)],
+        provenSubTrees: provenCheckpoints,
+        requestedCheckpoints: newest,
+        arrivalMs: [...times(newest, () => 0), ...times(later, i => (i + 1) * everyMs)],
+        producerDelayMs: 1000,
+      });
+    const requestDoneAt = (result: SimulationResult) => soleCompletion(result, [ProvingRequestType.ROOT_ROLLUP]).end;
+
+    // An agent that finishes a job of the proof takes its next job before the producer has enqueued the job that
+    // follows, so a later checkpoint can take that agent. It cannot do more than that. Every later checkpoint lands
+    // before the proof is done.
+    it.each([
+      [laterCheckpoints, slotMs],
+      [3 * laterCheckpoints, slotMs / 2],
+    ])('delays the requested proof by less than a slot when %s more checkpoints land', (later, everyMs) => {
+      expect(later * everyMs).toBeLessThan(requestDoneAt(run(0)));
+      expect(requestDoneAt(run(later, everyMs)) - requestDoneAt(run(0))).toBeLessThan(slotMs);
+    });
+
+    it('still proves the blocks of the later checkpoints', () => {
+      const result = run(laterCheckpoints);
+      const provenCheckpointsWithBlocks = new Set(completionsOf(result, BLOCK_ROOT_TYPES).map(c => c.checkpoint));
+      expect(provenCheckpointsWithBlocks).toEqual(new Set(times(laterCheckpoints + 1, i => newest + i)));
+      expect(completionsOf(result, CHECKPOINT_ROOT_TYPES)).toHaveLength(newest);
+    });
+  });
+
+  // With many agents the roots of the proven checkpoints finish long before the newest checkpoint's blocks do. The
+  // later checkpoints must still wait for the newest one. An agent with nothing else to do
+  // takes a job of a later checkpoint and finishes it, so the proof can wait for one such job, and no longer.
+  describe('with a slow newest checkpoint and checkpoints landing after the request', () => {
+    const slotMs = 72_000;
+    const avmMs = 150_000;
+    const slowCheckpoint: Checkpoint = [[8, [8, avmMs]]];
+    const run = (later: number) =>
+      runSimulationWithConfig({
+        name: `slow newest checkpoint, ${later} checkpoints after the request`,
+        workers: 16,
+        checkpoints: [...emptyCheckpoints(provenCheckpoints), slowCheckpoint, ...times(later, () => slowCheckpoint)],
+        provenSubTrees: provenCheckpoints,
+        requestedCheckpoints: newest,
+        arrivalMs: [...times(newest, () => 0), ...times(later, i => (i + 1) * slotMs)],
+        producerDelayMs: 1000,
+      });
+    const requestDoneAt = (result: SimulationResult) => soleCompletion(result, [ProvingRequestType.ROOT_ROLLUP]).end;
+
+    it.each([4, 12])('delays the requested proof by less than its longest job when %s more land', later => {
+      expect(requestDoneAt(run(later)) - requestDoneAt(run(0))).toBeLessThan(avmMs);
+    });
+  });
+
+  // The proof covers one checkpoint, the first of its epoch, so no checkpoint root exists until its blocks are
+  // proven. The registration of the proof is what keeps the second checkpoint behind it.
+  it('keeps the next checkpoint behind a proof of the first checkpoint of an epoch', () => {
+    const avmMs = 150_000;
+    const slowCheckpoint: Checkpoint = [[8, [8, avmMs]]];
+    const run = (later: number) =>
+      runSimulationWithConfig({
+        name: `first checkpoint, ${later} checkpoints after the request`,
+        workers: 8,
+        checkpoints: times(1 + later, () => slowCheckpoint),
+        requestedCheckpoints: 1,
+        arrivalMs: times(1 + later, i => i * 72_000),
+        producerDelayMs: 1000,
+      });
+    const requestDoneAt = (result: SimulationResult) => soleCompletion(result, [ProvingRequestType.ROOT_ROLLUP]).end;
+
+    expect(requestDoneAt(run(4)) - requestDoneAt(run(0))).toBeLessThan(avmMs);
   });
 
   it('starts the newest checkpoint inbox parity without waiting for the other checkpoint roots', () => {

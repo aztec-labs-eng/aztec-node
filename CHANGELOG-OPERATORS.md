@@ -48,13 +48,25 @@ The default is `false`, which keeps the previous behaviour. With the flag on:
 
 **Migration**: none. Set the variable to turn the feature on.
 
-### The proving broker hands out block-level jobs before checkpoint roots (PR link pending)
+### The proving broker hands out block-level jobs before checkpoint roots and holds back work a partial proof does not need (PR link pending)
 
 Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs: transaction merges, base rollups, AVM and chonk verifier. It gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once. The newest checkpoint's transactions and parity proof then waited until every one of those roots had an agent.
 
-Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, the root rollup stays first, and jobs of an older epoch still go before jobs of a newer one.
+Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, the root rollup stays first, and jobs of an older epoch still go before jobs of a newer one. Between jobs of one proof type in one epoch, the lower slot now goes first; before, the job enqueued first did.
 
-The effect depends on load. A partial proof whose newest checkpoint is still being proven finishes sooner. Checkpoints that land in the same epoch after the request bring block-level jobs that now go before the request's checkpoint roots, which delays it when agents are busy.
+The broker also holds back work that an outstanding epoch proof does not need. Each job carries a slot: a block-level job the slot of its block, and a checkpoint root, checkpoint merge or root rollup the last slot of the epoch proof it belongs to. The prover node tells the broker about an epoch proof when it starts on it and again when the proof is done or given up. In between, jobs of that epoch with a higher slot wait for the jobs at or below its last slot. The root rollup is the exception: it is never held back, because it completes a proof that covers the slots of every proof ending before it. A checkpoint that lands in the same epoch after a partial proof was requested therefore does not go ahead of that proof. An agent still takes held-back work when there is nothing else it can do, and finishes it, so a job of the proof that becomes ready meanwhile can wait for up to one such job each time the proof moves to its next job. With no epoch proof outstanding, the order within an epoch is by proof type alone.
+
+Results of a scheduling simulation of a partial proof of 16 checkpoints, with later checkpoints landing after the request:
+
+| Case | Alone | With later checkpoints | With later checkpoints, ordered by type alone |
+| --- | --- | --- | --- |
+| 4 agents, 4 later checkpoints | 581 s | 602 s | 1051 s |
+| 16 agents, slow newest checkpoint, 4 later checkpoints | 540 s | 671 s | 891 s |
+| 16 agents, slow newest checkpoint, 12 later checkpoints | 540 s | 598 s | 1973 s |
+
+Proving a whole epoch at once is not held back, since every job is at or below the proof's last slot. Ordering each proof type by slot changed the simulated whole-epoch time by less than 0.2% in 13 of 14 workloads. In the other one, with 5 agents and 3 checkpoints of very uneven size, it took 900 s where the previous first-in-first-out order took 831 s.
+
+The prover node sends the slot with each job. Both the prover node and the broker have to run this version for the new order to apply. Jobs from a prover node of an earlier version carry no slot and are never held back. While such a job is first in the queue of its proof type, the broker does not see the slots of the jobs behind it, and may not hold back later slots. A broker of an earlier version ignores the slot and has no `registerEpochProof`, `unregisterEpochProof` and `lowerProvingJobPrioritySlot` methods. The prover node logs a warning when those calls fail and proves as before.
 
 **Migration**: none.
 

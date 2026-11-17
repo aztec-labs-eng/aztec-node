@@ -1,21 +1,30 @@
 import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec-labs/constants';
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
-import { retryUntil } from '@aztec-labs/foundation/retry';
+import { retryFastUntil, retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ProvingJob, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
 import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
+import { jest } from '@jest/globals';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
 import { ChonkCache } from './chonk-cache.js';
-import { type CheckpointTopTreeData, TopTreeCancelledError, TopTreeOrchestrator } from './top-tree-orchestrator.js';
+import {
+  type CheckpointTopTreeData,
+  type EpochProofRegistry,
+  TopTreeCancelledError,
+  TopTreeOrchestrator,
+} from './top-tree-orchestrator.js';
 
 const logger = createLogger('prover-client:test:top-tree-orchestrator');
+
+type SubTreeProofs = Awaited<CheckpointTopTreeData['subTreeProofs']>;
 
 /** A full tx-worth of L2-to-L1 messages, padded to the per-tx maximum. */
 const makeL2ToL1Messages = (count: number) =>
@@ -33,9 +42,11 @@ const makeL2ToL1Messages = (count: number) =>
  */
 describe('prover/orchestrator/top-tree', () => {
   let context: TestContext;
+  let subTreeProver: ServerCircuitProver;
 
   beforeEach(async () => {
     context = await TestContext.new(logger);
+    subTreeProver = context.prover;
   });
 
   afterEach(async () => {
@@ -52,7 +63,7 @@ describe('prover/orchestrator/top-tree', () => {
   async function driveFixture(fixture: CheckpointFixture, messagesPerBlock: Fr[][]) {
     const subTree = await CheckpointSubTreeOrchestrator.start(
       context.worldState,
-      context.prover,
+      subTreeProver,
       EthAddress.ZERO,
       new ChonkCache(),
       EpochNumber(1),
@@ -146,6 +157,148 @@ describe('prover/orchestrator/top-tree', () => {
     } finally {
       await topTree.stop();
     }
+  });
+
+  it('sends each job to the broker with the slot the broker orders it by', async () => {
+    const enqueued: ProvingJob[] = [];
+    const enqueue = context.broker.enqueueProvingJob.bind(context.broker);
+    jest.spyOn(context.broker, 'enqueueProvingJob').mockImplementation(job => {
+      enqueued.push(job);
+      return enqueue(job);
+    });
+    subTreeProver = context.brokerProverFacade;
+
+    const a = await driveSubTree(2, 2);
+    const b = await driveSubTree(1, 1);
+    const slotA = a.fixture.constants.slotNumber;
+    const slotB = b.fixture.constants.slotNumber;
+    const blockLevelJobs = enqueued.length;
+    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([slotA, slotB]));
+
+    const challenges = await context.getFinalBlobChallenges();
+    const registryCalls: unknown[][] = [];
+    const registry: EpochProofRegistry = {
+      registerEpochProof: (epochNumber, lastSlot, proofId) => {
+        registryCalls.push(['register', epochNumber, lastSlot, proofId, enqueued.length]);
+        return Promise.resolve();
+      },
+      unregisterEpochProof: proofId => {
+        registryCalls.push(['unregister', proofId]);
+        return Promise.resolve();
+      },
+    };
+    const topTree = new TopTreeOrchestrator(
+      context.brokerProverFacade,
+      EthAddress.ZERO,
+      makeTestDeferredJobQueue(),
+      undefined,
+      undefined,
+      registry,
+    );
+    try {
+      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], slotB);
+    } finally {
+      await topTree.stop();
+    }
+    // The proof is registered under its last slot before any of its jobs is sent, and unregistered when it is done.
+    await retryFastUntil(() => registryCalls.length === 2, 'unregistered');
+    const proofId = registryCalls[0][3];
+    expect(registryCalls).toEqual([
+      ['register', EpochNumber(1), slotB, proofId, blockLevelJobs],
+      ['unregister', proofId],
+    ]);
+    // Both checkpoint roots carry the last slot of the proof, not the slot of their own checkpoint.
+    const topTreeJobs = enqueued.slice(blockLevelJobs);
+    expect(topTreeJobs.length).toBeGreaterThan(0);
+    expect(new Set(topTreeJobs.map(job => job.prioritySlot))).toEqual(new Set([slotB]));
+  });
+
+  it('unregisters a proof that was registered and then cancelled before proving', async () => {
+    const unregistered = promiseWithResolvers<string>();
+    const registered: string[] = [];
+    const registry: EpochProofRegistry = {
+      registerEpochProof: (_epochNumber, _lastSlot, proofId) => {
+        registered.push(proofId);
+        return Promise.resolve();
+      },
+      unregisterEpochProof: proofId => {
+        unregistered.resolve(proofId);
+        return Promise.resolve();
+      },
+    };
+    const topTree = new TopTreeOrchestrator(
+      context.prover,
+      EthAddress.ZERO,
+      makeTestDeferredJobQueue(),
+      undefined,
+      undefined,
+      registry,
+    );
+
+    topTree.registerProof(EpochNumber(1), SlotNumber(7));
+    topTree.cancel({ abortJobs: true });
+
+    await expect(unregistered.promise).resolves.toEqual(registered[0]);
+    await topTree.stop();
+  });
+
+  it('can be cancelled while the broker has not answered the registration', async () => {
+    const { topTreeData } = await driveSubTree(1, 1);
+    const challenges = await context.getFinalBlobChallenges();
+    const registry: EpochProofRegistry = {
+      registerEpochProof: () => promiseWithResolvers<void>().promise,
+      unregisterEpochProof: () => Promise.resolve(),
+    };
+    const topTree = new TopTreeOrchestrator(
+      context.prover,
+      EthAddress.ZERO,
+      makeTestDeferredJobQueue(),
+      undefined,
+      undefined,
+      registry,
+    );
+
+    const pending = { ...topTreeData, subTreeProofs: promiseWithResolvers<SubTreeProofs>().promise };
+    const proving = topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7));
+    topTree.cancel({ abortJobs: true });
+
+    await expect(proving).rejects.toBeInstanceOf(TopTreeCancelledError);
+    await topTree.stop();
+  });
+
+  it('keeps the proof registered when a second prove call is rejected', async () => {
+    const { topTreeData } = await driveSubTree(1, 1);
+    const challenges = await context.getFinalBlobChallenges();
+    const unregistered: string[] = [];
+    const registry: EpochProofRegistry = {
+      registerEpochProof: () => Promise.resolve(),
+      unregisterEpochProof: proofId => {
+        unregistered.push(proofId);
+        return Promise.resolve();
+      },
+    };
+    const topTree = new TopTreeOrchestrator(
+      context.prover,
+      EthAddress.ZERO,
+      makeTestDeferredJobQueue(),
+      undefined,
+      undefined,
+      registry,
+    );
+
+    const subTreeProofs = promiseWithResolvers<SubTreeProofs>();
+    const pending = { ...topTreeData, subTreeProofs: subTreeProofs.promise };
+    const first = topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7));
+    await expect(topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7))).rejects.toThrow(
+      /prove called twice/,
+    );
+    await sleep(50);
+    expect(unregistered).toEqual([]);
+
+    subTreeProofs.resolve(await topTreeData.subTreeProofs);
+    await first;
+    await retryFastUntil(() => unregistered.length === 1, 'unregistered');
+    await topTree.stop();
   });
 
   it('produces an epoch proof for a checkpoint carrying L1-to-L2 messages', async () => {
