@@ -1079,6 +1079,11 @@ describe('Archiver Sync', () => {
         fake.setL1BlockNumber(85n);
         await archiver.syncImmediate();
 
+        // Both are fetched and rejected, each under its own checkpoint number, even though they claim the same root.
+        expect(await archiverStore.blocks.getRejectedCheckpoint(CheckpointNumber(2), cp1.archive.root)).toBeDefined();
+        expect(await archiverStore.blocks.getRejectedCheckpoint(CheckpointNumber(3), cp1.archive.root)).toBeDefined();
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: false }));
+
         // Only CP3 is removed, and a checkpoint with valid attestations is built on the invalid CP2.
         fake.markCheckpointAsPruned(CheckpointNumber(3));
         const { checkpoint: validCp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
