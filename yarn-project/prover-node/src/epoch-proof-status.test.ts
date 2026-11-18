@@ -2,11 +2,18 @@ import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { DateProvider } from '@aztec-labs/foundation/timer';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { BlockData, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { BlockHeader, GlobalVariables } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { EpochProofStatus, type EpochProofStatusDeps } from './epoch-proof-status.js';
+
+/** Block data whose header reports the given slot, which is all `EpochProofStatus` reads of it. */
+const blockAtSlot = (slot: number) =>
+  mock<BlockData>({
+    header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(slot) }) }),
+  });
 
 describe('EpochProofStatus', () => {
   let l2BlockSource: MockProxy<EpochProofStatusDeps['l2BlockSource'] & L2BlockSource>;
@@ -49,13 +56,13 @@ describe('EpochProofStatus', () => {
     it("returns true for any epoch strictly below the proven tip's epoch", async () => {
       // Proven block at slot 5 ⇒ provenEpoch = 5 (epochDuration=1).
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue({ header: { getSlot: () => SlotNumber(5) } } as any);
+      l2BlockSource.getBlockData.mockResolvedValue(blockAtSlot(5));
       await expectFullyProven(EpochNumber(3), l1Constants).resolves.toBe(true);
     });
 
     it("returns false for any epoch strictly above the proven tip's epoch", async () => {
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockResolvedValue({ header: { getSlot: () => SlotNumber(5) } } as any);
+      l2BlockSource.getBlockData.mockResolvedValue(blockAtSlot(5));
       await expectFullyProven(EpochNumber(7), l1Constants).resolves.toBe(false);
     });
 
@@ -63,12 +70,12 @@ describe('EpochProofStatus', () => {
       // provenEpoch=2, next block in epoch 3 ⇒ last of epoch.
       const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2 };
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // epoch 2
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(5)); // epoch 2
         }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(6) } } as any); // epoch 3
+        if ('number' in q && q.number === 6) {
+          return Promise.resolve(blockAtSlot(6)); // epoch 3
         }
         return Promise.resolve(undefined);
       });
@@ -78,12 +85,12 @@ describe('EpochProofStatus', () => {
     it('returns false on the equality case when the proven block is mid-epoch (next block is in the same epoch)', async () => {
       const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2 };
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(4) } } as any); // epoch 2
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(4)); // epoch 2
         }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // also epoch 2
+        if ('number' in q && q.number === 6) {
+          return Promise.resolve(blockAtSlot(5)); // also epoch 2
         }
         return Promise.resolve(undefined);
       });
@@ -93,9 +100,9 @@ describe('EpochProofStatus', () => {
     it('falls back to isEpochComplete when there is no next-block header', async () => {
       // No next-block header ⇒ the archiver's isEpochComplete decides.
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(5));
         }
         return Promise.resolve(undefined); // no next block yet
       });
@@ -122,12 +129,12 @@ describe('EpochProofStatus', () => {
     it('returns provenEpoch when the proven block is the last of its epoch', async () => {
       // epochDuration=1: slot 5 ⇒ epoch 5; next slot 6 ⇒ epoch 6 > 5 ⇒ last of epoch.
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(5));
         }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(6) } } as any);
+        if ('number' in q && q.number === 6) {
+          return Promise.resolve(blockAtSlot(6));
         }
         return Promise.resolve(undefined);
       });
@@ -136,9 +143,9 @@ describe('EpochProofStatus', () => {
 
     it('returns provenEpoch via the isEpochComplete fallback when there is no next-block header', async () => {
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any);
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(5));
         }
         return Promise.resolve(undefined);
       });
@@ -151,12 +158,12 @@ describe('EpochProofStatus', () => {
       const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2, proofSubmissionEpochs: 1 };
       l2BlockSource.getL1Constants.mockResolvedValue(l1ConstantsTwo);
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(5));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 5) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(4) } } as any); // epoch 2
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 5) {
+          return Promise.resolve(blockAtSlot(4)); // epoch 2
         }
-        if (q.number === 6) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(5) } } as any); // epoch 2
+        if ('number' in q && q.number === 6) {
+          return Promise.resolve(blockAtSlot(5)); // epoch 2
         }
         return Promise.resolve(undefined);
       });
@@ -169,12 +176,12 @@ describe('EpochProofStatus', () => {
       const l1ConstantsTwo = { ...EmptyL1RollupConstants, epochDuration: 2, proofSubmissionEpochs: 1 };
       l2BlockSource.getL1Constants.mockResolvedValue(l1ConstantsTwo);
       l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(1));
-      l2BlockSource.getBlockData.mockImplementation((q: any) => {
-        if (q.number === 1) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(0) } } as any); // epoch 0
+      l2BlockSource.getBlockData.mockImplementation(q => {
+        if ('number' in q && q.number === 1) {
+          return Promise.resolve(blockAtSlot(0)); // epoch 0
         }
-        if (q.number === 2) {
-          return Promise.resolve({ header: { getSlot: () => SlotNumber(1) } } as any); // still epoch 0
+        if ('number' in q && q.number === 2) {
+          return Promise.resolve(blockAtSlot(1)); // still epoch 0
         }
         return Promise.resolve(undefined);
       });
