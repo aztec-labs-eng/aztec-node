@@ -2375,6 +2375,38 @@ describe('Archiver Sync', () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(3));
     }, 15_000);
 
+    it('accepts a republished first checkpoint once the stale rejected record is noticed long after the reorg', async () => {
+      // With no accepted checkpoint, the rewind has no stored L1 block to go back to. The reorg is shallow, but the
+      // node only notices it more than 64 L1 blocks later, so a window measured back from the head misses block 80.
+      fake.setTargetCommitteeSize(3);
+      const signers = times(3, Secp256k1Signer.random);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(
+        makeCommitteeLookup({ committee: signers.map(s => s.address), seed: 0n }),
+      );
+      const { checkpoint: badCp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 80n,
+        messagesL1BlockNumber: 50n,
+        numL1ToL2Messages: 3,
+        signers: times(3, Secp256k1Signer.random),
+      });
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp1.number, badCp1.archive.root)).toBeDefined();
+
+      fake.reorgL1BlocksFrom(80n);
+      await fake.repostCheckpoint(CheckpointNumber(1), { l1BlockNumber: 80n, signers, reorged: true });
+
+      for (const head of [200n, 201n, 202n]) {
+        fake.setL1BlockNumber(head);
+        await archiver.syncImmediate();
+      }
+
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getRejectedCheckpoint(badCp1.number, badCp1.archive.root)).toBeUndefined();
+      expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+    }, 15_000);
+
     it('accepts a rejected checkpoint and its descendant after an L1 reorg republished both', async () => {
       // CP3 is valid on its own but rejected as a descendant of the rejected CP2. A reorg below CP3's block
       // republishes CP2 with valid attestations and reposts CP3 unchanged, so the rollup's pending tip keeps CP3's
