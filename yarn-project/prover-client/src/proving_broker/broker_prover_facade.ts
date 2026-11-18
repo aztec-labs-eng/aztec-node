@@ -243,7 +243,9 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     try {
       // The broker ignores a slot for a job it does not have yet.
       await job.sentToBroker.promise;
-      if (job.signal?.aborted || this.jobs.get(job.id) !== job) {
+      // No check of the first caller's signal: the job may have live callers, and the broker ignores a lower slot
+      // for a job that was cancelled.
+      if (this.jobs.get(job.id) !== job) {
         return;
       }
       await this.broker.lowerProvingJobPrioritySlot(job.id, prioritySlot);
@@ -461,7 +463,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     await this.retrieveJobsThatShouldBeReady();
   }
 
-  getAvmProof(
+  public getAvmProof(
     inputs: AvmCircuitInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -477,7 +479,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getInboxParityProof(
+  public getInboxParityProof(
     inputs: InboxParityPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -493,7 +495,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getTxMergeRollupProof(
+  public getTxMergeRollupProof(
     input: TxMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -509,7 +511,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getPublicChonkVerifierProof(
+  public getPublicChonkVerifierProof(
     inputs: PublicChonkVerifierPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -527,7 +529,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getPrivateTxBaseRollupProof(
+  public getPrivateTxBaseRollupProof(
     baseRollupInput: PrivateTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -543,7 +545,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getPublicTxBaseRollupProof(
+  public getPublicTxBaseRollupProof(
     inputs: PublicTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -559,7 +561,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getBlockRootNoTxsRollupProof(
+  public getBlockRootNoTxsRollupProof(
     input: BlockRootNoTxsRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -575,7 +577,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getBlockRootRollupProof(
+  public getBlockRootRollupProof(
     input: BlockRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -591,7 +593,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getBlockRootSingleTxRollupProof(
+  public getBlockRootSingleTxRollupProof(
     input: BlockRootSingleTxRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -607,7 +609,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getBlockMergeRollupProof(
+  public getBlockMergeRollupProof(
     input: BlockMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -623,7 +625,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getCheckpointRootRollupProof(
+  public getCheckpointRootRollupProof(
     input: CheckpointRootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -641,7 +643,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getCheckpointRootSingleBlockRollupProof(
+  public getCheckpointRootSingleBlockRollupProof(
     input: CheckpointRootSingleBlockRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -659,7 +661,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getCheckpointPaddingRollupProof(
+  public getCheckpointPaddingRollupProof(
     input: CheckpointPaddingRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -677,7 +679,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getCheckpointMergeRollupProof(
+  public getCheckpointMergeRollupProof(
     input: CheckpointMergeRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,
@@ -695,7 +697,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     );
   }
 
-  getRootRollupProof(
+  public getRootRollupProof(
     input: RootRollupPrivateInputs,
     signal?: AbortSignal,
     epochNumber?: EpochNumber,

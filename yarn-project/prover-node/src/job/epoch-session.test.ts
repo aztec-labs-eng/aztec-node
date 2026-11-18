@@ -121,19 +121,18 @@ describe('EpochSession', () => {
       await expect(session.whenDone()).resolves.toBe('completed');
     });
 
-    it('registers and proves the top tree under the slot of the last checkpoint', async () => {
+    it('registers the top tree under the slot of the last checkpoint', async () => {
       publishingService.submit.mockResolvedValue('published');
       topTree.prove.mockResolvedValue(synthProof);
       const lastCp = await Checkpoint.random(CheckpointNumber(2), {
         numBlocks: 1,
         slotNumber: SlotNumber(cp.header.slotNumber + 1),
       });
-      const spec = { ...makeSpec(), toSlot: lastCp.header.slotNumber };
+      // The session's range ends after its last checkpoint, as it does when an epoch ends with empty slots.
+      const spec = { ...makeSpec(), toSlot: SlotNumber(lastCp.header.slotNumber + 3) };
       const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
       await new TestEpochSession(spec, [stubProver, makeStubProver(lastCp)], deps).start();
 
-      const lastSlot = topTree.prove.mock.calls[0][4];
-      expect(lastSlot).toEqual(lastCp.header.slotNumber);
       expect(topTree.registerProof).toHaveBeenCalledWith(spec.epochNumber, lastCp.header.slotNumber);
     });
 

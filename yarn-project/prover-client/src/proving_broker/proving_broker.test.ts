@@ -574,6 +574,11 @@ describe.each([
         });
         return id;
       };
+      const restartBroker = async () => {
+        await broker.stop();
+        broker = new ProvingBroker(database);
+        await broker.start();
+      };
       const nextJobId = async (...allowList: ProvingRequestType[]) =>
         (await broker.getProvingJob({ allowList }))?.job.id;
       const nextJobIds = async (count: number) => {
@@ -720,6 +725,47 @@ describe.each([
         const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
 
         expect([beforeSaved, ...(await nextJobIds(3))]).toEqual([undefined, id, other, undefined]);
+
+        await restartBroker();
+        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
+      });
+
+      it('hands out a job whose lower slot arrives at any point while it is being saved', async () => {
+        for (let ticks = 0; ticks < 8; ticks++) {
+          const id = makeRandomProvingJobId();
+          const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
+          for (let i = 0; i < ticks; i++) {
+            await Promise.resolve();
+          }
+          await Promise.all([saving, enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id)]);
+
+          const job = (await broker.getProvingJob())?.job;
+          expect({ id: job?.id, prioritySlot: job?.prioritySlot }).toEqual({ id, prioritySlot: SlotNumber(5) });
+          // Settled, so a job that times out is not handed out again in a later round.
+          await broker.reportProvingJobSuccess(id, makeOutputsUri());
+        }
+      });
+
+      it('keeps the inputs a job was first saved with when a second request lowers its slot', async () => {
+        const id = makeRandomProvingJobId();
+        const job = { id, type: ProvingRequestType.INBOX_PARITY, epochNumber: epoch, inputsUri: makeInputsUri() };
+        await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(7) });
+        await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(5), inputsUri: makeInputsUri() });
+
+        await restartBroker();
+        expect((await broker.getProvingJob())?.job).toEqual({ ...job, prioritySlot: SlotNumber(5) });
+      });
+
+      it('keeps a job whose lower slot, requested while it was being saved, fails to save', async () => {
+        const id = makeRandomProvingJobId();
+        const add = database.addProvingJob.bind(database);
+        jest.spyOn(database, 'addProvingJob').mockImplementationOnce(add).mockRejectedValueOnce(new Error('db down'));
+        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
+        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        await Promise.all([saving, lowering]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
       });
 
       it('does not hand out a cancelled job again before its revival is saved', async () => {
@@ -794,19 +840,15 @@ describe.each([
           await firstRead.promise;
           return inputs(jobId);
         });
-        const saved: (number | undefined)[] = [];
-        const add = database.addProvingJob.bind(database);
-        jest.spyOn(database, 'addProvingJob').mockImplementation(job => {
-          saved.push(job.prioritySlot);
-          return add(job);
-        });
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
 
         const slower = broker.lowerProvingJobPrioritySlot(id, SlotNumber(7));
         await broker.lowerProvingJobPrioritySlot(id, SlotNumber(5));
         firstRead.resolve();
         await slower;
 
-        expect(saved.at(-1)).toEqual(5);
+        await restartBroker();
+        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
       });
 
       it('hands the slot to the agent with the job', async () => {

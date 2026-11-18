@@ -99,15 +99,15 @@ class RecordingBrokerProxy implements ProvingJobBroker {
     return this.inner.getCompletedJobs(ids);
   }
 
-  registerEpochProof(...args: Parameters<ProvingBroker['registerEpochProof']>): Promise<void> {
+  public registerEpochProof(...args: Parameters<ProvingBroker['registerEpochProof']>): Promise<void> {
     return this.inner.registerEpochProof(...args);
   }
 
-  unregisterEpochProof(...args: Parameters<ProvingBroker['unregisterEpochProof']>): Promise<void> {
+  public unregisterEpochProof(...args: Parameters<ProvingBroker['unregisterEpochProof']>): Promise<void> {
     return this.inner.unregisterEpochProof(...args);
   }
 
-  lowerProvingJobPrioritySlot(...args: Parameters<ProvingBroker['lowerProvingJobPrioritySlot']>): Promise<void> {
+  public lowerProvingJobPrioritySlot(...args: Parameters<ProvingBroker['lowerProvingJobPrioritySlot']>): Promise<void> {
     return this.inner.lowerProvingJobPrioritySlot(...args);
   }
 

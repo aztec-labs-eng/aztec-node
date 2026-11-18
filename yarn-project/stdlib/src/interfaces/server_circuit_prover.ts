@@ -4,7 +4,7 @@ import type {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { AvmCircuitInputs } from '../avm/avm.js';
 import type { InboxParityPrivateInputs } from '../parity/inbox_parity_private_inputs.js';
@@ -37,6 +37,10 @@ import type { PublicInputsAndRecursiveProof } from './proving-job.js';
 
 /**
  * Generates proofs for parity and rollup circuits.
+ *
+ * Every method takes the same optional arguments after its inputs: `signal` aborts the request, `epochNumber` is
+ * the epoch the proof belongs to, and `prioritySlot` is the slot the proving broker orders the job by, see
+ * `ProvingJob.prioritySlot`.
  */
 export interface ServerCircuitProver {
   /**
@@ -47,14 +51,15 @@ export interface ServerCircuitProver {
   getInboxParityProof(
     inputs: InboxParityPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<ParityPublicInputs, typeof RECURSIVE_PROOF_LENGTH>>;
 
+  /** Verifies the chonk proof of a public transaction, so that its base rollup can take a recursive proof. */
   getPublicChonkVerifierProof(
     inputs: PublicChonkVerifierPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<PublicChonkVerifierPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
@@ -67,14 +72,15 @@ export interface ServerCircuitProver {
   getPrivateTxBaseRollupProof(
     baseRollupInput: PrivateTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
+  /** Creates the base rollup proof of a transaction with public calls. */
   getPublicTxBaseRollupProof(
     inputs: PublicTxBaseRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
@@ -85,7 +91,7 @@ export interface ServerCircuitProver {
   getTxMergeRollupProof(
     input: TxMergeRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<TxRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
@@ -96,21 +102,23 @@ export interface ServerCircuitProver {
   getBlockRootRollupProof(
     input: BlockRootRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
+  /** Creates the root rollup proof of a block with one transaction. */
   getBlockRootSingleTxRollupProof(
     input: BlockRootSingleTxRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
+  /** Creates the root rollup proof of a block with no transactions. */
   getBlockRootNoTxsRollupProof(
     input: BlockRootNoTxsRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
@@ -121,41 +129,45 @@ export interface ServerCircuitProver {
   getBlockMergeRollupProof(
     input: BlockMergeRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<BlockRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>>;
 
+  /** Creates the root rollup proof of a checkpoint with several blocks. */
   getCheckpointRootRollupProof(
     input: CheckpointRootRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
 
+  /** Creates the root rollup proof of a checkpoint with one block. */
   getCheckpointRootSingleBlockRollupProof(
     input: CheckpointRootSingleBlockRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
 
+  /** Creates the padding proof that fills the second input of the root rollup when an epoch has one checkpoint. */
   getCheckpointPaddingRollupProof(
     input: CheckpointPaddingRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   >;
 
+  /** Merges two checkpoint rollup proofs into one. */
   getCheckpointMergeRollupProof(
     input: CheckpointMergeRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<
     PublicInputsAndRecursiveProof<CheckpointRollupPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
@@ -168,7 +180,7 @@ export interface ServerCircuitProver {
   getRootRollupProof(
     input: RootRollupPrivateInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<PublicInputsAndRecursiveProof<RootRollupPublicInputs, typeof NESTED_RECURSIVE_PROOF_LENGTH>>;
 
@@ -179,7 +191,7 @@ export interface ServerCircuitProver {
   getAvmProof(
     inputs: AvmCircuitInputs,
     signal?: AbortSignal,
-    epochNumber?: number,
+    epochNumber?: EpochNumber,
     prioritySlot?: SlotNumber,
   ): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>>;
 }

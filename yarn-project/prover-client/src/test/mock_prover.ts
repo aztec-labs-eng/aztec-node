@@ -97,15 +97,15 @@ export class TestBroker implements ProvingJobProducer {
     return this.broker.getCompletedJobs(ids);
   }
 
-  registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
+  public registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
     return this.broker.registerEpochProof(epochNumber, lastSlot, proofId);
   }
 
-  unregisterEpochProof(proofId: string): Promise<void> {
+  public unregisterEpochProof(proofId: string): Promise<void> {
     return this.broker.unregisterEpochProof(proofId);
   }
 
-  lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
+  public lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
     return this.broker.lowerProvingJobPrioritySlot(id, prioritySlot);
   }
 }
