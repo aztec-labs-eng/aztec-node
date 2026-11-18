@@ -329,7 +329,7 @@ describe('CheckpointProposalJob Timing Tests', () => {
       proposer,
       publisher,
       attestorAddress,
-      undefined, // invalidateCheckpoint
+      undefined, // invalidateToPendingCheckpointNumber
       validatorClient,
       globalVariableBuilder,
       p2p,
