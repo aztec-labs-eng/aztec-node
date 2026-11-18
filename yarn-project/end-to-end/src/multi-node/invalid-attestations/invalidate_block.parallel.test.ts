@@ -1214,8 +1214,18 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
       }),
     );
 
-    const { checkpointNumber: invalidatedCheckpointNumber } = await invalidationPromise;
+    const { checkpointNumber: invalidatedCheckpointNumber, event } = await invalidationPromise;
     expect(invalidatedCheckpointNumber).toBeGreaterThan(1);
+
+    // The invalidated checkpoint is gone after the invalidation, so read the archive it posted from the block before.
+    const beforeInvalidation = { blockNumber: event.blockNumber! - 1n };
+    const postedArchive = await rollupContract.archiveAt(invalidatedCheckpointNumber, beforeInvalidation);
+    const parentArchive = await rollupContract.archiveAt(
+      CheckpointNumber(invalidatedCheckpointNumber - 1),
+      beforeInvalidation,
+    );
+    expect(postedArchive).toEqual(parentArchive);
+
     sequencers.forEach(sequencer =>
       sequencer.updateConfig({
         skipCollectingAttestations: false,
