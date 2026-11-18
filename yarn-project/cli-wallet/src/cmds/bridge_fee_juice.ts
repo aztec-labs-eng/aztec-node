@@ -8,7 +8,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { getNonNullifiedL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
+import { computeFeeJuiceMessageNullifier, lookUpL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
 
 export async function bridgeL1FeeJuice(
   amount: bigint,
@@ -64,25 +64,41 @@ export async function bridgeL1FeeJuice(
   }
 
   if (wait) {
-    const privateContent = [claimSecret];
-    await retryUntil(
-      async () => {
-        const witness = await getNonNullifiedL1ToL2MessageWitness(
-          node,
-          ProtocolContractAddress.FeeJuice,
-          Fr.fromHexString(messageHash),
-          privateContent,
-        );
-        if (!witness) {
-          log(`No L1 to L2 message found yet, checking again in ${interval / 1000}s`);
-        }
-        return witness;
-      },
-      'L1 to L2 message',
-      0,
-      interval / 1000,
-    );
+    await waitForFeeJuiceClaimMessage(node, Fr.fromHexString(messageHash), claimSecret, interval, log);
   }
 
   return [claimSecret, messageLeafIndex] as const;
+}
+
+/**
+ * Polls the node every `interval` ms until the fee juice claim's L1 to L2 message is in the message tree, and returns
+ * its membership witness. Fails if the claim has already been consumed, since the message would never become
+ * claimable again.
+ */
+export async function waitForFeeJuiceClaimMessage(
+  node: AztecNode,
+  messageHash: Fr,
+  claimSecret: Fr,
+  interval: number,
+  log: LogFn,
+) {
+  const nullifier = await computeFeeJuiceMessageNullifier(messageHash, [claimSecret]);
+  const unsiloedNullifier = { contractAddress: ProtocolContractAddress.FeeJuice, nullifier };
+  return retryUntil(
+    async () => {
+      const lookup = await lookUpL1ToL2MessageWitness(node, messageHash, unsiloedNullifier, 'latest');
+      switch (lookup.type) {
+        case 'missing':
+          log(`No L1 to L2 message found yet, checking again in ${interval / 1000}s`);
+          return undefined;
+        case 'nullified':
+          throw new Error(`The fee juice claim for L1 to L2 message ${messageHash} has already been consumed`);
+        case 'found':
+          return lookup.witness;
+      }
+    },
+    'L1 to L2 message',
+    0,
+    interval / 1000,
+  );
 }
