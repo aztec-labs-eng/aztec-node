@@ -151,6 +151,12 @@ type BlockBuildingResult =
   | { aborted: true };
 
 /**
+ * Outcome of enqueueing a checkpoint invalidation: the enqueued request (undefined when there was nothing left to
+ * invalidate), or a failure to simulate it.
+ */
+type InvalidationOutcome = { failed: false; request: InvalidateCheckpointRequest | undefined } | { failed: true };
+
+/**
  * Handles the execution of a checkpoint proposal after the initial preparation phase.
  * This includes building blocks, collecting attestations, and publishing the checkpoint to L1,
  * as well as enqueueing votes for slashing and governance proposals. This class is created from
@@ -828,7 +834,8 @@ export class CheckpointProposalJob implements Traceable {
       if (this.invalidateToPendingCheckpointNumber !== undefined && !this.config.skipInvalidateBlockAsProposer) {
         const validationStatus = await this.l2BlockSource.getPendingChainValidationStatus();
         if (!validationStatus.valid) {
-          this.parentInvalidation = await this.enqueueInvalidation(validationStatus);
+          const outcome = await this.enqueueInvalidation(validationStatus);
+          this.parentInvalidation = outcome.failed ? undefined : outcome.request;
         }
       }
       return true;
@@ -914,7 +921,12 @@ export class CheckpointProposalJob implements Traceable {
           `Checkpoint ${invalidCheckpointNumber} with invalid attestations landed on top of our parent ${parentCheckpointNumber}, invalidating it before proposing`,
           { checkpointNumber: this.checkpointNumber, reason: validationStatus.reason },
         );
-        this.parentInvalidation = await this.enqueueInvalidation(validationStatus);
+        const outcome = await this.enqueueInvalidation(validationStatus);
+        if (outcome.failed) {
+          this.emitPipelinedCheckpointDiscarded('parent-invalidation-failed');
+          return false;
+        }
+        this.parentInvalidation = outcome.request;
         return true;
       }
 
@@ -983,16 +995,29 @@ export class CheckpointProposalJob implements Traceable {
 
   /**
    * Simulates and enqueues an invalidation request for the invalid parent checkpoint. Returns the enqueued request, or
-   * undefined if nothing was enqueued.
+   * undefined if nothing was enqueued. A failed simulation is logged and reported as `failed` rather than thrown, so it
+   * cannot keep the slot's already-enqueued requests from being sent.
    */
-  private async enqueueInvalidation(
-    validationStatus: ValidateCheckpointResult,
-  ): Promise<InvalidateCheckpointRequest | undefined> {
+  private async enqueueInvalidation(validationStatus: ValidateCheckpointResult): Promise<InvalidationOutcome> {
     if (this.config.skipInvalidateBlockAsProposer) {
       this.log.warn(`Skipping checkpoint invalidation as proposer due to test configuration`);
-      return undefined;
+      return { failed: false, request: undefined };
     }
-    const invalidateRequest = await this.publisher.simulateInvalidateCheckpoint(validationStatus);
+    let invalidateRequest: InvalidateCheckpointRequest | undefined;
+    try {
+      invalidateRequest = await this.publisher.simulateInvalidateCheckpoint(validationStatus);
+    } catch (err) {
+      if (err instanceof SequencerInterruptedError) {
+        throw err;
+      }
+      this.log.warn(`Failed to simulate the checkpoint invalidation for slot ${this.targetSlot}`, {
+        slot: this.targetSlot,
+        checkpointNumber: this.checkpointNumber,
+        invalidCheckpoint: validationStatus.valid ? undefined : validationStatus.checkpoint,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { failed: true };
+    }
     if (invalidateRequest) {
       const submissionSlotStart = Number(getTimestampForSlot(this.targetSlot, this.l1Constants));
       const txTimeoutAt = new Date((submissionSlotStart + this.l1Constants.slotDuration) * 1000);
@@ -1002,7 +1027,7 @@ export class CheckpointProposalJob implements Traceable {
         checkpointNumber: this.checkpointNumber,
       });
     }
-    return invalidateRequest;
+    return { failed: false, request: invalidateRequest };
   }
 
   @trackSpan('CheckpointProposalJob.proposeCheckpoint', function () {

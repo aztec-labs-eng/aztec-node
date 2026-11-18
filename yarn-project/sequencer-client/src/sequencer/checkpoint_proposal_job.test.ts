@@ -1378,6 +1378,31 @@ describe('CheckpointProposalJob', () => {
         expect(publisher.validateCheckpointHeaderAndInbox.mock.calls[1][2]).toBeUndefined();
       });
 
+      it('skips the proposal but still sends the slot requests when the invalidation cannot be simulated', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(undefined);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1) });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(2)));
+        publisher.simulateInvalidateCheckpoint.mockRejectedValue(new Error('L1 RPC error'));
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber + 1));
+        expect(mismatchEvents).toHaveLength(1);
+      });
+
+      it('still sends the slot requests when the invalid proposed parent cannot be invalidated', async () => {
+        const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
+        mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
+        l2BlockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidValidation(CheckpointNumber(1)));
+        publisher.simulateInvalidateCheckpoint.mockRejectedValue(new Error('L1 RPC error'));
+
+        await pipelinedJob.executeAndAwait();
+
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber + 1));
+      });
+
       /** Creates a job for checkpoint 2 whose build started on an invalid checkpoint 2 and rolled L1 back to 1. */
       function createJobBuiltOnRolledBackTip(): Promise<TestCheckpointProposalJob> {
         return createPipelinedJobWithBlock(undefined, { invalidateToPendingCheckpointNumber: CheckpointNumber(1) });

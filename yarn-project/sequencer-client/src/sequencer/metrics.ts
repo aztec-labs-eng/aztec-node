@@ -154,6 +154,7 @@ export class SequencerMetrics {
           'parent-not-on-l1',
           'parent-hash-mismatch',
           'parent-invalid-attestations',
+          'parent-invalidation-failed',
           'unexpected-parent-appeared',
         ],
       },
