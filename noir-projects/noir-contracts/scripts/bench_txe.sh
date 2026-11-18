@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Benchmarks the TXE on noir-projects/txe-bench/account_scaling: the same private workload with 5, 20 and 40 accounts in the test.
-#
-# Each test runs alone against a fresh TXE. The value recorded is nargo's execution time for the test, which leaves out
-# compiling the package, so it measures the TXE and the contract execution it drives. Requires the contracts and the
-# TXE to be built. Driven by noir-contracts' bootstrap.sh bench_cmds.
+# Runs each benchmark test in noir-projects/txe-bench/account_scaling alone against a fresh TXE and records nargo's
+# execution time for it, which leaves out compilation. Requires the contracts and the TXE to be built.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
