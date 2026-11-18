@@ -285,6 +285,11 @@ export class SessionManager {
 
   private replaceInvalidSessionsIn<K>(sessions: Map<K, EpochSession>): void {
     for (const [key, session] of Array.from(sessions.entries())) {
+      // A finished partial session is dropped whatever the store holds, so its checkpoints are not looked up.
+      if (session.isTerminal() && session.getKind() !== 'full') {
+        sessions.delete(key);
+        continue;
+      }
       const current = this.checkpointsForSpec(session.getSpec());
       const verdict = this.judgeSession(session, current);
       if (verdict === 'keep') {
