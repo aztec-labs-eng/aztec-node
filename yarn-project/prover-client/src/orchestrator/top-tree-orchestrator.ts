@@ -122,24 +122,18 @@ export class TopTreeOrchestrator extends ProvingScheduler {
    * Proves the top tree from per-checkpoint data and pending block-proofs promises.
    * Resolves with the final epoch proof, or rejects with `TopTreeCancelledError` if
    * `cancel()` is invoked, or any other error if a circuit fails.
-   * @param lastSlot - Slot of the last checkpoint. The top tree's jobs carry it, and the proof is registered with
-   *   the broker under it, see `registerProof`.
+   * Call `registerProof` first to have the broker order the top tree's jobs by the proof's last slot.
    */
   public async prove(
     epochNumber: EpochNumber,
     totalNumCheckpoints: number,
     finalBlobBatchingChallenges: FinalBlobBatchingChallenges,
     checkpointData: CheckpointTopTreeData[],
-    lastSlot?: SlotNumber,
   ): Promise<TopTreeResult> {
     if (this.proveCalled) {
       throw new Error('TopTreeOrchestrator.prove called twice; construct a new orchestrator per epoch.');
     }
     this.proveCalled = true;
-    this.prioritySlot = lastSlot;
-    if (lastSlot !== undefined) {
-      this.registerProof(epochNumber, lastSlot);
-    }
     try {
       return await this.proveTopTree(epochNumber, totalNumCheckpoints, finalBlobBatchingChallenges, checkpointData);
     } finally {
@@ -148,15 +142,21 @@ export class TopTreeOrchestrator extends ProvingScheduler {
   }
 
   /**
-   * Registers the epoch proof with the broker, which then holds back the work of slots after `lastSlot`. `prove`
-   * does this itself. A caller with work to do before `prove` calls it first, so the broker knows of the proof
-   * while that work runs. The proof is unregistered when `prove` ends or the orchestrator is cancelled.
+   * Sets the slot the top tree's jobs carry, and registers the epoch proof with the broker, which then holds back
+   * the work of slots after `lastSlot`. Call it before `prove`, as early as the last slot is known, so the broker
+   * knows of the proof while the caller prepares the inputs. A call after `prove` has started does nothing. The
+   * proof is unregistered when `prove` ends or the orchestrator is cancelled.
    *
-   * Does not wait for the broker: the request is sent before any job of the proof, and a broker that is slow to
-   * answer must not delay the proof or its cancellation.
+   * Does not wait for the broker: the request is sent before any job of the top tree, and a broker that is slow to
+   * answer must not delay the proof or its cancellation. Block-level jobs of the proof's checkpoints may already be
+   * with the broker; the order changes once the broker has processed the registration.
    */
   public registerProof(epochNumber: EpochNumber, lastSlot: SlotNumber): void {
-    if (!this.proofRegistry || this.registration || this.cancelled) {
+    if (this.registration || this.cancelled || this.proveCalled) {
+      return;
+    }
+    this.prioritySlot = lastSlot;
+    if (!this.proofRegistry) {
       return;
     }
     const proofId = randomUUID();

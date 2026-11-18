@@ -4,7 +4,11 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
-import { type ProvingJobStatus, makePublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import {
+  type ProvingJobId,
+  type ProvingJobStatus,
+  makePublicInputsAndRecursiveProof,
+} from '@aztec-labs/stdlib/interfaces/server';
 import { makeRecursiveProof } from '@aztec-labs/stdlib/proofs';
 import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec-labs/stdlib/testing';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
@@ -153,6 +157,7 @@ describe('BrokerCircuitProverFacade', () => {
     let calls: string[];
     let enqueueSent: boolean;
     let brokerAnswers: Promise<void>;
+    let jobId: ProvingJobId;
 
     beforeEach(() => {
       calls = [];
@@ -161,6 +166,7 @@ describe('BrokerCircuitProverFacade', () => {
       const enqueue = broker.enqueueProvingJob.bind(broker);
       jest.spyOn(broker, 'enqueueProvingJob').mockImplementation(async job => {
         enqueueSent = true;
+        jobId = job.id;
         await brokerAnswers;
         const status = await enqueue(job);
         calls.push(`enqueue ${job.prioritySlot}`);
@@ -213,15 +219,31 @@ describe('BrokerCircuitProverFacade', () => {
       expect(calls).toEqual(['enqueue 6', 'lower 5']);
     });
 
-    it('is left alone at the broker after it was cancelled', async () => {
+    it('stays cancelled at the broker when it is requested again for an earlier slot', async () => {
       const controller = new AbortController();
       request(6, controller.signal);
       await retryFastUntil(() => calls.length >= 1, 'the job reaches the broker');
       controller.abort();
+      await retryFastUntil(async () => (await broker.getProvingJobStatus(jobId)).status === 'aborted', 'job aborted');
       request(5, controller.signal);
 
       await sleep(50);
-      expect(calls).toEqual(['enqueue 6']);
+      expect((await broker.getProvingJobStatus(jobId)).status).toEqual('aborted');
+    });
+
+    it('has its slot lowered for a live caller when its first caller gave up before the broker answered', async () => {
+      const answer = promiseWithResolvers<void>();
+      brokerAnswers = answer.promise;
+      const controller = new AbortController();
+
+      request(6, controller.signal);
+      await retryFastUntil(() => enqueueSent, 'the request leaves for the broker');
+      controller.abort();
+      request(5);
+      answer.resolve();
+
+      await retryFastUntil(() => calls.length >= 2, 'the lower slot reaches the broker');
+      expect(calls).toEqual(['enqueue 6', 'lower 5']);
     });
   });
 

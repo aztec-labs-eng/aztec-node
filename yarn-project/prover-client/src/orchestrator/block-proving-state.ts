@@ -9,7 +9,7 @@ import type {
   L1_TO_L2_MSG_TREE_HEIGHT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
@@ -102,7 +102,7 @@ export class BlockProvingState {
     return this.endMsgSponge;
   }
 
-  public get epochNumber(): number {
+  public get epochNumber(): EpochNumber {
     return this.parentCheckpoint.epochNumber;
   }
 

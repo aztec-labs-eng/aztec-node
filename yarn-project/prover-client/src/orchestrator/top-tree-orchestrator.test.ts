@@ -24,6 +24,7 @@ import {
 
 const logger = createLogger('prover-client:test:top-tree-orchestrator');
 
+/** What a checkpoint's sub-tree hands the top tree once its blocks are proven. */
 type SubTreeProofs = Awaited<CheckpointTopTreeData['subTreeProofs']>;
 
 /** A full tx-worth of L2-to-L1 messages, padded to the per-tx maximum. */
@@ -196,7 +197,8 @@ describe('prover/orchestrator/top-tree', () => {
       registry,
     );
     try {
-      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], slotB);
+      topTree.registerProof(EpochNumber(1), slotB);
+      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData]);
     } finally {
       await topTree.stop();
     }
@@ -259,7 +261,8 @@ describe('prover/orchestrator/top-tree', () => {
     );
 
     const pending = { ...topTreeData, subTreeProofs: promiseWithResolvers<SubTreeProofs>().promise };
-    const proving = topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7));
+    topTree.registerProof(EpochNumber(1), SlotNumber(7));
+    const proving = topTree.prove(EpochNumber(1), 1, challenges, [pending]);
     topTree.cancel({ abortJobs: true });
 
     await expect(proving).rejects.toBeInstanceOf(TopTreeCancelledError);
@@ -288,10 +291,9 @@ describe('prover/orchestrator/top-tree', () => {
 
     const subTreeProofs = promiseWithResolvers<SubTreeProofs>();
     const pending = { ...topTreeData, subTreeProofs: subTreeProofs.promise };
-    const first = topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7));
-    await expect(topTree.prove(EpochNumber(1), 1, challenges, [pending], SlotNumber(7))).rejects.toThrow(
-      /prove called twice/,
-    );
+    topTree.registerProof(EpochNumber(1), SlotNumber(7));
+    const first = topTree.prove(EpochNumber(1), 1, challenges, [pending]);
+    await expect(topTree.prove(EpochNumber(1), 1, challenges, [pending])).rejects.toThrow(/prove called twice/);
     await sleep(50);
     expect(unregistered).toEqual([]);
 

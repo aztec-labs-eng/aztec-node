@@ -31,6 +31,10 @@ type InProgressMetadata = {
   lastUpdatedAt: number;
 };
 
+/**
+ * A queue entry. A job can have several, one for each slot it was queued under; only the one with its current slot
+ * is valid.
+ */
 type EnqueuedProvingJob = Pick<ProvingJob, 'id' | 'epochNumber' | 'prioritySlot'>;
 
 /** The first valid entry of a queue, with the metadata of its job. */
@@ -236,6 +240,11 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     return this.#cancelProvingJob(id);
   }
 
+  /**
+   * Registers an epoch proof, see `ProvingJobProducer.registerEpochProof`. A proof of an epoch the broker no longer
+   * keeps is ignored. Registrations are kept in memory only, and the oldest is dropped beyond
+   * `MAX_OUTSTANDING_EPOCH_PROOFS`.
+   */
   public registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
     if (epochNumber < this.oldestEpochToKeep()) {
       return Promise.resolve();
@@ -250,11 +259,13 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     return Promise.resolve();
   }
 
+  /** Forgets an epoch proof, see `ProvingJobProducer.unregisterEpochProof`. Unknown ids are ignored. */
   public unregisterEpochProof(proofId: string): Promise<void> {
     this.outstandingProofs.delete(proofId);
     return Promise.resolve();
   }
 
+  /** Lowers a job's slot, see `ProvingJobProducer.lowerProvingJobPrioritySlot`. Never creates or revives a job. */
   public lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
     return this.#lowerPrioritySlot(id, prioritySlot);
   }
@@ -377,7 +388,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         });
         this.instrumentation.incCachedJobs(job.type);
         if (job.prioritySlot !== undefined) {
-          await this.#lowerPrioritySlot(job.id, job.prioritySlot, job.inputsUri);
+          await this.#lowerPrioritySlot(job.id, job.prioritySlot);
         }
         // Return the job's current status. This reads the fulfilled proof value from the DB when needed;
         // the await is fine here because this branch does not create the job, so it is outside the lock span.
@@ -400,8 +411,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       // do this first so it acts as a "lock". If this job is enqueued again while we're saving it the if at the top will catch it.
       this.jobsCache.set(job.id, toJobMetadata(job));
       await this.database.addProvingJob(job);
-      // The same holds for a lower slot requested during the write: the job is queued under it.
-      this.enqueueJobInternal(this.withLowestRequestedSlot(job));
+      await this.queueUnderLowestRequestedSlot(job);
       this.instrumentation.incTotalJobs(job.type);
     } catch (err) {
       this.logger.error(`Failed to save proving job id=${job.id}: ${err}`, err, { provingJobId: job.id });
@@ -409,6 +419,28 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       throw err;
     }
     return jobStatus;
+  }
+
+  /**
+   * Queues a job that was just saved. A lower slot requested while the job was being written is saved first, and the
+   * job is queued under it. The job is already saved by then, so a failed write here only loses the lower slot after
+   * a restart. No await separates the last slot check from the queue entry: a lower slot requested in between would
+   * only be recorded, and the entry queued under the old slot would be skipped.
+   */
+  private async queueUnderLowestRequestedSlot(job: ProvingJob): Promise<void> {
+    try {
+      for (let lowest = this.withLowestRequestedSlot(job); lowest !== job; lowest = this.withLowestRequestedSlot(job)) {
+        job = lowest;
+        await this.database.addProvingJob(job);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to save the lower priority slot of proving job id=${job.id}`, {
+        provingJobId: job.id,
+        prioritySlot: job.prioritySlot,
+        err,
+      });
+    }
+    this.enqueueJobInternal(this.withLowestRequestedSlot(job));
   }
 
   private withLowestRequestedSlot(job: ProvingJob): ProvingJob {
@@ -420,12 +452,12 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
 
   /**
    * Orders an unsettled job by `prioritySlot` if that is lower than its current slot. Never creates or revives a
-   * job. A job that is still being saved or revived only has its slot recorded: it is queued under the recorded
-   * slot once that finishes, and not before, because it cannot be handed out yet. Otherwise the queue entry is
-   * added before the database write, so a failed write only loses the lower slot after a restart. The entry with
-   * the old slot is skipped when it is reached.
+   * job. A job that is still being saved or revived only has its slot recorded: it is saved and queued under the
+   * recorded slot once that finishes, and not before, because it cannot be handed out yet. Otherwise the queue
+   * entry is added before the database write, so a failed write only loses the lower slot after a restart. The
+   * entry with the old slot is skipped when it is reached.
    */
-  async #lowerPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber, inputsUri?: ProofUri): Promise<void> {
+  async #lowerPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
     const existing = this.jobsCache.get(id);
     if (
       !existing ||
@@ -445,7 +477,8 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       this.queues[lowered.type].put({ id, epochNumber: lowered.epochNumber, prioritySlot });
     }
     try {
-      inputsUri ??= await this.database.getProvingJobInputs(id);
+      // The stored inputs stay: a second request for the job may name another location for the same inputs.
+      const inputsUri = await this.database.getProvingJobInputs(id);
       // The job may have been lowered again, settled or cleaned up during the read. Only its current slot is saved.
       const current = this.jobsCache.get(id);
       if (inputsUri && current && !this.resultsCache.has(id)) {
