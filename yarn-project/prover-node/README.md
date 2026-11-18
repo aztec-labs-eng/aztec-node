@@ -256,7 +256,8 @@ are skipped without being fetched.
 - A queued proof resolves `expired`.
 - A submission already sent to L1 is not withdrawn. The publisher stops retrying it at the same moment. If the
   transaction is mined after all, L1 holds the proof while the session reports `timed-out`.
-- No new session is opened for the epoch.
+- The node opens no new full session for the epoch. `startProof` can still open a partial session until the sweep
+  removes the epoch's provers; its timer cancels it at once.
 - `EpochExpirySweep` removes the epoch's provers and releases its chonk-verifier cache entries. The sweep runs on a
   timer, so it also runs while no chain events arrive.
 
@@ -280,7 +281,9 @@ the provers.
 id at once and does not wait for the proof.
 
 - It creates a partial session from the epoch's first slot to the slot of the last stored checkpoint.
-- If a running session already proves those checkpoints, it returns that session's id.
+- If a running partial session already proves those checkpoints, it returns that session's id. A running full
+  session counts only when its slot range ends at the same slot. When the epoch ended with empty slots, the full
+  session's range ends later, and `startProof` opens a second session over the same checkpoints.
 - It throws when the store holds no checkpoint of the epoch, when the proven tip already covers them, when one of
   their provers has failed, or when the session limit is reached.
 
@@ -319,7 +322,10 @@ Early proofs reach an epoch proof only when a `CheckpointProver` requests the sa
 - At most four slots are in progress. A slot normally leaves when its checkpoint lands.
 - A block is proven early only once a checkpoint of its epoch has landed. A block can be proposed shortly before
   its epoch starts. The broker drops the jobs of old epochs when it sees a job of a newer epoch, so proving that
-  block early would drop jobs of an epoch that can still be proven.
+  block early would drop jobs of an epoch that can still be proven. On a new chain the genesis block stands in
+  for that checkpoint, so blocks of epoch 0 are proven early from the start.
+- A slot is proven early from its first block or not at all. If its first block was proposed before a checkpoint
+  of the epoch landed, the later blocks of that slot are left to the checkpoint too.
 
 What it costs:
 
@@ -344,7 +350,7 @@ before their checkpoint lands.
 | `PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` | false | Prove only the epochs requested through `startProof` |
 | `PROVER_NODE_EARLY_BLOCK_PROVING` | false | Start block-level proving when a block is proposed |
 | `PROVER_NODE_PROOF_SUBMISSION_TARGET_ADDRESS` | rollup address | L1 address the proof transaction is sent to |
-| `PROVER_NODE_TX_GATHERING_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_PARALLEL_REQUESTS_PER_NODE` | 1000, 10, 100 | How transactions are fetched from peers |
+| `PROVER_NODE_TX_GATHERING_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_PARALLEL_REQUESTS_PER_NODE` | 1000, 10, 100 | Not read. Fetching from peers is set by the p2p `TX_COLLECTION_*` variables |
 | `PROVER_CANCEL_JOBS_ON_STOP` | false | Abort the block-level jobs of a prover when it is removed |
 
 `PROVER_NODE_FAILED_EPOCH_STORE` also needs a data directory, the L1 chain id and the rollup version. The node refuses
@@ -421,6 +427,15 @@ serial queue, so only one transaction is sent.
 
 A prune reaches the node twice: as a chain event, and as a failed world-state read inside a prover. The two are not
 ordered. The session does not ask which came first. It asks whether any of its provers failed or was cancelled.
+
+### The L1 constants are read from the archiver each time
+
+`CheckpointFollower`, `EpochExpirySweep`, `EpochProofStatus`, `EarlyBlockProver` and `CheckpointStore` call
+`l2BlockSource.getL1Constants()` whenever they need the constants and keep no copy. The prover node's block source
+is the in-process `Archiver`, whose `getL1Constants` returns a field set when the archiver is created. The call
+does not reach L1 and cannot fail, so a copy would add state without removing a failure. `ProverNode` kept a
+memoized copy before it was split. `SessionManager` keeps one because it computes a session's deadline in a
+synchronous method.
 
 ## Known limitations
 
