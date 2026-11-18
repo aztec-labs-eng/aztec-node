@@ -121,7 +121,9 @@ export abstract class ProvingScheduler {
     // event loop free of rejections.
     const safeJob = async () => {
       try {
-        if (controller.signal.aborted) {
+        // A scheduler stopped without aborting its jobs leaves this one queued. Its request has not been sent, so
+        // it is dropped here; the jobs already with the broker go on.
+        if (controller.signal.aborted || !state.verifyState() || isCancelled()) {
           return;
         }
         const result = await request(controller.signal);

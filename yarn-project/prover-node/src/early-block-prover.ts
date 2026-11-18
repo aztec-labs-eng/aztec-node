@@ -340,7 +340,9 @@ class SlotInProgress {
     );
     const deadline = new Date(this.deps.dateProvider.now() + this.deps.txGatheringTimeoutMs);
     const { txs, missingTxs } = await this.deps.txProvider.getTxsForBlock(block, { deadline, signal });
-    if (signal.aborted) {
+    // A proving job of an earlier block may have failed meanwhile, which stops the slot's sub-tree. Going on would
+    // start a second one from the slot's first block.
+    if (signal.aborted || this.failed) {
       return;
     }
     if (missingTxs.length > 0) {
@@ -379,9 +381,14 @@ class SlotInProgress {
 
     // Logged only when the block root proof is ready before the slot is released. A block whose checkpoint lands
     // first has its proofs reported by its `CheckpointProver`.
-    void subTree.whenBlockRootProven(block.number).then(() => {
-      // The slot is released when its checkpoint lands. A proof that arrives while that is under way is not early.
-      if (signal.aborted) {
+    void subTree.whenBlockRootProven(block.number).then(async () => {
+      // The slot is released when its checkpoint lands, after the archiver reports the block checkpointed. A proof
+      // that arrives in between is not early, and neither is one whose block cannot be compared with the tip.
+      const isAhead = await this.deps.l2BlockSource
+        .getBlockNumber({ tag: 'checkpointed' })
+        .then(checkpointed => block.number > (checkpointed ?? BlockNumber.ZERO))
+        .catch(() => false);
+      if (signal.aborted || !isAhead) {
         return;
       }
       this.log.info(`Block-level proofs ready for block ${block.number} ahead of its checkpoint`, {

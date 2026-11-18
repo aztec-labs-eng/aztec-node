@@ -62,7 +62,8 @@ export interface EpochProverFactory {
   ): Promise<CheckpointSubTreeOrchestrator>;
   /**
    * Constructs and starts a blocks-only `CheckpointSubTreeOrchestrator`, which proves the blocks of a checkpoint
-   * that has not landed yet. See `CheckpointSubTreeOrchestrator.startBlocksOnly`.
+   * that has not landed yet. See `CheckpointSubTreeOrchestrator.startBlocksOnly`. Its `getSubTreeResult()` never
+   * resolves and only rejects when proving fails.
    */
   createBlocksOnlySubTreeOrchestrator(
     chonkCache: ChonkCache,

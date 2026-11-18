@@ -101,7 +101,7 @@ describe('EarlyBlockProver', () => {
     const block = await propose(1, 5);
 
     prover.onChainProposed(BlockNumber(1));
-    await provenBlocks(subTrees, 0, [1]);
+    await completedBlocks(subTrees, 0, [1]);
 
     const [, , constants, previousHeader] = proverFactory.createBlocksOnlySubTreeOrchestrator.mock.calls[0];
     expect(constants.slotNumber).toEqual(SlotNumber(5));
@@ -121,8 +121,8 @@ describe('EarlyBlockProver', () => {
     await propose(3, 6);
 
     prover.onChainProposed(BlockNumber(3));
-    await provenBlocks(subTrees, 0, [1, 2]);
-    await provenBlocks(subTrees, 1, [3]);
+    await completedBlocks(subTrees, 0, [1, 2]);
+    await completedBlocks(subTrees, 1, [3]);
 
     expect(subTrees).toHaveLength(2);
     // The second slot starts from the last block of the first one.
@@ -135,7 +135,7 @@ describe('EarlyBlockProver', () => {
     checkpointedBlock = 1;
 
     prover.onChainProposed(BlockNumber(2));
-    await provenBlocks(subTrees, 0, [2]);
+    await completedBlocks(subTrees, 0, [2]);
 
     expect(subTrees).toHaveLength(1);
   });
@@ -165,7 +165,7 @@ describe('EarlyBlockProver', () => {
       await propose(blockNumber, 4 + blockNumber);
     }
     prover.onChainProposed(BlockNumber(4));
-    await provenBlocks(subTrees, 2, [4]);
+    await completedBlocks(subTrees, 2, [4]);
     expect(oldestAborted).toBe(false);
 
     await propose(5, 9);
@@ -180,7 +180,7 @@ describe('EarlyBlockProver', () => {
   it('stops proving a slot once its checkpoint lands', async () => {
     await propose(1, 5);
     prover.onChainProposed(BlockNumber(1));
-    await provenBlocks(subTrees, 0, [1]);
+    await completedBlocks(subTrees, 0, [1]);
 
     checkpointedBlock = 1;
     prover.onChainCheckpointed(BlockNumber(1));
@@ -189,7 +189,7 @@ describe('EarlyBlockProver', () => {
     // A later block of another slot is proven; the checkpointed block is not started again.
     await propose(2, 6);
     prover.onChainProposed(BlockNumber(2));
-    await provenBlocks(subTrees, 1, [2]);
+    await completedBlocks(subTrees, 1, [2]);
     expect(subTrees).toHaveLength(2);
   });
 
@@ -197,7 +197,7 @@ describe('EarlyBlockProver', () => {
     await propose(1, 5);
     const pruned = await propose(2, 5);
     prover.onChainProposed(BlockNumber(2));
-    await provenBlocks(subTrees, 0, [1, 2]);
+    await completedBlocks(subTrees, 0, [1, 2]);
 
     prover.onChainPruned(BlockNumber(1));
     await retryFastUntil(() => chonkCache.releaseForBlocks.mock.calls.length > 0, 'chonk proofs released');
@@ -208,7 +208,7 @@ describe('EarlyBlockProver', () => {
     // block 2's proving inputs depend on it.
     const replacement = await propose(2, 5);
     prover.onChainProposed(BlockNumber(2));
-    await provenBlocks(subTrees, 1, [1, 2]);
+    await completedBlocks(subTrees, 1, [1, 2]);
     expect(subTrees[1].setBlockCompleted).toHaveBeenCalledWith(BlockNumber(2), replacement.header);
   });
 
@@ -220,7 +220,7 @@ describe('EarlyBlockProver', () => {
     );
 
     prover.onChainProposed(BlockNumber(2));
-    await provenBlocks(subTrees, 0, [2]);
+    await completedBlocks(subTrees, 0, [2]);
 
     expect(subTrees).toHaveLength(1);
   });
@@ -233,7 +233,7 @@ describe('EarlyBlockProver', () => {
     await propose(2, 5);
     prover.onChainProposed(BlockNumber(2));
 
-    await provenBlocks(subTrees, 0, [1, 2]);
+    await completedBlocks(subTrees, 0, [1, 2]);
   });
 
   it('fetches a long run of proposed blocks in several reads', async () => {
@@ -246,7 +246,7 @@ describe('EarlyBlockProver', () => {
     prover.onChainProposed(BlockNumber(3 * blocksPerSlot));
 
     // The third slot starts after the first read ends.
-    await provenBlocks(
+    await completedBlocks(
       subTrees,
       2,
       times(blocksPerSlot, i => 2 * blocksPerSlot + i + 1),
@@ -274,7 +274,7 @@ describe('EarlyBlockProver', () => {
     );
 
     prover.onChainProposed(BlockNumber(1));
-    await provenBlocks(subTrees, 0, [1]);
+    await completedBlocks(subTrees, 0, [1]);
 
     expect(subTrees[0].startChonkVerifierCircuits).toHaveBeenCalledWith([txs[1]]);
     expect(subTrees[0].addTxs).toHaveBeenCalledWith(txs.map(tx => processedByTx.get(tx)!));
@@ -284,6 +284,7 @@ describe('EarlyBlockProver', () => {
     await propose(1, 5);
     proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementationOnce(() => {
       const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.getSubTreeResult.mockReturnValue(new Promise(() => {}));
       subTree.startNewBlock.mockRejectedValue(new Error('world state unavailable'));
       subTrees.push(subTree);
       return Promise.resolve(subTree);
@@ -292,6 +293,7 @@ describe('EarlyBlockProver', () => {
     prover.onChainProposed(BlockNumber(1));
 
     await retryFastUntil(() => subTrees[0]?.stop.mock.calls.length > 0, 'failed sub-tree stopped');
+    expect(subTrees[0].startNewBlock).toHaveBeenCalledTimes(1);
   });
 
   it('leaves alone a block proposed before any checkpoint of its epoch has landed', async () => {
@@ -302,13 +304,16 @@ describe('EarlyBlockProver', () => {
     await propose(2, 8);
     await propose(3, 8);
     prover.onChainProposed(BlockNumber(3));
+    // Blocks 2 and 3 are read while the checkpointed tip is still in epoch 1, and are not proven.
+    await retryFastUntil(() => l2BlockSource.getBlocks.mock.calls.length > 0, 'proposed blocks read');
+    expect(subTrees).toHaveLength(0);
 
     // The first checkpoint of epoch 2 lands, and the next slot of that epoch is proven early.
     checkpointedBlock = 3;
     prover.onChainCheckpointed(BlockNumber(3));
     await propose(4, 9);
     prover.onChainProposed(BlockNumber(4));
-    await provenBlocks(subTrees, 0, [4]);
+    await completedBlocks(subTrees, 0, [4]);
 
     expect(subTrees).toHaveLength(1);
   });
@@ -324,7 +329,7 @@ describe('EarlyBlockProver', () => {
       return Promise.resolve(subTree);
     });
     prover.onChainProposed(BlockNumber(1));
-    await provenBlocks(subTrees, 0, [1]);
+    await completedBlocks(subTrees, 0, [1]);
 
     jobFailed.reject(new Error('agent out of memory'));
     await retryFastUntil(() => subTrees[0].stop.mock.calls.length > 0, 'sub-tree stopped');
@@ -334,14 +339,42 @@ describe('EarlyBlockProver', () => {
     prover.onChainProposed(BlockNumber(2));
     await propose(3, 6);
     prover.onChainProposed(BlockNumber(3));
-    await provenBlocks(subTrees, 1, [3]);
+    await completedBlocks(subTrees, 1, [3]);
     expect(subTrees[0].setBlockCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start the slot again when a job fails while its next block is gathering transactions', async () => {
+    await propose(1, 5);
+    const jobFailed = promiseWithResolvers<never>();
+    proverFactory.createBlocksOnlySubTreeOrchestrator.mockImplementationOnce(() => {
+      const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.whenBlockRootProven.mockReturnValue(new Promise(() => {}));
+      subTree.getSubTreeResult.mockReturnValue(jobFailed.promise);
+      subTrees.push(subTree);
+      return Promise.resolve(subTree);
+    });
+    prover.onChainProposed(BlockNumber(1));
+    await completedBlocks(subTrees, 0, [1]);
+
+    const txsFetched = promiseWithResolvers<{ txs: Tx[]; missingTxs: TxHash[] }>();
+    txProvider.getTxsForBlock.mockReturnValueOnce(txsFetched.promise);
+    await propose(2, 5);
+    prover.onChainProposed(BlockNumber(2));
+    await retryFastUntil(() => txProvider.getTxsForBlock.mock.calls.length === 2, 'block 2 gathering its txs');
+    jobFailed.reject(new Error('agent out of memory'));
+    await retryFastUntil(() => subTrees[0].stop.mock.calls.length > 0, 'sub-tree stopped');
+    txsFetched.resolve({ txs: [], missingTxs: [] });
+
+    // The next sub-tree is the one of the next slot.
+    await propose(3, 6);
+    prover.onChainProposed(BlockNumber(3));
+    await completedBlocks(subTrees, 1, [3]);
   });
 
   it('waits on stop for a slot that was released just before', async () => {
     await propose(1, 5);
     prover.onChainProposed(BlockNumber(1));
-    await provenBlocks(subTrees, 0, [1]);
+    await completedBlocks(subTrees, 0, [1]);
     const subTreeStopped = promiseWithResolvers<void>();
     subTrees[0].stop.mockReturnValue(subTreeStopped.promise);
 
@@ -369,13 +402,16 @@ describe('EarlyBlockProver', () => {
   }
 });
 
-/** Waits until the sub-tree at `index` has completed these blocks, in this order. */
-async function provenBlocks(
+/**
+ * Waits until the sub-tree at `index` has been given these blocks to complete, in this order. The sub-trees are
+ * mocks, so nothing is proven.
+ */
+async function completedBlocks(
   subTrees: MockProxy<CheckpointSubTreeOrchestrator>[],
   index: number,
   blockNumbers: number[],
 ): Promise<void> {
   const completed = () => subTrees[index]?.setBlockCompleted.mock.calls.map(([blockNumber]) => Number(blockNumber));
-  await retryFastUntil(() => (completed()?.length ?? 0) >= blockNumbers.length, `blocks ${blockNumbers} proven`);
+  await retryFastUntil(() => (completed()?.length ?? 0) >= blockNumbers.length, `blocks ${blockNumbers} completed`);
   expect(completed()).toEqual(blockNumbers);
 }
