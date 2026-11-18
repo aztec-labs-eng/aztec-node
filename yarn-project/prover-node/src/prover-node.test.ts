@@ -121,13 +121,10 @@ describe('ProverNode', () => {
 
   it('registers the first checkpoint with a zero previous inbox rolling hash', async () => {
     setupNotFullyProven();
-    const event = mineCheckpoint(makeCheckpoint(1, 1, 1));
-    // No checkpoint precedes the first one, so none may be read to source its chain start.
-    l2BlockSource.getCheckpoint.mockImplementation((query: any) =>
-      Promise.resolve(
-        'number' in query && Number(query.number) === 1 ? makePublishedCheckpoint(mined.get(1)!) : undefined,
-      ),
-    );
+    // The checkpoint's own hash is nonzero, so passing it on as the previous hash fails the assertion below.
+    const inboxRollingHash = Fr.random();
+    serveMessageRange([Fr.random()], inboxRollingHash);
+    const event = mineCheckpoint(makeCheckpoint(1, 1, 1, Fr.random(), inboxRollingHash, 1));
 
     await proverNode.handleBlockStreamEvent(event);
 
