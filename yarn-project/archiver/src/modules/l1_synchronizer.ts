@@ -5,7 +5,6 @@ import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { maxBigint } from '@aztec-labs/foundation/bigint';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
@@ -907,10 +906,9 @@ export class ArchiverL1Synchronizer implements Traceable {
       // but still haven't reached the pending checkpoint according to the call to the rollup contract.
       // We suspect an L1 reorg that added checkpoints *behind* us. If that is the case, it must have happened between
       // the last accepted checkpoint and the current one, so we reset the last synched L1 block number. In the edge
-      // case we don't have one, we go back 2 L1 epochs, which is the deepest possible reorg (assuming Casper is working).
-      const targetL1BlockNumber =
-        latestLocalCheckpoint?.l1.blockNumber ??
-        maxBigint(currentL1BlockNumber - 64n, this.l1Constants.l1StartBlock, 0n);
+      // case we don't have one, we rescan from the rollup's start block. A window measured back from the head is not
+      // enough: the reorg can be shallow and still be noticed long after, e.g. through a stale rejected record.
+      const targetL1BlockNumber = latestLocalCheckpoint?.l1.blockNumber ?? this.l1Constants.l1StartBlock;
 
       this.log.warn(
         `Failed to reach checkpoint ${pendingCheckpointNumber} at ${currentL1BlockNumber} (latest is ${latestLocalCheckpointNumber}). ` +
