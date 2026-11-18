@@ -1190,4 +1190,56 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
   it('keeps the honest proposed checkpoint when a non-broadcast invalid checkpoint with the same number lands after it was gossiped', async () => {
     await runLateNonBroadcastCheckpointTest('honest-proposal-stored');
   });
+
+  // A checkpoint with insufficient attestations claims its parent's archive root as its own, so L1's pending tip keeps
+  // the root of the checkpoint the nodes already hold. Nodes must still fetch and reject it so a proposer invalidates
+  // it, and must then sync the valid checkpoints built on that parent. The attack starts once the nodes hold a valid
+  // checkpoint, since there is no parent checkpoint to compare against at genesis.
+  it('proposer invalidates a checkpoint that claims its parent archive root', async () => {
+    const sequencers = nodes.map(node => node.getSequencer()!);
+    sequencers.forEach(sequencer => sequencer.updateConfig({ minTxsPerBlock: 0 }));
+    await Promise.all(sequencers.map(s => s.start()));
+    await test.monitor.waitUntilCheckpoint(CheckpointNumber(1));
+    await test.waitForAllNodesToReachCheckpoint(CheckpointNumber(1), { nodes });
+
+    // The checkpoint reaches peers only through L1: neither gossiped nor pushed to the proposer's own archiver.
+    const invalidationPromise = awaitCheckpointInvalidationEvent();
+    logger.warn(`Configuring all sequencers to post checkpoints claiming their parent's archive root`);
+    sequencers.forEach(sequencer =>
+      sequencer.updateConfig({
+        skipCollectingAttestations: true,
+        claimParentArchiveRoot: true,
+        skipBroadcastProposals: true,
+        skipPushProposedBlocksToArchiver: true,
+      }),
+    );
+
+    const { checkpointNumber: invalidatedCheckpointNumber, event } = await invalidationPromise;
+    expect(invalidatedCheckpointNumber).toBeGreaterThan(1);
+
+    // The invalidated checkpoint is gone after the invalidation, so read the archive it posted from the block before.
+    const beforeInvalidation = { blockNumber: event.blockNumber! - 1n };
+    const postedArchive = await rollupContract.archiveAt(invalidatedCheckpointNumber, beforeInvalidation);
+    const parentArchive = await rollupContract.archiveAt(
+      CheckpointNumber(invalidatedCheckpointNumber - 1),
+      beforeInvalidation,
+    );
+    expect(postedArchive).toEqual(parentArchive);
+
+    sequencers.forEach(sequencer =>
+      sequencer.updateConfig({
+        skipCollectingAttestations: false,
+        claimParentArchiveRoot: false,
+        skipBroadcastProposals: false,
+        skipPushProposedBlocksToArchiver: false,
+      }),
+    );
+
+    const targetCheckpointNumber = CheckpointNumber(invalidatedCheckpointNumber + 2);
+    logger.warn(`Waiting for checkpoint ${targetCheckpointNumber} on L1 and on every node`);
+    await test.monitor.waitUntilCheckpoint(targetCheckpointNumber);
+    await test.waitForAllNodesToReachCheckpoint(targetCheckpointNumber, { nodes });
+
+    logger.warn(`Test succeeded '${expect.getState().currentTestName}'`);
+  });
 });

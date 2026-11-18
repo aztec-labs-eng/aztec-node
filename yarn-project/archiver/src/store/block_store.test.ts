@@ -3386,14 +3386,14 @@ describe('BlockStore', () => {
     });
 
     it('returns an empty result when no rejected checkpoints have been recorded', async () => {
-      expect(await blockStore.getRejectedCheckpointByArchiveRoot(Fr.random())).toBeUndefined();
+      expect(await blockStore.getRejectedCheckpoint(CheckpointNumber(1), Fr.random())).toBeUndefined();
     });
 
     it('round-trips an added rejected entry', async () => {
       const entry = makeEntry();
       await blockStore.addRejectedCheckpoint(entry);
 
-      const stored = await blockStore.getRejectedCheckpointByArchiveRoot(entry.archiveRoot);
+      const stored = await blockStore.getRejectedCheckpoint(entry.checkpointNumber, entry.archiveRoot);
       expect(stored).toBeDefined();
       expect(stored!.checkpointNumber).toEqual(entry.checkpointNumber);
       expect(stored!.archiveRoot.toString()).toEqual(entry.archiveRoot.toString());
@@ -3404,14 +3404,32 @@ describe('BlockStore', () => {
       expect(stored!.reason).toEqual(entry.reason);
     });
 
-    it('updates an existing entry when re-added with the same archive root', async () => {
-      const archiveRoot = Fr.random();
-      await blockStore.addRejectedCheckpoint(makeEntry({ archiveRoot, l1BlockNumber: 100 }));
-      await blockStore.addRejectedCheckpoint(makeEntry({ archiveRoot, l1BlockNumber: 110 }));
+    it('replaces an existing entry when another checkpoint with the same number is rejected', async () => {
+      const first = makeEntry({ checkpointNumber: 3, l1BlockNumber: 100 });
+      const second = makeEntry({ checkpointNumber: 3, l1BlockNumber: 110 });
+      await blockStore.addRejectedCheckpoint(first);
+      await blockStore.addRejectedCheckpoint(second);
 
-      const stored = await blockStore.getRejectedCheckpointByArchiveRoot(archiveRoot);
-      expect(stored).toBeDefined();
+      expect(await blockStore.getRejectedCheckpoint(first.checkpointNumber, first.archiveRoot)).toBeUndefined();
+      const stored = await blockStore.getRejectedCheckpoint(second.checkpointNumber, second.archiveRoot);
       expect(stored!.l1.blockNumber).toEqual(110n);
+    });
+
+    it('keeps separate entries for rejected checkpoints that claim the same archive root', async () => {
+      const archiveRoot = Fr.random();
+      await blockStore.addRejectedCheckpoint(makeEntry({ archiveRoot, checkpointNumber: 2, l1BlockNumber: 100 }));
+      await blockStore.addRejectedCheckpoint(makeEntry({ archiveRoot, checkpointNumber: 3, l1BlockNumber: 110 }));
+
+      expect((await blockStore.getRejectedCheckpoint(CheckpointNumber(2), archiveRoot))!.l1.blockNumber).toEqual(100n);
+      expect((await blockStore.getRejectedCheckpoint(CheckpointNumber(3), archiveRoot))!.l1.blockNumber).toEqual(110n);
+    });
+
+    it('does not match an entry with the same number but a different archive root', async () => {
+      const entry = makeEntry({ checkpointNumber: 2 });
+      await blockStore.addRejectedCheckpoint(entry);
+
+      expect(await blockStore.getRejectedCheckpoint(CheckpointNumber(2), Fr.random())).toBeUndefined();
+      expect(await blockStore.getRejectedCheckpoint(CheckpointNumber(1), entry.archiveRoot)).toBeUndefined();
     });
 
     it('preserves the descends-from-invalid-attestations reason', async () => {
@@ -3420,17 +3438,17 @@ describe('BlockStore', () => {
         reason: 'descends-from-invalid-attestations' as const,
       };
       await blockStore.addRejectedCheckpoint(entry);
-      const stored = await blockStore.getRejectedCheckpointByArchiveRoot(entry.archiveRoot);
+      const stored = await blockStore.getRejectedCheckpoint(entry.checkpointNumber, entry.archiveRoot);
       expect(stored!.reason).toEqual('descends-from-invalid-attestations');
     });
 
-    it('removes a rejected entry by archive root', async () => {
+    it('removes a rejected entry by checkpoint number', async () => {
       const entry = makeEntry({ checkpointNumber: 4 });
       await blockStore.addRejectedCheckpoint(entry);
-      expect(await blockStore.getRejectedCheckpointByArchiveRoot(entry.archiveRoot)).toBeDefined();
+      expect(await blockStore.getRejectedCheckpoint(entry.checkpointNumber, entry.archiveRoot)).toBeDefined();
 
-      await blockStore.removeRejectedCheckpointByArchiveRoot(entry.archiveRoot);
-      expect(await blockStore.getRejectedCheckpointByArchiveRoot(entry.archiveRoot)).toBeUndefined();
+      await blockStore.removeRejectedCheckpoint(entry.checkpointNumber);
+      expect(await blockStore.getRejectedCheckpoint(entry.checkpointNumber, entry.archiveRoot)).toBeUndefined();
     });
   });
 });
