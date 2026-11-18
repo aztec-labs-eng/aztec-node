@@ -171,7 +171,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     return this.dbs.size;
   }
 
-  /** Returns a promise that resolves when block-level proving completes for the checkpoint. */
+  /**
+   * Returns a promise that resolves when block-level proving completes for the checkpoint. For a blocks-only
+   * sub-tree it never resolves, because the block merges and the inbox parity proof are not proven: it only rejects,
+   * when proving fails. Use `whenBlockRootProven` to learn that a block of such a sub-tree is done.
+   */
   public getSubTreeResult(): Promise<SubTreeResult> {
     return this.subTreeResult.promise;
   }
@@ -291,7 +295,10 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     }
   }
 
-  /** Resolves once the block's root proof is ready. Stays pending if the block fails or the sub-tree is cancelled. */
+  /**
+   * Resolves once the block's root proof is ready and agrees with the completed block. Stays pending if the block
+   * fails or the sub-tree is cancelled.
+   */
   public whenBlockRootProven(blockNumber: BlockNumber): Promise<void> {
     return this.getOrCreateBlockRootCompletion(blockNumber).promise;
   }
@@ -355,6 +362,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     if (!this.dbs.has(blockNumber)) {
       // Fork world state at the end of the immediately previous block.
       const db = await this.dbProvider.fork(BlockNumber(blockNumber - 1));
+      // Cancelling closes the forks it knows of. One that arrives afterwards would stay open.
+      if (this.cancelled) {
+        await db.close();
+        throw new Error(`Checkpoint sub-tree was cancelled while starting block ${blockNumber}.`);
+      }
       this.dbs.set(blockNumber, db);
     }
     const db = this.getDbForBlock(blockNumber);
@@ -629,7 +641,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       lastArchiveSiblingPath,
       l1ToL2Messages,
       startInboxRollingHash,
-      Number(this.epochNumber),
+      this.epochNumber,
       /* isAlive */ () => !this.cancelled,
       /* onReject */ reason => this.subTreeResult.reject(new Error(reason)),
     );
@@ -848,9 +860,6 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         // will be the first to see all three pieces (header, proof output, archive) and run the checks.
         await this.verifyBuiltBlockAgainstSyncedState(provingState);
 
-        if (!provingState.getError()) {
-          this.getOrCreateBlockRootCompletion(provingState.blockNumber).resolve();
-        }
         if (this.blocksOnly) {
           return;
         }
@@ -1071,6 +1080,10 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       this.logger.error(`New archive mismatch.\nCircuit: ${output.newArchive}\nComputed: ${newArchive}`);
       provingState.reject(`New archive mismatch.`);
       return;
+    }
+
+    if (!provingState.getError() && !this.cancelled) {
+      this.getOrCreateBlockRootCompletion(blockNumber).resolve();
     }
   }
 
