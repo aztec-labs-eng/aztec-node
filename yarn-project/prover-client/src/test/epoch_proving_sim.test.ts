@@ -483,8 +483,13 @@ function tryEnqueueTxMerge(
 
   // Check if sibling exists
   if (nodes.has(siblingIndex)) {
-    // Both children ready, enqueue merge at parent level
     const parentLevel = level - 1;
+    // The two nodes under the root go into the block root directly, as in the orchestrator: no merge at level 0.
+    if (parentLevel === 0) {
+      tryEnqueueTxMerge(checkpoint, block, 0, 0, state, queues);
+      return;
+    }
+    // Both children ready, enqueue merge at parent level
     const parentIndex = getParentIndex(index);
     queues[ProvingRequestType.TX_MERGE_ROLLUP].push(
       createJob(checkpoint, block, ProvingRequestType.TX_MERGE_ROLLUP, parentLevel, parentIndex),
@@ -571,6 +576,11 @@ function tryEnqueueBlockMerge(checkpoint: number, level: number, index: number, 
 
   if (nodes.has(siblingIndex)) {
     const parentLevel = level - 1;
+    // The two nodes under the root go into the checkpoint root directly: no merge at level 0.
+    if (parentLevel === 0) {
+      tryEnqueueBlockMerge(checkpoint, 0, 0, state, queue);
+      return;
+    }
     const parentIndex = getParentIndex(index);
     queue[ProvingRequestType.BLOCK_MERGE_ROLLUP].push(
       createJob(checkpoint, 0, ProvingRequestType.BLOCK_MERGE_ROLLUP, parentLevel, parentIndex),
@@ -659,6 +669,11 @@ function tryEnqueueCheckpointMerge(level: number, index: number, state: SimState
 
   if (nodes.has(siblingIndex)) {
     const parentLevel = level - 1;
+    // The two nodes under the root go into the root rollup directly: no merge at level 0.
+    if (parentLevel === 0) {
+      tryEnqueueCheckpointMerge(0, 0, state, queues);
+      return;
+    }
     const parentIndex = getParentIndex(index);
     queues[ProvingRequestType.CHECKPOINT_MERGE_ROLLUP].push(
       createJob(0, 0, ProvingRequestType.CHECKPOINT_MERGE_ROLLUP, parentLevel, parentIndex),
@@ -1185,6 +1200,28 @@ describe('checkpoint dependency model', () => {
     expect(blockRoot.type).toBe(ProvingRequestType.BLOCK_ROOT_ROLLUP);
     expect(bases).toHaveLength(4);
     expect(blockRoot.start).toBeGreaterThanOrEqual(Math.max(...bases.map(b => b.end)));
+  });
+
+  it('gives the two nodes under a root to the root circuit without a merge', () => {
+    // Two checkpoints of two blocks of two transactions: every tree has exactly two leaves.
+    const result = simulate(
+      'two leaves in every tree',
+      [
+        [[2], [2]],
+        [[2], [2]],
+      ],
+      4,
+    );
+
+    const merges = [
+      ProvingRequestType.TX_MERGE_ROLLUP,
+      ProvingRequestType.BLOCK_MERGE_ROLLUP,
+      ProvingRequestType.CHECKPOINT_MERGE_ROLLUP,
+    ];
+    expect(completionsOf(result, merges)).toEqual([]);
+    expect(completionsOf(result, [ProvingRequestType.BLOCK_ROOT_ROLLUP])).toHaveLength(4);
+    expect(completionsOf(result, CHECKPOINT_ROOT_TYPES)).toHaveLength(2);
+    soleCompletion(result, [ProvingRequestType.ROOT_ROLLUP]);
   });
 
   it('proves zero-transaction blocks at any position in a checkpoint', () => {

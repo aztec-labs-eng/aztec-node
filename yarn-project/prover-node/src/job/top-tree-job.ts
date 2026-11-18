@@ -193,13 +193,7 @@ export class TopTreeJob {
       }));
 
       const defaultProve = (): Promise<TopTreeProof> =>
-        this.topTree.prove(
-          this.epochNumber,
-          this.snapshot.length,
-          finalBlobBatchingChallenges,
-          checkpointData,
-          lastSlot,
-        );
+        this.topTree.prove(this.epochNumber, this.snapshot.length, finalBlobBatchingChallenges, checkpointData);
 
       await this.deps.hooks?.beforeProve?.();
       const proveTimer = new Timer();

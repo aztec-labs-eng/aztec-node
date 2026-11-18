@@ -473,5 +473,10 @@ synchronous method.
 - The broker keeps at most 1024 registered epoch proofs and drops the oldest one beyond that.
 - The broker keeps the epoch proofs it was told about in memory. After a broker restart, the blocks of later
   slots are not held back for a proof that was already running.
-- A prover node that is killed does not unregister its epoch proofs. If a reorg then replaces checkpoints of such
-  a proof, the jobs of the replaced checkpoints stay queued and go ahead of later slots until they are proven.
+- A prover node that is killed does not unregister its epoch proofs. The same holds for a node that shuts down
+  while the broker has not yet answered a registration: the unregister request is sent after that answer and the
+  shutdown does not wait for it. If a reorg then replaces checkpoints of such a proof, the jobs of the replaced
+  checkpoints stay queued and go ahead of later slots until they are proven.
+- A job whose slot is lowered while it waits has two queue entries until the broker reaches the old one. The
+  queue-depth metric counts both. Only jobs that two slots share are lowered: the inbox parity proof of an empty
+  inbox and checkpoint padding.
