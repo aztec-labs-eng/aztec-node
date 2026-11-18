@@ -782,7 +782,7 @@ describe('ProverNode', () => {
     expect(onChainCheckpointed).toHaveBeenCalledWith(BlockNumber(1));
 
     // A prune that removes no checkpoint prover still reaches the early block prover.
-    l2BlockSource.getBlockData.mockResolvedValue({ checkpointNumber: CheckpointNumber(1) } as any);
+    l2BlockSource.getBlockData.mockResolvedValue(mock<BlockData>({ checkpointNumber: CheckpointNumber(1) }));
     await follower.handleBlockStreamEvent({
       type: 'chain-pruned',
       block: { number: BlockNumber(1), hash: '0x01' },
