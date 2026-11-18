@@ -38,6 +38,9 @@
     },
     {
       "path": "../wallet-sdk"
+    },
+    {
+      "path": "../constants"
     }
   ],
   "include": ["src"]

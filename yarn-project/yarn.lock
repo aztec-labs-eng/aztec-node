@@ -1251,6 +1251,7 @@ __metadata:
     "@aztec-labs/accounts": "workspace:^"
     "@aztec-labs/aztec.js": "workspace:^"
     "@aztec-labs/cli": "workspace:^"
+    "@aztec-labs/constants": "workspace:^"
     "@aztec-labs/entrypoints": "workspace:^"
     "@aztec-labs/ethereum": "workspace:^"
     "@aztec-labs/foundation": "workspace:^"
