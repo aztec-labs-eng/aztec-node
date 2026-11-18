@@ -57,10 +57,12 @@ export class EventService {
       txHash,
     } = request;
 
-    // Defense-in-depth: the built-in private-event path derives this commitment from content before enqueueing, but
-    // unconstrained PXE-side code (e.g. a custom message handler) can reach this oracle with arbitrary
-    // (content, commitment) pairs. Without this check it could bind arbitrary content to a legitimate tx nullifier,
-    // causing PXE to surface fabricated event data.
+    // Unlike a note hash, whose derivation only the note's contract knows, an event commitment derives from the
+    // event's content in a format the PXE knows. We therefore check the content ourselves instead of trusting the
+    // request, which could otherwise bind arbitrary content to a legitimate tx nullifier and have the PXE show
+    // arbitrary events.
+    // Because all content is validated to be correct, it doesn't matter which contract submitted the event data - a
+    // second contract could inform PXE of another contract's events.
     const recomputedCommitment = await computePrivateEventCommitment(randomness, selector.toField(), content);
     if (!recomputedCommitment.equals(eventCommitment)) {
       this.log.warn(

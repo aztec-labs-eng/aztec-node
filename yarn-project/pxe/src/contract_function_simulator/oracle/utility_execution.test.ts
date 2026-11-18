@@ -15,6 +15,7 @@ import { PostQuantumPublicKeyRegistryArtifact } from '@aztec-labs/standard-contr
 import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
 import {
   type ContractArtifact,
+  EventSelector,
   FunctionCall,
   FunctionSelector,
   FunctionType,
@@ -29,7 +30,12 @@ import {
   type ContractInstanceWithAddress,
   computeContractAddressFromInstance,
 } from '@aztec-labs/stdlib/contract';
-import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
+import {
+  computePrivateEventCommitment,
+  computeUniqueNoteHash,
+  siloNoteHash,
+  siloNullifier,
+} from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { MessagingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
@@ -70,7 +76,7 @@ import { EphemeralArrayService } from '../ephemeral_array_service.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
-import type { EventValidationRequest } from '../noir-structs/event_validation_request.js';
+import { EventValidationRequest } from '../noir-structs/event_validation_request.js';
 import { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
 import { Option } from '../noir-structs/option.js';
 import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
@@ -379,6 +385,25 @@ describe('Utility Execution test suite', () => {
 
       utilityExecutionOracle = makeOracle({ contractAddress, scopes: [scope] });
     });
+
+    const makeTxEffect = (txHash: TxHash) => TxEffect.from({ ...TxEffect.empty(), txHash });
+    const makeMinedReceipt = (
+      txHash: TxHash,
+      txEffect = makeTxEffect(txHash),
+      blockNumber = BlockNumber(syncedBlockNumber),
+    ) =>
+      new MinedTxReceipt(
+        txHash,
+        TxStatus.FINALIZED,
+        TxExecutionResult.SUCCESS,
+        0n,
+        BlockHash.random(),
+        blockNumber,
+        SlotNumber(1),
+        0,
+        EpochNumber(1),
+        txEffect,
+      );
 
     describe('Respects synced block number', () => {
       it('throws when getting block for future block number', async () => {
@@ -817,31 +842,12 @@ describe('Utility Execution test suite', () => {
         const otherContract = await AztecAddress.random();
 
         await expect(utilityExecutionOracle.getSettledNoteOrigin(noteHash, otherContract, noteNonce)).rejects.toThrow(
-          `Contract ${otherContract} is not allowed to access ${contractAddress}'s PXE DB`,
+          `Contract ${contractAddress} is not allowed to access ${otherContract}'s PXE DB`,
         );
       });
     });
 
     describe('tx effect oracles', () => {
-      const makeTxEffect = (txHash: TxHash) => TxEffect.from({ ...TxEffect.empty(), txHash });
-      const makeMinedReceipt = (
-        txHash: TxHash,
-        txEffect = makeTxEffect(txHash),
-        blockNumber = BlockNumber(syncedBlockNumber),
-      ) =>
-        new MinedTxReceipt(
-          txHash,
-          TxStatus.FINALIZED,
-          TxExecutionResult.SUCCESS,
-          0n,
-          BlockHash.random(),
-          blockNumber,
-          SlotNumber(1),
-          0,
-          EpochNumber(1),
-          txEffect,
-        );
-
       describe('getTxEffect', () => {
         it('returns the effect of a settled tx', async () => {
           const oracle = makeOracle({ scopes: [scope] });
@@ -1068,7 +1074,10 @@ describe('Utility Execution test suite', () => {
         const first = await makeNoteRequest(txHash);
         const second = await makeNoteRequest(txHash);
         aztecNode.getTxReceipt.mockResolvedValue(
-          makeMinedReceiptWithNoteHashes(txHash, [first.uniqueNoteHash, second.uniqueNoteHash]),
+          makeMinedReceipt(
+            txHash,
+            TxEffect.from({ ...TxEffect.empty(), txHash, noteHashes: [first.uniqueNoteHash, second.uniqueNoteHash] }),
+          ),
         );
 
         await oracle.validateAndStoreEnqueuedNotesAndEvents(
@@ -1082,11 +1091,69 @@ describe('Utility Execution test suite', () => {
         expect(storedNotes.map(note => note.noteHash)).toEqual([first.request.noteHash, second.request.noteHash]);
       });
 
-      async function makeNoteRequest(txHash: TxHash) {
+      it('rejects a note of another contract, storing none of its batch', async () => {
+        const oracle = makeOracle({ contractAddress, scopes: [owner] });
+        const otherContract = await AztecAddress.random();
+        const txHash = TxHash.random();
+        const own = await makeNoteRequest(txHash);
+        const foreign = await makeNoteRequest(txHash, otherContract);
+        aztecNode.getTxReceipt.mockResolvedValue(
+          makeMinedReceipt(
+            txHash,
+            TxEffect.from({ ...TxEffect.empty(), txHash, noteHashes: [own.uniqueNoteHash, foreign.uniqueNoteHash] }),
+          ),
+        );
+
+        await expect(
+          oracle.validateAndStoreEnqueuedNotesAndEvents(
+            EphemeralArray.fromValues(service, [own.request, foreign.request]),
+            EphemeralArray.fromValues<EventValidationRequest>(service, []),
+            owner,
+          ),
+        ).rejects.toThrow(`Contract ${contractAddress} is not allowed to access ${otherContract}'s PXE DB`);
+        expect(noteStore.addNotes).not.toHaveBeenCalled();
+      });
+
+      it('stores an event of another contract', async () => {
+        const oracle = makeOracle({ contractAddress, scopes: [owner] });
+        const otherContract = await AztecAddress.random();
+        const txHash = TxHash.random();
+        const eventTypeId = EventSelector.random();
+        const randomness = Fr.random();
+        const serializedEvent = [Fr.random()];
+        const eventCommitment = await computePrivateEventCommitment(randomness, eventTypeId.toField(), serializedEvent);
+        const siloedEventCommitment = await siloNullifier(otherContract, eventCommitment);
+        const request = new EventValidationRequest(
+          otherContract,
+          eventTypeId,
+          randomness,
+          serializedEvent,
+          eventCommitment,
+          txHash,
+        );
+        aztecNode.getTxReceipt.mockResolvedValue(
+          makeMinedReceipt(txHash, TxEffect.from({ ...TxEffect.empty(), txHash, nullifiers: [siloedEventCommitment] })),
+        );
+
+        await oracle.validateAndStoreEnqueuedNotesAndEvents(
+          EphemeralArray.fromValues<NoteValidationRequest>(service, []),
+          EphemeralArray.fromValues(service, [request]),
+          owner,
+        );
+
+        const [, , storedContent, storedCommitment, metadata] = privateEventStore.storePrivateEventLog.mock.calls[0];
+        expect([metadata.contractAddress, storedContent, storedCommitment]).toEqual([
+          otherContract,
+          serializedEvent,
+          siloedEventCommitment,
+        ]);
+      });
+
+      async function makeNoteRequest(txHash: TxHash, noteContractAddress: AztecAddress = contractAddress) {
         const noteNonce = Fr.random();
         const noteHash = Fr.random();
         const request = new NoteValidationRequest(
-          contractAddress,
+          noteContractAddress,
           owner,
           Fr.random(),
           Fr.random(),
@@ -1096,23 +1163,11 @@ describe('Utility Execution test suite', () => {
           Fr.random(),
           txHash,
         );
-        const uniqueNoteHash = await computeUniqueNoteHash(noteNonce, await siloNoteHash(contractAddress, noteHash));
-        return { request, uniqueNoteHash };
-      }
-
-      function makeMinedReceiptWithNoteHashes(txHash: TxHash, noteHashes: Fr[]) {
-        return new MinedTxReceipt(
-          txHash,
-          TxStatus.FINALIZED,
-          TxExecutionResult.SUCCESS,
-          0n,
-          BlockHash.random(),
-          BlockNumber(syncedBlockNumber),
-          SlotNumber(1),
-          0,
-          EpochNumber(1),
-          TxEffect.from({ ...TxEffect.empty(), txHash, noteHashes }),
+        const uniqueNoteHash = await computeUniqueNoteHash(
+          noteNonce,
+          await siloNoteHash(noteContractAddress, noteHash),
         );
+        return { request, uniqueNoteHash };
       }
     });
 
