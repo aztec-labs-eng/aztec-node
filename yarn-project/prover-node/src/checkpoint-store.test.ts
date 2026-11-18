@@ -150,8 +150,16 @@ describe('CheckpointStore', () => {
   });
 
   it('stop cancels the remaining provers and waits for provers removed earlier to tear down', async () => {
-    const kept = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, startBlockNumber: 1 });
-    const pruned = await Checkpoint.random(CheckpointNumber(2), { numBlocks: 1, startBlockNumber: 2 });
+    const kept = await Checkpoint.random(CheckpointNumber(1), {
+      numBlocks: 1,
+      startBlockNumber: 1,
+      slotNumber: SlotNumber(1),
+    });
+    const pruned = await Checkpoint.random(CheckpointNumber(2), {
+      numBlocks: 1,
+      startBlockNumber: 2,
+      slotNumber: SlotNumber(2),
+    });
     await store.addOrUpdate(kept, makeRegisterData());
 
     // The same checkpoint is pruned, registered again and pruned again while its first teardown is still running,
@@ -172,11 +180,12 @@ describe('CheckpointStore', () => {
     expect(stubs[0].isCancelled()).toBe(true);
     expect(stopped).toBe(false);
 
-    teardowns[0].resolve();
+    // Settle the later teardown first: a store that tracked teardowns by prover id would have kept only this one.
+    teardowns[1].resolve();
     await settle();
     expect(stopped).toBe(false);
 
-    teardowns[1].resolve();
+    teardowns[0].resolve();
     await stopPromise;
     expect(stopped).toBe(true);
   });
