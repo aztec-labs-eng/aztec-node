@@ -248,8 +248,8 @@ export class EpochSession implements Traceable {
   }
 
   /**
-   * Cancels the session. Idempotent. Withdraws any submitted candidate from the
-   * publishing service so the in-flight publisher (if any) is interrupted.
+   * Cancels the session. Idempotent. Withdraws a candidate that is still queued in the publishing service. A
+   * publish already under way finishes.
    */
   public async cancel(reason = 'cancelled', { abortJobs = true }: { abortJobs?: boolean } = {}): Promise<void> {
     if (this.isTerminal()) {
