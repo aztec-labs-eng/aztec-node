@@ -37,7 +37,7 @@ setting it starts with the default of 30s rather than the value it was given.
 The prover node's chain following, expiry sweep and failure uploads moved out of the `prover-node` logger. Their log lines now come from:
 
 - `prover-node:checkpoint-follower`: new checkpoints, skipped checkpoints, prunes.
-- `prover-node:epoch-expiry-sweep`: expired epochs.
+- `prover-node:epoch-expiry-sweep`: failures to release an expired epoch's chonk-verifier cache entries. The `Reaped N expired CheckpointProver(s)` line still comes from `prover-node:checkpoint-store`.
 - `prover-node:failure-uploader`: failed-epoch and failed-checkpoint uploads.
 - `prover-node:epoch-proof-status`: failed reads of the prover's own full-epoch proof registration, previously logged by `prover-node:session-manager`.
 
