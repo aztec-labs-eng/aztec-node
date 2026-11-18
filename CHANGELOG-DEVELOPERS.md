@@ -154,6 +154,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Fixes
 
+- **A contract can no longer store notes of another contract in the PXE**. A contract processing messages could submit notes under any contract address, with an owner, content and nullifier of its choosing, so a malicious contract could add fake notes to another contract's balances. The PXE now rejects a note whose contract address is not the executing contract's, which fails the execution. Contracts built with Aztec.nr only submit their own notes and need no change.
 - **Errors in PXE logs keep their message and stack** ([#599](https://github.com/aztec-labs-eng/aztec-node/pull/599)). They were logged as `{}`.
 - **Kernelless simulation reports the expiration timestamp the proven transaction publishes** ([#600](https://github.com/aztec-labs-eng/aztec-node/pull/600)). It skipped the cap at each called contract's class id update horizon and the PXE's rounding, so a simulated transaction could expire an hour later than the same transaction once proven.
 - **A browser PXE store survives a reload during a commit** ([#578](https://github.com/aztec-labs-eng/aztec-node/pull/578)). A worker killed mid-commit left a journal SQLite never rolled back, and the next open failed with `SQLITE_CORRUPT`. The bundled sqlite3mc is now 2.6.1, on SQLite 3.54.0.

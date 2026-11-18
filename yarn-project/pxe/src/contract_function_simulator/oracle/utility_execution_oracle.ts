@@ -741,6 +741,14 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     eventValidationRequests: EventValidationRequest[],
     scope: AztecAddress,
   ) {
+    // The PXE cannot check a note's owner, content and nullifier against its note hash, since only the note's contract
+    // knows how these derive from one another. It trusts each contract to describe its own notes instead, so a
+    // contract must not be able to describe those of another. Events need no such restriction, as their commitment
+    // binds their whole content in a format the PXE knows.
+    for (const { contractAddress } of noteValidationRequests) {
+      this.#assertOwnContract(contractAddress);
+    }
+
     const validationTxData = await this.#getValidationTxData([
       ...noteValidationRequests.map(r => r.txHash),
       ...eventValidationRequests.map(r => r.txHash),
@@ -848,7 +856,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   #assertOwnContract(contractAddress: AztecAddress): void {
     if (!contractAddress.equals(this.contractAddress)) {
-      throw new Error(`Contract ${contractAddress} is not allowed to access ${this.contractAddress}'s PXE DB`);
+      throw new Error(`Contract ${this.contractAddress} is not allowed to access ${contractAddress}'s PXE DB`);
     }
   }
 
