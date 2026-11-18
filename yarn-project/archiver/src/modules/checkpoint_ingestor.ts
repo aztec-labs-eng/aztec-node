@@ -346,10 +346,10 @@ export class CheckpointIngestor {
   ): Promise<{ accepted: ResolvedCheckpointFromCalldata[]; lastAccepted: boolean }> {
     const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
     let lastAccepted = false;
-    // Archive roots accepted earlier in this batch, by checkpoint number. The store only drops the rejected entry for a
-    // checkpoint number when the batch is persisted, so an accepted checkpoint that was also rejected (an earlier post
-    // of the same checkpoint with invalid attestations) would otherwise still look rejected to the children that follow
-    // it in this batch.
+    // Archive roots accepted earlier in this batch, by checkpoint number. A checkpoint accepted here may still have a
+    // rejected record in the store, left by an earlier post of it with invalid attestations. The store only drops that
+    // record when the batch is persisted, so without this map the children later in the batch would see their parent
+    // as rejected.
     const acceptedArchiveRoots = new Map<CheckpointNumber, string>();
 
     for (const [index, resolved] of resolvedCheckpoints.entries()) {
