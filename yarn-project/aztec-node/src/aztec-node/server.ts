@@ -518,9 +518,10 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
    * The head normally comes from memory: the plan from the archiver's in-memory frontier and the boundary fee
    * from the background-refreshed cache. At a boundary the cache has not priced yet, the request joins the
    * shared refresh for at most {@link QUOTE_MAX_WAIT_MS}, a budget the projections' wait shares so the whole
-   * quote stays under that bound. The head is omitted when the node cannot produce it in time — an L1 outage
-   * that outlasts the cache's cutoff, or a frontier with no header for its proposed tip — in which case the
-   * projections alone are returned, as before this method grew a head.
+   * quote stays under that bound. The head is omitted when the node cannot produce it in time — the boundary
+   * moved or the cached fee trails the archiver by more than one L1 block and the refresh misses the budget, or
+   * a frontier has no header for its proposed tip — in which case the projections alone are returned, as before
+   * this method grew a head.
    */
   public async getPredictedMinFees(manaUsage?: ManaUsageEstimate): Promise<GasFees[]> {
     const timer = new Timer();
