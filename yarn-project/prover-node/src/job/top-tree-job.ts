@@ -166,6 +166,11 @@ export class TopTreeJob {
 
   private async run() {
     try {
+      const lastSlot = this.snapshot.at(-1)?.slotNumber;
+      if (lastSlot !== undefined) {
+        // Before the blob challenges are computed, so the broker holds back later slots from the start.
+        this.topTree.registerProof(this.epochNumber, lastSlot);
+      }
       const blobTimer = new Timer();
       const blobFieldsPerCheckpoint = this.snapshot.map(j => j.checkpoint.toBlobFields());
       const finalBlobBatchingChallenges = await buildFinalBlobChallenges(blobFieldsPerCheckpoint);

@@ -5,7 +5,7 @@ import type {
   NESTED_RECURSIVE_PROOF_LENGTH,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
@@ -46,7 +46,7 @@ export class CheckpointProvingState {
     // Inbox rolling hash before this checkpoint's messages (the previous checkpoint's end value; genesis is zero).
     // Threaded into the InboxParity circuit so the resulting checkpoint header rolling hash matches the proposer's.
     private readonly startInboxRollingHash: Fr,
-    public readonly epochNumber: number,
+    public readonly epochNumber: EpochNumber,
     /** Owner's liveness check. `verifyState()` returns false once this returns false. */
     private readonly isAlive: () => boolean,
     /** Owner's failure callback. Invoked from `reject` to surface the error upward. */
