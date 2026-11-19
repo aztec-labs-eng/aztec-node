@@ -129,7 +129,7 @@ Do not explain *what* the code does — well-named identifiers cover that. Comme
 
 Do not reference the current task, PR, caller, or author (`// used by X`, `// fix for issue #123`, `// AI-generated`), and do not add banner-style section comments (`// ===== HELPERS =====`). Both rot the moment the surrounding code is moved.
 
-Keep comments self-contained: whatever a comment points to must be understandable from the repo alone. The repo is public but Linear issues are private, so never cite them (`// see A-1234`). Likewise do not reference an implementation plan that lives outside the repo (`// this fixes item 4`, `// tackles section C`) — describe the actual constraint or behavior instead.
+Keep comments self-contained: whatever a comment points to must be understandable from the repo alone. Likewise do not reference an implementation plan that lives outside the repo (`// this fixes item 4`, `// tackles section C`) — describe the actual constraint or behavior instead.
 </writing_comments>
 
 <jargon>

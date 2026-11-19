@@ -224,6 +224,35 @@ describe('ContractSyncService', () => {
       expectSyncedScopes([scopeA]);
     });
 
+    it('a scope repeated within one call is synced once', async () => {
+      await service.ensureContractSynced({
+        contract: contractAddress,
+        functionToInvokeAfterSync: null,
+        utilityExecutor,
+        anchorBlockHeader,
+        changeSetId,
+        scopes: [scopeA, scopeA],
+        triggeredBy: undefined,
+      });
+      expectSyncedScopes([scopeA]);
+    });
+
+    it('a failing sync of a repeated scope rejects with its own error', async () => {
+      const syncError = new Error('sync failed');
+      utilityExecutor.mockRejectedValue(syncError);
+      await expect(
+        service.ensureContractSynced({
+          contract: contractAddress,
+          functionToInvokeAfterSync: null,
+          utilityExecutor,
+          anchorBlockHeader,
+          changeSetId,
+          scopes: [scopeA, scopeA],
+          triggeredBy: undefined,
+        }),
+      ).rejects.toBe(syncError);
+    });
+
     it('concurrent calls for different scopes trigger separate syncs', async () => {
       const p1 = service.ensureContractSynced({
         contract: contractAddress,

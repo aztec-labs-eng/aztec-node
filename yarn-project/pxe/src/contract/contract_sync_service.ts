@@ -1,4 +1,4 @@
-import { compactArray } from '@aztec-labs/foundation/collection';
+import { compactArray, uniqueBy } from '@aztec-labs/foundation/collection';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { Semaphore } from '@aztec-labs/foundation/queue';
@@ -140,7 +140,7 @@ export class ContractSyncService implements OperationContributor {
   }
 
   /**
-   * For each unsynced scope, creates a promise that waits on:
+   * For each distinct unsynced scope, creates a promise that waits on:
    *  1. Note nullifier sync (shared, batched across all unsynced scopes).
    *  2. Per-scope sync (individual, semaphore-bounded).
    * When concurrent contract sync is enabled, the predicted direct callees of the invoked function and of the
@@ -158,7 +158,12 @@ export class ContractSyncService implements OperationContributor {
     changeSetId: ChangeSetId,
     scopes: AztecAddress[],
   ): Promise<void> {
-    const scopesToSync = scopes.filter(scope => !this.syncedContracts.has(toKey(contractAddress, scope)));
+    // A duplicated scope must be synced and awaited once: a second sync's promise would replace the first one's in the
+    // cache, leaving the first unawaited, and awaiting a failed sync twice rejects with an AggregateError instead of
+    // the sync's own error.
+    // TODO(F-930): deduplicate once in the constructor, when the service binds its scopes per run.
+    const distinctScopes = uniqueBy(scopes, scope => scope.toString());
+    const scopesToSync = distinctScopes.filter(scope => !this.syncedContracts.has(toKey(contractAddress, scope)));
     if (scopesToSync.length > 0) {
       this.log.debug(`Syncing contract ${contractAddress} for ${scopesToSync.length} scope(s)`);
 
@@ -206,7 +211,7 @@ export class ContractSyncService implements OperationContributor {
       utilityExecutor,
       anchorBlockHeader,
       changeSetId,
-      scopes,
+      distinctScopes,
     );
     this.#speculativelySync(
       contractAddress,
@@ -214,10 +219,10 @@ export class ContractSyncService implements OperationContributor {
       utilityExecutor,
       anchorBlockHeader,
       changeSetId,
-      scopes,
+      distinctScopes,
     );
 
-    await this.#awaitSync(contractAddress, scopes);
+    await this.#awaitSync(contractAddress, distinctScopes);
   }
 
   /**
