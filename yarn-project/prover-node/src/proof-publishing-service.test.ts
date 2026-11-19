@@ -224,6 +224,35 @@ describe('ProofPublishingService', () => {
     expect(publishers).toHaveLength(0);
   });
 
+  it.each([
+    { how: 'withdrawn', outcome: 'withdrawn' },
+    { how: 'expired', outcome: 'expired' },
+  ] as const)('does not publish a candidate $how while a publisher is being acquired', async ({ how, outcome }) => {
+    startService();
+    const acquiring = promiseWithResolvers<void>();
+    const publisherReady = promiseWithResolvers<void>();
+    const publisher = newPublisher();
+    publisherFactory.create.mockImplementationOnce(async () => {
+      acquiring.resolve();
+      await publisherReady.promise;
+      return publisher as unknown as Awaited<ReturnType<PublisherFactoryLike['create']>>;
+    });
+    const candidate = makeCandidate();
+
+    const outcomePromise = service.submit(candidate);
+    await acquiring.promise;
+    if (how === 'withdrawn') {
+      service.withdraw(candidate.id);
+    } else {
+      service.triggerExpiry(candidate.id);
+    }
+    publisherReady.resolve();
+    await service.drainSyncPoint();
+
+    expect(await outcomePromise).toEqual(outcome);
+    expect(publisher.submitEpochProof).not.toHaveBeenCalled();
+  });
+
   it('lets an in-flight publish run to completion when withdraw is called on it', async () => {
     // Once a publish starts, withdraw is a no-op for the in-flight candidate — the L1
     // submission runs naturally and the outcome reports whatever the publisher returned.

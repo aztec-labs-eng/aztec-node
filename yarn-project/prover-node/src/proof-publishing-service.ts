@@ -362,6 +362,11 @@ export class ProofPublishingService {
       return;
     }
 
+    // The candidate may have been withdrawn or have expired while the publisher was being acquired.
+    if (!bucket.candidates.has(winner.id)) {
+      return;
+    }
+
     this.inFlight = { id: winner.id };
     this.log.info(`Publishing candidate ${winner.id}`, {
       candidateId: winner.id,

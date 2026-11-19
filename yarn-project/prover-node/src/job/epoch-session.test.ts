@@ -6,6 +6,7 @@ import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { TopTreeOrchestrator } from '@aztec-labs/prover-client/orchestrator';
@@ -284,6 +285,21 @@ describe('EpochSession', () => {
       expect(session.getState()).toBe('completed');
       // withdraw is NOT called once the session has already terminated.
       expect(publishingService.withdraw).not.toHaveBeenCalled();
+    });
+
+    it('does not hand its proof to the publishing service when cancelled while reading the attestations', async () => {
+      // The proof is ready and the session is reading the last checkpoint's attestations when it is cancelled.
+      const attestationsRead = promiseWithResolvers<undefined>();
+      l2BlockSource.getCheckpoint.mockReturnValue(attestationsRead.promise);
+      const session = makeSession();
+      const startResult = session.start();
+      await retryFastUntil(() => l2BlockSource.getCheckpoint.mock.calls.length > 0, 'attestations read started');
+
+      await session.cancel();
+      attestationsRead.resolve(undefined);
+
+      await expect(startResult).resolves.toBe('cancelled');
+      expect(publishingService.submit).not.toHaveBeenCalled();
     });
 
     it('a withdraw error from the publishing service does not stop cancel from finishing', async () => {
