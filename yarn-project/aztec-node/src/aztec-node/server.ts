@@ -528,7 +528,8 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
       this.log.warn(`Failed to compute the next-block min fee for a quote, serving L1 projections only`, err);
       return undefined;
     });
-    // Tagging the projections with the head's L1 sync point keeps both halves of the answer on one L1 block.
+    // Tagging the projections with the head's L1 sync point keeps them from coming from an older L1 block than the
+    // head. A head may be priced one L1 block behind the archiver, and then the projections come from the block after.
     const asOf = head?.l1SyncPoint && {
       ...head.l1SyncPoint,
       maxWaitMs: Math.max(0, QUOTE_MAX_WAIT_MS - timer.ms()),
