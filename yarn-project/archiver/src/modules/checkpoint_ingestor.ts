@@ -4,6 +4,7 @@ import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { BlockNumber, CheckpointNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { partition, pick } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
@@ -17,6 +18,7 @@ import {
 import {
   Checkpoint,
   type CheckpointInfo,
+  type L1PublishedData,
   type ProposedCheckpointData,
   PublishedCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
@@ -658,7 +660,7 @@ export class CheckpointIngestor {
     let l1Proposer: EthAddress | undefined;
     if (proposed.signer) {
       try {
-        l1Proposer = await this.getL1ProposerForSlot(slotNumber);
+        l1Proposer = await this.getL1ProposerForSlot(slotNumber, calldataCheckpoint.l1);
       } catch (err) {
         this.deps.log.warn(`Failed to get the L1 proposer for slot ${slotNumber}`, {
           checkpointNumber,
@@ -692,21 +694,39 @@ export class CheckpointIngestor {
   }
 
   /**
-   * Asks the rollup who had to sign the checkpoint it accepted for a past slot. `propose` only succeeds when the slot's
-   * proposer signed the checkpoint, and the rollup derives that proposer from history keyed by timestamp, so querying
-   * at the latest L1 block returns the address `propose` checked. The propose calldata cannot tell this: the
-   * CheckpointProposed event commits to neither the signers nor the bundle signature, so a reverted copy of the call
-   * signed by another key matches the event just as well. Returns undefined when L1 did not check the committee's
-   * proposer, because an escape hatch was open for the epoch, or when the committee was empty. Throws while the epoch's
-   * committee is not stable, since whether its escape hatch was open is not known yet.
+   * Asks the rollup who had to sign the checkpoint it accepted for a past slot, published in the L1 block `l1`.
+   * `propose` only succeeds when the slot's proposer signed the checkpoint, so querying at the block that holds the
+   * `propose` returns the address it checked. The propose calldata cannot tell this: the CheckpointProposed event
+   * commits to neither the signers nor the bundle signature, so a reverted copy of the call signed by another key
+   * matches the event just as well. Returns undefined when that block is no longer canonical: L1 may have reorged onto
+   * a fork without the checkpoint and with another proposer for the slot, before the archiver caught up. Also returns
+   * undefined when L1 did not check the committee's proposer, because an escape hatch was open for the epoch, or when
+   * the committee was empty. Throws while the epoch's committee is not stable, since whether its escape hatch was open
+   * is not known yet.
    */
-  public async getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+  public async getL1ProposerForSlot(slot: SlotNumber, l1: L1PublishedData): Promise<EthAddress | undefined> {
     const epoch = getEpochAtSlot(slot, this.deps.l1Constants);
     const { isEscapeHatchOpen } = requireStableCommittee(await this.deps.epochCache.getCommitteeForEpoch(epoch));
     if (isEscapeHatchOpen) {
       return undefined;
     }
-    const proposer = await this.deps.rollup.getProposerAt(getTimestampForSlot(slot, this.deps.l1Constants));
+    const proposer = await this.deps.rollup.getProposerAt(getTimestampForSlot(slot, this.deps.l1Constants), {
+      blockNumber: l1.blockNumber,
+    });
+    // Checked after the read, so that a reorg landing while the read runs is caught as well.
+    const canonical = await this.deps.publicClient.getBlock({
+      blockNumber: l1.blockNumber,
+      includeTransactions: false,
+    });
+    if (!Buffer32.fromString(canonical.hash).equals(Buffer32.fromString(l1.blockHash))) {
+      this.deps.log.debug(`Naming no L1 proposer for slot ${slot}: L1 block ${l1.blockNumber} is no longer canonical`, {
+        slot,
+        l1BlockNumber: l1.blockNumber,
+        l1BlockHash: l1.blockHash,
+        canonicalBlockHash: canonical.hash,
+      });
+      return undefined;
+    }
     return proposer.isZero() ? undefined : proposer;
   }
 

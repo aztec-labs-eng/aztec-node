@@ -8,6 +8,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { FunctionsOf } from '@aztec-labs/foundation/types';
 import type { ArchiverEmitter, BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import type { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { TestRollupFeeConfigProvider } from '@aztec-labs/stdlib/gas';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
@@ -52,7 +53,7 @@ class NoopL1Synchronizer implements FunctionsOf<ArchiverL1Synchronizer> {
   isRecoveringMessages(): boolean {
     return false;
   }
-  getL1ProposerForSlot(_slot: SlotNumber): Promise<EthAddress | undefined> {
+  getL1ProposerForSlot(_slot: SlotNumber, _l1: L1PublishedData): Promise<EthAddress | undefined> {
     return Promise.resolve(undefined);
   }
 }

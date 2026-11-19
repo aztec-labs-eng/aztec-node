@@ -5,6 +5,7 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { L1ProposerSource, L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { P2PClient, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
 import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
@@ -234,10 +235,11 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     if (unreported.length === 0) {
       return undefined;
     }
-    const l1Blocks = await this.tryGetL1BlocksForSlot(slot);
-    if (!l1Blocks) {
+    const l1Checkpoint = await this.tryGetL1CheckpointForSlot(slot);
+    if (!l1Checkpoint) {
       return undefined;
     }
+    const l1Blocks = l1Checkpoint.checkpoint.blocks;
     // Look blocks up by their own index, not their array position: the archiver leaves out a block it cannot read in
     // full, which would shift every later block onto an earlier index.
     const diverging = unreported.filter(proposal => {
@@ -248,14 +250,16 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       return undefined;
     }
 
-    // An uncached L1 call. It repeats on every scan while the slot is in the lookback window and a diverging proposal
+    // Uncached L1 reads. They repeat on every scan while the slot is in the lookback window and a diverging proposal
     // stays unattributed: with an empty committee, where anyone may propose and the blocks of sequencers that lost the
     // slot differ from L1; while the escape hatch is open; or when the diverging block comes from a signer other than
     // the L1 proposer, such as a proposal made before the slot's proposer was final.
     // Deliberately not handled: the lookup reads a failed escape-hatch query as a closed hatch, so it can name the
     // committee proposer for a slot whose checkpoint the hatch proposer landed. Blaming that proposer also needs its
     // own node to have misread the hatch and gossiped a block, so both reads must fail.
-    const l1Proposer = await this.tryGetL1ProposerForSlot(slot);
+    // Read at the L1 block that carried the checkpoint, so that the proposer comes from the same L1 fork as the blocks
+    // compared above, and nothing is attributed while the archiver still holds a checkpoint from a reorged-out fork.
+    const l1Proposer = await this.tryGetL1ProposerForSlot(slot, l1Checkpoint);
     if (!l1Proposer || !diverging.some(proposal => proposal.getSender()?.equals(l1Proposer))) {
       return undefined;
     }
@@ -263,13 +267,12 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
   }
 
   /**
-   * Returns the blocks of the slot's L1 checkpoint, or undefined when there is none or it cannot be read. A failed read
-   * skips only the L1 comparison, so the slot's gossip-only offenses and the later slots in the scan are still
-   * reported.
+   * Returns the slot's L1 checkpoint, or undefined when there is none or it cannot be read. A failed read skips only
+   * the L1 comparison, so the slot's gossip-only offenses and the later slots in the scan are still reported.
    */
-  private async tryGetL1BlocksForSlot(slot: SlotNumber): Promise<L2Block[] | undefined> {
+  private async tryGetL1CheckpointForSlot(slot: SlotNumber): Promise<PublishedCheckpoint | undefined> {
     try {
-      return (await this.l2BlockSource.getCheckpoint({ slot }))?.checkpoint.blocks;
+      return await this.l2BlockSource.getCheckpoint({ slot });
     } catch (err) {
       this.log.warn(`Failed to read the L1 checkpoint for slot ${slot}`, { slot, err });
       return undefined;
@@ -277,9 +280,12 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
   }
 
   /** Returns undefined when the lookup fails, leaving the slot to be compared again on a later scan. */
-  private async tryGetL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
+  private async tryGetL1ProposerForSlot(
+    slot: SlotNumber,
+    l1Checkpoint: PublishedCheckpoint,
+  ): Promise<EthAddress | undefined> {
     try {
-      return await this.l1ProposerSource.getL1ProposerForSlot(slot);
+      return await this.l1ProposerSource.getL1ProposerForSlot(slot, l1Checkpoint.l1);
     } catch (err) {
       this.log.warn(`Failed to get the L1 proposer for slot ${slot}`, { slot, err });
       return undefined;

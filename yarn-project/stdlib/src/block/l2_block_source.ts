@@ -424,12 +424,13 @@ export interface ProposedCheckpointSink {
 /** Reads, from the rollup on L1, which key had to sign the checkpoint that L1 accepted for a slot. */
 export interface L1ProposerSource {
   /**
-   * Returns the proposer whose signature the rollup required for a checkpoint at the given past slot. Returns
-   * undefined when L1 did not check the committee's proposer, because an escape hatch was open for the epoch, or when
-   * the committee was empty.
+   * Returns the proposer whose signature the rollup required for the checkpoint at the given past slot, as read at
+   * `l1`, the L1 block that checkpoint was published in. Returns undefined when that block is no longer canonical, when
+   * L1 did not check the committee's proposer, because an escape hatch was open for the epoch, or when the committee was
+   * empty.
    * @throws While the slot's epoch committee is not stable yet, since whether its escape hatch was open is not known.
    */
-  getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined>;
+  getL1ProposerForSlot(slot: SlotNumber, l1: L1PublishedData): Promise<EthAddress | undefined>;
 }
 
 /**
