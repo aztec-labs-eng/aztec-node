@@ -170,10 +170,9 @@ export class FeeProviderImpl implements FeeProvider {
   /**
    * Picks the entry to serve. A tagged request whose L1 block the entry does not describe waits for the shared
    * refresh, and once more for its own if the one it joined was already under way from an older sync point, all
-   * within `maxWaitMs` when set, and then gets the entry whatever block it describes. A refresh is a no-op once the
-   * entry matches the sync point, so a request tagged with a block the provider has already moved past is answered
-   * at once. A tagged miss never throws: the caller asked for a specific L1 view as a consistency preference, not as
-   * a precondition.
+   * within `maxWaitMs` when set, and then gets the entry whatever block it describes. A request tagged with a block
+   * the provider has already moved past is answered at once from the entry, without joining a refresh. A tagged miss
+   * never throws: the caller asked for a specific L1 view as a consistency preference, not as a precondition.
    */
   private async getEntry(asOf?: FeeAsOf): Promise<FeeEntry | undefined> {
     if (asOf === undefined) {
@@ -182,7 +181,7 @@ export class FeeProviderImpl implements FeeProvider {
 
     const timer = new Timer();
     for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
-      if (this.entry?.blockHash.equals(asOf.blockHash)) {
+      if (this.entry && (this.entry.blockHash.equals(asOf.blockHash) || this.entry.blockNumber > asOf.blockNumber)) {
         return this.entry;
       }
       const remainingMs = asOf.maxWaitMs === undefined ? undefined : asOf.maxWaitMs - timer.ms();

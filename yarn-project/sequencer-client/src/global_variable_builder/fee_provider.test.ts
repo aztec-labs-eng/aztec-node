@@ -392,6 +392,25 @@ describeWithAnvil('FeeProviderImpl', () => {
       expect(requests).toEqual([]);
     });
 
+    it('answers a request tagged with a block the provider has moved past without joining a refresh', async () => {
+      const provider = await startProvider();
+      const older = syncPoint!;
+      await raisePendingExcessMana();
+      await mineAndSync();
+      await provider.refresh();
+      const current = await provider.getCurrentMinFees();
+      const release = promiseWithResolvers<void>();
+      gate = release.promise;
+      await mineAndSync();
+      const stalled = provider.refresh();
+
+      const served = await Promise.race([provider.getCurrentMinFees({ ...older }), sleep(1000).then(() => 'waited')]);
+
+      expect(served).toEqual(current);
+      release.resolve();
+      await stalled;
+    });
+
     it('serves the current view once a capped wait for a new sync point runs out', async () => {
       const provider = await startProvider();
       const before = await provider.getCurrentMinFees();
