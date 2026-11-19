@@ -878,12 +878,12 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_utl_getSharedSecrets(...inputs: ForeignCallArgs) {
+  aztec_utl_getEcdhMessagingSecrets(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_utl_getSharedSecrets',
+      oracle: 'aztec_utl_getEcdhMessagingSecrets',
       inputs,
       handler: ([address, ephPksSlot, contractAddress]) =>
-        this.handlerAsUtility().getSharedSecrets(address, ephPksSlot, contractAddress),
+        this.handlerAsUtility().getEcdhMessagingSecrets(address, ephPksSlot, contractAddress),
     });
   }
 

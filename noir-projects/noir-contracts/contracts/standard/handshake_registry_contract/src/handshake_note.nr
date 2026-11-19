@@ -1,7 +1,8 @@
 use aztec::{
-    keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point,
     macros::notes::note,
-    messages::delivery::handshake::AppSiloedHandshakeSecrets,
+    messages::delivery::{
+        handshake::AppSiloedHandshakeSecrets, messaging_secret_derivation::compute_messaging_secret_from_point,
+    },
     protocol::{
         address::AztecAddress,
         constants::DOM_SEP__CONSTRAINED_MSG_SENDER_SECRET,
@@ -35,7 +36,7 @@ impl HandshakeNote {
     /// different values for the same note.
     pub(crate) fn app_siloed_secrets_for(self, caller: AztecAddress) -> AppSiloedHandshakeSecrets {
         AppSiloedHandshakeSecrets {
-            shared: compute_app_siloed_shared_secret_from_point(self.secret, caller),
+            shared: compute_messaging_secret_from_point(self.secret, caller),
             sender_only: poseidon2_hash_with_separator(
                 [self.sender_secret, caller.to_field()],
                 DOM_SEP__CONSTRAINED_MSG_SENDER_SECRET,

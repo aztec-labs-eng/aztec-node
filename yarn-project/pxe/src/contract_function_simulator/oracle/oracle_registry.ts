@@ -337,7 +337,7 @@ export const ORACLE_REGISTRY = {
     returnType: OPTION(BOUNDED_VEC(U8)),
   }),
 
-  aztec_utl_getSharedSecrets: makeEntry({
+  aztec_utl_getEcdhMessagingSecrets: makeEntry({
     params: [
       { name: 'address', type: AZTEC_ADDRESS },
       { name: 'ephPks', type: EPHEMERAL_ARRAY(POINT) },

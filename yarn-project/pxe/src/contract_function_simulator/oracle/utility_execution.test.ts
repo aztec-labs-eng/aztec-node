@@ -584,15 +584,15 @@ describe('Utility Execution test suite', () => {
       });
     });
 
-    describe('getSharedSecrets', () => {
+    describe('getEcdhMessagingSecrets', () => {
       const service = new EphemeralArrayService();
 
-      it('returns different shared secrets for different contract addresses', async () => {
+      it('returns different messaging secrets for different contract addresses', async () => {
         // Generate a deterministic ephemeral public key
         const ephSk = GrumpkinScalar.random();
         const ephPk = await Grumpkin.mul(Grumpkin.generator, ephSk);
 
-        // Derive keys so we can mock getMasterSecretKey (used by getSharedSecrets)
+        // Derive keys so we can mock getMasterSecretKey (used by getEcdhMessagingSecrets)
         const { masterIncomingViewingSecretKey: ownerIvskM } = await deriveKeys(ownerSecretKey);
         const ownerIvpkMHash = await hashPublicKey(ownerCompleteAddress.publicKeys.ivpkM);
         keyStore.getMasterSecretKey.mockImplementation((pkMHash: Fr) => {
@@ -609,13 +609,13 @@ describe('Utility Execution test suite', () => {
         const oracleB = makeOracle({ contractAddress: contractAddressB, scopes: [owner] });
 
         const ephPksArray = EphemeralArray.fromValues<EmbeddedCurvePoint>(service, [ephPk]);
-        const responseA = await oracleA.getSharedSecrets(owner, ephPksArray, contractAddressA);
+        const responseA = await oracleA.getEcdhMessagingSecrets(owner, ephPksArray, contractAddressA);
         const [secretA] = responseA.readAll(service);
 
-        const responseB = await oracleB.getSharedSecrets(owner, ephPksArray, contractAddressB);
+        const responseB = await oracleB.getEcdhMessagingSecrets(owner, ephPksArray, contractAddressB);
         const [secretB] = responseB.readAll(service);
 
-        // After app-siloing, different contracts must get different shared secrets for the same
+        // After app-siloing, different contracts must get different messaging secrets for the same
         // (address, ephPk) pair. This prevents cross-contract decryption attacks.
         expect(secretA).not.toEqual(secretB);
       });
@@ -629,7 +629,7 @@ describe('Utility Execution test suite', () => {
 
         const ephPksArray = EphemeralArray.fromValues<EmbeddedCurvePoint>(service, [ephPk]);
         const wrongAddress = await AztecAddress.random();
-        await expect(utilityExecutionOracle.getSharedSecrets(owner, ephPksArray, wrongAddress)).rejects.toThrow(
+        await expect(utilityExecutionOracle.getEcdhMessagingSecrets(owner, ephPksArray, wrongAddress)).rejects.toThrow(
           /expected/,
         );
       });
@@ -639,9 +639,9 @@ describe('Utility Execution test suite', () => {
         const ephPk = await Grumpkin.mul(Grumpkin.generator, ephSk);
 
         const ephPksArray = EphemeralArray.fromValues<EmbeddedCurvePoint>(service, [ephPk]);
-        await expect(utilityExecutionOracle.getSharedSecrets(owner, ephPksArray, contractAddress)).rejects.toThrow(
-          /not in the allowed scopes/,
-        );
+        await expect(
+          utilityExecutionOracle.getEcdhMessagingSecrets(owner, ephPksArray, contractAddress),
+        ).rejects.toThrow(/not in the allowed scopes/);
       });
     });
 
