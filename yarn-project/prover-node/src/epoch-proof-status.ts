@@ -16,21 +16,37 @@ export type EpochProofStatusDeps = {
 };
 
 /**
- * Answers what L1 has proven so far: where the proven tip is, which epochs it fully covers, and whether this prover
- * holds a full-epoch proof of an epoch. Reads the proven tip from the archiver on every call.
+ * Answers questions about what L1 has proven so far:
+ * - whether a block, or every block of an epoch, is proven;
+ * - the last fully proven epoch and the next unproven one;
+ * - whether L1 registered this prover's full-epoch proof of an epoch.
+ *
+ * The proven tip comes from the archiver and is read again on every call. The registration comes from the rollup
+ * contract and is cached for one L2 slot.
  */
 export class EpochProofStatus {
   private readonly log: Logger;
   /**
-   * Reads of our full-epoch proof registration from the last L2 slot that did not find it missing: `true`
-   * (registered) or `undefined` (L1 could not be read), with the checkpoint count and when it was read. An epoch is
-   * then read once per L2 slot rather than on every call: a confirmed registration still notices an L1 reorg that
-   * drops it, and an L1 outage costs one slow read per slot. Entries older than a slot are dropped on each read, so
-   * the map holds at most the epochs read within one slot.
+   * Cache of L1 reads of this prover's full-epoch proof registration, so an epoch is read at most once per L2 slot
+   * instead of on every call. Each entry records the checkpoint count it was read for, when it was read, and the
+   * answer:
+   * - `true`: the proof is registered.
+   * - `undefined`: L1 could not be read.
+   *
+   * `false` is not cached, so an epoch without our registration is read again on the next call.
+   *
+   * Entries expire after one slot, so an L1 reorg that drops a registration is noticed within a slot, and an L1
+   * outage costs one slow read per slot. Expired entries are removed on every read, so the map holds only epochs read
+   * within the last slot.
    */
   private readonly ownFullEpochProofs = new Map<
     EpochNumber,
-    { length: number; registered: true | undefined; readAtMs: number }
+    {
+      length: number;
+      registered: true | undefined;
+      /** When the read happened, in milliseconds since the Unix epoch, as returned by `DateProvider.now()`. */
+      readAtMs: number;
+    }
   >();
 
   constructor(private readonly deps: EpochProofStatusDeps) {
@@ -59,10 +75,16 @@ export class EpochProofStatus {
   }
 
   /**
-   * The last epoch whose blocks are all proven: the proven tip's epoch when the tip is that epoch's last block,
-   * otherwise the epoch before it. Undefined when nothing is proven yet, when the archiver holds no header for the
-   * proven block, or when the tip is mid-way through epoch 0. Undefined errs toward an earlier start: a restart seeded
-   * from it re-processes the partially proven epoch rather than trusting a stale tip.
+   * The last epoch whose blocks are all proven. That is the proven tip's epoch if the tip is the epoch's last block,
+   * and the epoch before it otherwise.
+   *
+   * Returns undefined when:
+   * - nothing is proven yet;
+   * - the archiver holds no header for the proven block;
+   * - the tip is partway through epoch 0.
+   *
+   * Undefined errs toward an earlier epoch. A restart seeded from it processes the partially proven epoch again
+   * instead of trusting a stale tip.
    */
   public async getLastFullyProvenEpoch(): Promise<EpochNumber | undefined> {
     const proven = await this.getProvenBlockAndEpoch();
@@ -76,9 +98,10 @@ export class EpochProofStatus {
   }
 
   /**
-   * The epoch of the first block after the proven tip, or undefined when the archiver does not hold that block. The
-   * answer moves forward only when the proven tip does, so proving whatever it returns proves epochs in order rather
-   * than all at once.
+   * The epoch of the first block after the proven tip, or undefined when the archiver does not hold that block.
+   *
+   * The answer moves forward only when the proven tip does. A caller that proves each epoch it returns therefore
+   * proves epochs one at a time, in order.
    */
   public async getNextUnprovenEpoch(): Promise<EpochNumber | undefined> {
     const lastProven = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' })) ?? BlockNumber.ZERO;
@@ -90,9 +113,15 @@ export class EpochProofStatus {
   }
 
   /**
-   * Whether L1 registered this prover's proof of the epoch's `length` checkpoints as a full-epoch proof, or undefined
-   * if L1 could not be read. Callers decide what an unread registration means for them. Answers other than `false`
-   * are reused for one L2 slot.
+   * Reads whether L1 registered this prover's proof of the epoch, taken to have `length` checkpoints, as a full-epoch
+   * proof.
+   *
+   * Returns:
+   * - `true`: registered;
+   * - `false`: not registered;
+   * - `undefined`: L1 could not be read. Each caller decides what that means for it.
+   *
+   * `true` and `undefined` are cached for one L2 slot. `false` is read from L1 again on every call.
    */
   public async readOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean | undefined> {
     const { slotDuration } = await this.deps.l2BlockSource.getL1Constants();
@@ -103,8 +132,8 @@ export class EpochProofStatus {
       }
     }
     const cached = this.ownFullEpochProofs.get(epoch);
-    // A failed read is reused whatever the count: while a catch-up fills the store, the count changes from call to
-    // call, and each change would otherwise retry L1 during an outage.
+    // A failed read is reused even if the checkpoint count has changed. During a catch-up the count grows on every
+    // call, and treating each new count as a fresh read would retry L1 throughout an outage.
     if (cached && (cached.registered === undefined || cached.length === length)) {
       return cached.registered;
     }
