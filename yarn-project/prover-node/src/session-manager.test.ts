@@ -1454,7 +1454,7 @@ describe('SessionManager', () => {
   }
 
   /**
-   * Mocks the chain tip that `nextUnprovenEpoch` reads: proven height = `provenBlock`, with the
+   * Mocks the chain tip that `EpochProofStatus.getNextUnprovenEpoch` reads: proven height = `provenBlock`, with the
    * first unproven block (`provenBlock + 1`) sitting at `firstUnprovenSlot` — or not yet mined
    * when `undefined`. With epochDuration=2, slot N lives in epoch ⌊N/2⌋: e.g. slot 6 → epoch 3.
    */
