@@ -154,7 +154,7 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
     const { blockProposals, checkpointProposals } = proposals;
     const truncators = this.findTruncatedCheckpointSigners(blockProposals, checkpointProposals);
     const equivocators = this.findEquivocators(blockProposals, checkpointProposals);
-    const l1Equivocator = await this.findL1Equivocator(slot, blockProposals);
+    const l1Equivocator = await this.findL1Equivocator(slot, blockProposals, equivocators);
     if (l1Equivocator) {
       equivocators.set(l1Equivocator.toString(), l1Equivocator);
     }
@@ -211,16 +211,25 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
 
   /**
    * Returns the slot's L1 proposer if it gossiped a block proposal that differs from the block at the same index in the
-   * checkpoint L1 accepted for the slot, and has no DUPLICATE_PROPOSAL offense emitted for the slot yet. A gossiped
-   * index beyond the L1 checkpoint's blocks is truncation rather than a second payload at one position, and is left
-   * out. So is an L1 block from another slot, which the archiver can return when a prune and re-add of the checkpoint
-   * land between its reads.
+   * checkpoint L1 accepted for the slot, and is neither among `gossipEquivocators` nor has a DUPLICATE_PROPOSAL offense
+   * emitted for the slot yet. A gossiped index beyond the L1 checkpoint's blocks is truncation rather than a second
+   * payload at one position, and is left out. So is an L1 block from another slot, which the archiver can return when a
+   * prune and re-add of the checkpoint land between its reads.
    */
-  private async findL1Equivocator(slot: SlotNumber, blockProposals: BlockProposal[]): Promise<EthAddress | undefined> {
-    // A signer already reported for the slot needs no L1 read or lookup, which would otherwise repeat on every scan.
+  private async findL1Equivocator(
+    slot: SlotNumber,
+    blockProposals: BlockProposal[],
+    gossipEquivocators: Map<string, EthAddress>,
+  ): Promise<EthAddress | undefined> {
+    // A signer already caught by gossip or reported for the slot needs no L1 read or lookup, which would otherwise
+    // repeat on every scan.
     const unreported = blockProposals.filter(proposal => {
       const signer = proposal.getSender();
-      return signer !== undefined && !this.hasEmittedOffense(slot, signer, OffenseType.DUPLICATE_PROPOSAL);
+      return (
+        signer !== undefined &&
+        !gossipEquivocators.has(signer.toString()) &&
+        !this.hasEmittedOffense(slot, signer, OffenseType.DUPLICATE_PROPOSAL)
+      );
     });
     if (unreported.length === 0) {
       return undefined;
@@ -239,9 +248,10 @@ export class BroadcastedProposalWatcher extends (EventEmitter as new () => Watch
       return undefined;
     }
 
-    // An uncached L1 call. It repeats on every scan only while a diverging proposal stays unreported, which happens
-    // with an empty committee: in that dev setup anyone may propose, so the blocks of sequencers that lost the slot
-    // differ from L1 and are never attributed.
+    // An uncached L1 call. It repeats on every scan while the slot is in the lookback window and a diverging proposal
+    // stays unattributed: with an empty committee, where anyone may propose and the blocks of sequencers that lost the
+    // slot differ from L1; while the escape hatch is open; or when the diverging block comes from a signer other than
+    // the L1 proposer, such as a proposal made before the slot's proposer was final.
     // Deliberately not handled: the lookup reads a failed escape-hatch query as a closed hatch, so it can name the
     // committee proposer for a slot whose checkpoint the hatch proposer landed. Blaming that proposer also needs its
     // own node to have misread the hatch and gossiped a block, so both reads must fail.

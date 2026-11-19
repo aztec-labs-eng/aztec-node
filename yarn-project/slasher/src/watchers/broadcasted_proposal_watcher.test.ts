@@ -698,6 +698,19 @@ describe('BroadcastedProposalWatcher', () => {
 
         expect(emittedOffenses()).toEqual([duplicateOffense(proposer)]);
       });
+
+      it('does not read L1 when gossip alone already shows every signer equivocating', async () => {
+        const signer = Secp256k1Signer.random();
+        await publishCheckpoint(1);
+        l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(signer.address);
+        mockProposals(slot, [await makeBlockAt(signer, 0), await makeBlockAt(signer, 0)], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([duplicateOffense(signer)]);
+        expect(l2BlockSource.getCheckpoint).not.toHaveBeenCalled();
+        expect(l1ProposerSource.getL1ProposerForSlot).not.toHaveBeenCalled();
+      });
     });
   });
 });
