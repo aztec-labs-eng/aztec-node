@@ -1,34 +1,15 @@
-import type { Archiver } from '@aztec-labs/archiver';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { assertRequired, compact, pick, unique } from '@aztec-labs/foundation/collection';
-import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { memoize } from '@aztec-labs/foundation/decorators';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { compact, pick } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { DateProvider, executeTimeout } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
-import { getLastSiblingPath } from '@aztec-labs/prover-client/helpers';
 import { ChonkCache } from '@aztec-labs/prover-client/orchestrator';
 import { type AvmSimulator, PublicProcessorFactory } from '@aztec-labs/simulator/server';
-import {
-  EventDrivenL2BlockStream,
-  type L2BlockId,
-  type L2BlockSource,
-  type L2BlockStreamEvent,
-  type L2BlockStreamEventHandler,
-  L2TipsMemoryStore,
-} from '@aztec-labs/stdlib/block';
-import type { Checkpoint, CommonCheckpointData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import {
-  type L1RollupConstants,
-  getEpochAtSlot,
-  getProofSubmissionDeadlineEpoch,
-  getSlotRangeForEpoch,
-} from '@aztec-labs/stdlib/epoch-helpers';
 import {
   type EpochProverManager,
   type EpochProvingJobState,
@@ -41,7 +22,6 @@ import {
 } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   L1Metrics,
   type TelemetryClient,
@@ -50,10 +30,12 @@ import {
   getTelemetryClient,
 } from '@aztec-labs/telemetry-client';
 
-import { uploadEpochProofFailure } from './actions/upload-epoch-proof-failure.js';
-import { CheckpointStore, type RegisterCheckpointData } from './checkpoint-store.js';
+import { CheckpointFollower } from './checkpoint-follower.js';
+import { CheckpointStore } from './checkpoint-store.js';
 import type { SpecificProverNodeConfig } from './config.js';
+import { EpochExpirySweep } from './epoch-expiry-sweep.js';
 import { EpochProofStatus } from './epoch-proof-status.js';
+import { FailureUploader } from './failure-uploader.js';
 import type { CheckpointProver, CheckpointProverTestHooks } from './job/checkpoint-prover.js';
 import type { EpochSessionHooks } from './job/epoch-session.js';
 import { ProverNodeJobMetrics, ProverNodeRewardsMetrics } from './metrics.js';
@@ -73,54 +55,34 @@ const PUBLISHING_SERVICE_STOP_TIMEOUT_MS = 30_000;
 
 /**
  * An Aztec Prover Node is a standalone process that monitors the chain for new checkpoints,
- * starts proving them optimistically as they arrive, and submits epoch proofs to L1 once
- * complete.
+ * starts proving them as they arrive, and submits epoch proofs to L1 once complete.
  *
- * The class is intentionally thin: it owns the long-lived collections (`CheckpointStore`,
- * `ChonkCache`, `SessionManager`), the L2BlockStream, and a periodic ticker that nudges the
- * manager to pick up newly-complete epochs. Every session lifecycle decision is delegated to
- * the `SessionManager`. Each chain event is translated here into a single method call on it.
+ * This class builds the components, starts and stops them in order, and serves the `ProverNodeApi`:
+ *
+ * - `CheckpointFollower` follows the chain and keeps the `CheckpointStore` in step with it.
+ * - `CheckpointStore` holds one `CheckpointProver` per checkpoint; each proves its checkpoint's blocks.
+ * - `SessionManager` decides when to prove an epoch and runs an `EpochSession` for it.
+ * - `ProofPublishingService` submits finished epoch proofs to L1.
+ * - `EpochExpirySweep` drops the state of epochs that can no longer be proven.
+ * - `FailureUploader` uploads the data of failed proving attempts.
  */
-export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Traceable {
+export class ProverNode implements ProverNodeApi, Traceable {
   private log = createLogger('prover-node');
 
   protected readonly checkpointStore: CheckpointStore;
   protected readonly chonkCache: ChonkCache;
+  protected readonly epochProofStatus: EpochProofStatus;
+  protected readonly checkpointFollower: CheckpointFollower;
+  protected readonly expirySweep: EpochExpirySweep;
+  protected readonly failureUploader: FailureUploader;
   protected sessionManager: SessionManager | undefined;
+  protected publishingService: ProofPublishingService | undefined;
 
   private readonly config: ProverNodeOptions;
   private readonly jobMetrics: ProverNodeJobMetrics;
   private readonly rewardsMetrics: ProverNodeRewardsMetrics;
 
-  /** In-memory store for the L2BlockStream's local data provider. */
-  private tipsStore: L2TipsMemoryStore;
-  /** Block stream for checkpoint and reorg detection. */
-  private blockStream: EventDrivenL2BlockStream | undefined;
-  /**
-   * Highest epoch whose proof-submission window has passed. Monotonic high-water mark.
-   * Seeded from the catch-up start epoch at start(); advanced by the periodic expiry tick,
-   * which compares the archiver's latest synced L2 slot against each epoch's
-   * submission deadline. Protected so tests can verify the start() seeding.
-   */
-  protected lastExpiredEpoch: EpochNumber | undefined;
-
-  /**
-   * Highest checkpoint number whose proving-side handling has completed (or that was legitimately skipped).
-   * The catch-up loop walks from here to each `chain-checkpointed` tip event. Seeded at start() from the last
-   * checkpoint of the catch-up start epoch (or 0), so a restart reprocesses the partially-proven epoch, and any proven
-   * epoch still in its proof window, rather than trusting a checkpointed tip that may sit ahead of unproven
-   * checkpoints. Clamped down on a prune.
-   */
-  protected lastProcessedCheckpoint: CheckpointNumber = CheckpointNumber.ZERO;
-
-  /** Periodic tick that runs the epoch-expiry sweep during idle periods when no block-stream events arrive. */
-  private expiryTicker: RunningPromise | undefined;
-
   public readonly tracer: Tracer;
-
-  protected publishingService: ProofPublishingService | undefined;
-
-  protected readonly epochProofStatus: EpochProofStatus;
 
   constructor(
     protected readonly prover: EpochProverManager & EpochProverFactory,
@@ -129,7 +91,9 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     protected readonly l1ToL2MessageSource: L1ToL2MessageSource,
     protected readonly contractDataSource: ContractDataSource,
     protected readonly worldState: WorldStateSynchronizer,
-    protected readonly p2pClient: { getTxProvider(): ITxProvider } & Partial<Service>,
+    protected readonly p2pClient: {
+      getTxProvider(): ITxProvider;
+    } & Partial<Service>,
     protected readonly rollupContract: RollupContract,
     protected readonly l1Metrics: L1Metrics,
     private readonly avmSimulator: AvmSimulator,
@@ -159,16 +123,24 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     this.jobMetrics = new ProverNodeJobMetrics(meter, telemetryClient.getTracer('EpochProvingJob'));
     this.rewardsMetrics = new ProverNodeRewardsMetrics(meter, this.prover.getProverId(), rollupContract);
 
-    this.tipsStore = new L2TipsMemoryStore(this.l2BlockSource.getGenesisBlockHash());
-
+    const bindings = this.log.getBindings();
     this.epochProofStatus = new EpochProofStatus({
       l2BlockSource: this.l2BlockSource,
       rollupContract: this.rollupContract,
       proverId: this.prover.getProverId(),
       dateProvider: this.dateProvider,
-      bindings: this.log.getBindings(),
+      bindings,
     });
-    this.chonkCache = new ChonkCache(this.log.getBindings());
+    this.failureUploader = new FailureUploader({
+      l2BlockSource: this.l2BlockSource,
+      worldState: this.worldState,
+      config: {
+        failedEpochStore: this.config.proverNodeFailedEpochStore,
+        ...pick(this.config, 'l1ChainId', 'rollupVersion', 'dataDirectory'),
+      },
+      bindings,
+    });
+    this.chonkCache = new ChonkCache(bindings);
     this.checkpointStore = new CheckpointStore(
       this.l2BlockSource,
       {
@@ -179,7 +151,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
           this.avmSimulator,
           this.dateProvider,
           this.telemetryClient,
-          this.log.getBindings(),
+          bindings,
         ),
         dbProvider: this.worldState,
         txProvider: this.p2pClient.getTxProvider(),
@@ -188,12 +160,41 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
         metrics: this.jobMetrics,
         txGatheringTimeoutMs: this.config.txGatheringTimeoutMs,
         deadline: undefined,
-        // A checkpoint prover that fails (a sub-tree fault or a prune-induced fork fault) uploads a
-        // post-mortem for its own checkpoint, independently of any session. Fire-and-forget.
+        // Not awaited: an upload must not hold up the prover's teardown.
         onFailed: prover => void this.tryUploadCheckpointFailure(prover),
       },
-      this.log.getBindings(),
+      bindings,
     );
+    this.checkpointFollower = new CheckpointFollower({
+      l2BlockSource: this.l2BlockSource,
+      l1ToL2MessageSource: this.l1ToL2MessageSource,
+      worldState: this.worldState,
+      checkpointStore: this.checkpointStore,
+      proofStatus: this.epochProofStatus,
+      handlers: {
+        onCheckpointRegistered: async epoch => {
+          await this.sessionManager?.onCheckpointAdded(epoch);
+        },
+        // The session manager cancels the affected sessions, and each cancelled session withdraws its own
+        // candidate from the publishing service.
+        onPruned: async affectedEpochs => {
+          await this.sessionManager?.onPrune(affectedEpochs);
+        },
+        onChainProven: block => this.publishingService?.onChainProven(block),
+      },
+      config: {
+        pollIntervalMs: this.config.proverNodePollingIntervalMs,
+        disableFullEpochProving: !!this.config.proverNodeDisableFullEpochProving,
+      },
+      bindings,
+    });
+    this.expirySweep = new EpochExpirySweep({
+      l2BlockSource: this.l2BlockSource,
+      checkpointStore: this.checkpointStore,
+      chonkCache: this.chonkCache,
+      intervalMs: this.config.proverNodePollingIntervalMs,
+      bindings,
+    });
   }
 
   public getProverId() {
@@ -207,11 +208,6 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
   /** Test-only: the shared L1 tx delayer, if enabled. */
   public getDelayer(): Delayer | undefined {
     return this.delayer;
-  }
-
-  /** Observability summary for the ProverNodeApi. */
-  public getJobs(): Promise<{ uuid: string; status: EpochProvingJobState; epochNumber: EpochNumber }[]> {
-    return Promise.resolve(this.sessionManager?.getJobs() ?? []);
   }
 
   /** Tests inspect this when validating reconcile behaviour. */
@@ -237,357 +233,12 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     return this.prover;
   }
 
-  // ---------------- L2BlockStream handler ----------------
-
-  public async handleBlockStreamEvent(event: L2BlockStreamEvent): Promise<void> {
-    switch (event.type) {
-      case 'chain-checkpointed':
-        await this.processCheckpointJump(event.checkpoint.number);
-        break;
-      case 'chain-pruned':
-        await this.handlePruneEvent(event.block);
-        break;
-      case 'chain-proven':
-        this.publishingService?.onChainProven(BlockNumber(event.block.number));
-        break;
-      // The proposed tip drives only the tips store's walk-back history (recorded below); the prover-node
-      // tracks checkpoints, not proposed blocks. `blocks-added` is never emitted in tips-only mode, and
-      // `chain-finalized` carries nothing the prover-node acts on.
-      case 'chain-proposed':
-      case 'chain-finalized':
-      case 'blocks-added':
-        break;
-      default: {
-        const _: never = event;
-        break;
-      }
-    }
-    // Advance the local tips store only after the proving-side handling (registration / prune) has
-    // succeeded. Any failure above propagates to the L2BlockStream (which logs and stops this poll
-    // pass) and skips this update, so the event is re-emitted on the next poll rather than skipped
-    await this.tipsStore.handleBlockStreamEvent(event);
+  /** Lists the proving sessions the node holds, with their state. */
+  public getJobs(): Promise<{ uuid: string; status: EpochProvingJobState; epochNumber: EpochNumber }[]> {
+    return Promise.resolve(this.sessionManager?.getJobs() ?? []);
   }
 
-  /**
-   * Walks every checkpoint between the local cursor and the newly-reported checkpointed tip, registering
-   * each one that belongs to an epoch that can still be proven. The block stream now delivers a single thin
-   * `chain-checkpointed` tip event per pass rather than one fat event per checkpoint, so this drives the
-   * catch-up itself: light metadata first (`getCheckpointsData`) to decide relevance per epoch, then a heavy
-   * `getCheckpoints` fetch only for checkpoints in provable epochs.
-   *
-   * The cursor advances one checkpoint at a time and only after that checkpoint's proving-side handling has
-   * fully succeeded, preserving the A-1041 at-least-once semantics: a mid-jump failure leaves the cursor
-   * behind so the next pass retries from the first checkpoint that did not complete.
-   */
-  private async processCheckpointJump(targetCheckpoint: CheckpointNumber): Promise<void> {
-    if (targetCheckpoint <= this.lastProcessedCheckpoint) {
-      return;
-    }
-    const l1Constants = await this.getL1Constants();
-
-    // Cap the catch-up at the `(proofSubmissionEpochs + 1) * epochDuration` most recent checkpoints.
-    // When the cursor is much further behind (e.g. resyncing after a long time offline), fetching the whole gap could
-    // load thousands of checkpoints we cannot act on: anything older than the last two epochs is already past
-    // its proof-submission window, so we skip it and jump the cursor forward to the start of the capped range.
-    const maxCheckpoints = (l1Constants.proofSubmissionEpochs + 1) * l1Constants.epochDuration;
-    let from = CheckpointNumber(this.lastProcessedCheckpoint + 1);
-    if (Number(targetCheckpoint - from) + 1 > maxCheckpoints) {
-      const cappedFrom = CheckpointNumber(targetCheckpoint - maxCheckpoints + 1);
-      this.log.warn(`Skipping unprovable checkpoints during catch-up; the prover node is far behind`, {
-        from,
-        cappedFrom,
-        targetCheckpoint,
-        maxCheckpoints,
-      });
-      // Advance the cursor past the skipped checkpoints so they are never retried.
-      this.lastProcessedCheckpoint = CheckpointNumber(cappedFrom - 1);
-      from = cappedFrom;
-    }
-    const limit = Number(targetCheckpoint - from) + 1;
-    const metadatas = await this.l2BlockSource.getCheckpointsData({ from, limit });
-
-    // Per-epoch relevance is cached so a multi-checkpoint epoch resolves it once. Skipping is whole-epoch
-    // only: the SessionManager requires an epoch's checkpoints fully covered before it opens a session, so we
-    // never drop an individual checkpoint inside an epoch we will prove.
-    const epochSkippable = new Map<EpochNumber, boolean>();
-    for (const metadata of metadatas) {
-      const epochNumber = getEpochAtSlot(metadata.header.slotNumber, l1Constants);
-      let skippable = epochSkippable.get(epochNumber);
-      if (skippable === undefined) {
-        skippable = await this.isEpochSkippableForCatchUp(epochNumber, l1Constants);
-        epochSkippable.set(epochNumber, skippable);
-      }
-      if (skippable) {
-        this.log.debug(`Skipping checkpoint ${metadata.checkpointNumber} for unprovable epoch ${epochNumber}`);
-      } else {
-        await this.registerCheckpoint(metadata.checkpointNumber, epochNumber);
-      }
-      // Advance only after the checkpoint's handling succeeded (or it was legitimately skipped). registerCheckpoint
-      // throws on failure, which leaves the cursor here for the next pass to retry (A-1041).
-      this.lastProcessedCheckpoint = metadata.checkpointNumber;
-    }
-  }
-
-  /** Heavy-fetch a single checkpoint, register it with the store, and notify the session manager. */
-  private async registerCheckpoint(checkpointNumber: CheckpointNumber, epochNumber: EpochNumber): Promise<void> {
-    const published = await this.l2BlockSource.getCheckpoint({ number: checkpointNumber });
-    if (!published) {
-      throw new Error(`Checkpoint ${checkpointNumber} not found in block source during catch-up`);
-    }
-    const checkpoint = published.checkpoint;
-    this.log.info(`New checkpoint ${checkpoint.number} for epoch ${epochNumber}`, {
-      checkpointNumber: checkpoint.number,
-      epochNumber,
-      slotNumber: checkpoint.header.slotNumber,
-    });
-
-    // A retry can revisit a checkpoint already in the store. Its register data would be discarded, and collecting it
-    // reads world-state history that may since have been pruned.
-    if (!this.checkpointStore.getByCheckpoint(checkpoint)) {
-      const registerData = await this.collectRegisterData(checkpoint, published);
-      await this.checkpointStore.addOrUpdate(checkpoint, registerData);
-    }
-    await this.sessionManager?.onCheckpointAdded(epochNumber);
-
-    // Tips-only mode delivers no blocks, so record one witness per checkpointed block: a reorg into the checkpoint's
-    // range then prunes at the true divergence instead of the nearest sparse tip anchor.
-    await this.tipsStore.recordBlockHashes(
-      await Promise.all(
-        checkpoint.blocks.map(async block => ({ number: block.number, hash: (await block.header.hash()).toString() })),
-      ),
-    );
-  }
-
-  /**
-   * Gathers register-time data for a checkpoint: previous block header, L1-to-L2 messages,
-   * and the archive sibling path.
-   */
-  private async collectRegisterData(
-    checkpoint: Checkpoint,
-    published: Pick<PublishedCheckpoint, 'attestations' | 'verbatimAttestations'>,
-  ): Promise<RegisterCheckpointData> {
-    const previousBlockNumber = BlockNumber(checkpoint.blocks[0].number - 1);
-    const previousBlockHeader = await this.gatherPreviousBlockHeader(previousBlockNumber);
-    const lastBlock = checkpoint.blocks.at(-1)!;
-    // Streaming Inbox: the checkpoint's consumed messages are those between the parent
-    // checkpoint's consumed position and this checkpoint's last block, as a compact leaf-count range. The prover
-    // slices them per block.
-    const { messages: l1ToL2Messages, end } = await this.l1ToL2MessageSource.getL1ToL2MessageRange(
-      BigInt(previousBlockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex),
-      BigInt(lastBlock.header.state.l1ToL2MessageTree.nextAvailableLeafIndex),
-    );
-    // A count-matching range can still hold a pre-reorg version of the messages while the source recovers. The store
-    // keeps a prover's messages for good, so throw and let the next pass retry rather than freeze a list that can
-    // never prove this checkpoint.
-    if (!end.rollingHash.equals(checkpoint.header.inboxRollingHash)) {
-      throw new Error(
-        `L1-to-L2 messages for checkpoint ${checkpoint.number} do not match its inbox rolling hash: ` +
-          `source has ${end.rollingHash} at message count ${end.totalMessageCount}, ` +
-          `checkpoint committed to ${checkpoint.header.inboxRollingHash}`,
-      );
-    }
-    const previousInboxRollingHash = await this.gatherPreviousInboxRollingHash(checkpoint.number);
-    const lastBlockHash = await lastBlock.header.hash();
-    await this.worldState.syncImmediate(lastBlock.number, lastBlockHash);
-    const previousArchiveSiblingPath = await getLastSiblingPath(
-      MerkleTreeId.ARCHIVE,
-      this.worldState.getSnapshot(previousBlockNumber),
-    );
-    return {
-      verbatimAttestations: published.verbatimAttestations,
-      previousBlockHeader,
-      l1ToL2Messages,
-      previousInboxRollingHash,
-      previousArchiveSiblingPath,
-    };
-  }
-
-  /**
-   * Sources the inbox rolling hash chain-start for a checkpoint: the previous checkpoint's `inboxRollingHash`, or zero
-   * for the genesis checkpoint. The prover threads this into the base parity circuits so the rebuilt checkpoint header
-   * matches the proposer's.
-   */
-  private async gatherPreviousInboxRollingHash(checkpointNumber: CheckpointNumber): Promise<Fr> {
-    if (checkpointNumber <= 1) {
-      return Fr.ZERO;
-    }
-    const previous = await this.l2BlockSource.getCheckpoint({ number: CheckpointNumber(checkpointNumber - 1) });
-    if (!previous) {
-      throw new Error(`Previous checkpoint ${checkpointNumber - 1} not found when sourcing inbox rolling hash`);
-    }
-    return previous.checkpoint.header.inboxRollingHash;
-  }
-
-  /**
-   * Marks every prover orphaned by the prune as pruned, clamps the catch-up cursor below the prune target's
-   * checkpoint, and notifies the session manager. Keyed off the prune target block (the highest surviving block)
-   * rather than the source's checkpointed tip, which can sit above the target after a re-checkpoint and would leave
-   * orphaned provers canonical. Throws (rather than warning) if the cursor floor cannot be resolved, so the pass
-   * fails and the prune is retried next iteration.
-   */
-  private async handlePruneEvent(prunedToBlock: L2BlockId) {
-    this.log.warn(`Chain pruned to block ${prunedToBlock.number}`, { prunedToBlock });
-
-    // Resolve the cursor floor BEFORE removing provers: cancelAndRemoveAboveBlock returns only the provers it removed,
-    // so a throw after removing would leave a retry pass with nothing to act on. Resolving first means a throw leaves
-    // everything untouched and the next pass retries the whole handler (the tips cursor only advances on success).
-    let cursorFloor: CheckpointNumber;
-    if (prunedToBlock.number === 0) {
-      cursorFloor = CheckpointNumber.ZERO;
-    } else {
-      const targetData = await this.l2BlockSource.getBlockData({ number: prunedToBlock.number });
-      if (targetData === undefined) {
-        throw new Error(
-          `No block data found for prune target block ${prunedToBlock.number}; cannot clamp checkpoint cursor`,
-        );
-      }
-      // Clamp to `cpAtTarget - 1`: a mid-checkpoint target leaves that checkpoint partially orphaned and it must be
-      // reprocessed. Over-clamping merely re-registers a checkpoint (at-least-once by design — A-1041); under-clamping
-      // would permanently skip a rebuilt same-number checkpoint.
-      cursorFloor = CheckpointNumber(Math.max(0, Number(targetData.checkpointNumber) - 1));
-    }
-
-    const affected = this.checkpointStore.cancelAndRemoveAboveBlock(prunedToBlock.number);
-
-    if (this.lastProcessedCheckpoint > cursorFloor) {
-      this.lastProcessedCheckpoint = cursorFloor;
-    }
-
-    if (affected.length === 0) {
-      return;
-    }
-    const l1Constants = await this.getL1Constants();
-    const affectedEpochs = unique(affected.map(p => Number(getEpochAtSlot(p.slotNumber, l1Constants)))).map(n =>
-      EpochNumber(n),
-    );
-    // The session manager cancels every affected session, which in turn calls
-    // publishingService.withdraw(uuid) for each candidate; no separate notification to the
-    // publishing service is needed.
-    await this.sessionManager?.onPrune(affectedEpochs);
-  }
-
-  /**
-   * Decides whether the catch-up can skip an epoch's checkpoints instead of registering them for proving.
-   *
-   * - Past its proof-submission window: skip. L1 no longer accepts a proof of it.
-   * - Not fully proven yet: register.
-   * - Fully proven, on a node with full-epoch proving disabled: skip. That node never proves a full epoch.
-   * - Fully proven, and L1 already holds our own full-epoch proof of it: skip.
-   * - Fully proven, but world state no longer holds a snapshot that one of its checkpoints not yet in the store needs,
-   *   because a small `WS_HISTORY_RETENTION` pruned it once the epoch was finalized: skip. Registering would fail and
-   *   stall the catch-up of every later checkpoint.
-   * - Fully proven otherwise: register. The proof that moved the tip may be another prover's, or may have landed
-   *   before the epoch ended, and L1 still rewards ours. If L1 cannot be read, register anyway; the session manager
-   *   checks again before proving.
-   */
-  private async isEpochSkippableForCatchUp(epoch: EpochNumber, l1Constants: L1RollupConstants): Promise<boolean> {
-    if (await this.isEpochPastProofSubmissionWindow(epoch, l1Constants)) {
-      return true;
-    }
-    if (!(await this.epochProofStatus.isEpochFullyProven(epoch))) {
-      return false;
-    }
-    if (this.config.proverNodeDisableFullEpochProving) {
-      return true;
-    }
-    const checkpoints = await this.l2BlockSource.getCheckpointsData({ epoch });
-    if ((await this.epochProofStatus.readOwnFullEpochProof(epoch, checkpoints.length)) === true) {
-      return true;
-    }
-    const stored = await this.checkpointStore.listForEpoch(epoch);
-    const unregistered = checkpoints.filter(
-      c =>
-        !stored.some(
-          p => p.checkpoint.number === c.checkpointNumber && p.checkpoint.archive.root.equals(c.archive.root),
-        ),
-    );
-    // Checkpoints come in ascending order, so the first unregistered one that reads a prunable snapshot reads the
-    // oldest one.
-    const oldestRequiredSnapshot = unregistered.map(getOldestPrunableSnapshot).find(block => block !== undefined);
-    if (oldestRequiredSnapshot === undefined) {
-      return false;
-    }
-    const { oldestHistoricBlockNumber } = (await this.worldState.status()).syncSummary;
-    if (oldestRequiredSnapshot < oldestHistoricBlockNumber) {
-      this.log.warn(`Not proving fully-proven epoch ${epoch}: world-state history it needs has been pruned`, {
-        epoch,
-        oldestRequiredSnapshot,
-        oldestHistoricBlockNumber,
-      });
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Returns true once the chain has advanced past the given epoch's proof-submission window.
-   * Used to ignore checkpoints whose epoch can no longer be proven in time — chiefly while the
-   * archiver replays old blocks after a restart. Compares the archiver's latest synced L2 slot
-   * against the epoch's submission-deadline epoch; conservatively returns false if the slot can't
-   * be read yet.
-   */
-  private async isEpochPastProofSubmissionWindow(
-    epochNumber: EpochNumber,
-    l1Constants: L1RollupConstants,
-  ): Promise<boolean> {
-    const latestSlot = await this.l2BlockSource.getSyncedL2SlotNumber();
-    if (latestSlot === undefined) {
-      return false;
-    }
-    const latestEpoch = getEpochAtSlot(latestSlot, l1Constants);
-    return latestEpoch >= getProofSubmissionDeadlineEpoch(epochNumber, l1Constants);
-  }
-
-  /**
-   * Compares the archiver's latest synced L2 slot against `lastExpiredEpoch` and, for each
-   * newly-expired epoch, releases the chonk-cache entries for its blocks and reaps any
-   * CheckpointProvers in the store. An epoch E is expired once the chain reaches the start
-   * of epoch `E + proofSubmissionEpochs + 1`. Silently no-ops if nothing has expired since
-   * the last check or the archiver's slot can't be read.
-   */
-  private async checkEpochExpiry(): Promise<void> {
-    const latestSlot = await this.l2BlockSource.getSyncedL2SlotNumber();
-    if (latestSlot === undefined) {
-      return;
-    }
-    const l1Constants = await this.getL1Constants();
-    const latestEpoch = getEpochAtSlot(latestSlot, l1Constants);
-    const offset = l1Constants.proofSubmissionEpochs + 1;
-    if (latestEpoch < offset) {
-      return;
-    }
-    const newlyExpiredUpTo = EpochNumber(latestEpoch - offset);
-    const from = this.lastExpiredEpoch === undefined ? EpochNumber(0) : EpochNumber(this.lastExpiredEpoch + 1);
-    if (newlyExpiredUpTo < from) {
-      return;
-    }
-    for (let e = from; e <= newlyExpiredUpTo; e = EpochNumber(e + 1)) {
-      await this.expireEpoch(e);
-    }
-    this.lastExpiredEpoch = newlyExpiredUpTo;
-  }
-
-  /**
-   * Releases chonk-cache entries for every block in the supplied epoch (best-effort) and reaps every
-   * CheckpointProver in the store whose epoch is at or below it.
-   */
-  private async expireEpoch(epoch: EpochNumber): Promise<void> {
-    try {
-      const blocks = await this.l2BlockSource.getBlocks({ epoch, onlyCheckpointed: true });
-      if (blocks.length > 0) {
-        this.chonkCache.releaseForBlocks(blocks);
-      }
-    } catch (err) {
-      this.log.warn(`Could not release chonk-cache entries for expired epoch ${epoch}`, err);
-    }
-    this.checkpointStore.reapExpired(epoch);
-  }
-
-  // ---------------- public API ----------------
-
-  /**
-   * Schedules proving for the given epoch and returns the job id without waiting for completion.
-   */
+  /** Schedules proving for the given epoch and returns the job id without waiting for completion. */
   public async startProof(epochNumber: EpochNumber): Promise<string> {
     if (!this.sessionManager) {
       throw new Error('ProverNode not started');
@@ -615,29 +266,13 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
         proverNodeDisableFullEpochProving: true,
       });
     }
-    // SessionManager owns its own periodic tick; start it here so it begins picking up
-    // epochs that become complete by time (no fresh checkpoint event) and advances once
-    // the previous epoch is proven on L1.
     this.sessionManager.start();
-    // Now that the store + manager exist, arm the live-state observable gauges.
     this.jobMetrics.observeState(this.checkpointStore, this.sessionManager);
 
-    await this.seedCatchUp();
-    this.blockStream = new EventDrivenL2BlockStream(this.l2BlockSource, this.tipsStore, this, this.log, {
-      pollIntervalMS: this.config.proverNodePollingIntervalMs,
-      tipsOnly: true,
-    });
-    this.blockStream.start();
-
-    // The periodic ticker is the sole driver of the expiry sweep: it fires every poll interval whether
-    // or not block-stream events arrive, and RunningPromise never overlaps its own runs, so the sweep's
-    // `lastExpiredEpoch` high-water mark advances — and each epoch's post-mortem uploads — exactly once.
-    this.expiryTicker = new RunningPromise(
-      () => this.checkEpochExpiry(),
-      this.log,
-      this.config.proverNodePollingIntervalMs,
-    );
-    this.expiryTicker.start();
+    // The follower decides where a restart resumes. The sweep treats every epoch up to that point as expired
+    // already, so the two agree on which epochs are still in play.
+    const resumeAfterEpoch = await this.checkpointFollower.start();
+    this.expirySweep.start(resumeAfterEpoch);
 
     await this.rewardsMetrics.start();
     this.l1Metrics.start();
@@ -647,15 +282,14 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
   async stop() {
     this.log.info('Stopping ProverNode');
     this.jobMetrics.stopObservingState();
-    await this.blockStream?.stop();
-    await this.expiryTicker?.stop();
+    await this.checkpointFollower.stop();
+    await this.expirySweep.stop();
     if (this.sessionManager) {
       await this.sessionManager.stop();
     }
     if (this.publishingService) {
-      // Bound the wait: the publishing service blocks until any in-flight L1 proof-submission tx
-      // settles, which can outlast a reasonable shutdown window. On timeout we log and move on —
-      // the tx may still mine, but shutdown must not hang on it.
+      // The publishing service waits for an L1 proof-submission tx that is in flight, which can outlast a
+      // reasonable shutdown. On timeout the tx may still mine; shutdown moves on.
       const publishingService = this.publishingService;
       await executeTimeout(
         () => publishingService.stop(),
@@ -673,12 +307,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     this.log.info('Stopped ProverNode');
   }
 
-  /**
-   * Constructs the session manager. Extracted so subclasses (test harness) can swap the
-   * implementation. Wired to upload a post-mortem when a full session ends in its own genuine failure
-   * (`EpochSession.hasFailed()` — top-tree/submit failed with every prover healthy, so definitively not
-   * a prune). A `stopped` session (a prover under it failed) is not uploaded; it recovers on re-add.
-   */
+  /** Constructs the session manager. Extracted so a test harness can swap the implementation. */
   protected createSessionManager(publishingService: ProofPublishingService): SessionManager {
     return new SessionManager({
       checkpointStore: this.checkpointStore,
@@ -722,149 +351,14 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     this.checkpointStore.setTestHooks(hooks);
   }
 
-  /**
-   * Uploads a post-mortem snapshot for an epoch whose full session failed to prove, built from that
-   * session's checkpoint provers. Fired from the session manager's `onSessionFailed` callback (a
-   * genuine, race-free failure). Exposed as a method so tests can spy on it. No-ops if no failed-epoch
-   * store is configured or the checkpoint set is empty.
-   */
-  public async tryUploadEpochFailure(
-    id: string,
-    checkpoints: readonly CheckpointProver[],
-  ): Promise<string | undefined> {
-    if (!this.config.proverNodeFailedEpochStore || checkpoints.length === 0) {
-      return undefined;
-    }
-    const data = await SessionManager.buildProvingData(checkpoints);
-    return await uploadEpochProofFailure(
-      this.config.proverNodeFailedEpochStore,
-      // The session's own id; `uploadEpochProofFailure` already prefixes the path with the epoch number.
-      id,
-      data,
-      this.l2BlockSource as Archiver,
-      this.worldState,
-      assertRequired(pick(this.config, 'l1ChainId', 'rollupVersion', 'dataDirectory')),
-      this.log,
-    );
+  /** Uploads the proving data of an epoch whose full session failed. Delegates to `FailureUploader`. */
+  public tryUploadEpochFailure(id: string, checkpoints: readonly CheckpointProver[]): Promise<string | undefined> {
+    return this.failureUploader.uploadEpochFailure(id, checkpoints);
   }
 
-  /**
-   * Uploads a post-mortem for a single failed checkpoint prover, built from just that checkpoint's
-   * proving data. Fired (fire-and-forget) from the store's `onFailed` callback for any non-cancel
-   * block-proof failure — a genuine sub-tree fault or a prune-induced fork fault alike. No-ops if no
-   * failed-epoch store is configured, or if the checkpoint is no longer canonical (a prune left nothing
-   * to diagnose). Swallows its own errors so a fire-and-forget caller can't leak.
-   */
-  public async tryUploadCheckpointFailure(prover: CheckpointProver): Promise<string | undefined> {
-    if (!this.config.proverNodeFailedEpochStore) {
-      return undefined;
-    }
-    try {
-      // A prune-induced fork fault and a genuine sub-tree failure are indistinguishable at the moment the
-      // prover rejects (no control-plane cancel has landed yet). But the archiver is the authoritative
-      // committed chain: if this checkpoint was pruned out, its last block is no longer canonical there.
-      // Only upload for a checkpoint that still exists on-chain — a prune leaves nothing to diagnose, and
-      // the snapshot (full world-state + archiver) is expensive to produce and store.
-      if (!(await this.isCheckpointCanonical(prover.checkpoint))) {
-        this.log.debug(`Skipping checkpoint-failure upload for ${prover.id}: no longer canonical (pruned)`, {
-          checkpointNumber: prover.checkpoint.number,
-        });
-        return undefined;
-      }
-      const data = await SessionManager.buildProvingData([prover]);
-      return await uploadEpochProofFailure(
-        this.config.proverNodeFailedEpochStore,
-        // The prover's content-addressed id; the epoch number is already in the upload path.
-        prover.id,
-        data,
-        this.l2BlockSource as Archiver,
-        this.worldState,
-        assertRequired(pick(this.config, 'l1ChainId', 'rollupVersion', 'dataDirectory')),
-        this.log,
-      );
-    } catch (err) {
-      this.log.error(`Error uploading checkpoint failure for ${prover.id}`, err);
-      return undefined;
-    }
-  }
-
-  // ---------------- helpers ----------------
-
-  /**
-   * True if the checkpoint still exists on the canonical chain: the archiver holds a block at its last
-   * block's height whose archive root matches. A prune (fork fault) leaves the block missing or replaced,
-   * so this returns false. Protected for direct unit-test access.
-   */
-  protected async isCheckpointCanonical(checkpoint: Checkpoint): Promise<boolean> {
-    const lastBlock = checkpoint.blocks.at(-1);
-    if (!lastBlock) {
-      return false;
-    }
-    const onChain = await this.l2BlockSource.getBlock({ number: lastBlock.number });
-    return !!onChain && onChain.archive.root.equals(checkpoint.archive.root);
-  }
-
-  @memoize
-  private getL1Constants(): Promise<L1RollupConstants> {
-    return this.l2BlockSource.getL1Constants();
-  }
-
-  /**
-   * Seeds the catch-up cursor and the expiry high-water mark on start, from the catch-up start epoch. Protected for
-   * direct unit-test access.
-   */
-  protected async seedCatchUp(): Promise<void> {
-    const lastFullyProvenEpoch = await this.epochProofStatus.getLastFullyProvenEpoch();
-    const catchUpStartEpoch = await this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
-    this.lastExpiredEpoch = catchUpStartEpoch;
-    this.lastProcessedCheckpoint = await this.computeStartingCheckpoint(catchUpStartEpoch);
-  }
-
-  /**
-   * Resolves the epoch the restart catch-up resumes after: the last fully-proven epoch, lowered to the last epoch whose
-   * proof-submission window has closed. Epochs between the two are covered by the proven tip but can still be proven,
-   * and this prover may hold no full-epoch proof of them.
-   */
-  protected async resolveCatchUpStartEpoch(
-    lastFullyProvenEpoch: EpochNumber | undefined,
-  ): Promise<EpochNumber | undefined> {
-    if (lastFullyProvenEpoch === undefined) {
-      return undefined;
-    }
-    const l1Constants = await this.getL1Constants();
-    const latestSlot = await this.l2BlockSource.getSyncedL2SlotNumber();
-    // While the archiver reports no synced slot, assume the earliest possible current epoch: the last fully-proven one.
-    // It can still be the current epoch, since the archiver counts an epoch complete once its last slot has a
-    // checkpoint. Assuming an earlier epoch only revisits more epochs.
-    const currentEpoch = latestSlot === undefined ? lastFullyProvenEpoch : getEpochAtSlot(latestSlot, l1Constants);
-    const lastClosedEpoch = currentEpoch - l1Constants.proofSubmissionEpochs - 1;
-    if (lastClosedEpoch < 0) {
-      return undefined;
-    }
-    return EpochNumber(Math.min(lastFullyProvenEpoch, lastClosedEpoch));
-  }
-
-  /**
-   * Resolves the catch-up cursor seed: the last checkpoint at or before the catch-up start epoch's last slot, or 0 if
-   * none. The start epoch itself may hold no checkpoints, since it is picked by time. Seeding from a checkpoint (rather
-   * than a checkpointed tip) guarantees a restart reprocesses every checkpoint of the partially-proven epoch, since the
-   * checkpointed tip can sit ahead of the last fully-proven checkpoint.
-   */
-  protected async computeStartingCheckpoint(startEpoch: EpochNumber | undefined): Promise<CheckpointNumber> {
-    if (startEpoch === undefined) {
-      return CheckpointNumber.ZERO;
-    }
-    const [, lastSlot] = getSlotRangeForEpoch(startEpoch, await this.getL1Constants());
-    const [last] = await this.l2BlockSource.getCheckpointsData({ fromSlot: lastSlot, limit: 1, reverse: true });
-    return last?.checkpointNumber ?? CheckpointNumber.ZERO;
-  }
-
-  private async gatherPreviousBlockHeader(previousBlockNumber: number) {
-    const data = await this.l2BlockSource.getBlockData({ number: BlockNumber(previousBlockNumber) });
-    if (!data?.header) {
-      throw new Error(`Previous block header ${previousBlockNumber} not found`);
-    }
-    return data.header;
+  /** Uploads the proving data of a single failed checkpoint prover. Delegates to `FailureUploader`. */
+  public tryUploadCheckpointFailure(prover: CheckpointProver): Promise<string | undefined> {
+    return this.failureUploader.uploadCheckpointFailure(prover);
   }
 
   private validateConfig() {
@@ -881,21 +375,6 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       );
     }
   }
-}
-
-/**
- * Returns the oldest world-state snapshot that proving the checkpoint reads and that pruning can remove, or undefined
- * if it reads none. Proving block `b` reads the snapshot of block `b - 1`. The genesis snapshot (block 0) is never
- * pruned, so a checkpoint starting at block 1 reads a prunable snapshot only if it holds a second block.
- */
-function getOldestPrunableSnapshot({
-  startBlock,
-  blockCount,
-}: Pick<CommonCheckpointData, 'startBlock' | 'blockCount'>): BlockNumber | undefined {
-  if (startBlock > 1) {
-    return BlockNumber(startBlock - 1);
-  }
-  return blockCount > 1 ? BlockNumber(1) : undefined;
 }
 
 // Re-export so handlers can compare states externally.
