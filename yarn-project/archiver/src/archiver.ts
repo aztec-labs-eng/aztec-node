@@ -28,6 +28,7 @@ import {
   l2TipsEqual,
 } from '@aztec-labs/stdlib/block';
 import {
+  type L1PublishedData,
   type ProposedCheckpointData,
   type ProposedCheckpointInput,
   PublishedCheckpoint,
@@ -760,8 +761,8 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, L1P
     return Promise.resolve(this.synchronizer.getL1Timestamp());
   }
 
-  public getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
-    return this.synchronizer.getL1ProposerForSlot(slot);
+  public getL1ProposerForSlot(slot: SlotNumber, l1: L1PublishedData): Promise<EthAddress | undefined> {
+    return this.synchronizer.getL1ProposerForSlot(slot, l1);
   }
 
   public async getSyncedL2SlotNumber(): Promise<SlotNumber | undefined> {

@@ -164,9 +164,12 @@ export class ArchiverL1Synchronizer implements Traceable {
     return this.l1Timestamp;
   }
 
-  /** Returns the proposer whose signature the rollup required for a checkpoint at the given past slot. */
-  public getL1ProposerForSlot(slot: SlotNumber): Promise<EthAddress | undefined> {
-    return this.checkpointIngestor.getL1ProposerForSlot(slot);
+  /**
+   * Returns the proposer whose signature the rollup required for the checkpoint at the given past slot, published in
+   * the L1 block `l1`, or undefined once that block is no longer canonical.
+   */
+  public getL1ProposerForSlot(slot: SlotNumber, l1: L1PublishedData): Promise<EthAddress | undefined> {
+    return this.checkpointIngestor.getL1ProposerForSlot(slot, l1);
   }
 
   /** Checks that the ethereum node we are connected to has a latest timestamp no more than the allowed drift. Throw if not. */

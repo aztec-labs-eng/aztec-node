@@ -3322,6 +3322,26 @@ describe('Archiver Sync', () => {
         expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeUndefined();
       }, 15_000);
     });
+
+    describe('L1 proposer for a published checkpoint', () => {
+      it('names the proposer the rollup required while the L1 block that carried the checkpoint is canonical', async () => {
+        const cp1 = await syncCheckpointOne();
+        const [published] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+
+        expect(await archiver.getL1ProposerForSlot(cp1.header.slotNumber, published.l1)).toEqual(signers[0].address);
+      });
+
+      it('names no proposer once the L1 block that carried the checkpoint is reorged out', async () => {
+        const cp1 = await syncCheckpointOne();
+        const [published] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+
+        // L1 replaces that block, before the archiver syncs again, with a fork where another key proposes the slot.
+        fake.reorgL1BlocksFrom(published.l1.blockNumber);
+        rollupContract.getProposerAt.mockResolvedValue(signers[1].address);
+
+        expect(await archiver.getL1ProposerForSlot(cp1.header.slotNumber, published.l1)).toBeUndefined();
+      });
+    });
   });
 
   describe('Inbox message recovery', () => {

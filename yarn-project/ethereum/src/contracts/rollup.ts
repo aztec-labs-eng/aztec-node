@@ -833,12 +833,13 @@ export class RollupContract {
     return EthAddress.fromString(result);
   }
 
-  async getProposerAt(timestamp: bigint): Promise<EthAddress> {
+  async getProposerAt(timestamp: bigint, options?: { blockNumber?: bigint }): Promise<EthAddress> {
     const { result } = await this.client.simulateContract({
       address: this.address,
       abi: RollupAbi,
       functionName: 'getProposerAt',
       args: [timestamp],
+      blockNumber: options?.blockNumber,
     });
 
     return EthAddress.fromString(result);

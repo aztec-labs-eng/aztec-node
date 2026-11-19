@@ -513,10 +513,17 @@ describe('BroadcastedProposalWatcher', () => {
     });
 
     describe('against the checkpoint published on L1', () => {
-      /** Makes the archiver return a checkpoint for the scanned slot, whose blocks are from `blockSlot`. */
-      const publishCheckpoint = async (numBlocks: number, blockSlot = slot): Promise<Checkpoint> => {
+      /**
+       * Makes the archiver return a checkpoint for the scanned slot, whose blocks are from `blockSlot`, published in the
+       * L1 block `l1`.
+       */
+      const publishCheckpoint = async (
+        numBlocks: number,
+        blockSlot = slot,
+        l1 = L1PublishedData.random(),
+      ): Promise<Checkpoint> => {
         const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks, slotNumber: blockSlot });
-        const published = new PublishedCheckpoint(checkpoint, L1PublishedData.random(), [], {
+        const published = new PublishedCheckpoint(checkpoint, l1, [], {
           signatureIndices: '0x',
           signaturesOrAddresses: '0x',
         });
@@ -580,6 +587,26 @@ describe('BroadcastedProposalWatcher', () => {
         l1ProposerSource.getL1ProposerForSlot.mockResolvedValue(Secp256k1Signer.random().address);
         const otherSigner = Secp256k1Signer.random();
         mockProposals(slot, [await proposeBlock(otherSigner, checkpoint.blocks[0], { archiveRoot: Fr.random() })], []);
+
+        await watcher.scanSlot(slot);
+
+        expect(emittedOffenses()).toEqual([]);
+      });
+
+      it('does not slash the proposer of a reorged-in fork for a checkpoint the archiver kept from the old fork', async () => {
+        // The archiver still holds the checkpoint from the L1 block `oldFork`, but L1 has reorged onto a fork that
+        // dropped that block and where `newForkProposer` must sign the slot.
+        const oldFork = L1PublishedData.random();
+        const newForkProposer = Secp256k1Signer.random();
+        const checkpoint = await publishCheckpoint(1, slot, oldFork);
+        l1ProposerSource.getL1ProposerForSlot.mockImplementation((_slot, l1Block) =>
+          Promise.resolve(l1Block?.blockHash === oldFork.blockHash ? undefined : newForkProposer.address),
+        );
+        mockProposals(
+          slot,
+          [await proposeBlock(newForkProposer, checkpoint.blocks[0], { archiveRoot: Fr.random() })],
+          [],
+        );
 
         await watcher.scanSlot(slot);
 
