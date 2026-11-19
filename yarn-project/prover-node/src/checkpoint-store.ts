@@ -2,7 +2,7 @@ import type { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@az
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
-import { type L1RollupConstants, getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
+import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 
 import {
   CheckpointProver,
@@ -173,11 +173,6 @@ export class CheckpointStore {
     }
   }
 
-  /** Returns the prover with the supplied id, or undefined. */
-  public get(id: string): CheckpointProver | undefined {
-    return this.provers.get(id);
-  }
-
   /** Returns the prover for the supplied checkpoint (by its content-addressed id), or undefined. */
   public getByCheckpoint(checkpoint: Checkpoint): CheckpointProver | undefined {
     return this.provers.get(CheckpointProver.idFor(checkpoint));
@@ -207,6 +202,3 @@ export class CheckpointStore {
     return this.list().filter(p => p.slotNumber >= fromSlot && p.slotNumber <= toSlot);
   }
 }
-
-/** Sub-set of `L1RollupConstants` actually consumed by the store's slot helpers. */
-export type CheckpointStoreL1Constants = Pick<L1RollupConstants, 'epochDuration'>;
