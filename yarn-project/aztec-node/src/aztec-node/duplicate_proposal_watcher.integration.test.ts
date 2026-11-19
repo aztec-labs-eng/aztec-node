@@ -12,7 +12,7 @@ import {
   WANT_TO_SLASH_EVENT,
   type WantToSlashArgs,
 } from '@aztec-labs/slasher';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { L1ProposerSource, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type { CheckpointProposal } from '@aztec-labs/stdlib/p2p';
 import {
@@ -37,10 +37,11 @@ describe('DUPLICATE_PROPOSAL attribution from the attestation pool', () => {
     store = await openTmpStore('duplicate-proposal-watcher');
     pool = new AttestationPool(store);
 
-    const l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber'>> = mock();
+    const l2BlockSource: MockProxy<Pick<L2BlockSource, 'getSyncedL2SlotNumber' | 'getCheckpoint'>> = mock();
+    const l1ProposerSource: MockProxy<L1ProposerSource> = mock();
     const epochCache: MockProxy<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>> = mock();
     epochCache.getL1Constants.mockReturnValue({ ...EmptyL1RollupConstants, ethereumSlotDuration: 12 });
-    watcher = new BroadcastedProposalWatcher(pool, l2BlockSource, epochCache, {
+    watcher = new BroadcastedProposalWatcher(pool, l2BlockSource, l1ProposerSource, epochCache, {
       ...DefaultSlasherConfig,
       slashDuplicateProposalPenalty: penalty,
     });
