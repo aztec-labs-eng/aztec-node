@@ -60,7 +60,9 @@ export class EpochProofStatus {
 
   /**
    * The last epoch whose blocks are all proven: the proven tip's epoch when the tip is that epoch's last block,
-   * otherwise the epoch before it. Undefined when no such epoch exists.
+   * otherwise the epoch before it. Undefined when nothing is proven yet, when the archiver holds no header for the
+   * proven block, or when the tip is mid-way through epoch 0. Undefined errs toward an earlier start: a restart seeded
+   * from it re-processes the partially proven epoch rather than trusting a stale tip.
    */
   public async getLastFullyProvenEpoch(): Promise<EpochNumber | undefined> {
     const proven = await this.getProvenBlockAndEpoch();
@@ -73,7 +75,11 @@ export class EpochProofStatus {
     return proven.epoch > 0 ? EpochNumber(proven.epoch - 1) : undefined;
   }
 
-  /** The epoch of the first block after the proven tip, or undefined when the archiver does not hold that block. */
+  /**
+   * The epoch of the first block after the proven tip, or undefined when the archiver does not hold that block. The
+   * answer moves forward only when the proven tip does, so proving whatever it returns proves epochs in order rather
+   * than all at once.
+   */
   public async getNextUnprovenEpoch(): Promise<EpochNumber | undefined> {
     const lastProven = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' })) ?? BlockNumber.ZERO;
     const header = (await this.deps.l2BlockSource.getBlockData({ number: BlockNumber(lastProven + 1) }))?.header;
