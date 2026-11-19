@@ -2,13 +2,13 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { ml_kem768 as mlKem768 } from '@noble/post-quantum/ml-kem.js';
 import { Buffer } from 'buffer';
 
-import { bufferFromFieldChunks, bufferToFieldChunks } from '../abi/buffer.js';
+import { bufferFromExactFieldChunks, bufferToFieldChunks } from '../abi/buffer.js';
 
 /**
  * An account's post-quantum public key.
  *
- * It is an ML-KEM-768 public key, which senders encapsulate to in order to establish a post-quantum shared secret with
- * the account. Unlike their elliptic curve key, which is their address point, accounts have no native post-quantum
+ * It is an ML-KEM-768 public key, which senders encapsulate to in order to establish a KEM shared secret with the
+ * account. Unlike their elliptic curve key, which is their address point, accounts have no native post-quantum
  * public key, so they register theirs in the post-quantum public key registry for senders to learn it.
  *
  * TypeScript counterpart of aztec-nr's `PostQuantumPublicKey`, whose fields are this key's
@@ -42,23 +42,9 @@ export class PostQuantumPublicKey {
    * @throws If `fields` is not the {@link PostQuantumPublicKey.toFields} encoding of a key.
    */
   static fromFields(fields: Fr[]): PostQuantumPublicKey {
-    if (fields.length !== PostQuantumPublicKey.SIZE_IN_FIELDS) {
-      throw new Error(
-        `A post-quantum public key is encoded in ${PostQuantumPublicKey.SIZE_IN_FIELDS} fields, got ${fields.length}`,
-      );
-    }
-    const key = PostQuantumPublicKey.fromBuffer(
-      bufferFromFieldChunks(fields).subarray(0, PostQuantumPublicKey.SIZE_IN_BYTES),
+    return PostQuantumPublicKey.fromBuffer(
+      bufferFromExactFieldChunks(fields, PostQuantumPublicKey.SIZE_IN_BYTES, 'post-quantum public key'),
     );
-    // Decoding ignores each field's top byte, and the last field's bytes past the end of the key, so a field with bits
-    // set there decodes to the same key as a well-formed encoding. Re-encoding the key and comparing catches it.
-    const index = key.toFields().findIndex((field, i) => !field.equals(fields[i]));
-    if (index !== -1) {
-      throw new Error(
-        `Field ${index} of a post-quantum public key encoding holds bits outside the key: ${fields[index]}`,
-      );
-    }
-    return key;
   }
 
   toBuffer(): Buffer {

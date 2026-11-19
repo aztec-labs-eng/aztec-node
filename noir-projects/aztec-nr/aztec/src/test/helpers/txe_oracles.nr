@@ -1,6 +1,7 @@
 use crate::{
     context::inputs::PrivateContextInputs,
     event::EventSelector,
+    keys::post_quantum::mlkem768::PostQuantumPublicKey,
     messages::encoding::MESSAGE_CIPHERTEXT_LEN,
     test::helpers::{messaging_secret_strategy::MessagingSecretStrategy, utils::TestAccount},
 };
@@ -22,7 +23,7 @@ use crate::protocol::{
 ///
 /// The TypeScript counterparts are in `yarn-project/txe/src/oracle/txe_oracle_version.ts`.
 pub global TXE_ORACLE_VERSION_MAJOR: Field = 11;
-pub global TXE_ORACLE_VERSION_MINOR: Field = 0;
+pub global TXE_ORACLE_VERSION_MINOR: Field = 1;
 
 /// Asserts that the TXE oracle interface version is compatible.
 pub unconstrained fn assert_compatible_txe_oracle_version() {
@@ -222,6 +223,10 @@ pub unconstrained fn create_account(secret: Field, partial_address: Field) -> Te
 
 #[oracle(aztec_txe_addAccount)]
 pub unconstrained fn add_account(secret: Field) -> TestAccount {}
+
+/// Derives the post-quantum public key of `account`.
+#[oracle(aztec_txe_derivePostQuantumPublicKey)]
+pub(crate) unconstrained fn derive_post_quantum_public_key(account: AztecAddress) -> PostQuantumPublicKey {}
 
 #[oracle(aztec_txe_addAuthWitness)]
 pub unconstrained fn add_authwit(address: AztecAddress, message_hash: Field) {}
