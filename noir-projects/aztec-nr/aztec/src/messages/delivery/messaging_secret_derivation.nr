@@ -7,7 +7,10 @@ use crate::oracle::{
     key_validation_request::get_key_validation_request, keys::get_public_keys_and_partial_address,
     notes::get_address_derived_messaging_secret, random::random,
 };
-use crate::protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, traits::ToField};
+use crate::protocol::{
+    address::AztecAddress, constants::DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, hash::poseidon2_hash_with_separator,
+    point::EmbeddedCurvePoint, traits::ToField,
+};
 use crate::standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS;
 
 global NON_INTERACTIVE_HANDSHAKE: u8 = 1;
@@ -25,6 +28,17 @@ pub(crate) fn compute_recipient_tsk_messaging_secret(tsk_app: Field, recipient: 
     poseidon2_hash_with_separator(
         [tsk_app, recipient.to_field()],
         DOM_SEP__RECIPIENT_TSK_SECRET,
+    )
+}
+
+/// Computes a shared secret point's messaging secret for a contract.
+///
+/// `h(DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, S.x, S.y, contract_address)`
+pub fn compute_messaging_secret_from_point(shared_secret: EmbeddedCurvePoint, contract_address: AztecAddress) -> Field {
+    // The separator name is ECDH-specific, but this silos any shared secret point, not only ECDH ones.
+    poseidon2_hash_with_separator(
+        [shared_secret.x, shared_secret.y, contract_address.to_field()],
+        DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET,
     )
 }
 
@@ -125,14 +139,15 @@ pub(crate) unconstrained fn get_recipient_tsk_messaging_secret(recipient: AztecA
 mod test {
     use crate::context::PrivateContext;
     use crate::hash::hash_args;
+    use crate::keys::ecdh_shared_secret::derive_ecdh_shared_secret;
     use crate::messages::delivery::{
         delivery_messaging_secret::DeliveryMessagingSecret, handshake::AppSiloedHandshakeSecrets, OnchainDeliveryMode,
     };
     use crate::oracle::execution_cache;
     use crate::oracle::resolve_messaging_secret_strategy::resolve_messaging_secret_strategy;
-    use crate::protocol::{address::AztecAddress, traits::{FromField, Serialize}};
+    use crate::protocol::{address::AztecAddress, scalar::Scalar, traits::{FromField, Serialize}};
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::MessagingSecretDerivation;
+    use super::{compute_messaging_secret_from_point, MessagingSecretDerivation};
     use std::test::OracleMock;
 
     global SENDER: AztecAddress = AztecAddress::from_field(1);
@@ -254,6 +269,22 @@ mod test {
                 .into_delivery_messaging_secret(context, SENDER, RECIPIENT);
             assert_eq(delivery_messaging_secret.secret(), secrets.shared);
         });
+    }
+
+    #[test]
+    unconstrained fn messaging_secret_differs_per_contract() {
+        let secret_a = Scalar { lo: 0x1234, hi: 0x2345 };
+        let pk_b = std::embedded_curve_ops::fixed_base_scalar_mul(Scalar { lo: 0x3456, hi: 0x4567 });
+
+        let shared_secret = derive_ecdh_shared_secret(secret_a, pk_b);
+
+        let contract_a = AztecAddress::from_field(0xAAAA);
+        let contract_b = AztecAddress::from_field(0xBBBB);
+
+        let messaging_secret_a = compute_messaging_secret_from_point(shared_secret, contract_a);
+        let messaging_secret_b = compute_messaging_secret_from_point(shared_secret, contract_b);
+
+        assert(messaging_secret_a != messaging_secret_b);
     }
 
     unconstrained fn mock_existing_handshake_secrets(maybe_secrets: Option<AppSiloedHandshakeSecrets>) {

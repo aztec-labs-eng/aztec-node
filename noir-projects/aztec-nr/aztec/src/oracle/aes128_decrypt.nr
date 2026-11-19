@@ -25,8 +25,10 @@ pub unconstrained fn try_aes128_decrypt<let N: u32>(
 
 mod test {
     use crate::{
-        keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point,
-        messages::encryption::aes128::derive_aes_symmetric_key_and_iv_from_shared_secret,
+        messages::{
+            delivery::messaging_secret_derivation::compute_messaging_secret_from_point,
+            encryption::aes128::derive_aes_symmetric_key_and_iv_from_encryption_secret,
+        },
         utils::{array::subarray::subarray, point::point_from_x_coord},
     };
     use crate::protocol::address::AztecAddress;
@@ -45,9 +47,9 @@ mod test {
 
         env.utility_context(|_| {
             let shared_secret_point = point_from_x_coord(1).unwrap();
-            let s_app = compute_app_siloed_shared_secret_from_point(shared_secret_point, CONTRACT_ADDRESS);
+            let messaging_secret = compute_messaging_secret_from_point(shared_secret_point, CONTRACT_ADDRESS);
 
-            let (sym_key, iv) = derive_aes_symmetric_key_and_iv_from_shared_secret::<1>(s_app)[0];
+            let (sym_key, iv) = derive_aes_symmetric_key_and_iv_from_encryption_secret::<1>(messaging_secret)[0];
 
             let plaintext: [u8; TEST_PLAINTEXT_LENGTH] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -74,9 +76,9 @@ mod test {
             // Decrypting with the wrong key results in garbage data with invalid PKCS#7 padding,
             // so the oracle returns None.
             let shared_secret_point = point_from_x_coord(1).unwrap();
-            let s_app = compute_app_siloed_shared_secret_from_point(shared_secret_point, CONTRACT_ADDRESS);
+            let messaging_secret = compute_messaging_secret_from_point(shared_secret_point, CONTRACT_ADDRESS);
 
-            let (sym_key, iv) = derive_aes_symmetric_key_and_iv_from_shared_secret::<1>(s_app)[0];
+            let (sym_key, iv) = derive_aes_symmetric_key_and_iv_from_encryption_secret::<1>(messaging_secret)[0];
 
             let plaintext: [u8; TEST_PLAINTEXT_LENGTH] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
             let ciphertext: [u8; TEST_CIPHERTEXT_LENGTH] = aes128_encrypt(plaintext, iv, sym_key);

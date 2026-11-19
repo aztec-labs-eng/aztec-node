@@ -226,6 +226,25 @@ describe('legacy oracle dispatch', () => {
     expect(legacyElement).toEqual(modernElement.slice(0, -1));
   });
 
+  it('serves the retired getSharedSecrets name from the ECDH messaging secrets handler over the same wire', async () => {
+    const service = new EphemeralArrayService();
+    const secrets = EphemeralArray.fromValues(service, [Fr.random()]);
+    const handler = {
+      isUtility: true,
+      getEcdhMessagingSecrets: () => Promise.resolve(secrets),
+    } as unknown as Handler;
+    const inputs = [
+      [toACVMField(await AztecAddress.random())],
+      [toACVMField(service.newArray([]))],
+      [toACVMField(await AztecAddress.random())],
+    ];
+
+    const callback = buildACIRCallback(handler);
+
+    const legacyWire = await callback['aztec_utl_getSharedSecrets'](...inputs);
+    expect(legacyWire).toEqual(await callback['aztec_utl_getEcdhMessagingSecrets'](...inputs));
+  });
+
   it('rejects a legacy name that collides with a live oracle', () => {
     const handler = { isMisc: true, getRandomField: () => Promise.resolve(new Fr(0)) } as Handler;
     const legacyRegistry: Record<string, LegacyOracleEntry> = {

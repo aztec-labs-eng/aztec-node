@@ -11,8 +11,9 @@ import { CompleteAddress } from '../contract/complete_address.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
 import { computeAppTaggingSecretKey, deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
 import { makeInvalidAztecAddress, randomMessagingSecret } from '../tests/factories.js';
-import { MessagingSecret, MessagingSecretSchema, computeAddressDerivedSharedSecretPoint } from './messaging_secret.js';
+import { MessagingSecret, MessagingSecretSchema } from './messaging_secret.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
+import { computeAddressDerivedSharedSecretPoint } from './shared_secret_derivation.js';
 import { SiloedTag } from './siloed_tag.js';
 import { TaggingIndexRangeSchema } from './tagging_index_range.js';
 
