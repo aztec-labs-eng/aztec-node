@@ -70,6 +70,7 @@ export const rollupReads = {
     })),
   currentSlot: () => makeRead('getCurrentSlot', [], slot => SlotNumber.fromBigInt(slot)),
   manaTarget: () => makeRead('getManaTarget', [], target => target),
+  manaLimit: () => makeRead('getManaLimit', [], limit => limit),
   provingCostPerManaInEth: () => makeRead('getProvingCostPerManaInEth', [], cost => cost),
   protocolFeeMargin: () => makeRead('getProtocolFeeMargin', [], margin => BigInt(margin)),
   checkpoint: (checkpointNumber: CheckpointNumber) =>

@@ -298,6 +298,7 @@ export class FeeProviderImpl implements FeeProvider {
       rollupReads.tips(),
       rollupReads.currentSlot(),
       rollupReads.manaTarget(),
+      rollupReads.manaLimit(),
       rollupReads.provingCostPerManaInEth(),
       rollupReads.protocolFeeMargin(),
       ...(tips === undefined
@@ -345,6 +346,7 @@ export class FeeProviderImpl implements FeeProvider {
     const tips = need(rollupReads.tips());
     const currentSlot = need(rollupReads.currentSlot());
     const manaTarget = need(rollupReads.manaTarget());
+    const manaLimit = need(rollupReads.manaLimit());
     const provingCostPerManaEth = need(rollupReads.provingCostPerManaInEth());
     const protocolFeeMarginBps = need(rollupReads.protocolFeeMargin());
     if (tips === undefined || currentSlot === undefined) {
@@ -384,6 +386,7 @@ export class FeeProviderImpl implements FeeProvider {
     if (
       missing.length > 0 ||
       manaTarget === undefined ||
+      manaLimit === undefined ||
       provingCostPerManaEth === undefined ||
       protocolFeeMarginBps === undefined ||
       currentMinFee === undefined ||
@@ -403,7 +406,7 @@ export class FeeProviderImpl implements FeeProvider {
           excessMana: computeExcessMana(feeHeader.excessMana, feeHeader.manaUsed, manaTarget),
           ethPerFeeAsset: feeHeader.ethPerFeeAsset,
           manaTarget,
-          manaLimit: 2n * manaTarget,
+          manaLimit,
           provingCostPerManaEth,
           epochDuration,
           protocolFeeMarginBps,
