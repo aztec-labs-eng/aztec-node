@@ -2,8 +2,9 @@ import { ARCHIVE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import type { KeyStore } from '@aztec-labs/key-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
@@ -19,6 +20,7 @@ import {
   FunctionCall,
   FunctionSelector,
   FunctionType,
+  bufferToFieldChunks,
   encodeArguments,
   getFunctionArtifactByName,
   getFunctionReturnType,
@@ -37,8 +39,25 @@ import {
   siloNullifier,
 } from '@aztec-labs/stdlib/hash';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { MessagingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
+import {
+  KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES,
+  KemCiphertext,
+  PostQuantumPublicKey,
+  PublicKeys,
+  deriveKeys,
+  derivePostQuantumKeyPair,
+  hashPublicKey,
+  mlKemDecapsulate,
+  mlKemEncapsulate,
+} from '@aztec-labs/stdlib/keys';
+import {
+  MessagingSecret,
+  OnchainDeliveryMode,
+  SiloedTag,
+  computeHybridMessagingSecret,
+  computeHybridSharedSecret,
+  deriveEcdhSharedSecretPoint,
+} from '@aztec-labs/stdlib/logs';
 import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
@@ -53,6 +72,7 @@ import {
   TxHash,
   TxStatus,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { mock } from 'jest-mock-extended';
 import type { _MockProxy } from 'jest-mock-extended/lib/Mock.js';
 
@@ -641,6 +661,218 @@ describe('Utility Execution test suite', () => {
         const ephPksArray = EphemeralArray.fromValues<EmbeddedCurvePoint>(service, [ephPk]);
         await expect(
           utilityExecutionOracle.getEcdhMessagingSecrets(owner, ephPksArray, contractAddress),
+        ).rejects.toThrow(/not in the allowed scopes/);
+      });
+    });
+
+    describe('mlKemEncapsulate', () => {
+      const randomSeed = () => [...randomBytes(KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES)];
+
+      it('encapsulates a shared secret that the secret key decapsulates', () => {
+        const { publicKey, secretKey } = derivePostQuantumKeyPair(GrumpkinScalar.random());
+
+        const { kemSharedSecret, kemCiphertext } = utilityExecutionOracle.mlKemEncapsulate(
+          { fields: publicKey.toFields() },
+          randomSeed(),
+        ).value!;
+
+        const decapsulated = mlKemDecapsulate(KemCiphertext.fromFields(kemCiphertext.fields), secretKey);
+        expect(kemSharedSecret.fields).toEqual(bufferToFieldChunks(decapsulated));
+      });
+
+      it('encapsulates the same shared secret and ciphertext from the same seed', () => {
+        const publicKey = { fields: derivePostQuantumKeyPair(GrumpkinScalar.random()).publicKey.toFields() };
+        const seed = randomSeed();
+
+        const encapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, seed);
+
+        expect(encapsulation.isSome()).toBe(true);
+        expect(utilityExecutionOracle.mlKemEncapsulate(publicKey, seed).value).toEqual(encapsulation.value);
+      });
+
+      it('encapsulates a different shared secret and ciphertext from another seed', () => {
+        const publicKey = { fields: derivePostQuantumKeyPair(GrumpkinScalar.random()).publicKey.toFields() };
+
+        const encapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, randomSeed()).value!;
+        const otherEncapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, randomSeed()).value!;
+
+        expect(otherEncapsulation.kemSharedSecret).not.toEqual(encapsulation.kemSharedSecret);
+        expect(otherEncapsulation.kemCiphertext).not.toEqual(encapsulation.kemCiphertext);
+      });
+
+      it('returns none for a key with out of range coefficients', () => {
+        // Every coefficient of this key is 4095, and ML-KEM-768 allows none above 3328.
+        const publicKey = PostQuantumPublicKey.fromBuffer(Buffer.alloc(PostQuantumPublicKey.SIZE_IN_BYTES, 0xff));
+
+        const encapsulation = utilityExecutionOracle.mlKemEncapsulate({ fields: publicKey.toFields() }, randomSeed());
+
+        expect(encapsulation.isNone()).toBe(true);
+      });
+
+      it('returns none for fields that do not encode a key', () => {
+        const fields = derivePostQuantumKeyPair(GrumpkinScalar.random()).publicKey.toFields();
+        fields[0] = fields[0].add(new Fr(1n << 248n));
+
+        expect(utilityExecutionOracle.mlKemEncapsulate({ fields }, randomSeed()).isNone()).toBe(true);
+      });
+    });
+
+    describe('getHybridMessagingSecret', () => {
+      let oracle: UtilityExecutionOracle;
+      let ownerPublicKey: PostQuantumPublicKey;
+
+      /** Creates a hybrid shared secret with the owner, the way a sender does. */
+      const createHybridSharedSecret = async () => {
+        const ephSk = GrumpkinScalar.random();
+        const ephPk = await Grumpkin.mul(Grumpkin.generator, ephSk);
+        const { sharedSecret, ciphertext } = mlKemEncapsulate(
+          ownerPublicKey,
+          randomBytes(KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES),
+        )!;
+        const secret = await computeHybridSharedSecret(
+          sharedSecret,
+          await deriveEcdhSharedSecretPoint(ephSk, await owner.toAddressPoint()),
+        );
+
+        return { secret, ephPk, kemCiphertext: { fields: ciphertext.toFields() } };
+      };
+
+      beforeEach(async () => {
+        const { masterIncomingViewingSecretKey, masterTaggingSecretKey } = await deriveKeys(ownerSecretKey);
+        const ownerIvpkMHash = await hashPublicKey(ownerCompleteAddress.publicKeys.ivpkM);
+        keyStore.getMasterSecretKey.mockImplementation((pkMHash: Fr) => {
+          if (pkMHash.equals(ownerIvpkMHash)) {
+            return Promise.resolve(masterIncomingViewingSecretKey);
+          }
+          throw new Error(`Unknown pk_m_hash ${pkMHash}`);
+        });
+        keyStore.getMasterTaggingSecretKey.mockImplementation((account: AztecAddress) => {
+          if (account.equals(owner)) {
+            return Promise.resolve(masterTaggingSecretKey);
+          }
+          throw new Error(`Unknown account ${account}`);
+        });
+
+        ownerPublicKey = derivePostQuantumKeyPair(masterTaggingSecretKey).publicKey;
+        oracle = makeOracle({ contractAddress, scopes: [owner] });
+      });
+
+      it('derives the messaging secret of a hybrid shared secret created with the recipient', async () => {
+        const { secret, ephPk, kemCiphertext } = await createHybridSharedSecret();
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, contractAddress);
+
+        expect(messagingSecret.value).toEqual(await computeHybridMessagingSecret(secret, contractAddress));
+      });
+
+      it('returns different messaging secrets for different contract addresses', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const otherContractAddress = await AztecAddress.random();
+        const otherOracle = makeOracle({ contractAddress: otherContractAddress, scopes: [owner] });
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, contractAddress);
+        const otherMessagingSecret = await otherOracle.getHybridMessagingSecret(
+          owner,
+          ephPk,
+          kemCiphertext,
+          otherContractAddress,
+        );
+
+        expect(otherMessagingSecret.value).not.toEqual(messagingSecret.value);
+      });
+
+      it('derives a different messaging secret from another ephemeral public key', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const { ephPk: otherEphPk } = await createHybridSharedSecret();
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, contractAddress);
+        const otherMessagingSecret = await oracle.getHybridMessagingSecret(
+          owner,
+          otherEphPk,
+          kemCiphertext,
+          contractAddress,
+        );
+
+        expect(otherMessagingSecret.isSome()).toBe(true);
+        expect(otherMessagingSecret.value).not.toEqual(messagingSecret.value);
+      });
+
+      it('derives a different messaging secret from another KEM ciphertext', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const { kemCiphertext: otherKemCiphertext } = await createHybridSharedSecret();
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, contractAddress);
+        const otherMessagingSecret = await oracle.getHybridMessagingSecret(
+          owner,
+          ephPk,
+          otherKemCiphertext,
+          contractAddress,
+        );
+
+        expect(otherMessagingSecret.isSome()).toBe(true);
+        expect(otherMessagingSecret.value).not.toEqual(messagingSecret.value);
+      });
+
+      it('returns none for an ephemeral public key that is not on the curve', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const offCurve = { x: ephPk.x, y: ephPk.y.add(Fr.ONE) };
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, offCurve, kemCiphertext, contractAddress);
+
+        expect(messagingSecret.isNone()).toBe(true);
+      });
+
+      it('returns none for an ephemeral public key at infinity', async () => {
+        const { kemCiphertext } = await createHybridSharedSecret();
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(
+          owner,
+          Point.INFINITY,
+          kemCiphertext,
+          contractAddress,
+        );
+
+        expect(messagingSecret.isNone()).toBe(true);
+      });
+
+      it('returns none for fields that do not encode a KEM ciphertext', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const fields = [...kemCiphertext.fields];
+        fields[0] = fields[0].add(new Fr(1n << 248n));
+
+        const messagingSecret = await oracle.getHybridMessagingSecret(owner, ephPk, { fields }, contractAddress);
+
+        expect(messagingSecret.isNone()).toBe(true);
+      });
+
+      it('returns none for a recipient whose keys are not held', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+
+        // `scope` is in the allowed scopes of this oracle, but was never registered as an account.
+        const messagingSecret = await utilityExecutionOracle.getHybridMessagingSecret(
+          scope,
+          ephPk,
+          kemCiphertext,
+          contractAddress,
+        );
+
+        expect(messagingSecret.isNone()).toBe(true);
+      });
+
+      it('rejects when contract address does not match execution context', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+        const wrongAddress = await AztecAddress.random();
+
+        await expect(oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, wrongAddress)).rejects.toThrow(
+          /expected/,
+        );
+      });
+
+      it('rejects a recipient outside the allowed scopes', async () => {
+        const { ephPk, kemCiphertext } = await createHybridSharedSecret();
+
+        await expect(
+          utilityExecutionOracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, contractAddress),
         ).rejects.toThrow(/not in the allowed scopes/);
       });
     });

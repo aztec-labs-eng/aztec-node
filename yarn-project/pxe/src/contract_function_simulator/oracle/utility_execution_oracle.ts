@@ -8,7 +8,7 @@ import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { chunk, times, uniqueBy } from '@aztec-labs/foundation/collection';
 import { Aes128 } from '@aztec-labs/foundation/crypto/aes128';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { type GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { LogLevels, type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
@@ -23,7 +23,7 @@ import {
 } from '@aztec-labs/simulator/client';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
-import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { type FunctionCall, FunctionSelector, bufferToFieldChunks } from '@aztec-labs/stdlib/abi';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, type BlockParameter, type L2TipsProvider } from '@aztec-labs/stdlib/block';
@@ -31,8 +31,24 @@ import type { CompleteAddress, ContractInstancePreimageWithAddress, PartialAddre
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
-import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { FlatPublicLogs, MessagingSecret, computeEcdhMessagingSecret } from '@aztec-labs/stdlib/logs';
+import {
+  KemCiphertext,
+  PostQuantumPublicKey,
+  PublicKeys,
+  computeAddressSecret,
+  derivePostQuantumKeyPair,
+  hashPublicKey,
+  mlKemDecapsulate,
+  mlKemEncapsulate,
+} from '@aztec-labs/stdlib/keys';
+import {
+  FlatPublicLogs,
+  MessagingSecret,
+  computeEcdhMessagingSecret,
+  computeHybridMessagingSecret,
+  computeHybridSharedSecret,
+  deriveEcdhSharedSecretPoint,
+} from '@aztec-labs/stdlib/logs';
 import {
   type UnsiloedMessageNullifier,
   getL1ToL2MessageWitness,
@@ -81,8 +97,10 @@ import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { EventValidationRequest } from '../noir-structs/event_validation_request.js';
 import { type FactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
+import type { FieldChunks } from '../noir-structs/field_chunks.js';
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
+import type { MlKemEncapsulationData } from '../noir-structs/ml_kem_encapsulation_data.js';
 import type { NoteData } from '../noir-structs/note_data.js';
 import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import type { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
@@ -1006,12 +1024,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       );
     }
 
-    assertAllowedScope(address, this.scopes);
-
-    // An address can be in scope without the PXE holding its keys (e.g. syncing a registered but non-owned account),
-    // in which case no secrets can be derived and we return an empty array rather than failing.
-    const recipientCompleteAddress = await this.addressStore.getCompleteAddress(address);
-    if (!recipientCompleteAddress) {
+    const addressSecret = await this.#getAddressSecret(address);
+    if (!addressSecret) {
       this.logger.warn(
         `Computing ECDH messaging secrets for address ${address} whose keys are not held - returning no secrets`,
         {
@@ -1021,9 +1035,6 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       );
       return EphemeralArray.fromValues<Fr>(this.ephemeralArrayService, []);
     }
-    const ivpkMHash = await hashPublicKey(recipientCompleteAddress.publicKeys.ivpkM);
-    const ivskM = await this.keyStore.getMasterSecretKey(ivpkMHash);
-    const addressSecret = await computeAddressSecret(await recipientCompleteAddress.getPreaddress(), ivskM);
 
     const ephPkPoints = ephPks.readAll(this.ephemeralArrayService);
     const secrets = await allToCompletion(
@@ -1031,6 +1042,104 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     );
 
     return EphemeralArray.fromValues(this.ephemeralArrayService, secrets);
+  }
+
+  /**
+   * Encapsulates a KEM shared secret to a post-quantum public key, drawing all of its randomness from `seed`.
+   * @returns The KEM shared secret and its ciphertext, or none if `publicKey` is not a valid ML-KEM-768 public key.
+   */
+  public mlKemEncapsulate(publicKey: FieldChunks, seed: number[]): Option<MlKemEncapsulationData> {
+    let key: PostQuantumPublicKey;
+    try {
+      key = PostQuantumPublicKey.fromFields(publicKey.fields);
+    } catch {
+      // The fields are whatever the key's account registered, so they may not be the encoding of a key.
+      return Option.none();
+    }
+
+    const encapsulation = mlKemEncapsulate(key, Buffer.from(seed));
+    if (!encapsulation) {
+      return Option.none();
+    }
+
+    return Option.some({
+      kemSharedSecret: { fields: bufferToFieldChunks(encapsulation.sharedSecret) },
+      kemCiphertext: { fields: encapsulation.ciphertext.toFields() },
+    });
+  }
+
+  /**
+   * Derives a messaging secret from a hybrid shared secret.
+   *
+   * It is the one the calling contract gets from the hybrid shared secret created with `address`, the recipient.
+   * `ephPk` is the ephemeral public key of whoever created it, and `kemCiphertext` the ciphertext of their
+   * encapsulation to the post-quantum public key of `address`. `contractAddress` is the contract the secret is siloed
+   * to, and must be the calling contract.
+   *
+   * Returns none when the PXE does not hold the keys for `address`, or when `ephPk` or `kemCiphertext` are malformed.
+   * @throws If `address` is not in the execution's allowed scopes.
+   */
+  public async getHybridMessagingSecret(
+    address: AztecAddress,
+    ephPk: EmbeddedCurvePoint,
+    kemCiphertext: FieldChunks,
+    contractAddress: AztecAddress,
+  ): Promise<Option<Fr>> {
+    if (!contractAddress.equals(this.contractAddress)) {
+      throw new Error(
+        `getHybridMessagingSecret called with contract address ${contractAddress}, expected ${this.contractAddress}`,
+      );
+    }
+
+    const addressSecret = await this.#getAddressSecret(address);
+    if (!addressSecret) {
+      this.logger.warn(
+        `Computing a hybrid messaging secret for address ${address} whose keys are not held - returning no secret`,
+        {
+          address,
+          contractAddress: this.contractAddress,
+        },
+      );
+      return Option.none();
+    }
+
+    // The ephemeral public key and the ciphertext are whatever the sender chose to hand over, so neither may be
+    // well-formed. No secret can be derived from those, which are skipped rather than failing the execution.
+    const ephPkPoint = new Point(ephPk.x, ephPk.y);
+    if (ephPkPoint.isInfinite || !ephPkPoint.isOnCurve()) {
+      return Option.none();
+    }
+    let ciphertext: KemCiphertext;
+    try {
+      ciphertext = KemCiphertext.fromFields(kemCiphertext.fields);
+    } catch {
+      return Option.none();
+    }
+
+    const { secretKey } = derivePostQuantumKeyPair(await this.keyStore.getMasterTaggingSecretKey(address));
+    const hybridSharedSecret = await computeHybridSharedSecret(
+      mlKemDecapsulate(ciphertext, secretKey),
+      await deriveEcdhSharedSecretPoint(addressSecret, ephPkPoint),
+    );
+
+    return Option.some(await computeHybridMessagingSecret(hybridSharedSecret, this.contractAddress));
+  }
+
+  /**
+   * Returns the secret key of the address point of `address`, or undefined when the PXE does not hold its keys. An
+   * address can be in scope without them, e.g. when syncing a registered but non-owned account.
+   * @throws If `address` is not in the execution's allowed scopes.
+   */
+  async #getAddressSecret(address: AztecAddress): Promise<GrumpkinScalar | undefined> {
+    assertAllowedScope(address, this.scopes);
+
+    const completeAddress = await this.addressStore.getCompleteAddress(address);
+    if (!completeAddress) {
+      return undefined;
+    }
+    const ivskM = await this.keyStore.getMasterSecretKey(await hashPublicKey(completeAddress.publicKeys.ivpkM));
+
+    return computeAddressSecret(await completeAddress.getPreaddress(), ivskM);
   }
 
   public pushEphemeral(slot: Fr, elements: Fr[]): number {

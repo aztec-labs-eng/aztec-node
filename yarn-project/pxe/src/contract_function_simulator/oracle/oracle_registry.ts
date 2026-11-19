@@ -3,6 +3,7 @@ import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 import { toACVMField } from '@aztec-labs/simulator/client';
+import { KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES } from '@aztec-labs/stdlib/keys';
 
 import {
   ARRAY,
@@ -24,10 +25,12 @@ import {
   FIXED_ARRAY,
   FUNCTION_SELECTOR,
   type InputSlot,
+  KEM_CIPHERTEXT,
   KEY_VALIDATION_REQUEST,
   LOG_RETRIEVAL_REQUEST,
   LOG_RETRIEVAL_RESPONSE,
   MEMBERSHIP_WITNESS,
+  ML_KEM_ENCAPSULATION,
   type MaybePromise,
   NOTE,
   NOTE_ORIGIN,
@@ -39,6 +42,7 @@ import {
   type OutputSlot,
   PENDING_TAGGED_LOG,
   POINT,
+  POST_QUANTUM_PUBLIC_KEY,
   PROVIDED_SECRET,
   PUBLIC_DATA_WITNESS,
   PUBLIC_KEYS_AND_PARTIAL_ADDRESS,
@@ -344,6 +348,24 @@ export const ORACLE_REGISTRY = {
       { name: 'contractAddress', type: AZTEC_ADDRESS },
     ],
     returnType: EPHEMERAL_ARRAY(FIELD),
+  }),
+
+  aztec_utl_mlKemEncapsulate: makeEntry({
+    params: [
+      { name: 'publicKey', type: POST_QUANTUM_PUBLIC_KEY },
+      { name: 'seed', type: FIXED_ARRAY(U8, KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES) },
+    ],
+    returnType: OPTION(ML_KEM_ENCAPSULATION),
+  }),
+
+  aztec_utl_getHybridMessagingSecret: makeEntry({
+    params: [
+      { name: 'address', type: AZTEC_ADDRESS },
+      { name: 'ephPk', type: POINT },
+      { name: 'kemCiphertext', type: KEM_CIPHERTEXT },
+      { name: 'contractAddress', type: AZTEC_ADDRESS },
+    ],
+    returnType: OPTION(FIELD),
   }),
 
   aztec_utl_setContractSyncCacheInvalid: makeEntry({

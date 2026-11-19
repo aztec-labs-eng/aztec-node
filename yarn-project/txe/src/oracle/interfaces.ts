@@ -2,7 +2,7 @@ import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ChangeSetId, MessagingSecretStrategy } from '@aztec-labs/pxe/server';
-import type { Option } from '@aztec-labs/pxe/simulator';
+import type { FieldChunks, Option } from '@aztec-labs/pxe/simulator';
 import type { EventSelector, FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CompleteAddress } from '@aztec-labs/stdlib/contract';
@@ -72,6 +72,8 @@ export interface ITxeExecutionOracle {
   ): Promise<Fr[]>;
   createAccount(secret: Fr, partialAddress: Fr): Promise<CompleteAddress>;
   addAccount(secret: Fr): Promise<CompleteAddress>;
+  /** Derives the post-quantum public key of an account whose keys the test environment holds. */
+  derivePostQuantumPublicKey(account: AztecAddress): Promise<FieldChunks>;
   addAuthWitness(address: AztecAddress, messageHash: Fr): Promise<void>;
   sendL1ToL2Message(
     publicContentHash: Fr,

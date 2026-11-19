@@ -80,3 +80,27 @@ export function bufferToFieldChunks(input: Buffer): Fr[] {
 export function bufferFromFieldChunks(fields: Fr[]): Buffer {
   return Buffer.concat(fields.map(f => f.toBuffer().subarray(1)));
 }
+
+/**
+ * Recovers the `byteLength` bytes that {@link bufferToFieldChunks} stored in `fields`.
+ *
+ * Unlike {@link bufferFromFieldChunks}, it only accepts the fields `bufferToFieldChunks` produces for those bytes, so
+ * that no two field arrays decode to the same bytes.
+ *
+ * @param name - What the bytes are, for error messages: a noun phrase with no article, e.g. `'KEM ciphertext'`.
+ * @throws If `fields` is not the {@link bufferToFieldChunks} encoding of `byteLength` bytes.
+ */
+export function bufferFromExactFieldChunks(fields: Fr[], byteLength: number, name: string): Buffer {
+  const fieldCount = Math.ceil(byteLength / (Fr.SIZE_IN_BYTES - 1));
+  if (fields.length !== fieldCount) {
+    throw new Error(`A ${name} is encoded in ${fieldCount} fields, got ${fields.length}`);
+  }
+  const buffer = bufferFromFieldChunks(fields).subarray(0, byteLength);
+  // Decoding ignores each field's top byte, and the last field's bytes past `byteLength`, so a field with bits set
+  // there decodes to the same bytes as a well-formed encoding. Re-encoding the bytes and comparing catches it.
+  const index = bufferToFieldChunks(buffer).findIndex((field, i) => !field.equals(fields[i]));
+  if (index !== -1) {
+    throw new Error(`Field ${index} of a ${name} encoding holds bits outside the ${name}: ${fields[index]}`);
+  }
+  return buffer;
+}

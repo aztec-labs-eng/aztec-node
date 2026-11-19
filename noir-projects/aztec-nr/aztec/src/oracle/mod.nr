@@ -77,6 +77,8 @@ pub mod get_l1_to_l2_membership_witness;
 pub mod get_nullifier_membership_witness;
 #[generate_oracle_tests]
 pub mod get_public_data_witness;
+#[generate_oracle_tests]
+pub(crate) mod hybrid_messaging_secret;
 #[generate_oracle_tests_excluding(
     @[
         // TODO: cover once the test resolver can serve EphemeralArray contents.
@@ -101,6 +103,8 @@ pub mod logs;
     ],
 )]
 pub mod message_processing;
+#[generate_oracle_tests]
+pub(crate) mod mlkem_encapsulate;
 #[generate_oracle_tests_excluding(
     @[
         // TODO: implement once the test resolver can serve EphemeralArray contents.

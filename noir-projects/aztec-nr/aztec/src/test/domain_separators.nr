@@ -10,6 +10,7 @@
 
 use crate::authwit::account::DOM_SEP__TX_NULLIFIER;
 use crate::authwit::auth::DOM_SEP__AUTHWIT_NULLIFIER;
+use crate::keys::hybrid_shared_secret::{DOM_SEP__HYBRID_MESSAGING_SECRET, DOM_SEP__HYBRID_SHARED_SECRET};
 use crate::keys::post_quantum::registry::DOM_SEP__POST_QUANTUM_PUBLIC_KEY_REGISTRY_LOG_TAG;
 use crate::macros::functions::initialization_utils::DOM_SEP__INITIALIZATION_NULLIFIER;
 use crate::messages::delivery::constrained_delivery::{
@@ -161,6 +162,8 @@ unconstrained fn domain_separators_are_valid() {
         DOM_SEP__POST_QUANTUM_PUBLIC_KEY_REGISTRY_LOG_TAG,
         "post_quantum_public_key_registry_log_tag",
     ));
+    all = all.push_back(derived(DOM_SEP__HYBRID_SHARED_SECRET, "hybrid_shared_secret"));
+    all = all.push_back(derived(DOM_SEP__HYBRID_MESSAGING_SECRET, "hybrid_messaging_secret"));
 
     assert_all_unique(all);
 }
