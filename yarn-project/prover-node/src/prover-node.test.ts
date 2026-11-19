@@ -29,6 +29,7 @@ import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 
 import type { CheckpointFollower } from './checkpoint-follower.js';
+import type { EarlyBlockProver } from './early-block-prover.js';
 import type { EpochExpirySweep } from './epoch-expiry-sweep.js';
 import type { EpochProofStatus } from './epoch-proof-status.js';
 import type { FailureUploader } from './failure-uploader.js';
@@ -759,6 +760,40 @@ describe('ProverNode', () => {
     expect(await proverNode.getTipsStore().getL2BlockHash(BlockNumber(1))).toEqual('0x01');
   });
 
+  it('passes proposed, checkpointed and pruned tips to the early block prover when it is enabled', async () => {
+    proverNode = createProverNode({ proverNodeEarlyBlockProving: true });
+    const earlyBlockProver = proverNode.getEarlyBlockProver()!;
+    const onChainProposed = jest.spyOn(earlyBlockProver, 'onChainProposed').mockReturnValue();
+    const onChainCheckpointed = jest.spyOn(earlyBlockProver, 'onChainCheckpointed').mockReturnValue();
+    const onChainPruned = jest.spyOn(earlyBlockProver, 'onChainPruned').mockReturnValue();
+    setupNotFullyProven();
+
+    await follower.handleBlockStreamEvent({
+      type: 'chain-proposed',
+      block: { number: BlockNumber(2), hash: '0x02' },
+      header: BlockHeader.empty(),
+    });
+    expect(onChainProposed).toHaveBeenCalledWith(BlockNumber(2));
+
+    await follower.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(1, 1, 1)));
+    expect(onChainCheckpointed).toHaveBeenCalledWith(BlockNumber(1));
+
+    // A prune that removes no checkpoint prover still reaches the early block prover.
+    l2BlockSource.getBlockData.mockResolvedValue(mock<BlockData>({ checkpointNumber: CheckpointNumber(1) }));
+    await follower.handleBlockStreamEvent({
+      type: 'chain-pruned',
+      block: { number: BlockNumber(1), hash: '0x01' },
+      checkpointed: makeTipId(1),
+      proven: makeTipId(1),
+    });
+    expect(sessionManager.onPrune).not.toHaveBeenCalled();
+    expect(onChainPruned).toHaveBeenCalledWith(BlockNumber(1));
+  });
+
+  it('has no early block prover unless it is enabled', () => {
+    expect(proverNode.getEarlyBlockProver()).toBeUndefined();
+  });
+
   // ---------------- checkEpochExpiry: latestEpoch < offset is a no-op ----------------
 
   it('the expiry sweep does nothing before the first proof-submission window has closed', async () => {
@@ -1140,6 +1175,10 @@ class TestProverNode extends ProverNode {
 
   public getExpirySweep(): EpochExpirySweep {
     return this.expirySweep;
+  }
+
+  public getEarlyBlockProver(): EarlyBlockProver | undefined {
+    return this.earlyBlockProver;
   }
 
   public getFailureUploader(): FailureUploader {

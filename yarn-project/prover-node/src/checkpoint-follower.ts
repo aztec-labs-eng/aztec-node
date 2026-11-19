@@ -36,6 +36,12 @@ export type CheckpointFollowerHandlers = {
   onPruned(affectedEpochs: EpochNumber[]): Promise<void>;
   /** The proven tip moved. Must not block on L1 work. */
   onChainProven(block: BlockNumber): void;
+  /** The proposed tip moved to this block. Must not throw or block. */
+  onChainProposed?(block: BlockNumber): void;
+  /** The checkpointed tip moved to this block, and every checkpoint up to it has been registered or skipped. */
+  onChainCheckpointed?(block: BlockNumber): void;
+  /** The chain was pruned back to this block. Called for every prune, whether or not it removed a prover. */
+  onChainPruned?(block: BlockNumber): void;
 };
 
 /** What the follower reads the chain from, where it registers checkpoints, and whom it reports to. */
@@ -113,6 +119,7 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
     switch (event.type) {
       case 'chain-checkpointed':
         await this.catchUpTo(event.checkpoint.number);
+        this.deps.handlers.onChainCheckpointed?.(BlockNumber(event.block.number));
         break;
       case 'chain-pruned':
         await this.handlePrune(event.block);
@@ -120,9 +127,11 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
       case 'chain-proven':
         this.deps.handlers.onChainProven(BlockNumber(event.block.number));
         break;
-      // The prover node proves checkpoints, not proposed blocks. `blocks-added` is never emitted in tips-only mode,
-      // and `chain-finalized` carries nothing to act on. All three are still recorded in the tips store below.
       case 'chain-proposed':
+        this.deps.handlers.onChainProposed?.(BlockNumber(event.block.number));
+        break;
+      // `blocks-added` is never emitted in tips-only mode, and `chain-finalized` carries nothing to act on. Both
+      // are still recorded in the tips store below.
       case 'chain-finalized':
       case 'blocks-added':
         break;
@@ -418,6 +427,7 @@ export class CheckpointFollower implements L2BlockStreamEventHandler {
     }
 
     const affected = this.deps.checkpointStore.cancelAndRemoveAboveBlock(prunedToBlock.number);
+    this.deps.handlers.onChainPruned?.(BlockNumber(prunedToBlock.number));
 
     if (this.lastProcessedCheckpoint > cursorFloor) {
       this.lastProcessedCheckpoint = cursorFloor;

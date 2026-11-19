@@ -60,6 +60,17 @@ export interface EpochProverFactory {
     totalNumBlocks: number,
     headerOfLastBlockInPreviousCheckpoint: BlockHeader,
   ): Promise<CheckpointSubTreeOrchestrator>;
+  /**
+   * Constructs and starts a blocks-only `CheckpointSubTreeOrchestrator`, which proves the blocks of a checkpoint
+   * that has not landed yet. See `CheckpointSubTreeOrchestrator.startBlocksOnly`. Its `getSubTreeResult()` never
+   * resolves and only rejects when proving fails.
+   */
+  createBlocksOnlySubTreeOrchestrator(
+    chonkCache: ChonkCache,
+    epochNumber: EpochNumber,
+    checkpointConstants: CheckpointConstantData,
+    headerOfLastBlockInPreviousCheckpoint: BlockHeader,
+  ): Promise<CheckpointSubTreeOrchestrator>;
   createTopTreeOrchestrator(): TopTreeOrchestrator;
 }
 
@@ -150,6 +161,26 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
       l1ToL2Messages,
       startInboxRollingHash,
       totalNumBlocks,
+      headerOfLastBlockInPreviousCheckpoint,
+      this.telemetry,
+      this.log.getBindings(),
+    );
+  }
+
+  public createBlocksOnlySubTreeOrchestrator(
+    chonkCache: ChonkCache,
+    epochNumber: EpochNumber,
+    checkpointConstants: CheckpointConstantData,
+    headerOfLastBlockInPreviousCheckpoint: BlockHeader,
+  ): Promise<CheckpointSubTreeOrchestrator> {
+    return CheckpointSubTreeOrchestrator.startBlocksOnly(
+      this.worldState,
+      this.getFacade(),
+      this.config.proverId,
+      chonkCache,
+      epochNumber,
+      this.getDeferredJobQueue(),
+      checkpointConstants,
       headerOfLastBlockInPreviousCheckpoint,
       this.telemetry,
       this.log.getBindings(),

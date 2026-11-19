@@ -8,7 +8,8 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import type { TestProverNode } from '@aztec-labs/prover-node/test';
 import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { TxExecutionResult } from '@aztec-labs/stdlib/tx';
+import type { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
+import { type BlockHeader, TxExecutionResult } from '@aztec-labs/stdlib/tx';
 import { expect, jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';
@@ -260,6 +261,100 @@ describe('single-node/proving/optimistic', () => {
       for (const epoch of provenEpochs) {
         expectOptimisticProving(lowestProvenSlotByEpoch, epoch);
       }
+    });
+  });
+
+  describe('early block proving', () => {
+    beforeEach(async () => {
+      // The gossip network delivers block proposals to the prover node, so its archiver holds blocks before their
+      // checkpoint lands. Without it the prover node learns of blocks only from checkpoints.
+      test = await setupWithProver({
+        numberOfAccounts: 1,
+        mockGossipSubNetwork: true,
+        proverNodeConfig: { proverNodeEarlyBlockProving: true },
+      });
+      ({ rollup, logger, context } = test);
+      ({ L2_SLOT_DURATION_IN_S } = test);
+      node = context.aztecNode;
+    });
+
+    it('proves an epoch whose blocks were proven ahead of their checkpoints', async () => {
+      const proverNode = test.proverNodes[0].getProverNode() as TestProverNode;
+      // Each call to the factory starts block-level proving for the proposed blocks of one slot, before the slot's
+      // checkpoint lands. Record the blocks whose block root proof that early proving completes, with their slot.
+      const prover = proverNode.getProver();
+      const createEarlySubTree = prover.createBlocksOnlySubTreeOrchestrator.bind(prover);
+      const blocksProvenEarly = new Map<BlockNumber, SlotNumber>();
+      // What the prover node gives a sub-tree besides the blocks, by slot. These and the block fix the ids of a
+      // block's proving jobs, so the checkpoint's sub-tree asks for the jobs the early one started only if they
+      // are the same for both.
+      const earlyInputs = new Map<SlotNumber, string>();
+      const landedInputs = new Map<SlotNumber, string>();
+      const inputsOf = (epoch: EpochNumber, constants: CheckpointConstantData, previousHeader: BlockHeader) =>
+        `${epoch}:${constants.toBuffer().toString('hex')}:${previousHeader.toBuffer().toString('hex')}`;
+      const createSubTree = prover.createCheckpointSubTreeOrchestrator.bind(prover);
+      jest.spyOn(prover, 'createCheckpointSubTreeOrchestrator').mockImplementation((...args) => {
+        landedInputs.set(args[2].slotNumber, inputsOf(args[1], args[2], args[6]));
+        return createSubTree(...args);
+      });
+      jest.spyOn(prover, 'createBlocksOnlySubTreeOrchestrator').mockImplementation(async (...args) => {
+        const slot = args[2].slotNumber;
+        earlyInputs.set(slot, inputsOf(args[1], args[2], args[3]));
+        const subTree = await createEarlySubTree(...args);
+        const whenBlockRootProven = subTree.whenBlockRootProven.bind(subTree);
+        jest.spyOn(subTree, 'whenBlockRootProven').mockImplementation(blockNumber => {
+          const proven = whenBlockRootProven(blockNumber);
+          // A block root that resolves once its checkpoint has landed was not proven early.
+          void proven.then(async () => {
+            if (blockNumber > (await node.getBlockNumber('checkpointed'))) {
+              blocksProvenEarly.set(blockNumber, slot);
+            }
+          });
+          return proven;
+        });
+        return subTree;
+      });
+
+      await test.waitUntilNextEpochStarts();
+
+      const contract = await test.registerTestContract(context.wallet);
+      const provenTx = await proveInteraction(context.wallet, contract.methods.emit_nullifier(new Fr(1)), {
+        from: context.accounts[0],
+      });
+      const txReceipt = await provenTx.send();
+      const txCheckpoint = (await node.getBlock(txReceipt.blockNumber!))!.checkpointNumber;
+      const txEpoch = await epochOfCheckpoint(txCheckpoint);
+
+      await waitForProverToRegisterEpoch(proverNode, txEpoch);
+      // The warp prunes proposed blocks that have no checkpoint yet, and their early proving with them. Wait for one
+      // block that was proven early to be checkpointed in the slot it was proposed in, so that the block has a
+      // sub-tree of each kind.
+      const early = await retryUntil(
+        async () => {
+          const checkpointed = await node.getBlockNumber('checkpointed');
+          for (const [blockNumber, slot] of blocksProvenEarly) {
+            const landed = blockNumber <= checkpointed ? await node.getBlock(blockNumber) : undefined;
+            if (landed?.header.globalVariables.slotNumber === slot && landedInputs.has(slot)) {
+              return { blockNumber, slot };
+            }
+          }
+          return undefined;
+        },
+        'a block proven early to be checkpointed',
+        120,
+        1,
+      );
+      await test.warpToEpochStart(txEpoch + 1);
+      const epochEndCheckpointNumber = (await test.monitor.run(true)).checkpointNumber;
+
+      // The checkpoints are proven through the usual path, which requests the jobs the early proving started.
+      await test.waitUntilProvenCheckpointNumber(epochEndCheckpointNumber, 240);
+      await test.waitForNodeToSync(await lastBlockOfCheckpoint(epochEndCheckpointNumber), 'proven');
+      expect((await node.getTxReceipt(txReceipt.txHash)).executionResult).toEqual(TxExecutionResult.SUCCESS);
+      // The block that was proven early is in the proven range, and its checkpoint's sub-tree was given what the
+      // early one was given.
+      expect(early.blockNumber).toBeLessThanOrEqual(await lastBlockOfCheckpoint(epochEndCheckpointNumber));
+      expect(landedInputs.get(early.slot)).toEqual(earlyInputs.get(early.slot));
     });
   });
 
