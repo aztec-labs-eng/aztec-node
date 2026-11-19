@@ -1,4 +1,4 @@
-import type { FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { FunctionCall } from '@aztec-labs/stdlib/abi';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
@@ -11,7 +11,6 @@ export async function syncScope(
   contractStore: ContractStore,
   contractClassService: ContractClassService,
   anchorBlockHeader: BlockHeader,
-  functionToInvokeAfterSync: FunctionSelector | null,
   utilityExecutor: (privateSyncCall: FunctionCall, scopes: AztecAddress[]) => Promise<any>,
   scope: AztecAddress,
 ) {
@@ -25,11 +24,5 @@ export async function syncScope(
     throw new Error(`Cannot sync contract ${contractAddress}: its instance is not registered nor published.`);
   }
   const syncStateFunctionCall = await contractStore.getFunctionCall('sync_state', [scope], contractAddress, classId);
-  if (functionToInvokeAfterSync && functionToInvokeAfterSync.equals(syncStateFunctionCall.selector)) {
-    throw new Error(
-      'Forbidden `sync_state` invocation. `sync_state` can only be invoked by PXE, manual execution can lead to inconsistencies.',
-    );
-  }
-
   await utilityExecutor(syncStateFunctionCall, [scope]);
 }

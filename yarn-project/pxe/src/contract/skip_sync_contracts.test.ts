@@ -53,7 +53,6 @@ describe('syncScope', () => {
       contractStore,
       contractClassService,
       mock<BlockHeader>(),
-      null,
       utilityExecutor,
       await AztecAddress.random(),
     );

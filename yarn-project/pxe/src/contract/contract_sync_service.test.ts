@@ -765,8 +765,8 @@ describe('ContractSyncService', () => {
     });
 
     it('speculatively syncs the dependencies of the contract sync itself', async () => {
-      // `sync_state` is only ever invoked by PXE, so its callees (e.g. most contract syncs query the handshake
-      // registry) are learned and predicted under the universal sync_state selector, not under a requested function.
+      // Calls made by `sync_state` (e.g. to the handshake registry) are learned as callees of `sync_state`, not of the
+      // function the request invokes. Every sync runs `sync_state`, so those callees start syncing on any request.
       const syncStateFn: ContractFunction = { address: contractAddress, selector: SYNC_STATE_SELECTOR };
       await learnDependencies({
         count: PREDICTION_THRESHOLD,

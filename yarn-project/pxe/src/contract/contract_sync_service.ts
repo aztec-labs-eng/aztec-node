@@ -181,7 +181,6 @@ export class ContractSyncService implements OperationContributor {
             this.contractStore,
             this.contractClassService,
             anchorBlockHeader,
-            functionToInvokeAfterSync,
             utilityExecutor,
             scope,
           ),
