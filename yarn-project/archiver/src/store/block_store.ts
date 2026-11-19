@@ -89,9 +89,9 @@ export type RejectedCheckpointReason = 'invalid-attestations' | 'descends-from-i
  * A checkpoint observed on L1 that the archiver decided not to ingest, recorded so that
  * any descendant that builds on top of it can also be skipped (rather than throwing
  * `InitialCheckpointNumberNotSequentialError` and looping). An entry is dropped via
- * {@link BlockStore.removeRejectedCheckpointByArchiveRoot} once a checkpoint with the same
- * archive root is later ingested as valid (e.g. it gathered enough attestations), which
- * re-enables its descendants.
+ * {@link BlockStore.removeRejectedCheckpoint} once a checkpoint with the same number is
+ * later ingested as valid (e.g. it gathered enough attestations), which re-enables its
+ * descendants.
  */
 export type RejectedCheckpoint = {
   /** Checkpoint number this entry represents. */
@@ -223,8 +223,8 @@ export class BlockStore {
   /** Index mapping block archive to block number */
   #blockArchiveIndex: AztecAsyncMap<string, number>;
 
-  /** Map rejected checkpoints (due to invalid attestations) by archive root */
-  #rejectedCheckpoints: AztecAsyncMap<string, RejectedCheckpointStorage>;
+  /** Map rejected checkpoints (due to invalid attestations) by checkpoint number */
+  #rejectedCheckpoints: AztecAsyncMap<number, RejectedCheckpointStorage>;
 
   #log = createLogger('archiver:block_store');
 
@@ -244,7 +244,7 @@ export class BlockStore {
     this.#checkpoints = db.openMap('archiver_checkpoints');
     this.#slotToCheckpoint = db.openMap('archiver_slot_to_checkpoint');
     this.#proposedCheckpoints = db.openMap('archiver_proposed_checkpoints');
-    this.#rejectedCheckpoints = db.openMap('archiver_rejected_checkpoints');
+    this.#rejectedCheckpoints = db.openMap('archiver_rejected_checkpoints_by_number');
   }
 
   /**
@@ -432,9 +432,9 @@ export class BlockStore {
         // Remove proposed checkpoint if it exists, since L1 is authoritative
         await this.#proposedCheckpoints.delete(checkpoint.checkpoint.number);
 
-        // Drop any rejected entry for this archive root: a checkpoint that was previously rejected
-        // (e.g. invalid attestations) is now being ingested as valid, so its descendants are allowed.
-        await this.removeRejectedCheckpointByArchiveRoot(checkpoint.checkpoint.archive.root);
+        // Drop any rejected entry for this checkpoint number: L1 now holds a valid checkpoint at this
+        // number (e.g. a re-post that gathered enough attestations), so its descendants are allowed.
+        await this.removeRejectedCheckpoint(checkpoint.checkpoint.number);
       }
 
       await this.advanceSynchedL1BlockNumber(checkpoints[checkpoints.length - 1].l1.blockNumber);
@@ -444,7 +444,8 @@ export class BlockStore {
 
   /**
    * Handles checkpoints at the start of a batch that are already stored (e.g. due to L1 reorg).
-   * Verifies the archive root matches, updates L1 metadata, and returns only the new checkpoints.
+   * Verifies the archive root matches, updates L1 metadata, drops any rejected entry at that number, and returns only
+   * the new checkpoints.
    */
   private async skipOrUpdateAlreadyStoredCheckpoints(
     checkpoints: PublishedCheckpoint[],
@@ -485,6 +486,9 @@ export class BlockStore {
         blockCount: incoming.checkpoint.blocks.length,
         feeAssetPriceModifier: incoming.checkpoint.feeAssetPriceModifier.toString(),
       });
+      // A re-read of an earlier invalid post at this number (e.g. after an L1 reorg replayed it) writes a rejected
+      // entry again; L1 still holds this valid checkpoint, so drop it as the insert and promote paths do.
+      await this.removeRejectedCheckpoint(incoming.checkpoint.number);
       // Update the sync point to reflect the new L1 block
       await this.advanceSynchedL1BlockNumber(incoming.l1.blockNumber);
     }
@@ -1009,9 +1013,9 @@ export class BlockStore {
       // Remove only this pending entry — remaining entries N+1, N+2, ... stay valid
       await this.#proposedCheckpoints.delete(proposed.checkpointNumber);
 
-      // Drop any rejected entry for this archive root: a checkpoint that was previously rejected
-      // (e.g. invalid attestations) is now being promoted as valid, so its descendants are allowed.
-      await this.removeRejectedCheckpointByArchiveRoot(proposed.archive.root);
+      // Drop any rejected entry for this checkpoint number: L1 now holds a valid checkpoint at this
+      // number, so its descendants are allowed.
+      await this.removeRejectedCheckpoint(proposed.checkpointNumber);
 
       // Update the last synced L1 block
       await this.advanceSynchedL1BlockNumber(l1.blockNumber);
@@ -1686,10 +1690,9 @@ export class BlockStore {
     }
   }
 
-  /** Records a rejected-checkpoint entry, keyed by its own archive root. */
+  /** Records a rejected-checkpoint entry, replacing any earlier entry for the same checkpoint number. */
   async addRejectedCheckpoint(entry: RejectedCheckpoint): Promise<void> {
-    const archiveRootHex = entry.archiveRoot.toString();
-    await this.#rejectedCheckpoints.set(archiveRootHex, {
+    await this.#rejectedCheckpoints.set(entry.checkpointNumber, {
       checkpointNumber: entry.checkpointNumber,
       archiveRoot: entry.archiveRoot.toBuffer(),
       parentArchiveRoot: entry.parentArchiveRoot.toBuffer(),
@@ -1700,15 +1703,24 @@ export class BlockStore {
     await this.advanceSynchedL1BlockNumber(entry.l1.blockNumber);
   }
 
-  /** Returns the rejected-checkpoint entry with the given archive root, or undefined if not present. */
-  async getRejectedCheckpointByArchiveRoot(archiveRoot: Fr): Promise<RejectedCheckpoint | undefined> {
-    const stored = await this.#rejectedCheckpoints.getAsync(archiveRoot.toString());
-    return stored ? this.rejectedCheckpointFromStorage(stored) : undefined;
+  /**
+   * Returns the rejected checkpoint with the given number if it has the given archive root. The root alone does not
+   * identify a checkpoint, since proposers pick it freely, and the number alone may match a stale entry left by an
+   * earlier checkpoint with that number.
+   */
+  async getRejectedCheckpoint(
+    checkpointNumber: CheckpointNumber,
+    archiveRoot: Fr,
+  ): Promise<RejectedCheckpoint | undefined> {
+    const stored = await this.#rejectedCheckpoints.getAsync(checkpointNumber);
+    return stored && archiveRoot.equals(Fr.fromBuffer(stored.archiveRoot))
+      ? this.rejectedCheckpointFromStorage(stored)
+      : undefined;
   }
 
-  /** Removes a rejected-checkpoint entry by its archive root (used when an entry no longer matches L1). */
-  async removeRejectedCheckpointByArchiveRoot(archiveRoot: Fr): Promise<void> {
-    await this.#rejectedCheckpoints.delete(archiveRoot.toString());
+  /** Removes the rejected-checkpoint entry for the given checkpoint number. */
+  async removeRejectedCheckpoint(checkpointNumber: CheckpointNumber): Promise<void> {
+    await this.#rejectedCheckpoints.delete(checkpointNumber);
   }
 
   /**

@@ -129,13 +129,8 @@ export class CalldataRetriever {
       `Failed to decode multicall3, direct propose, or Spire proposer for L1 tx ${tx.hash}, falling back to trace for checkpoint ${checkpointNumber}`,
     );
     this.instrumentation?.recordBlockProposalTxTarget(tx.to ?? EthAddress.ZERO.toString(), true);
-    const tracedCalldata = await this.extractCalldataViaTrace(tx.hash, checkpointNumber);
-    const tracedResult = this.tryDecodeAndVerifyPropose(
-      tracedCalldata,
-      expectedHashes,
-      checkpointNumber,
-      tx.blockHash!,
-    );
+    const traced = await this.extractProposeCalldatasViaTrace(tx.hash, checkpointNumber);
+    const tracedResult = this.pickVerifiedPropose(traced, expectedHashes, checkpointNumber, tx.blockHash!, tx.hash);
     if (!tracedResult) {
       throw new Error(`Hash mismatch for traced propose calldata in tx ${tx.hash} for checkpoint ${checkpointNumber}`);
     }
@@ -257,30 +252,7 @@ export class CalldataRetriever {
         return undefined;
       }
 
-      // Decode, verify, and build for each candidate
-      const verified: RawCheckpointFromCalldata[] = [];
-      for (const candidate of candidates) {
-        const result = this.tryDecodeAndVerifyPropose(candidate, expectedHashes, checkpointNumber, blockHash);
-        if (result) {
-          verified.push(result);
-        }
-      }
-
-      if (verified.length === 1) {
-        this.logger.trace(`Verified single propose candidate via hash matching`, { txHash });
-        return verified[0];
-      }
-
-      if (verified.length > 1) {
-        this.logger.warn(
-          `Multiple propose candidates verified (${verified.length}), returning first (identical data)`,
-          { txHash },
-        );
-        return verified[0];
-      }
-
-      this.logger.debug(`No candidates verified against expected hashes`, { txHash });
-      return undefined;
+      return this.pickVerifiedPropose(candidates, expectedHashes, checkpointNumber, blockHash, txHash);
     } catch (err) {
       // Any decoding error triggers fallback to trace
       this.logger.warn(`Failed to decode multicall3: ${err}`, { txHash });
@@ -329,15 +301,17 @@ export class CalldataRetriever {
   }
 
   /**
-   * Uses debug/trace RPC to extract the actual calldata from the successful propose call.
+   * Uses debug/trace RPC to extract the calldata of every successful propose call in a transaction.
    * This is the definitive fallback that works for any transaction pattern.
    * Tries trace_transaction first, then falls back to debug_traceTransaction.
+   * A single tx may hold several successful propose calls (e.g. propose, invalidate, propose), so the caller must
+   * match each one against the event it is retrieving.
    * @param txHash - The transaction hash to trace
    * @param checkpointNumber - The checkpoint the tx is expected to propose, for error reporting
-   * @returns The propose calldata from the successful call
+   * @returns The calldata of each successful propose call, in trace order
    * @throws CheckpointCalldataUnavailableError if neither trace_transaction nor debug_traceTransaction succeeds
    */
-  protected async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
+  protected async extractProposeCalldatasViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex[]> {
     const rollupAddress = this.rollupAddress;
     const selector = PROPOSE_SELECTOR;
 
@@ -390,17 +364,11 @@ export class CalldataRetriever {
       }
     }
 
-    // Validate exactly ONE successful propose call
     if (calls.length === 0) {
       throw new Error(`No successful propose calls found in transaction ${txHash}`);
     }
 
-    if (calls.length > 1) {
-      throw new Error(`Multiple successful propose calls found in transaction ${txHash} (${calls.length})`);
-    }
-
-    // Return the calldata from the single successful propose call
-    return calls[0].input;
+    return calls.map(call => call.input);
   }
 
   /**
@@ -478,6 +446,41 @@ export class CalldataRetriever {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Decodes and verifies each propose candidate against the expected hashes from the CheckpointProposed event.
+   * @returns The first candidate whose hashes match the event, or undefined when none does
+   */
+  private pickVerifiedPropose(
+    candidates: Hex[],
+    expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
+    checkpointNumber: CheckpointNumber,
+    blockHash: Hex,
+    txHash: Hex,
+  ): RawCheckpointFromCalldata | undefined {
+    const verified: RawCheckpointFromCalldata[] = [];
+    for (const candidate of candidates) {
+      const result = this.tryDecodeAndVerifyPropose(candidate, expectedHashes, checkpointNumber, blockHash);
+      if (result) {
+        verified.push(result);
+      }
+    }
+
+    if (verified.length === 1) {
+      this.logger.trace(`Verified single propose candidate via hash matching`, { txHash });
+      return verified[0];
+    }
+
+    if (verified.length > 1) {
+      this.logger.warn(`Multiple propose candidates verified (${verified.length}), returning first (identical data)`, {
+        txHash,
+      });
+      return verified[0];
+    }
+
+    this.logger.debug(`No candidates verified against expected hashes`, { txHash });
+    return undefined;
   }
 
   /** Computes the keccak256 hash of ABI-encoded CommitteeAttestations. */

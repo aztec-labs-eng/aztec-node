@@ -1,7 +1,12 @@
 import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { L1RpcError } from '@aztec-labs/ethereum/client';
-import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';
+import {
+  MULTI_CALL_3_ADDRESS,
+  type ViemCommitteeAttestations,
+  type ViemHeader,
+  computeAttestationsHash,
+} from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -12,6 +17,7 @@ import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { withHexPrefix } from '@aztec-labs/foundation/string';
 import { Signature } from '@aztec-labs/stdlib/block';
+import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -60,8 +66,11 @@ class TestCalldataRetriever extends CalldataRetriever {
     return super.tryDecodeDirectPropose(tx, expectedHashes, checkpointNumber, blockHash);
   }
 
-  public override async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
-    return await super.extractCalldataViaTrace(txHash, checkpointNumber);
+  public override async extractProposeCalldatasViaTrace(
+    txHash: Hex,
+    checkpointNumber: CheckpointNumber,
+  ): Promise<Hex[]> {
+    return await super.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
   }
 
   public override tryDecodeAndVerifyPropose(
@@ -1027,7 +1036,7 @@ describe('CalldataRetriever', () => {
     });
   });
 
-  describe('extractCalldataViaTrace', () => {
+  describe('extractProposeCalldatasViaTrace', () => {
     it('should successfully extract calldata using trace_transaction', async () => {
       const proposeCalldata = makeProposeCalldata();
 
@@ -1052,9 +1061,9 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
+      const result = await retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
 
-      expect(result).toBe(proposeCalldata);
+      expect(result).toEqual([proposeCalldata]);
       expect(debugClient.request).toHaveBeenCalledWith({ method: 'trace_transaction', params: [txHash] });
     });
 
@@ -1090,9 +1099,9 @@ describe('CalldataRetriever', () => {
         ],
       });
 
-      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
+      const result = await retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber);
 
-      expect(result).toBe(proposeCalldata);
+      expect(result).toEqual([proposeCalldata]);
       expect(debugClient.request).toHaveBeenCalledTimes(2);
       expect(debugClient.request).toHaveBeenNthCalledWith(1, { method: 'trace_transaction', params: [txHash] });
       expect(debugClient.request).toHaveBeenNthCalledWith(2, {
@@ -1108,7 +1117,7 @@ describe('CalldataRetriever', () => {
       // Second call (debug_traceTransaction) also fails
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
 
@@ -1123,7 +1132,7 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -1133,7 +1142,7 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -1157,7 +1166,9 @@ describe('CalldataRetriever', () => {
         output: '0x',
       });
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).resolves.toBe(proposeCalldata);
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).resolves.toEqual([
+        proposeCalldata,
+      ]);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ txHash, issues: expect.any(Array) }),
@@ -1170,16 +1181,15 @@ describe('CalldataRetriever', () => {
       // Mock debug client to return empty trace
       debugClient.request.mockResolvedValueOnce([]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'No successful propose calls found in transaction ' + txHash,
       );
     });
 
-    it('should throw when multiple propose calls found', async () => {
+    it('should return every successful propose call in trace order', async () => {
       const proposeCalldata1 = makeProposeCalldata();
       const proposeCalldata2 = makeProposeCalldata();
 
-      // Mock debug client to return trace with multiple propose calls
       debugClient.request.mockResolvedValueOnce([
         {
           type: 'call',
@@ -1217,9 +1227,10 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
-        'Multiple successful propose calls found in transaction ' + txHash + ' (2)',
-      );
+      await expect(retriever.extractProposeCalldatasViaTrace(txHash, checkpointNumber)).resolves.toEqual([
+        proposeCalldata1,
+        proposeCalldata2,
+      ]);
     });
   });
 
@@ -1570,6 +1581,201 @@ describe('CalldataRetriever', () => {
 
       await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, wrongHashes)).rejects.toThrow(
         /hash mismatch/i,
+      );
+    });
+  });
+
+  describe('trace fallback with several propose calls', () => {
+    /** A call frame in a format-neutral shape, converted to either trace format by the helpers below. */
+    type Frame = { to: Hex; input: Hex; error?: string; calls?: Frame[] };
+
+    const wrapperAddress = EthAddress.random().toString();
+    const wrapperInput: Hex = '0xabcd0000';
+    const invalidateSelector = toFunctionSelector(
+      RollupAbi.find(x => x.type === 'function' && x.name === 'invalidateInsufficientAttestations')!,
+    );
+    const invalidateCalldata: Hex = `${invalidateSelector}${'00'.repeat(64)}`;
+
+    /** Builds a propose calldata along with the hashes the rollup would emit for it, computed with the real hashers. */
+    function makeProposal({ header = CheckpointHeader.random(), archiveRoot = Fr.random() } = {}) {
+      const attestations = makeViemCommitteeAttestations();
+      const feeAssetPriceModifier = 0n;
+      const calldata = encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'propose',
+        args: [
+          {
+            archive: archiveRoot.toString(),
+            oracleInput: { feeAssetPriceModifier },
+            header: header.toViem(),
+            bucketHint: 0n,
+          },
+          attestations,
+          [],
+          Signature.random().toViemSignature(),
+          '0x',
+        ],
+      });
+      const hashes = {
+        attestationsHash: computeAttestationsHash(attestations),
+        payloadDigest: computeCheckpointPayloadDigest({
+          header,
+          archiveRoot,
+          feeAssetPriceModifier,
+          signatureContext: { chainId: 1, rollupAddress },
+        }).toString(),
+      };
+      return { calldata, header, archiveRoot, attestations, hashes };
+    }
+
+    function rollupFrame(calldata: Hex, extra: Partial<Frame> = {}): Frame {
+      return { to: rollupAddress.toString(), input: calldata, ...extra };
+    }
+
+    function wrapperFrame(calls: Frame[]): Frame {
+      return { to: wrapperAddress, input: wrapperInput, calls };
+    }
+
+    function toParityTrace(frame: Frame, traceAddress: number[] = []): object[] {
+      const calls = frame.calls ?? [];
+      return [
+        {
+          type: 'call',
+          action: {
+            from: EthAddress.random().toString(),
+            to: frame.to,
+            callType: 'call',
+            input: frame.input,
+            value: '0x0',
+            gas: '0x100000',
+          },
+          result: frame.error ? null : { output: '0x', gasUsed: '0x5208' },
+          error: frame.error,
+          subtraces: calls.length,
+          traceAddress,
+        },
+        ...calls.flatMap((call, i) => toParityTrace(call, [...traceAddress, i])),
+      ];
+    }
+
+    function toGethTrace(frame: Frame): object {
+      return {
+        type: 'CALL',
+        from: EthAddress.random().toString(),
+        to: frame.to,
+        input: frame.input,
+        value: '0x0',
+        gas: '0x100000',
+        gasUsed: '0x5208',
+        output: '0x',
+        error: frame.error,
+        calls: frame.calls?.map(toGethTrace),
+      };
+    }
+
+    const traceFormats = ['trace_transaction', 'debug_traceTransaction'] as const;
+
+    /** Mocks one trace of the tx, served by trace_transaction or, when that fails, by debug_traceTransaction. */
+    function mockTrace(format: (typeof traceFormats)[number], root: Frame) {
+      if (format === 'trace_transaction') {
+        debugClient.request.mockResolvedValueOnce(toParityTrace(root));
+      } else {
+        debugClient.request
+          .mockRejectedValueOnce(new Error('trace_transaction not supported'))
+          .mockResolvedValueOnce(toGethTrace(root));
+      }
+    }
+
+    function mockWrapperTx() {
+      publicClient.getTransaction.mockResolvedValue({
+        input: wrapperInput,
+        to: wrapperAddress,
+        blockHash,
+        hash: txHash,
+      } as Transaction);
+    }
+
+    it.each(traceFormats)(
+      'returns the propose call matching the event from a tx with propose, invalidate, propose via %s',
+      async format => {
+        const first = makeProposal();
+        const second = makeProposal();
+        mockWrapperTx();
+        mockTrace(
+          format,
+          wrapperFrame([rollupFrame(first.calldata), rollupFrame(invalidateCalldata), rollupFrame(second.calldata)]),
+        );
+
+        const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+
+        expect(result).toEqual(
+          expect.objectContaining({ archiveRoot: second.archiveRoot, verbatimAttestations: second.attestations }),
+        );
+      },
+    );
+
+    it('gives each event its own call when a tx posts the same checkpoint twice with different attestations', async () => {
+      const first = makeProposal();
+      const second = makeProposal({ header: first.header, archiveRoot: first.archiveRoot });
+      const root = wrapperFrame([
+        rollupFrame(first.calldata),
+        rollupFrame(invalidateCalldata),
+        rollupFrame(second.calldata),
+      ]);
+      mockWrapperTx();
+      mockTrace('trace_transaction', root);
+      mockTrace('trace_transaction', root);
+
+      const forFirst = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, first.hashes);
+      const forSecond = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, second.hashes);
+
+      expect(forFirst.verbatimAttestations).toEqual(first.attestations);
+      expect(forSecond.verbatimAttestations).toEqual(second.attestations);
+    });
+
+    it('returns the checkpoint when two traced propose calls both match the event', async () => {
+      const proposal = makeProposal();
+      mockWrapperTx();
+      mockTrace('trace_transaction', wrapperFrame([rollupFrame(proposal.calldata), rollupFrame(proposal.calldata)]));
+
+      const result = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, proposal.hashes);
+
+      expect(result).toEqual(
+        expect.objectContaining({ archiveRoot: proposal.archiveRoot, verbatimAttestations: proposal.attestations }),
+      );
+    });
+
+    it('throws a hash mismatch when no traced propose call matches the event', async () => {
+      const [first, second, other] = times(3, () => makeProposal());
+      mockWrapperTx();
+      mockTrace('trace_transaction', wrapperFrame([rollupFrame(first.calldata), rollupFrame(second.calldata)]));
+
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, other.hashes)).rejects.toThrow(
+        'Hash mismatch for traced propose calldata',
+      );
+    });
+
+    it.each(traceFormats)('ignores a propose call under a reverted frame via %s', async format => {
+      const reverted = makeProposal();
+      const kept = makeProposal();
+      const root = wrapperFrame([
+        {
+          to: EthAddress.random().toString(),
+          input: '0x12345678',
+          error: 'execution reverted',
+          calls: [rollupFrame(reverted.calldata)],
+        },
+        rollupFrame(kept.calldata),
+      ]);
+      mockWrapperTx();
+      mockTrace(format, root);
+      mockTrace(format, root);
+
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, reverted.hashes)).rejects.toThrow(
+        'Hash mismatch for traced propose calldata',
+      );
+      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, kept.hashes)).resolves.toEqual(
+        expect.objectContaining({ archiveRoot: kept.archiveRoot, verbatimAttestations: kept.attestations }),
       );
     });
   });
