@@ -924,6 +924,25 @@ describe('SessionManager', () => {
     expect(manager.getFullSession(epoch)).toBe(recreated as unknown as EpochSession);
   });
 
+  it('replaces a session when one of its provers is pruned and re-added with the same id', async () => {
+    const epoch = EpochNumber(3);
+    const pruned = proverForCheckpoint(1, 6);
+    await openCanonicalFullSession(epoch, [pruned]);
+    const original = stubs[0];
+
+    // The store removed the pruned prover and now holds a new prover for the identical checkpoint.
+    pruned.isCancelled = () => true;
+    const readded = proverForCheckpoint(1, 6);
+    expect(readded.id).toBe(pruned.id);
+    store.listInSlotRange.mockReturnValue([readded]);
+    await manager.onCheckpointAdded(epoch);
+
+    expect(original.cancelReasons).toEqual(['canonical content changed']);
+    expect(stubs).toHaveLength(2);
+    expect(stubs[1].provers[0]).toBe(readded);
+    expect(manager.getFullSession(epoch)).toBe(stubs[1] as unknown as EpochSession);
+  });
+
   it('drops a session and does not recreate when canonical content goes empty', async () => {
     const epoch = EpochNumber(3);
     await openCanonicalFullSession(epoch, [proverForCheckpoint(1, 6)]);
@@ -1244,6 +1263,39 @@ describe('SessionManager', () => {
 
     await expect(manager.startProof(epoch)).rejects.toThrow(/already proven/i);
     expect(stubs).toHaveLength(0);
+  });
+
+  it('startProof throws when the session limit is reached', async () => {
+    manager = new TestSessionManager(
+      {
+        checkpointStore: store,
+        l2BlockSource,
+        proverFactory: {} as any,
+        proverId: EthAddress.ZERO,
+        rollupContract,
+        publishingService,
+        metrics,
+        dateProvider,
+        config: { maxPendingJobs: 1, tickIntervalMs: 60_000, finalizationDelayMs: undefined },
+      },
+      (spec, provers) => {
+        const stub = makeStubSession(spec, provers);
+        stubs.push(stub);
+        return stub as unknown as EpochSession;
+      },
+    );
+    // Epoch 3 holds the only session slot; epoch 7 is then requested.
+    const epoch3Provers = [proverForCheckpoint(1, 6)];
+    const epoch7Provers = [proverForCheckpoint(2, 14)];
+    setStore([...epoch3Provers, ...epoch7Provers]);
+    store.listForEpoch.mockImplementation((epoch: EpochNumber) =>
+      Promise.resolve(Number(epoch) === 3 ? epoch3Provers : epoch7Provers),
+    );
+
+    await manager.startProof(EpochNumber(3));
+    await expect(manager.startProof(EpochNumber(7))).rejects.toThrow(/Maximum pending proving jobs/);
+
+    expect(stubs).toHaveLength(1);
   });
 
   it('startProof dedupes against an existing full session with the same range', async () => {
