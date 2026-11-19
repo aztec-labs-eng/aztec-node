@@ -12,7 +12,7 @@ export interface GlobalVariableBuilder {
   /**
    * Builds global variables that are constant throughout a checkpoint.
    * @param options - Optional L1 block to pin the fee read to, so the fee describes the same L1 state the caller
-   * planned the block from. A block hash takes precedence over a number, and also pins the overrides plan's reads.
+   * planned the block from. A block hash takes precedence over a number.
    */
   buildCheckpointGlobalVariables(
     coinbase: EthAddress,
