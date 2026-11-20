@@ -4,7 +4,9 @@ FROM aztecprotocol/build:3.2 AS build
 # Should just be package.json, yarn.lock, and .yarn* files.
 COPY . /usr/src
 # Install yarn-project production dependencies.
-# Explicitly specify projects that we use to keep as slim as possible.
+# Explicitly specify projects that we use to keep as slim as possible. The image ships every workspace's dest, but
+# only the focused workspaces and their dependencies get node_modules: cli-wallet is listed because @aztec-labs/aztec
+# does not depend on it, and without it the wallet's own dependencies (such as inquirer) are left out.
 WORKDIR /usr/src/yarn-project
 # yarnrc carries the scope routing for a registry other than npmjs and names the credential
 # variables it needs; the rest supply them. The credentials are secrets so they never reach a
@@ -18,7 +20,7 @@ RUN --mount=type=secret,id=yarnrc,target=/root/.yarnrc.yml \
     NPM_TOKEN="$(cat /run/secrets/npmtoken 2>/dev/null || true)" \
     NPM_USERNAME="$(cat /run/secrets/npmuser 2>/dev/null || true)" \
     NPM_PASSWORD="$(cat /run/secrets/npmpass 2>/dev/null || true)" \
-    yarn workspaces focus @aztec-labs/aztec --production
+    yarn workspaces focus @aztec-labs/aztec @aztec-labs/cli-wallet --production
 
 # Create base of our final slim image.
 # This can be cached and will only update if dependencies change.
