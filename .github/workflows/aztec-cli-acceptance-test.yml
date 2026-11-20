@@ -41,7 +41,9 @@ jobs:
           persist-credentials: false
 
       - name: Run Aztec CLI acceptance test
-        timeout-minutes: 30
+        # Room for run-test.sh's wait for npm to make the release installable: 8 attempts 60s apart,
+        # about 15 minutes on ubuntu and about 22 on macOS.
+        timeout-minutes: 45
         run: ./aztec-up/test/aztec-cli-acceptance-test/run-test.sh
 
       - name: Upload diagnostics on failure
