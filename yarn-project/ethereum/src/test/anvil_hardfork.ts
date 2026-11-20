@@ -9,9 +9,20 @@ import { isAmsterdamBlock } from '../l1_tx_utils/amsterdam.js';
 import type { EthCheatCodes } from './eth_cheat_codes.js';
 import { type Anvil, startAnvil } from './start_anvil.js';
 
+/** Gas of a plain value transfer before any state gas. */
+const PLAIN_TRANSFER_GAS = 21_000n;
+
+/** An address no anvil dev account or genesis allocation uses, so it has no balance, nonce or code. */
+const EMPTY_ADDRESS = '0x000000000000000000000000000000000000dEaD';
+
 /**
  * Starts a throwaway anvil on `hardfork` and checks that it mines blocks of that fork, so a test that needs a fork
  * the installed foundry cannot run fails within seconds instead of after its whole setup. Never skips.
+ *
+ * On Amsterdam it also checks that anvil charges EIP-8037 state gas. Anvil before foundry 1.9.0 mines Amsterdam
+ * blocks but estimates and executes with the pre-fork gas schedule, so Amsterdam runs on it say nothing about
+ * Amsterdam gas. A value transfer to an empty address is the cheapest probe: it creates an account, so under EIP-8037
+ * it costs far more than a plain transfer.
  */
 export async function assertAnvilSupportsHardfork(hardfork: string): Promise<void> {
   let res: Awaited<ReturnType<typeof startAnvil>> | undefined;
@@ -23,9 +34,16 @@ export async function assertAnvilSupportsHardfork(hardfork: string): Promise<voi
     if (isAmsterdamBlock(block) !== (hardfork === 'amsterdam')) {
       throw new Error(`anvil --hardfork ${hardfork} mined block ${block.number} with the wrong header shape`);
     }
+    if (hardfork === 'amsterdam') {
+      const [from] = (await client.request({ method: 'eth_accounts' as any, params: [] as any })) as Hex[];
+      const gas = await client.estimateGas({ account: from, to: EMPTY_ADDRESS, value: 1n });
+      if (gas <= PLAIN_TRANSFER_GAS) {
+        throw new Error(`anvil estimated ${gas} gas for a transfer to an empty address, so it charges no state gas`);
+      }
+    }
   } catch (err) {
     throw new Error(
-      `Anvil at ${resolveFoundryBinary('anvil')} cannot run --hardfork ${hardfork}; foundry >= 1.8.5 is required`,
+      `Anvil at ${resolveFoundryBinary('anvil')} cannot run --hardfork ${hardfork}; foundry >= 1.9.0 is required`,
       { cause: err },
     );
   } finally {
