@@ -11,7 +11,7 @@ import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
 import type { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
 import { FunctionCall, FunctionType } from '@aztec-labs/stdlib/abi';
-import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
@@ -26,7 +26,7 @@ import { FeesTest } from './fees_test.js';
 // aztecProofSubmissionEpochs=NO_REORG_SUBMISSION_EPOCHS), fake in-proc prover node, and GasBridgingTestHarness for
 // L1↔L2 fee-juice bridging. Auto-proving is disabled after setup so tests control proving themselves.
 describe('single-node/fees/failures', () => {
-  // FeesTest.setup + applyFPCSetup chains many dependent txs which run at the
+  // FeesTest.setup + applyFPCSetup + applyFundAliceWithBananas chains many dependent txs which run at the
   // ~24s/tx pipelined cadence, exceeding the default 5 min hook window.
   jest.setTimeout(900_000);
 
@@ -50,7 +50,7 @@ describe('single-node/fees/failures', () => {
       aztecProofSubmissionEpochs: NO_REORG_SUBMISSION_EPOCHS,
       aztecEpochDuration: 4,
     });
-    await t.applyFPCSetup();
+    await Promise.all([t.applyFPCSetup(), t.applyFundAliceWithBananas()]);
     ({ wallet, aliceAddress, sequencerAddress, bananaCoin, bananaFPC, gasSettings } = t);
     await ensureAuthRegistryPublished(wallet, aliceAddress);
     aztecNode = t.aztecNode;
@@ -285,13 +285,34 @@ describe('single-node/fees/failures', () => {
     ).rejects.toThrow(/Transaction (0x)?[0-9a-fA-F]{64} was dropped/i);
   });
 
-  // A tx whose teardown gas limit is zero (BuggedTeardownFeePaymentMethod) reverts in teardown but
-  // is still included in a block. Asserts the tx revert code is REVERTED, Alice was charged up to the
-  // fee limit in setup, and the epoch can still be proven after the revert.
+  // The FPC pays the tx fee from its own Fee Juice even when teardown reverts, so both FPC entrypoints must reject a
+  // max fee below the tx fee limit during private execution, before the tx can be included.
+  it.each([
+    [
+      'private',
+      (settings: GasSettings) => new PrivateFeePaymentMethod(bananaFPC.address, aliceAddress, wallet, settings),
+    ],
+    [
+      'public',
+      (settings: GasSettings) => new PublicFeePaymentMethod(bananaFPC.address, aliceAddress, wallet, settings),
+    ],
+  ])('rejects a %s FPC payment whose max fee is below the fee limit', async (_flow, makePaymentMethod) => {
+    // The payment method derives max_fee from its own gas settings, while the tx itself runs with `gasSettings`.
+    const paymentMethod = makePaymentMethod(GasSettings.from({ ...gasSettings, maxFeesPerGas: new GasFees(1, 1) }));
+    const [initialFPCGas] = await t.getGasBalanceFn(bananaFPC.address);
+
+    await expect(
+      bananaCoin.methods
+        .mint_to_public(aliceAddress, 1n)
+        .send({ from: aliceAddress, fee: { gasSettings, paymentMethod } }),
+    ).rejects.toThrow('max fee not enough to cover tx fee');
+    await expectMapping(t.getGasBalanceFn, [bananaFPC.address], [initialFPCGas]);
+  });
+
+  // A tx whose teardown gas limit is zero reverts in teardown but is still included in a block. Asserts the tx
+  // revert code is REVERTED, Alice was charged up to the fee limit in setup, and the epoch can still be proven
+  // after the revert.
   it('includes transaction that error in teardown', async () => {
-    /**
-     * We trigger an error in teardown by having the "FPC" call a function that reverts.
-     */
     const publicMintedAlicePublicBananas = 100_000_000_000n;
 
     const [initialAlicePrivateBananas, initialSequencerPrivateBananas] = await t.getBananaPrivateBalanceFn(
@@ -360,7 +381,7 @@ describe('single-node/fees/failures', () => {
       [initialAliceGas, initialFPCGas - receipt.transactionFee!, initialSequencerGas],
     );
 
-    // Prove the block containing the teardown-reverted tx (revert_code = 2).
+    // Prove the block containing the teardown-reverted tx.
     await t.advanceToNextEpoch();
     const provenTimeout =
       (t.context.config.aztecProofSubmissionEpochs + 1) *
@@ -373,6 +394,8 @@ describe('single-node/fees/failures', () => {
   // the block to be proven. Ensures a double-revert tx can be proven without hanging the prover.
   it('proves transaction where both app logic and teardown revert', async () => {
     const outrageousPublicAmountAliceDoesNotHave = t.ALICE_INITIAL_BANANAS * 5n;
+    // Without teardown gas, the FPC's refund in teardown runs out of gas.
+    const noTeardownGas = GasSettings.from({ ...gasSettings, teardownGasLimits: Gas.empty() });
 
     // Send a tx that will revert in BOTH app logic and teardown.
     const { receipt } = await bananaCoin.methods
@@ -380,7 +403,7 @@ describe('single-node/fees/failures', () => {
       .send({
         from: aliceAddress,
         fee: {
-          paymentMethod: new BuggedTeardownFeePaymentMethod(bananaFPC.address, aliceAddress, wallet, gasSettings),
+          paymentMethod: new PublicFeePaymentMethod(bananaFPC.address, aliceAddress, wallet, noTeardownGas),
         },
         wait: { dontThrowOnRevert: true },
       });
@@ -396,58 +419,6 @@ describe('single-node/fees/failures', () => {
     await waitForProven(aztecNode, receipt, { provenTimeout });
   });
 });
-
-/**
- * Fee payment method whose teardown always reverts because max_fee is set to 0.
- * The FPC's _pay_refund will assert `0 >= actual_fee` which always fails since actual_fee > 0.
- * The setup transfer of 0 tokens succeeds (and the authwit matches the 0 amount).
- */
-class BuggedTeardownFeePaymentMethod extends PublicFeePaymentMethod {
-  override async getExecutionPayload(): Promise<ExecutionPayload> {
-    const zeroFee = new Fr(0n);
-    const authwitNonce = Fr.random();
-
-    const asset = await this.getAsset();
-
-    // Authorize the FPC to transfer 0 tokens (matches the 0 max_fee we'll pass).
-    const setPublicAuthWitInteraction = await SetPublicAuthwitContractInteraction.create(
-      this.wallet,
-      this.sender,
-      {
-        caller: this.paymentContract,
-        call: FunctionCall.from({
-          name: 'transfer_in_public',
-          to: asset,
-          selector: await FunctionSelector.fromSignature('transfer_in_public((Field),(Field),u128,Field)'),
-          type: FunctionType.PUBLIC,
-          hideMsgSender: false,
-          isStatic: false,
-          args: [this.sender.toField(), this.paymentContract.toField(), zeroFee, authwitNonce],
-        }),
-      },
-      true,
-    );
-
-    return new ExecutionPayload(
-      [
-        ...(await setPublicAuthWitInteraction.request()).calls,
-        FunctionCall.from({
-          name: 'fee_entrypoint_public',
-          to: this.paymentContract,
-          selector: await FunctionSelector.fromSignature('fee_entrypoint_public(u128,Field)'),
-          type: FunctionType.PRIVATE,
-          hideMsgSender: false,
-          isStatic: false,
-          args: [zeroFee, authwitNonce],
-        }),
-      ],
-      [],
-      [],
-      [],
-      this.paymentContract,
-    );
-  }
-}
 
 class BuggedSetupFeePaymentMethod extends PublicFeePaymentMethod {
   override async getExecutionPayload(): Promise<ExecutionPayload> {

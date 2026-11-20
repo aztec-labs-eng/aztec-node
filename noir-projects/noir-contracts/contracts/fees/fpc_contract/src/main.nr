@@ -15,7 +15,7 @@ use aztec::macros::aztec;
 /// be pulled by the admin using the `pull_funds` function.
 #[aztec]
 pub contract FPC {
-    use crate::{config::Config, utils::safe_cast_to_u128};
+    use crate::{config::Config, utils::{assert_max_fee_covers_fee_limit, safe_cast_to_u128}};
     use aztec::{
         macros::{functions::{allow_phase_change, external, initializer, only_self}, storage::storage},
         protocol::address::AztecAddress,
@@ -45,6 +45,8 @@ pub contract FPC {
     /// Uses partial notes to implement a refund flow which works as follows:
     /// Setup Phase:
     /// 1. This `fee_entrypoint_private` function:
+    ///     - Asserts that `max_fee` covers the tx fee limit (`gas_limits * max_fees_per_gas`), since this contract
+    ///       pays the tx fee even when teardown reverts,
     ///     - Transfers `max_fee` of AA from private balance of the user to the public balance of this contract,
     ///     - prepares a partial note for the user (which will later on be used to refund the user any unspent fee),
     ///     - sets a public teardown function, where at the end of the tx a partial note will be finalized
@@ -82,13 +84,12 @@ pub contract FPC {
     #[external("private")]
     #[allow_phase_change]
     fn fee_entrypoint_private(max_fee: u128, authwit_nonce: Field) {
+        assert_max_fee_covers_fee_limit(max_fee, self.context.gas_settings());
+
         let accepted_asset = self.storage.config.read().accepted_asset;
 
         let user = self.msg_sender();
         let token = Token::at(accepted_asset);
-
-        // TODO(#10805): Here we should check that `max_fee` converted to fee juice is enough to cover the tx
-        // fee juice/mana/gas limit. Currently the fee juice/AA exchange rate is fixed 1:1.
 
         // Pull the max fee from the user's balance of the accepted asset to the public balance of this contract.
         self.call(token.transfer_to_public(user, self.address, max_fee, authwit_nonce));
@@ -113,11 +114,8 @@ pub contract FPC {
     fn _complete_refund(accepted_asset: AztecAddress, partial_note: PartialUintNote, max_fee: u128) {
         let tx_fee = safe_cast_to_u128(self.context.transaction_fee());
 
-        // 1. Check that user funded the fee payer contract with at least the transaction fee.
-        // TODO(#10805): Nuke this check once we have a proper max_fee check in the fee_entrypoint_private.
-        assert(max_fee >= tx_fee, "max fee not enough to cover tx fee");
-
-        // 2. Compute the refund amount as the difference between funded amount and the tx fee.
+        // Compute the refund amount as the difference between funded amount and the tx fee. With the fixed 1:1 rate
+        // this cannot underflow, because `fee_entrypoint_private` asserted that `max_fee` covers the tx fee limit.
         // TODO(#10805): Introduce a real exchange rate
         let refund_amount = max_fee - tx_fee;
 
@@ -131,6 +129,8 @@ pub contract FPC {
     /// The refund flow works as follows:
     /// Setup phase:
     /// 1. This `fee_entrypoint_public` function:
+    ///     - Asserts that `max_fee` covers the tx fee limit (`gas_limits * max_fees_per_gas`), since this contract
+    ///       pays the tx fee even when teardown reverts.
     ///     - Transfers the `max_fee` from the user's balance of the accepted asset to this contract.
     ///     - Sets itself as the `fee_payer` of the tx.
     ///     - Sets a public teardown function in which the refund will be paid back to the user in public.
@@ -147,6 +147,8 @@ pub contract FPC {
     #[external("private")]
     #[allow_phase_change]
     fn fee_entrypoint_public(max_fee: u128, authwit_nonce: Field) {
+        assert_max_fee_covers_fee_limit(max_fee, self.context.gas_settings());
+
         let config = self.storage.config.read();
 
         // We pull the max fee from the user's balance of the accepted asset to this contract.
@@ -175,7 +177,8 @@ pub contract FPC {
     fn _pay_refund(refund_recipient: AztecAddress, max_fee: u128, accepted_asset: AztecAddress) {
         let actual_fee = safe_cast_to_u128(self.context.transaction_fee());
 
-        assert(actual_fee <= max_fee, "Max fee paid to the paymaster does not cover actual fee");
+        // With the fixed 1:1 rate this cannot underflow, because `fee_entrypoint_public` asserted that `max_fee` covers
+        // the tx fee limit.
         // TODO(#10805): Introduce a real exchange rate
         let refund = max_fee - actual_fee;
 
