@@ -6,7 +6,7 @@ use crate::{
     context::PrivateContext,
     ephemeral::EphemeralArray,
     messages::{delivery::OnchainDeliveryMode, processing::provided_secret::ProvidedSecret},
-    oracle::{call_utility_function::call_utility_function, shared_secret::get_shared_secrets},
+    oracle::{call_utility_function::call_utility_function, ecdh_messaging_secret::get_ecdh_messaging_secrets},
     protocol::{
         abis::function_selector::FunctionSelector,
         address::AztecAddress,
@@ -193,7 +193,7 @@ pub(crate) unconstrained fn get_handshake_secrets(
     }
 
     if protected_eph_pks.len() > 0 {
-        let secrets = get_shared_secrets(recipient, protected_eph_pks, contract_address);
+        let secrets = get_ecdh_messaging_secrets(recipient, protected_eph_pks, contract_address);
         for j in 0..secrets.len() {
             let secret = secrets.get(j);
             // Handshakes are mode-agnostic; emit one entry per on-chain tag domain for PXE to scan.
@@ -245,7 +245,7 @@ mod test {
 
             let secret_a: Field = 111;
             let secret_b: Field = 222;
-            mock_get_shared_secrets([secret_a, secret_b]);
+            mock_get_ecdh_messaging_secrets([secret_a, secret_b]);
 
             let secrets = get_handshake_secrets(contract_address, recipient);
 
@@ -284,7 +284,7 @@ mod test {
             let _ = OracleMock::mock("aztec_utl_callUtilityFunction").returns(page_1.serialize()).times(1);
             let _ = OracleMock::mock("aztec_utl_callUtilityFunction").returns(page_2.serialize()).times(1);
 
-            mock_get_shared_secrets([111, 222, 333]);
+            mock_get_ecdh_messaging_secrets([111, 222, 333]);
 
             let secrets = get_handshake_secrets(contract_address, recipient);
             assert_eq(secrets.len(), 6);
@@ -316,19 +316,19 @@ mod test {
             let _ = OracleMock::mock("aztec_utl_callUtilityFunction").returns(page.serialize());
 
             let empty: [Field; 0] = [];
-            mock_get_shared_secrets(empty);
+            mock_get_ecdh_messaging_secrets(empty);
 
             let secrets = get_handshake_secrets(contract_address, recipient);
             assert_eq(secrets.len(), 0);
         });
     }
 
-    unconstrained fn mock_get_shared_secrets<let N: u32>(response_values: [Field; N]) {
+    unconstrained fn mock_get_ecdh_messaging_secrets<let N: u32>(response_values: [Field; N]) {
         let response_slot: Field = 99;
         let response_array: EphemeralArray<Field> = EphemeralArray::at(response_slot);
         for value in response_values {
             response_array.push(value);
         }
-        let _ = OracleMock::mock("aztec_utl_getSharedSecrets").returns(response_slot);
+        let _ = OracleMock::mock("aztec_utl_getEcdhMessagingSecrets").returns(response_slot);
     }
 }

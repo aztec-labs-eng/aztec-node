@@ -32,7 +32,7 @@ import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
-import { FlatPublicLogs, MessagingSecret, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
+import { FlatPublicLogs, MessagingSecret, computeEcdhMessagingSecret } from '@aztec-labs/stdlib/logs';
 import {
   type UnsiloedMessageNullifier,
   getL1ToL2MessageWitness,
@@ -989,22 +989,22 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
-   * Retrieves app-siloed shared secrets for multiple ephemeral public keys stored in an ephemeral array.
+   * Computes the messaging secrets of `address`'s ECDH exchanges with multiple ephemeral public keys.
    * @param address - The recipient address.
    * @param ephPks - Ephemeral array containing the serialized Points.
    * @param contractAddress - The contract address for app-siloing (validated against execution context).
-   * @returns A new ephemeral array containing the computed shared secrets, or an empty array when the PXE does not
+   * @returns A new ephemeral array containing the computed messaging secrets, or an empty array when the PXE does not
    * hold the keys for `address`.
    * @throws If `address` is not in the execution's allowed scopes.
    */
-  public async getSharedSecrets(
+  public async getEcdhMessagingSecrets(
     address: AztecAddress,
     ephPks: EphemeralArray<EmbeddedCurvePoint>,
     contractAddress: AztecAddress,
   ): Promise<EphemeralArray<Fr>> {
     if (!contractAddress.equals(this.contractAddress)) {
       throw new Error(
-        `getSharedSecrets called with contract address ${contractAddress}, expected ${this.contractAddress}`,
+        `getEcdhMessagingSecrets called with contract address ${contractAddress}, expected ${this.contractAddress}`,
       );
     }
 
@@ -1015,7 +1015,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     const recipientCompleteAddress = await this.addressStore.getCompleteAddress(address);
     if (!recipientCompleteAddress) {
       this.logger.warn(
-        `Computing shared secrets for address ${address} whose keys are not held - returning no secrets`,
+        `Computing ECDH messaging secrets for address ${address} whose keys are not held - returning no secrets`,
         {
           address,
           contractAddress: this.contractAddress,
@@ -1029,7 +1029,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
 
     const ephPkPoints = ephPks.readAll(this.ephemeralArrayService);
     const secrets = await allToCompletion(
-      ephPkPoints.map(({ x, y }) => appSiloEcdhSharedSecret(addressSecret, new Point(x, y), this.contractAddress)),
+      ephPkPoints.map(({ x, y }) => computeEcdhMessagingSecret(addressSecret, new Point(x, y), this.contractAddress)),
     );
 
     return EphemeralArray.fromValues(this.ephemeralArrayService, secrets);

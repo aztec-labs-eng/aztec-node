@@ -32,6 +32,8 @@ pub mod call_private_function;
 pub mod call_utility_function;
 #[generate_oracle_tests]
 pub mod capsules;
+// TODO: cover with oracle tests once the test resolver can serve EphemeralArray contents.
+pub mod ecdh_messaging_secret;
 #[generate_oracle_tests]
 pub(crate) mod ephemeral_oracles;
 #[generate_oracle_tests]
@@ -119,7 +121,6 @@ pub mod offchain_effect;
 pub mod version;
 #[generate_oracle_tests]
 pub mod random;
-// TODO: cover with oracle tests once the test resolver can serve EphemeralArray contents.
 pub mod shared_secret;
 #[generate_oracle_tests]
 pub mod storage;

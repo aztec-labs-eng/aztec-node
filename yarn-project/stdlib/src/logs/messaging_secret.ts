@@ -1,14 +1,15 @@
-import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { DomainSeparator } from '@aztec-labs/constants';
 import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { type Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
-import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import type { CompleteAddress } from '../contract/complete_address.js';
-import { computeAddressSecret, computeAppTaggingSecretKey, computePreaddress } from '../keys/derivation.js';
+import { computeAppTaggingSecretKey } from '../keys/derivation.js';
+import type { PublicKey } from '../keys/public_key.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
-import { computeAppSiloedSharedSecretFromPoint } from './shared_secret_derivation.js';
+import { computeAddressDerivedSharedSecretPoint, deriveEcdhSharedSecretPoint } from './shared_secret_derivation.js';
 
 const OnchainDeliveryModeSchema = z.union([
   z.literal(OnchainDeliveryMode.UNCONSTRAINED),
@@ -32,7 +33,7 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  * ## From raw secret to messaging secret
  *
  * Every mechanism starts from a raw secret that apps never see, and silos it to an app so that an app can only compute
- * its own tags. Shared secret points are siloed with {@link computeAppSiloedSharedSecretFromPoint}, and the recipient's
+ * its own tags. Shared secret points are siloed with {@link computeMessagingSecretFromPoint}, and the recipient's
  * tagging secret key with {@link computeAppTaggingSecretKey}.
  *
  * - **Address-derived** ({@link computeAddressDerived}): the raw secret is the ECDH exchange between the sender's and
@@ -88,15 +89,14 @@ export class MessagingSecret {
   /**
    * Derives the messaging secret for a handshake's shared secret point.
    *
-   * The secret is the bare app-siloed value from {@link computeAppSiloedSharedSecretFromPoint}, under the given
-   * delivery mode.
+   * The secret is the bare value from {@link computeMessagingSecretFromPoint}, under the given delivery mode.
    */
   static async computeFromHandshakeSecret(
     sharedSecretPoint: Point,
     app: AztecAddress,
     deliveryMode: OnchainDeliveryMode,
   ): Promise<MessagingSecret> {
-    return new MessagingSecret(await computeAppSiloedSharedSecretFromPoint(sharedSecretPoint, app), app, deliveryMode);
+    return new MessagingSecret(await computeMessagingSecretFromPoint(sharedSecretPoint, app), app, deliveryMode);
   }
 
   /**
@@ -168,17 +168,17 @@ export class MessagingSecret {
   }
 
   /**
-   * App-silos a shared secret point via {@link computeAppSiloedSharedSecretFromPoint}, then directs the result to
-   * `recipient`: `h([s_app, recipient])`. The directional step stops a symmetric shared secret from colliding
-   * bidirectionally, so two parties never share a tag sequence.
+   * App-silos a shared secret point via {@link computeMessagingSecretFromPoint}, then directs the result to
+   * `recipient`: `h([messagingSecret, recipient])`. The directional step stops a symmetric shared secret from
+   * colliding bidirectionally, so two parties never share a tag sequence.
    */
   static async #computeDirectional(
     sharedSecretPoint: Point,
     app: AztecAddress,
     recipient: AztecAddress,
   ): Promise<MessagingSecret> {
-    const appSiloedSecret = await computeAppSiloedSharedSecretFromPoint(sharedSecretPoint, app);
-    const directionalMessagingSecret = await poseidon2Hash([appSiloedSecret, recipient]);
+    const messagingSecret = await computeMessagingSecretFromPoint(sharedSecretPoint, app);
+    const directionalMessagingSecret = await poseidon2Hash([messagingSecret, recipient]);
 
     return new MessagingSecret(directionalMessagingSecret, app, OnchainDeliveryMode.UNCONSTRAINED);
   }
@@ -222,31 +222,43 @@ function onchainDeliveryModeFromString(deliveryMode: string): OnchainDeliveryMod
 }
 
 /**
- * Computes the shared secret point between a local address (i.e. one for which the privacy keys are known) and
- * an external one via a Diffie-Hellman key exchange.
+ * Derives the messaging secret of an ECDH exchange: ECDHs `S = secretKey * publicKey` via
+ * {@link deriveEcdhSharedSecretPoint}, then app-silos it via {@link computeMessagingSecretFromPoint}.
  *
- * Returns undefined if `externalAddress` is an invalid address.
+ * @param secretKey - The secret key used to derive shared secret.
+ * @param publicKey - The public key used to derive shared secret.
+ * @param contractAddress - The address of the calling contract, used for app-siloing.
+ * @returns The messaging secret as a Field.
+ * @throws If the publicKey is zero.
  */
-export async function computeAddressDerivedSharedSecretPoint(
-  localAddress: CompleteAddress,
-  localIvsk: Fq,
-  externalAddress: AztecAddress,
-): Promise<Point | undefined> {
-  // An invalid address has no corresponding address point
-  if (!(await externalAddress.isValid())) {
-    return undefined;
-  }
-
-  const externalAddressPoint = await externalAddress.toAddressPoint();
-
-  const localPreaddress = await computePreaddress(await localAddress.publicKeys.hash(), localAddress.partialAddress);
-  const localAddressSecret = await computeAddressSecret(localPreaddress, localIvsk);
-
-  // For a given local address A and external address B, the shared secret point S is (h_A + ivsk_A) * Addr_Point_B
-  // (conceptually, in reality we don't use h_A + ivsk_A directly but rather the actual address secret, which is the
-  // same but with an optional sign adjustment to prevent A's address point from having a negative y-coordinate).
-  return Grumpkin.mul(externalAddressPoint, localAddressSecret);
+export async function computeEcdhMessagingSecret(
+  secretKey: GrumpkinScalar,
+  publicKey: PublicKey,
+  contractAddress: AztecAddress,
+): Promise<Fr> {
+  const rawSharedSecret = await deriveEcdhSharedSecretPoint(secretKey, publicKey);
+  return computeMessagingSecretFromPoint(rawSharedSecret, contractAddress);
 }
 
-/** @deprecated Use {@link computeAddressDerivedSharedSecretPoint}. */
-export const computeSharedTaggingSecret = computeAddressDerivedSharedSecretPoint;
+/** @deprecated Use {@link computeEcdhMessagingSecret}. */
+export const appSiloEcdhSharedSecret = computeEcdhMessagingSecret;
+
+/**
+ * Computes a shared secret point's messaging secret by app-siloing it:
+ * `h(DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, S.x, S.y, app)`.
+ *
+ * Mirrors `compute_messaging_secret_from_point` in aztec-nr.
+ *
+ * @param point - The raw shared secret point `S`.
+ * @param app - The contract address to silo to.
+ */
+export function computeMessagingSecretFromPoint(point: Point, app: AztecAddress): Promise<Fr> {
+  // The separator name is ECDH-specific, but this silos any shared secret point, not only ECDH ones.
+  return poseidon2HashWithSeparator([point.x, point.y, app], DomainSeparator.APP_SILOED_ECDH_SHARED_SECRET);
+}
+
+/** @deprecated Use {@link computeMessagingSecretFromPoint}. */
+export const computeAppSiloedSharedSecretFromPoint = computeMessagingSecretFromPoint;
+
+/** @deprecated Use {@link computeMessagingSecretFromPoint}. */
+export const appSiloEcdhSharedSecretPoint = computeMessagingSecretFromPoint;

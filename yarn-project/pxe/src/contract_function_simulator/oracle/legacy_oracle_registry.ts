@@ -140,6 +140,9 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
       },
     },
   }),
+  aztec_utl_getSharedSecrets: legacyOracle({
+    modernOracle: 'aztec_utl_getEcdhMessagingSecrets',
+  }),
 };
 
 type LegacyLogRetrievalResponse = Pick<

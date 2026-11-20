@@ -2,11 +2,11 @@ mod builder;
 mod mode;
 mod resolved_messaging_secret_strategy;
 mod tag;
-pub(crate) mod messaging_secret_derivation;
 pub(crate) mod delivery_messaging_secret;
 pub(crate) mod constrained_delivery;
 
 pub mod handshake;
+pub mod messaging_secret_derivation;
 
 use crate::{
     context::PrivateContext,
