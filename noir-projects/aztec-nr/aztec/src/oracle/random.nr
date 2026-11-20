@@ -14,7 +14,7 @@ unconstrained fn rand_oracle() -> Field {}
 global RANDOM_BYTES_PER_FIELD: u32 = 16;
 
 /// Variant of [`random`] that returns `N` random bytes.
-pub unconstrained fn random_bytes<let N: u32>() -> [u8; N] {
+pub(crate) unconstrained fn random_bytes<let N: u32>() -> [u8; N] {
     let mut bytes = [0; N];
     let mut start = 0;
     while start < N {
