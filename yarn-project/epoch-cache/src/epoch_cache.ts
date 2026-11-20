@@ -460,21 +460,39 @@ export class EpochCache implements EpochCacheInterface {
     ts: bigint,
     prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: L1BlockInfo | undefined },
   ): Promise<EpochEntry> {
+    const latestBlock = prefetched?.latestBlock ?? (await this.rollup.client.getBlock({ includeTransactions: false }));
+    const entry = await this.readEntryAt(epoch, ts, latestBlock, prefetched);
+    if (entry !== 'seed-fixed-after-block') {
+      return entry;
+    }
+
+    // The seed check saw a later block fix the seed, so that block is mined and the new latest block holds the fixed
+    // seed. Retry there instead of caching an unstable marker, which would hide the committee for an Ethereum slot.
+    const retryBlock = await this.rollup.client.getBlock({ includeTransactions: false });
+    const retry = await this.readEntryAt(epoch, ts, retryBlock);
+    return retry === 'seed-fixed-after-block' ? this.makeUnstableEntry(retryBlock) : retry;
+  }
+
+  /**
+   * Reads an epoch's entry pinned to the given L1 block. Returns `seed-fixed-after-block` when the seed check saw the
+   * seed fixed but the block's own state does not have it fixed, so the committee and seed read may be superseded.
+   */
+  private async readEntryAt(
+    epoch: EpochNumber,
+    ts: bigint,
+    block: L1BlockInfo,
+    prefetched?: { finalizedBlock: L1BlockInfo | undefined },
+  ): Promise<EpochEntry | 'seed-fixed-after-block'> {
     // Pin the rollup reads to one L1 block so the entry's provenance matches the data it holds. The escape hatch flag
     // is only partly pinned: the hatch address is resolved at the latest block, and any read error counts as closed.
-    const latestBlock = prefetched?.latestBlock ?? (await this.rollup.client.getBlock({ includeTransactions: false }));
-    const blockNumber = latestBlock.number;
-    const unstable: UnstableEpochEntry = {
-      kind: 'unstable',
-      l1BlockNumber: blockNumber,
-      lastRefreshL1Timestamp: maxBigint(latestBlock.timestamp, BigInt(this.dateProvider.nowInSeconds())),
-    };
+    const blockNumber = block.number;
+    const unstable = this.makeUnstableEntry(block);
 
-    if (!(await this.isSeedFixed(epoch, latestBlock))) {
+    if (!(await this.isSeedFixed(epoch, block))) {
       this.log.debug(`Committee for epoch ${epoch} is not stable yet as of L1 block ${blockNumber}`, {
         epoch,
         l1BlockNumber: blockNumber,
-        l1BlockTimestamp: latestBlock.timestamp,
+        l1BlockTimestamp: block.timestamp,
       });
       return unstable;
     }
@@ -498,8 +516,20 @@ export class EpochCache implements EpochCacheInterface {
     // Reads by block number follow the canonical chain, so a reorg mid-fetch could mix the seed check above with
     // committee data from another fork. Confirm the queried block is still canonical before trusting the reads.
     const queriedBlock = await this.rollup.client.getBlock({ blockNumber, includeTransactions: false });
-    if (queriedBlock.hash !== latestBlock.hash) {
+    if (queriedBlock.hash !== block.hash) {
       throw new Error(`L1 block ${blockNumber} was reorged out while reading the committee for epoch ${epoch}`);
+    }
+
+    // Anvil can answer a read pinned at the latest block with the next block's state when that block is mined during
+    // the read. The seed check above may then have seen the next block fix the seed while the reads above, issued once
+    // that block was mined, got this block's older seed. A check issued now cannot see the next block, and a seed that
+    // was fixed at this block stays fixed, so a failing re-check means the reads may hold a superseded seed.
+    if (!(await this.isSeedFixed(epoch, block))) {
+      this.log.verbose(`Seed for epoch ${epoch} was fixed after L1 block ${blockNumber} while reading its committee`, {
+        epoch,
+        l1BlockNumber: blockNumber,
+      });
+      return 'seed-fixed-after-block';
     }
 
     const data = toCommitteeLookup(committee, { seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen });
@@ -507,11 +537,20 @@ export class EpochCache implements EpochCacheInterface {
       kind: 'committee',
       data,
       lastQueryL1BlockNumber: blockNumber,
-      lastQueryL1BlockHash: latestBlock.hash,
-      lastRefreshL1Timestamp: latestBlock.timestamp,
+      lastQueryL1BlockHash: block.hash,
+      lastRefreshL1Timestamp: block.timestamp,
       finalized: this.isEntryFinalized(data, blockNumber, finalizedBlock),
     };
     return entry;
+  }
+
+  /** Marker for an epoch whose seed is not fixed as of the given L1 block. */
+  private makeUnstableEntry(block: L1BlockInfo): UnstableEpochEntry {
+    return {
+      kind: 'unstable',
+      l1BlockNumber: block.number,
+      lastRefreshL1Timestamp: maxBigint(block.timestamp, BigInt(this.dateProvider.nowInSeconds())),
+    };
   }
 
   /**
