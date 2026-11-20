@@ -32,7 +32,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### The node sends far fewer L1 requests to keep its fee estimates current
+### The node sends far fewer L1 requests to keep its fee estimates current ([#761](https://github.com/aztec-labs-eng/aztec-node/pull/761))
 
 The node used to send about 14 L1 requests for every new L1 block to keep its fee estimates current, and a few more each time it re-priced the next block's fee: roughly 4,000 to 5,400 requests an hour. It now batches these reads into one Multicall3 call per L1 block in the common case, and re-prices the next block's fee with one or two requests, for a few hundred requests an hour. On an RPC provider that bills per request, this cuts the bill for this traffic by about a factor of ten.
 
