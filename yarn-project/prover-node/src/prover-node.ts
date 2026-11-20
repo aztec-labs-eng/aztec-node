@@ -53,6 +53,7 @@ import {
 import { uploadEpochProofFailure } from './actions/upload-epoch-proof-failure.js';
 import { CheckpointStore, type RegisterCheckpointData } from './checkpoint-store.js';
 import type { SpecificProverNodeConfig } from './config.js';
+import { EpochProofStatus } from './epoch-proof-status.js';
 import type { CheckpointProver, CheckpointProverTestHooks } from './job/checkpoint-prover.js';
 import type { EpochSessionHooks } from './job/epoch-session.js';
 import { ProverNodeJobMetrics, ProverNodeRewardsMetrics } from './metrics.js';
@@ -119,6 +120,8 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
 
   protected publishingService: ProofPublishingService | undefined;
 
+  protected readonly epochProofStatus: EpochProofStatus;
+
   constructor(
     protected readonly prover: EpochProverManager & EpochProverFactory,
     protected readonly publisherFactory: ProverPublisherFactory,
@@ -158,6 +161,13 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
 
     this.tipsStore = new L2TipsMemoryStore(this.l2BlockSource.getGenesisBlockHash());
 
+    this.epochProofStatus = new EpochProofStatus({
+      l2BlockSource: this.l2BlockSource,
+      rollupContract: this.rollupContract,
+      proverId: this.prover.getProverId(),
+      dateProvider: this.dateProvider,
+      bindings: this.log.getBindings(),
+    });
     this.chonkCache = new ChonkCache(this.log.getBindings());
     this.checkpointStore = new CheckpointStore(
       this.l2BlockSource,
@@ -474,14 +484,14 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
     if (await this.isEpochPastProofSubmissionWindow(epoch, l1Constants)) {
       return true;
     }
-    if (!(await this.isEpochFullyProven(epoch, l1Constants))) {
+    if (!(await this.epochProofStatus.isEpochFullyProven(epoch))) {
       return false;
     }
     if (this.config.proverNodeDisableFullEpochProving) {
       return true;
     }
     const checkpoints = await this.l2BlockSource.getCheckpointsData({ epoch });
-    if ((await this.sessionManager?.readOwnFullEpochProof(epoch, checkpoints.length)) === true) {
+    if ((await this.epochProofStatus.readOwnFullEpochProof(epoch, checkpoints.length)) === true) {
       return true;
     }
     const stored = await this.checkpointStore.listForEpoch(epoch);
@@ -675,7 +685,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       l2BlockSource: this.l2BlockSource,
       proverFactory: this.prover,
       proverId: this.prover.getProverId(),
-      rollupContract: this.rollupContract,
+      proofStatus: this.epochProofStatus,
       publishingService,
       metrics: this.jobMetrics,
       dateProvider: this.dateProvider,
@@ -800,77 +810,14 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
   }
 
   /**
-   * Returns true if every block in the given epoch is proven on L1. An epoch is only
-   * fully proven when its *last* block is proven. Protected for direct unit-test access.
-   */
-  protected async isEpochFullyProven(
-    epochNumber: EpochNumber,
-    l1Constants: Pick<L1RollupConstants, 'epochDuration'>,
-  ): Promise<boolean> {
-    const provenBlockNumber = await this.l2BlockSource.getBlockNumber({ tag: 'proven' });
-    if (!provenBlockNumber || provenBlockNumber <= 0) {
-      return false;
-    }
-    const provenHeader = (await this.l2BlockSource.getBlockData({ number: BlockNumber(provenBlockNumber) }))?.header;
-    if (!provenHeader) {
-      return false;
-    }
-    const provenEpoch = getEpochAtSlot(provenHeader.getSlot(), l1Constants);
-    if (epochNumber < provenEpoch) {
-      return true;
-    }
-    if (epochNumber > provenEpoch) {
-      return false;
-    }
-    return this.isProvenBlockLastOfItsEpoch(BlockNumber(provenBlockNumber), provenEpoch, l1Constants);
-  }
-
-  /** Protected for direct unit-test access. */
-  protected async isProvenBlockLastOfItsEpoch(
-    provenBlockNumber: BlockNumber,
-    provenEpoch: EpochNumber,
-    l1Constants: Pick<L1RollupConstants, 'epochDuration'>,
-  ): Promise<boolean> {
-    const nextHeader = (await this.l2BlockSource.getBlockData({ number: BlockNumber(provenBlockNumber + 1) }))?.header;
-    if (nextHeader) {
-      return getEpochAtSlot(nextHeader.getSlot(), l1Constants) > provenEpoch;
-    }
-    return this.l2BlockSource.isEpochComplete(provenEpoch);
-  }
-
-  /**
    * Seeds the catch-up cursor and the expiry high-water mark on start, from the catch-up start epoch. Protected for
    * direct unit-test access.
    */
   protected async seedCatchUp(): Promise<void> {
-    const { lastFullyProvenEpoch } = await this.resolveLastFullyProvenEpoch();
+    const lastFullyProvenEpoch = await this.epochProofStatus.getLastFullyProvenEpoch();
     const catchUpStartEpoch = await this.resolveCatchUpStartEpoch(lastFullyProvenEpoch);
     this.lastExpiredEpoch = catchUpStartEpoch;
     this.lastProcessedCheckpoint = await this.computeStartingCheckpoint(catchUpStartEpoch);
-  }
-
-  /**
-   * Resolves the last fully-proven epoch from L1 proven state, used to seed the catch-up cursor and
-   * `lastExpiredEpoch` (via `resolveCatchUpStartEpoch`). The fully-proven epoch is `provenEpoch` when the
-   * proven tip is the last block of its epoch, otherwise `provenEpoch - 1`, or `undefined` if no block is
-   * proven yet (so a restart reprocesses the partially-proven epoch rather than trusting a stale tip).
-   */
-  protected async resolveLastFullyProvenEpoch(): Promise<{ lastFullyProvenEpoch: EpochNumber | undefined }> {
-    const provenBlockNumber = await this.l2BlockSource.getBlockNumber({ tag: 'proven' });
-    if (!provenBlockNumber || provenBlockNumber <= 0) {
-      return { lastFullyProvenEpoch: undefined };
-    }
-    const l1Constants = await this.getL1Constants();
-    const provenHeader = (await this.l2BlockSource.getBlockData({ number: BlockNumber(provenBlockNumber) }))?.header;
-    if (!provenHeader) {
-      return { lastFullyProvenEpoch: undefined };
-    }
-    const provenEpoch = getEpochAtSlot(provenHeader.getSlot(), l1Constants);
-    if (await this.isProvenBlockLastOfItsEpoch(BlockNumber(provenBlockNumber), provenEpoch, l1Constants)) {
-      return { lastFullyProvenEpoch: provenEpoch };
-    }
-    const lastFullyProvenEpoch = provenEpoch > 0 ? EpochNumber(provenEpoch - 1) : undefined;
-    return { lastFullyProvenEpoch };
   }
 
   /**
