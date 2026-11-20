@@ -93,10 +93,29 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Deprecations
 
+- **`try_get_sk_app` replaces `get_nhk_app`, `get_ovsk_app` and `get_key_validation_request`.** The old functions still work and are deprecated. `try_get_sk_app`, in `aztec::keys::getters`, takes the type of the key (`KeyType::nullifier_hiding()`, `incoming_viewing()`, `outgoing_viewing()` or `tagging()`), and returns `None` instead of failing when no account in scope has the key. Code that relied on the failure calls `expect` on the result. Code that needs the whole `KeyValidationRequest` can call `try_get_key_validation_request`, which takes the key index like `get_key_validation_request` and also returns `None`.
+
+  ```diff
+  - let secret = get_nhk_app(npk_m_hash);
+  + let secret = try_get_sk_app(npk_m_hash, KeyType::nullifier_hiding()).expect("nullifier hiding key not in scope");
+  ```
+
 - **Tagging secrets are renamed messaging secrets** ([#646](https://github.com/aztec-labs-eng/aztec-node/pull/646)). The old names still work and are deprecated. In `aztec::oracle::notes`, `get_address_derived_messaging_secret` replaces `get_app_address_derived_tagging_secret` and `get_app_tagging_secret`. In `aztec::messages::delivery`, `ResolvedMessagingSecretStrategy` replaces `ResolvedTaggingStrategy`. On `TestEnvironmentOptions`, `with_default_messaging_secret_strategy` and `with_default_messaging_secret_strategy_all_modes` replace `with_default_tag_secret_strategy` and `with_default_tag_secret_strategy_all_modes`. The `test::helpers::messaging_secret_strategy` module and its `MessagingSecretStrategy` replace `test::helpers::tagging_secret_strategy` and its `TaggingSecretStrategy`. Noir warns on the old function names only, not on the old type and module names.
 - **`get_app_address_derived_tagging_secret` replaces `get_app_tagging_secret`, and `compute_app_siloed_shared_secret_from_point` replaces `compute_app_siloed_shared_secret`** ([#620](https://github.com/aztec-labs-eng/aztec-node/pull/620), [#621](https://github.com/aztec-labs-eng/aztec-node/pull/621)). The old names still work and are deprecated.
 
 #### Fixes
+
+- **A note owned by another account in the same PXE no longer breaks the recipient's sync.** When a note's message reached an account other than its owner, for example through `deliver_to`, and the owner was another account in the recipient's PXE, the recipient's sync of that contract failed with `Key validation request denied`, and every later sync failed the same way. Discovery now skips such a note, as it already did for owners the PXE doesn't know. Notes declared with `#[note]` and `UintNote` get the fix once their contract is recompiled, and the recompiled contract needs a PXE on oracle interface 33.6 or later. A note with its own `compute_nullifier_unconstrained` should get the key with the new `try_get_sk_app`, which returns `None` when no account in scope has it.
+
+  ```diff
+  - try_get_public_keys(owner).map(|public_keys| {
+  -     let secret = get_nhk_app(public_keys.npk_m_hash);
+  -     compute_note_nullifier(note_hash_for_nullification, [secret])
+  - })
+  + try_get_public_keys(owner)
+  +     .and_then(|public_keys| try_get_sk_app(public_keys.npk_m_hash, KeyType::nullifier_hiding()))
+  +     .map(|secret| compute_note_nullifier(note_hash_for_nullification, [secret]))
+  ```
 
 ### PXE
 

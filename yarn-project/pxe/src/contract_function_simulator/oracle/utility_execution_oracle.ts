@@ -245,11 +245,9 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    * Retrieve keys associated with a specific master public key and app address.
    * @param pkMHash - The master public key hash.
    * @param _keyIndex - Sent by the Noir oracle caller but unused here; kept to match the oracle signature.
-   * @returns A Promise that resolves to nullifier keys.
-   * @throws If the keys are not registered in the key store.
-   * @throws If scopes are defined and the account is not in the scopes.
+   * @returns The key validation request, or none if no account in scope has a key with this hash.
    */
-  public async getKeyValidationRequest(pkMHash: Fr, _keyIndex: Fr): Promise<KeyValidationRequest> {
+  public async getKeyValidationRequestV2(pkMHash: Fr, _keyIndex: Fr): Promise<Option<KeyValidationRequest>> {
     let hasAccess = false;
     for (let i = 0; i < this.scopes.length && !hasAccess; i++) {
       if (await this.keyStore.accountHasKey(this.scopes[i], pkMHash)) {
@@ -257,9 +255,9 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       }
     }
     if (!hasAccess) {
-      throw new Error(`Key validation request denied: no scoped account has a key with hash ${pkMHash.toString()}.`);
+      return Option.none();
     }
-    return this.keyStore.getKeyValidationRequest(pkMHash, this.contractAddress);
+    return Option.some(await this.keyStore.getKeyValidationRequest(pkMHash, this.contractAddress));
   }
 
   /**

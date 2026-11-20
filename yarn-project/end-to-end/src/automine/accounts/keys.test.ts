@@ -132,7 +132,7 @@ describe('automine/accounts/keys', () => {
       // domain-separated hash over `[x, y]`) rather than `Point.hash()` (which hashes
       // `[x, y, is_infinite]` with no separator) -- the PXE's `KeyStore.addAccount` stores
       // master-key hashes computed via `hashPublicKey`, so this is what the
-      // `aztec_utl_getKeyValidationRequest` lookup compares against.
+      // `aztec_utl_getKeyValidationRequestV2` lookup compares against.
       const ovskM = deriveMasterOutgoingViewingSecretKey(secret);
       const ovpkMHash = await hashPublicKey(await derivePublicKeyFromSecretKey(ovskM));
 

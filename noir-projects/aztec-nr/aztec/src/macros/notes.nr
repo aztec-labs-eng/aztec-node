@@ -97,14 +97,14 @@ comptime fn generate_note_hash_trait_impl(s: TypeDefinition) -> Quoted {
                 owner: aztec::protocol::address::AztecAddress,
                 note_hash_for_nullification: Field,
             ) -> Option<Field> {
-                // Note: In the current PXE implementation, if public keys are available then the nullifier
-                // hiding key (nhk) is also available, so we don't need to handle get_nhk_app potentially
-                // failing. The Option is only needed for the try_get_public_keys call.
-                aztec::keys::getters::try_get_public_keys(owner).map(|public_keys| {
-                    let owner_npk_m_hash = public_keys.npk_m_hash;
-                    let secret = aztec::keys::getters::get_nhk_app(owner_npk_m_hash);
-                    aztec::note::utils::compute_note_nullifier(note_hash_for_nullification, [secret])
-                })
+                aztec::keys::getters::try_get_public_keys(owner)
+                    .and_then(|public_keys| {
+                        aztec::keys::getters::try_get_sk_app(
+                            public_keys.npk_m_hash,
+                            aztec::keys::getters::KeyType::nullifier_hiding(),
+                        )
+                    })
+                    .map(|secret| aztec::note::utils::compute_note_nullifier(note_hash_for_nullification, [secret]))
             }
         }
     }

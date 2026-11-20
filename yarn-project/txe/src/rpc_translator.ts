@@ -484,11 +484,11 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_utl_getKeyValidationRequest(...inputs: ForeignCallArgs) {
+  aztec_utl_getKeyValidationRequestV2(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_utl_getKeyValidationRequest',
+      oracle: 'aztec_utl_getKeyValidationRequestV2',
       inputs,
-      handler: ([pkMHash, keyIndex]) => this.handlerAsUtility().getKeyValidationRequest(pkMHash, keyIndex),
+      handler: ([pkMHash, keyIndex]) => this.handlerAsUtility().getKeyValidationRequestV2(pkMHash, keyIndex),
     });
   }
 
