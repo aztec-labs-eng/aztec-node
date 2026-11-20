@@ -1,11 +1,10 @@
 use crate::context::PrivateContext;
-use crate::keys::constants::TAGGING_INDEX;
+use crate::keys::getters::{KeyType, try_get_sk_app};
 use crate::messages::delivery::{
     delivery_messaging_secret::DeliveryMessagingSecret, handshake::get_existing_app_siloed_handshake_secrets,
 };
 use crate::oracle::{
-    key_validation_request::get_key_validation_request, keys::get_public_keys_and_partial_address,
-    notes::get_address_derived_messaging_secret, random::random,
+    keys::get_public_keys_and_partial_address, notes::get_address_derived_messaging_secret, random::random,
 };
 use crate::protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, traits::ToField};
 use crate::standard_addresses::STANDARD_HANDSHAKE_REGISTRY_ADDRESS;
@@ -118,7 +117,9 @@ pub(crate) fn existing_handshake_secrets_or_else<Env>(
 /// Fails if PXE does not hold `recipient`'s keys or `recipient` is not in the execution's scopes.
 pub(crate) unconstrained fn get_recipient_tsk_messaging_secret(recipient: AztecAddress) -> Field {
     let (public_keys, _) = get_public_keys_and_partial_address(recipient);
-    let tsk_app = get_key_validation_request(public_keys.tpk_m_hash, TAGGING_INDEX).sk_app;
+    let tsk_app = try_get_sk_app(public_keys.tpk_m_hash, KeyType::tagging()).expect(
+        f"Key validation request denied: no scoped account has the tagging secret key of {recipient}",
+    );
     compute_recipient_tsk_messaging_secret(tsk_app, recipient)
 }
 

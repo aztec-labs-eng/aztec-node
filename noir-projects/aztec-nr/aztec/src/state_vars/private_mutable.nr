@@ -1,6 +1,6 @@
 use crate::{
     context::{PrivateContext, UtilityContext},
-    keys::getters::{get_nhk_app, get_public_keys},
+    keys::getters::{get_public_keys, KeyType, try_get_sk_app},
     note::{
         lifecycle::{create_note, destroy_note},
         note_getter::{get_note, view_note},
@@ -306,8 +306,11 @@ where
 {
     /// Computes the nullifier that will be created when this PrivateMutable is first initialized.
     unconstrained fn get_initialization_nullifier(self) -> Field {
-        let owner_npk_m_hash = get_public_keys(self.owner).npk_m_hash;
-        let secret = get_nhk_app(owner_npk_m_hash);
+        let owner = self.owner;
+        let owner_npk_m_hash = get_public_keys(owner).npk_m_hash;
+        let secret = try_get_sk_app(owner_npk_m_hash, KeyType::nullifier_hiding()).expect(
+            f"Key validation request denied: no scoped account has the nullifier hiding key of {owner}",
+        );
         self.compute_initialization_nullifier(secret)
     }
 

@@ -111,12 +111,12 @@ export const ORACLE_REGISTRY = {
 
   aztec_utl_getUtilityContext: makeEntry({ returnType: UTILITY_CONTEXT }),
 
-  aztec_utl_getKeyValidationRequest: makeEntry({
+  aztec_utl_getKeyValidationRequestV2: makeEntry({
     params: [
       { name: 'pkMHash', type: FIELD },
       { name: 'keyIndex', type: FIELD },
     ],
-    returnType: KEY_VALIDATION_REQUEST,
+    returnType: OPTION(KEY_VALIDATION_REQUEST),
   }),
 
   aztec_utl_getContractInstance: makeEntry({
