@@ -23,7 +23,7 @@ import {
 } from '@aztec-labs/simulator/client';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import { STANDARD_POST_QUANTUM_PUBLIC_KEY_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/post-quantum-public-key-registry/constants';
-import { type FunctionCall, FunctionSelector, bufferToFieldChunks } from '@aztec-labs/stdlib/abi';
+import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, type BlockParameter, type L2TipsProvider } from '@aztec-labs/stdlib/block';
@@ -100,7 +100,7 @@ import { type FactCollection, toNoirFactCollection } from '../noir-structs/fact_
 import type { FieldChunks } from '../noir-structs/field_chunks.js';
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
-import type { MlKemEncapsulationData } from '../noir-structs/ml_kem_encapsulation_data.js';
+import type { MlKemEncapsulationResultData } from '../noir-structs/ml_kem_encapsulation_result_data.js';
 import type { NoteData } from '../noir-structs/note_data.js';
 import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import type { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
@@ -870,11 +870,11 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
-   * Asserts the executing contract may only access its own slice of PXE DB.
+   * Asserts that `contractAddress` is the executing contract, as a contract can only act as itself.
    */
   #assertOwnContract(contractAddress: AztecAddress): void {
     if (!contractAddress.equals(this.contractAddress)) {
-      throw new Error(`Contract ${this.contractAddress} is not allowed to access ${contractAddress}'s PXE DB`);
+      throw new Error(`Contract ${this.contractAddress} is not allowed to act as ${contractAddress}`);
     }
   }
 
@@ -1020,11 +1020,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     ephPks: EphemeralArray<EmbeddedCurvePoint>,
     contractAddress: AztecAddress,
   ): Promise<EphemeralArray<Fr>> {
-    if (!contractAddress.equals(this.contractAddress)) {
-      throw new Error(
-        `getEcdhMessagingSecrets called with contract address ${contractAddress}, expected ${this.contractAddress}`,
-      );
-    }
+    this.#assertOwnContract(contractAddress);
 
     const addressSecret = await this.#getAddressSecret(address);
     if (!addressSecret) {
@@ -1047,15 +1043,15 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
-   * Encapsulates a KEM shared secret to a post-quantum public key, drawing all of its randomness from `seed`.
+   * Encapsulates a KEM shared secret to a post-quantum public key, with `seed` for randomness.
    * @returns The KEM shared secret and its ciphertext, or none if `publicKey` is not a valid ML-KEM-768 public key.
    */
-  public mlKemEncapsulate(publicKey: FieldChunks, seed: number[]): Option<MlKemEncapsulationData> {
+  public mlKemEncapsulate(publicKey: FieldChunks, seed: number[]): Option<MlKemEncapsulationResultData> {
     let key: PostQuantumPublicKey;
     try {
       key = PostQuantumPublicKey.fromFields(publicKey.fields);
     } catch {
-      // The fields are whatever the key's account registered, so they may not be the encoding of a key.
+      // The fields are not a valid post-quantum public key.
       return Option.none();
     }
 
@@ -1065,20 +1061,13 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     }
 
     return Option.some({
-      kemSharedSecret: { fields: bufferToFieldChunks(encapsulation.sharedSecret) },
-      kemCiphertext: { fields: encapsulation.ciphertext.toFields() },
+      sharedSecret: { fields: encapsulation.sharedSecret.toFields() },
+      ciphertext: { fields: encapsulation.ciphertext.toFields() },
     });
   }
 
   /**
-   * Derives a messaging secret from a hybrid shared secret.
-   *
-   * It is the one the calling contract gets from the hybrid shared secret created with `address`, the recipient.
-   * `ephPk` is the ephemeral public key of whoever created it, and `kemCiphertext` the ciphertext of their
-   * encapsulation to the post-quantum public key of `address`. `contractAddress` is the contract the secret is siloed
-   * to, and must be the calling contract.
-   *
-   * Returns none when the PXE does not hold the keys for `address`, or when `ephPk` or `kemCiphertext` are malformed.
+   * Computes `address`'s hybrid messaging secret for `ephPk` and `kemCiphertext`.
    * @throws If `address` is not in the execution's allowed scopes.
    */
   public async getHybridMessagingSecret(
@@ -1087,11 +1076,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     kemCiphertext: FieldChunks,
     contractAddress: AztecAddress,
   ): Promise<Option<Fr>> {
-    if (!contractAddress.equals(this.contractAddress)) {
-      throw new Error(
-        `getHybridMessagingSecret called with contract address ${contractAddress}, expected ${this.contractAddress}`,
-      );
-    }
+    this.#assertOwnContract(contractAddress);
 
     const addressSecret = await this.#getAddressSecret(address);
     if (!addressSecret) {
@@ -1105,8 +1090,6 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       return Option.none();
     }
 
-    // The ephemeral public key and the ciphertext are whatever the sender chose to hand over, so neither may be
-    // well-formed. No secret can be derived from those, which are skipped rather than failing the execution.
     const ephPkPoint = new Point(ephPk.x, ephPk.y);
     if (ephPkPoint.isInfinite || !ephPkPoint.isOnCurve()) {
       return Option.none();
@@ -1118,10 +1101,14 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       return Option.none();
     }
 
-    const { secretKey } = derivePostQuantumKeyPair(await this.keyStore.getMasterTaggingSecretKey(address));
+    const [masterTaggingSecretKey, ecdhSharedSecret] = await Promise.all([
+      this.keyStore.getMasterTaggingSecretKey(address),
+      deriveEcdhSharedSecretPoint(addressSecret, ephPkPoint),
+    ]);
+    const { secretKey } = derivePostQuantumKeyPair(masterTaggingSecretKey);
     const hybridSharedSecret = await computeHybridSharedSecret(
       mlKemDecapsulate(ciphertext, secretKey),
-      await deriveEcdhSharedSecretPoint(addressSecret, ephPkPoint),
+      ecdhSharedSecret,
     );
 
     return Option.some(await computeHybridMessagingSecret(hybridSharedSecret, this.contractAddress));

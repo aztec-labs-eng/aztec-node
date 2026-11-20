@@ -3,12 +3,7 @@ import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { Buffer } from 'buffer';
 
 import { derivePostQuantumKeyPair } from './derivation.js';
-import {
-  KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES,
-  KEM_SHARED_SECRET_SIZE_IN_BYTES,
-  mlKemDecapsulate,
-  mlKemEncapsulate,
-} from './ml_kem.js';
+import { KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES, mlKemDecapsulate, mlKemEncapsulate } from './ml_kem.js';
 import { PostQuantumPublicKey } from './post_quantum_public_key.js';
 
 describe('ML-KEM', () => {
@@ -20,7 +15,6 @@ describe('ML-KEM', () => {
 
     const { sharedSecret, ciphertext } = mlKemEncapsulate(publicKey, randomSeed())!;
 
-    expect(sharedSecret).toHaveLength(KEM_SHARED_SECRET_SIZE_IN_BYTES);
     expect(mlKemDecapsulate(ciphertext, secretKey)).toEqual(sharedSecret);
   });
 

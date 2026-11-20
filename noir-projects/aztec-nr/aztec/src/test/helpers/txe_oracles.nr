@@ -224,7 +224,6 @@ pub unconstrained fn create_account(secret: Field, partial_address: Field) -> Te
 #[oracle(aztec_txe_addAccount)]
 pub unconstrained fn add_account(secret: Field) -> TestAccount {}
 
-/// Derives the post-quantum public key of `account`.
 #[oracle(aztec_txe_derivePostQuantumPublicKey)]
 pub(crate) unconstrained fn derive_post_quantum_public_key(account: AztecAddress) -> PostQuantumPublicKey {}
 

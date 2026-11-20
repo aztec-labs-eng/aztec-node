@@ -27,10 +27,8 @@ global KEM_SHARED_SECRET_SIZE_IN_FIELDS: u32 = div_ceil(KEM_SHARED_SECRET_SIZE_I
 
 /// The secret an ML-KEM-768 encapsulation establishes.
 ///
-/// Only whoever encapsulated to a [`PostQuantumPublicKey`], and the account the key belongs to, know it. The account
-/// recovers it from the encapsulation's [`KemCiphertext`].
-///
-/// The fields hold the secret's bytes in 31-byte chunks.
+/// Only known by whoever encapsulated to a [`PostQuantumPublicKey`] and the account the key belongs to (via
+/// [`KemCiphertext`]).
 #[derive(Eq)]
 pub(crate) struct KemSharedSecret {
     pub(crate) fields: [Field; KEM_SHARED_SECRET_SIZE_IN_FIELDS],
@@ -47,10 +45,8 @@ global KEM_CIPHERTEXT_SIZE_IN_FIELDS: u32 = div_ceil(KEM_CIPHERTEXT_SIZE_IN_BYTE
 
 /// The ciphertext of an ML-KEM-768 encapsulation.
 ///
-/// It is what whoever encapsulated to a [`PostQuantumPublicKey`] hands the account the key belongs to, for them to
-/// recover the encapsulation's [`KemSharedSecret`]. It reveals nothing about the secret to anyone else.
-///
-/// The fields hold the ciphertext's bytes in 31-byte chunks.
+/// The owner of the [`PostQuantumPublicKey`] can perform decapsulation on this to recover [`KemSharedSecret`]. It
+/// reveals nothing about the secret to anyone else, including an attacker with a quantum computer.
 #[derive(Eq)]
 pub(crate) struct KemCiphertext {
     pub(crate) fields: [Field; KEM_CIPHERTEXT_SIZE_IN_FIELDS],

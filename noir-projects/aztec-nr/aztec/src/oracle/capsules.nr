@@ -248,7 +248,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "not allowed to access")]
+    #[test(should_fail_with = "not allowed to act as")]
     unconstrained fn cannot_store_other_contract() {
         let (env, scope) = setup();
         env.private_context(|context| {
@@ -260,7 +260,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "not allowed to access")]
+    #[test(should_fail_with = "not allowed to act as")]
     unconstrained fn cannot_load_other_contract() {
         let (env, scope) = setup();
         env.private_context(|context| {
@@ -271,7 +271,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "not allowed to access")]
+    #[test(should_fail_with = "not allowed to act as")]
     unconstrained fn cannot_delete_other_contract() {
         let (env, scope) = setup();
         env.private_context(|context| {
@@ -282,7 +282,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "not allowed to access")]
+    #[test(should_fail_with = "not allowed to act as")]
     unconstrained fn cannot_copy_other_contract() {
         let (env, scope) = setup();
         env.private_context(|context| {

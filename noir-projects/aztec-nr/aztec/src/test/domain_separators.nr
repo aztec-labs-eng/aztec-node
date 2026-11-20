@@ -10,13 +10,15 @@
 
 use crate::authwit::account::DOM_SEP__TX_NULLIFIER;
 use crate::authwit::auth::DOM_SEP__AUTHWIT_NULLIFIER;
-use crate::keys::hybrid_shared_secret::{DOM_SEP__HYBRID_MESSAGING_SECRET, DOM_SEP__HYBRID_SHARED_SECRET};
+use crate::keys::hybrid_shared_secret::DOM_SEP__HYBRID_SHARED_SECRET;
 use crate::keys::post_quantum::registry::DOM_SEP__POST_QUANTUM_PUBLIC_KEY_REGISTRY_LOG_TAG;
 use crate::macros::functions::initialization_utils::DOM_SEP__INITIALIZATION_NULLIFIER;
 use crate::messages::delivery::constrained_delivery::{
     DOM_SEP__CONSTRAINED_MSG_NULLIFIER, DOM_SEP__RECIPIENT_TSK_SEQUENCE_NULLIFIER,
 };
-use crate::messages::delivery::messaging_secret_derivation::DOM_SEP__RECIPIENT_TSK_SECRET;
+use crate::messages::delivery::messaging_secret_derivation::{
+    DOM_SEP__HYBRID_MESSAGING_SECRET, DOM_SEP__RECIPIENT_TSK_SECRET,
+};
 use crate::messages::encryption::aes128::{
     DOM_SEP__ECDH_FIELD_MASK, DOM_SEP__ECDH_SUBKEY, DOM_SEP__SALTED_MESSAGING_SECRET,
 };

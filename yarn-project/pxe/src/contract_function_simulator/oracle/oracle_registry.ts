@@ -30,7 +30,7 @@ import {
   LOG_RETRIEVAL_REQUEST,
   LOG_RETRIEVAL_RESPONSE,
   MEMBERSHIP_WITNESS,
-  ML_KEM_ENCAPSULATION,
+  ML_KEM_ENCAPSULATION_RESULT,
   type MaybePromise,
   NOTE,
   NOTE_ORIGIN,
@@ -355,7 +355,7 @@ export const ORACLE_REGISTRY = {
       { name: 'publicKey', type: POST_QUANTUM_PUBLIC_KEY },
       { name: 'seed', type: FIXED_ARRAY(U8, KEM_ENCAPSULATION_SEED_SIZE_IN_BYTES) },
     ],
-    returnType: OPTION(ML_KEM_ENCAPSULATION),
+    returnType: OPTION(ML_KEM_ENCAPSULATION_RESULT),
   }),
 
   aztec_utl_getHybridMessagingSecret: makeEntry({

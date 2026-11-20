@@ -7,10 +7,6 @@ import { bufferFromExactFieldChunks, bufferToFieldChunks } from '../abi/buffer.j
 /**
  * An account's post-quantum public key.
  *
- * It is an ML-KEM-768 public key, which senders encapsulate to in order to establish a KEM shared secret with the
- * account. Unlike their elliptic curve key, which is their address point, accounts have no native post-quantum
- * public key, so they register theirs in the post-quantum public key registry for senders to learn it.
- *
  * TypeScript counterpart of aztec-nr's `PostQuantumPublicKey`, whose fields are this key's
  * {@link PostQuantumPublicKey.toFields} encoding.
  */

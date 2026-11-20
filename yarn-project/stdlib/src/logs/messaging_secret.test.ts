@@ -11,7 +11,7 @@ import { CompleteAddress } from '../contract/complete_address.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';
 import { computeAppTaggingSecretKey, deriveMasterIncomingViewingSecretKey } from '../keys/derivation.js';
 import { makeInvalidAztecAddress, randomMessagingSecret } from '../tests/factories.js';
-import { MessagingSecret, MessagingSecretSchema } from './messaging_secret.js';
+import { MessagingSecret, MessagingSecretSchema, computeHybridMessagingSecret } from './messaging_secret.js';
 import { OnchainDeliveryMode } from './onchain_delivery_mode.js';
 import { computeAddressDerivedSharedSecretPoint } from './shared_secret_derivation.js';
 import { SiloedTag } from './siloed_tag.js';
@@ -422,5 +422,17 @@ describe('MessagingSecret', () => {
 
       expect(unconstrainedTag.value.toString()).not.toEqual(constrainedTag.value.toString());
     });
+  });
+});
+
+describe('computeHybridMessagingSecret', () => {
+  const hybridSharedSecret = new Fr(7);
+  const app = AztecAddress.fromNumberUnsafe(42);
+
+  // aztec-nr derives the sender's side in Noir, whose tests pin the same value for the same inputs.
+  it('matches the aztec-nr derivation', async () => {
+    expect(await computeHybridMessagingSecret(hybridSharedSecret, app)).toEqual(
+      Fr.fromString('0x2163cd6fceadd9f938bdb1fa6237cecf0fb8cf5ee2a2aaea150354f705754d29'),
+    );
   });
 });

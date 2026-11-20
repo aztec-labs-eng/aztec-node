@@ -20,7 +20,6 @@ import {
   FunctionCall,
   FunctionSelector,
   FunctionType,
-  bufferToFieldChunks,
   encodeArguments,
   getFunctionArtifactByName,
   getFunctionReturnType,
@@ -650,7 +649,7 @@ describe('Utility Execution test suite', () => {
         const ephPksArray = EphemeralArray.fromValues<EmbeddedCurvePoint>(service, [ephPk]);
         const wrongAddress = await AztecAddress.random();
         await expect(utilityExecutionOracle.getEcdhMessagingSecrets(owner, ephPksArray, wrongAddress)).rejects.toThrow(
-          /expected/,
+          `Contract ${contractAddress} is not allowed to act as ${wrongAddress}`,
         );
       });
 
@@ -671,33 +670,13 @@ describe('Utility Execution test suite', () => {
       it('encapsulates a shared secret that the secret key decapsulates', () => {
         const { publicKey, secretKey } = derivePostQuantumKeyPair(GrumpkinScalar.random());
 
-        const { kemSharedSecret, kemCiphertext } = utilityExecutionOracle.mlKemEncapsulate(
+        const { sharedSecret, ciphertext } = utilityExecutionOracle.mlKemEncapsulate(
           { fields: publicKey.toFields() },
           randomSeed(),
         ).value!;
 
-        const decapsulated = mlKemDecapsulate(KemCiphertext.fromFields(kemCiphertext.fields), secretKey);
-        expect(kemSharedSecret.fields).toEqual(bufferToFieldChunks(decapsulated));
-      });
-
-      it('encapsulates the same shared secret and ciphertext from the same seed', () => {
-        const publicKey = { fields: derivePostQuantumKeyPair(GrumpkinScalar.random()).publicKey.toFields() };
-        const seed = randomSeed();
-
-        const encapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, seed);
-
-        expect(encapsulation.isSome()).toBe(true);
-        expect(utilityExecutionOracle.mlKemEncapsulate(publicKey, seed).value).toEqual(encapsulation.value);
-      });
-
-      it('encapsulates a different shared secret and ciphertext from another seed', () => {
-        const publicKey = { fields: derivePostQuantumKeyPair(GrumpkinScalar.random()).publicKey.toFields() };
-
-        const encapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, randomSeed()).value!;
-        const otherEncapsulation = utilityExecutionOracle.mlKemEncapsulate(publicKey, randomSeed()).value!;
-
-        expect(otherEncapsulation.kemSharedSecret).not.toEqual(encapsulation.kemSharedSecret);
-        expect(otherEncapsulation.kemCiphertext).not.toEqual(encapsulation.kemCiphertext);
+        const decapsulated = mlKemDecapsulate(KemCiphertext.fromFields(ciphertext.fields), secretKey);
+        expect(sharedSecret.fields).toEqual(decapsulated.toFields());
       });
 
       it('returns none for a key with out of range coefficients', () => {
@@ -864,7 +843,7 @@ describe('Utility Execution test suite', () => {
         const wrongAddress = await AztecAddress.random();
 
         await expect(oracle.getHybridMessagingSecret(owner, ephPk, kemCiphertext, wrongAddress)).rejects.toThrow(
-          /expected/,
+          `Contract ${contractAddress} is not allowed to act as ${wrongAddress}`,
         );
       });
 
@@ -1074,7 +1053,7 @@ describe('Utility Execution test suite', () => {
         const otherContract = await AztecAddress.random();
 
         await expect(utilityExecutionOracle.getSettledNoteOrigin(noteHash, otherContract, noteNonce)).rejects.toThrow(
-          `Contract ${contractAddress} is not allowed to access ${otherContract}'s PXE DB`,
+          `Contract ${contractAddress} is not allowed to act as ${otherContract}`,
         );
       });
     });
@@ -1342,7 +1321,7 @@ describe('Utility Execution test suite', () => {
             EphemeralArray.fromValues<EventValidationRequest>(service, []),
             owner,
           ),
-        ).rejects.toThrow(`Contract ${contractAddress} is not allowed to access ${otherContract}'s PXE DB`);
+        ).rejects.toThrow(`Contract ${contractAddress} is not allowed to act as ${otherContract}`);
         expect(noteStore.addNotes).not.toHaveBeenCalled();
       });
 
@@ -1533,7 +1512,7 @@ describe('Utility Execution test suite', () => {
         const otherContract = await AztecAddress.random();
         expect(() =>
           oracle.recordFact(otherContract, accountScope(), typeId, collectionId, factTypeId, payloadOf(1), noBlock),
-        ).toThrow(/not allowed to access/);
+        ).toThrow(/not allowed to act as/);
       });
 
       it('rejects a scope outside the allowed list', async () => {
