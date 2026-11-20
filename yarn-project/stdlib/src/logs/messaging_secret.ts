@@ -20,6 +20,12 @@ const OnchainDeliveryModeSchema = z.union([
 const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
 
 /**
+ * Domain separator for the messaging secrets computed from hybrid shared secrets. Mirrors the separator of the same
+ * name in aztec-nr.
+ */
+const DOM_SEP__HYBRID_MESSAGING_SECRET = 3760126800;
+
+/**
  * Messaging secret used for log tagging and message encryption.
  *
  * It bundles a secret siloed to an app contract with the delivery mode whose tag stream it backs. Each way of deriving
@@ -33,8 +39,14 @@ const DOM_SEP__RECIPIENT_TSK_SECRET = 1256167324;
  * ## From raw secret to messaging secret
  *
  * Every mechanism starts from a raw secret that apps never see, and silos it to an app so that an app can only compute
- * its own tags. Shared secret points are siloed with {@link computeMessagingSecretFromPoint}, and the recipient's
- * tagging secret key with {@link computeAppTaggingSecretKey}.
+ * its own tags. Shared secret points are siloed with {@link computeMessagingSecretFromPoint}, hybrid shared secrets
+ * with {@link computeHybridMessagingSecret}, and the recipient's tagging secret key with
+ * {@link computeAppTaggingSecretKey}.
+ *
+ * Siloing is what keeps contracts apart. A contract asks the PXE for a secret with public inputs only, such as an
+ * address and an ephemeral public key, so without siloing any contract could get the secret another contract gets,
+ * find that contract's tagged logs and decrypt its messages. For the same reason, a contract cannot request the
+ * messaging secrets of another contract: that would need a way for a contract to allow trusted contracts to do so.
  *
  * - **Address-derived** ({@link computeAddressDerived}): the raw secret is the ECDH exchange between the sender's and
  *   the recipient's addresses, which either of them can compute. It is app-siloed and directed to `recipient`. It only
@@ -262,3 +274,13 @@ export const computeAppSiloedSharedSecretFromPoint = computeMessagingSecretFromP
 
 /** @deprecated Use {@link computeMessagingSecretFromPoint}. */
 export const appSiloEcdhSharedSecretPoint = computeMessagingSecretFromPoint;
+
+/**
+ * Computes a hybrid shared secret's messaging secret by app-siloing it:
+ * `h(DOM_SEP__HYBRID_MESSAGING_SECRET, hybridSharedSecret, app)`.
+ *
+ * Mirrors `compute_hybrid_messaging_secret` in aztec-nr.
+ */
+export function computeHybridMessagingSecret(hybridSharedSecret: Fr, app: AztecAddress): Promise<Fr> {
+  return poseidon2HashWithSeparator([hybridSharedSecret, app], DOM_SEP__HYBRID_MESSAGING_SECRET);
+}

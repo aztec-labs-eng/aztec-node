@@ -26,7 +26,7 @@ import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { ContractInstancePreimage, PartialAddress } from '@aztec-labs/stdlib/contract';
 import type { GasFees } from '@aztec-labs/stdlib/gas';
 import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
-import type { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { KemCiphertext, KemSharedSecret, PostQuantumPublicKey, type PublicKeys } from '@aztec-labs/stdlib/keys';
 import {
   type FlatPublicLogs,
   type OnchainDeliveryMode,
@@ -67,8 +67,10 @@ import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import { EventValidationRequest } from '../noir-structs/event_validation_request.js';
 import type { Fact } from '../noir-structs/fact.js';
 import type { FactCollection } from '../noir-structs/fact_collection.js';
+import type { FieldChunks } from '../noir-structs/field_chunks.js';
 import { type LogRetrievalRequest, type LogSource, logSourceFromField } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
+import type { MlKemEncapsulationResultData } from '../noir-structs/ml_kem_encapsulation_result_data.js';
 import type { NoteData } from '../noir-structs/note_data.js';
 import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
@@ -617,6 +619,23 @@ export const FACT_COLLECTION: TypeMapping<FactCollection> = STRUCT([
 export const PROVIDED_SECRET: TypeMapping<ProvidedSecret> = STRUCT([
   { name: 'secret', type: FIELD },
   { name: 'mode', type: DELIVERY_MODE },
+]);
+
+export const POST_QUANTUM_PUBLIC_KEY: TypeMapping<FieldChunks> = STRUCT([
+  { name: 'fields', type: FIXED_ARRAY(FIELD, PostQuantumPublicKey.SIZE_IN_FIELDS) },
+]);
+
+const KEM_SHARED_SECRET: TypeMapping<FieldChunks> = STRUCT([
+  { name: 'fields', type: FIXED_ARRAY(FIELD, KemSharedSecret.SIZE_IN_FIELDS) },
+]);
+
+export const KEM_CIPHERTEXT: TypeMapping<FieldChunks> = STRUCT([
+  { name: 'fields', type: FIXED_ARRAY(FIELD, KemCiphertext.SIZE_IN_FIELDS) },
+]);
+
+export const ML_KEM_ENCAPSULATION_RESULT: TypeMapping<MlKemEncapsulationResultData> = STRUCT([
+  { name: 'sharedSecret', type: KEM_SHARED_SECRET },
+  { name: 'ciphertext', type: KEM_CIPHERTEXT },
 ]);
 
 // ─── Combinator Type Mappings ────────────────────────────────────────────────

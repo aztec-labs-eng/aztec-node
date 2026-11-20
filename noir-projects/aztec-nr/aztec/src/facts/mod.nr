@@ -393,7 +393,7 @@ mod test {
         });
     }
 
-    #[test(should_fail_with = "not allowed to access")]
+    #[test(should_fail_with = "not allowed to act as")]
     unconstrained fn cannot_record_for_other_contract() {
         let (env, scope) = setup();
         env.private_context(|context| {

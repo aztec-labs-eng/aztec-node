@@ -29,6 +29,7 @@ import {
   type Option,
   type OracleRegistryEntry,
   type OutputSlot,
+  POST_QUANTUM_PUBLIC_KEY,
   PUBLIC_KEYS,
   type ParamTypes,
   SCALAR,
@@ -266,6 +267,11 @@ export const TXE_ORACLE_REGISTRY = {
   aztec_txe_addAccount: makeEntry({
     params: [{ name: 'secret', type: FIELD }],
     returnType: COMPLETE_ADDRESS,
+  }),
+
+  aztec_txe_derivePostQuantumPublicKey: makeEntry({
+    params: [{ name: 'account', type: AZTEC_ADDRESS }],
+    returnType: POST_QUANTUM_PUBLIC_KEY,
   }),
 
   aztec_txe_addAuthWitness: makeEntry({

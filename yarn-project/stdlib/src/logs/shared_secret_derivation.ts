@@ -1,13 +1,17 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
-import type { Fq } from '@aztec-labs/foundation/curves/bn254';
+import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, type Point } from '@aztec-labs/foundation/curves/grumpkin';
 
 import type { AztecAddress } from '../aztec-address/index.js';
 import type { CompleteAddress } from '../contract/complete_address.js';
 import { computeAddressSecret, computePreaddress } from '../keys/derivation.js';
+import type { KemSharedSecret } from '../keys/kem_shared_secret.js';
 import type { PublicKey } from '../keys/public_key.js';
+
+/** Domain separator for hybrid shared secrets. Mirrors the separator of the same name in aztec-nr. */
+const DOM_SEP__HYBRID_SHARED_SECRET = 2111733946;
 
 /**
  * Derives the raw ECDH shared secret point `S = secretKey * publicKey`.
@@ -52,6 +56,21 @@ export async function computeAddressDerivedSharedSecretPoint(
 
 /** @deprecated Use {@link computeAddressDerivedSharedSecretPoint}. */
 export const computeSharedTaggingSecret = computeAddressDerivedSharedSecretPoint;
+
+/**
+ * Combines a KEM shared secret with an ECDH shared secret.
+ *
+ * The resulting hybrid shared secret is secret for as long as either of the two is. It is
+ * `h(DOM_SEP__HYBRID_SHARED_SECRET, kemSharedSecret, S.x, S.y)`, with the KEM shared secret hashed as 31-byte chunks.
+ *
+ * Mirrors `compute_hybrid_shared_secret` in aztec-nr.
+ */
+export function computeHybridSharedSecret(kemSharedSecret: KemSharedSecret, ecdhSharedSecret: Point): Promise<Fr> {
+  return poseidon2HashWithSeparator(
+    [...kemSharedSecret.toFields(), ecdhSharedSecret.x, ecdhSharedSecret.y],
+    DOM_SEP__HYBRID_SHARED_SECRET,
+  );
+}
 
 /**
  * Protects a handshake's shared secret from being forged by the recipient: `S' = hash(ephPk, recipientPoint) * S`.
