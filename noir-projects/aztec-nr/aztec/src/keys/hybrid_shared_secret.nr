@@ -3,7 +3,7 @@
 //! They combine elliptic curve Diffie-Hellman and ML-KEM shared secrets, such that they are resilient to failure of any
 //! of the two. Elliptic curves are expected to be breakable by a quantum computer, unlike ML-KEM, but they are also
 //! better understood and regarded classically. This combination is therefore a good mitigation against both current and
-//! future threats, and essentially follows the approach as X-Wing.
+//! future threats, and essentially follows the same approach as X-Wing.
 
 use crate::{
     keys::{
@@ -12,25 +12,21 @@ use crate::{
         post_quantum::mlkem768::{KemCiphertext, KemSharedSecret, PostQuantumPublicKey},
     },
     oracle::mlkem_encapsulate::mlkem_encapsulate,
-    protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, point::EmbeddedCurvePoint, traits::ToField},
+    protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator, point::EmbeddedCurvePoint},
 };
 
-/// Domain separator for the hybrid shared secret derived from a KEM shared secret and an ECDH shared secret.
+/// Domain separator for hybrid shared secrets.
 pub(crate) global DOM_SEP__HYBRID_SHARED_SECRET: u32 = 2111733946;
-
-/// Domain separator for the messaging secret a contract gets from a hybrid shared secret.
-pub(crate) global DOM_SEP__HYBRID_MESSAGING_SECRET: u32 = 3760126800;
 
 /// A hybrid shared secret a sender created with a recipient.
 ///
 /// The sender gives `eph_pk` and `kem_ciphertext` to the recipient, who derives the secret from them (see
 /// [`get_hybrid_messaging_secret`](crate::oracle::hybrid_messaging_secret::get_hybrid_messaging_secret)). Nothing is
 /// revealed about the secret to anyone else.
-pub(crate) struct CreatedHybridSharedSecret {
+pub(crate) struct HybridSharedSecret {
     /// The hybrid shared secret, which only the sender and the recipient know.
     pub(crate) secret: Field,
-    /// The sender's ephemeral public key. Its y-coordinate is positive, so its x-coordinate is enough to reconstruct
-    /// it.
+    /// The sender's ephemeral public key.
     pub(crate) eph_pk: EmbeddedCurvePoint,
     /// The ciphertext of the sender's encapsulation to the recipient's post-quantum public key.
     pub(crate) kem_ciphertext: KemCiphertext,
@@ -44,29 +40,31 @@ pub(crate) struct CreatedHybridSharedSecret {
 /// yields a different secret.
 ///
 /// The secret is not a messaging secret: derive the one each contract uses from it with
-/// [`compute_hybrid_messaging_secret`].
+/// [`crate::messages::delivery::messaging_secret_derivation::compute_hybrid_messaging_secret`].
 ///
 /// Returns `None` if `recipient` is not a valid address, or `recipient_post_quantum_public_key` is not a valid
 /// ML-KEM-768 public key.
 pub(crate) unconstrained fn create_hybrid_shared_secret(
     recipient: AztecAddress,
     recipient_post_quantum_public_key: PostQuantumPublicKey,
-) -> Option<CreatedHybridSharedSecret> {
+) -> Option<HybridSharedSecret> {
     recipient.to_address_point().and_then(|recipient_point| {
-        mlkem_encapsulate(recipient_post_quantum_public_key).map(|(kem_shared_secret, kem_ciphertext)| {
+        mlkem_encapsulate(recipient_post_quantum_public_key).map(|encapsulation| {
+            // By making the eph_pk positive, we can let the recipient reconstruct it from just the x-coordinate,
+            // reducing how much data needs to be sent to them.
             let (eph_sk, eph_pk) = generate_positive_ephemeral_key_pair();
             let ecdh_shared_secret = derive_ecdh_shared_secret(eph_sk, recipient_point.inner);
 
-            CreatedHybridSharedSecret {
-                secret: compute_hybrid_shared_secret(kem_shared_secret, ecdh_shared_secret),
+            HybridSharedSecret {
+                secret: compute_hybrid_shared_secret(encapsulation.shared_secret, ecdh_shared_secret),
                 eph_pk,
-                kem_ciphertext,
+                kem_ciphertext: encapsulation.ciphertext,
             }
         })
     })
 }
 
-/// Combines a KEM shared secret and an ECDH shared secret into a hybrid shared secret.
+/// Combines a KEM shared secret with an ECDH shared secret.
 pub(crate) fn compute_hybrid_shared_secret(
     kem_shared_secret: KemSharedSecret,
     ecdh_shared_secret: EmbeddedCurvePoint,
@@ -82,28 +80,16 @@ pub(crate) fn compute_hybrid_shared_secret(
     )
 }
 
-/// Derives the messaging secret `contract_address` gets from a hybrid shared secret.
-///
-/// Each contract gets a different messaging secret, which reveals neither the hybrid shared secret nor the messaging
-/// secret of any other contract.
-///
-/// `messaging_secret = h(DOM_SEP__HYBRID_MESSAGING_SECRET, hybrid_shared_secret, contract_address)`
-pub(crate) fn compute_hybrid_messaging_secret(hybrid_shared_secret: Field, contract_address: AztecAddress) -> Field {
-    poseidon2_hash_with_separator(
-        [hybrid_shared_secret, contract_address.to_field()],
-        DOM_SEP__HYBRID_MESSAGING_SECRET,
-    )
-}
-
 mod test {
     use crate::keys::post_quantum::mlkem768::{
         KemSharedSecret, POST_QUANTUM_PUBLIC_KEY_SIZE_IN_FIELDS, PostQuantumPublicKey,
     };
+    use crate::messages::delivery::messaging_secret_derivation::compute_hybrid_messaging_secret;
     use crate::oracle::hybrid_messaging_secret::get_hybrid_messaging_secret;
-    use crate::protocol::{address::AztecAddress, point::EmbeddedCurvePoint, traits::FromField};
+    use crate::protocol::{address::AztecAddress, point::EmbeddedCurvePoint};
     use crate::test::helpers::{test_environment::TestEnvironment, txe_oracles::derive_post_quantum_public_key};
     use crate::utils::point::get_sign_of_point;
-    use super::{compute_hybrid_messaging_secret, compute_hybrid_shared_secret, create_hybrid_shared_secret};
+    use super::{compute_hybrid_shared_secret, create_hybrid_shared_secret};
     use std::ops::Neg;
 
     global KEM_SHARED_SECRET: KemSharedSecret = KemSharedSecret {
@@ -150,31 +136,6 @@ mod test {
         assert(compute_hybrid_shared_secret(KEM_SHARED_SECRET, other_x) != hybrid_shared_secret);
     }
 
-    // PXE derives the recipient's side in TypeScript, whose tests pin the same value for the same inputs.
-    #[test]
-    fn hybrid_messaging_secret_matches_the_typescript_derivation() {
-        assert_eq(
-            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42)),
-            0x2163cd6fceadd9f938bdb1fa6237cecf0fb8cf5ee2a2aaea150354f705754d29,
-        );
-    }
-
-    #[test]
-    fn hybrid_messaging_secret_differs_per_contract() {
-        assert(
-            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42))
-                != compute_hybrid_messaging_secret(7, AztecAddress::from_field(43)),
-        );
-    }
-
-    #[test]
-    fn hybrid_messaging_secret_differs_per_hybrid_shared_secret() {
-        assert(
-            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42))
-                != compute_hybrid_messaging_secret(8, AztecAddress::from_field(42)),
-        );
-    }
-
     #[test]
     unconstrained fn recipient_derives_the_messaging_secret_of_a_created_hybrid_shared_secret() {
         let mut env = TestEnvironment::new();
@@ -199,7 +160,7 @@ mod test {
     }
 
     #[test]
-    unconstrained fn every_created_hybrid_shared_secret_is_different() {
+    unconstrained fn creating_a_hybrid_shared_secret_twice_yields_different_secrets() {
         let mut env = TestEnvironment::new();
         let recipient = env.create_light_account();
         let recipient_post_quantum_public_key = derive_post_quantum_public_key(recipient);

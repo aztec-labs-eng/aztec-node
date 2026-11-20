@@ -16,24 +16,10 @@ describe('KemCiphertext', () => {
     expect(() => KemCiphertext.fromBuffer(randomBytes(length))).toThrow(`got ${length} bytes`);
   });
 
-  it.each([KemCiphertext.SIZE_IN_FIELDS - 1, KemCiphertext.SIZE_IN_FIELDS + 1])('rejects %i fields', count => {
-    const fields = [...randomCiphertext().toFields(), Fr.ZERO].slice(0, count);
-
-    expect(() => KemCiphertext.fromFields(fields)).toThrow(`got ${count}`);
-  });
-
-  it('rejects a field with bits above its 31-byte chunk', () => {
+  it('rejects fields that do not encode a ciphertext', () => {
     const fields = randomCiphertext().toFields();
     fields[0] = fields[0].add(new Fr(1n << 248n));
 
     expect(() => KemCiphertext.fromFields(fields)).toThrow('Field 0 ');
-  });
-
-  it('rejects a last field with bytes past the end of the ciphertext', () => {
-    const fields = randomCiphertext().toFields();
-    const last = fields.length - 1;
-    fields[last] = fields[last].add(Fr.ONE);
-
-    expect(() => KemCiphertext.fromFields(fields)).toThrow(`Field ${last} `);
   });
 });

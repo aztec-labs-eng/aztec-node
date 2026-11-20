@@ -41,6 +41,22 @@ pub fn compute_messaging_secret_from_point(shared_secret: EmbeddedCurvePoint, co
     )
 }
 
+/// Domain separator for the messaging secret a contract gets from a hybrid shared secret.
+pub(crate) global DOM_SEP__HYBRID_MESSAGING_SECRET: u32 = 3760126800;
+
+/// Computes a hybrid shared secret's messaging secret for a contract.
+///
+/// The hybrid shared secret is one made with
+/// [`create_hybrid_shared_secret`](crate::keys::hybrid_shared_secret::create_hybrid_shared_secret).
+///
+/// `h(DOM_SEP__HYBRID_MESSAGING_SECRET, hybrid_shared_secret, contract_address)`
+pub(crate) fn compute_hybrid_messaging_secret(hybrid_shared_secret: Field, contract_address: AztecAddress) -> Field {
+    poseidon2_hash_with_separator(
+        [hybrid_shared_secret, contract_address.to_field()],
+        DOM_SEP__HYBRID_MESSAGING_SECRET,
+    )
+}
+
 /// A contract's choice of messaging secret derivation, made with the on-chain builders' `via_*` methods (see
 /// [`OnchainUnconstrainedDelivery`](super::OnchainUnconstrainedDelivery)).
 #[derive(Eq)]
@@ -148,7 +164,7 @@ mod test {
     use crate::oracle::resolve_messaging_secret_strategy::resolve_messaging_secret_strategy;
     use crate::protocol::{address::AztecAddress, scalar::Scalar, traits::{FromField, Serialize}};
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::{compute_messaging_secret_from_point, MessagingSecretDerivation};
+    use super::{compute_hybrid_messaging_secret, compute_messaging_secret_from_point, MessagingSecretDerivation};
     use std::test::OracleMock;
 
     global SENDER: AztecAddress = AztecAddress::from_field(1);
@@ -286,6 +302,31 @@ mod test {
         let messaging_secret_b = compute_messaging_secret_from_point(shared_secret, contract_b);
 
         assert(messaging_secret_a != messaging_secret_b);
+    }
+
+    // PXE derives the recipient's side in TypeScript, whose tests pin the same value for the same inputs.
+    #[test]
+    fn hybrid_messaging_secret_matches_the_typescript_derivation() {
+        assert_eq(
+            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42)),
+            0x2163cd6fceadd9f938bdb1fa6237cecf0fb8cf5ee2a2aaea150354f705754d29,
+        );
+    }
+
+    #[test]
+    fn hybrid_messaging_secret_differs_per_contract() {
+        assert(
+            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42))
+                != compute_hybrid_messaging_secret(7, AztecAddress::from_field(43)),
+        );
+    }
+
+    #[test]
+    fn hybrid_messaging_secret_differs_per_hybrid_shared_secret() {
+        assert(
+            compute_hybrid_messaging_secret(7, AztecAddress::from_field(42))
+                != compute_hybrid_messaging_secret(8, AztecAddress::from_field(42)),
+        );
     }
 
     unconstrained fn mock_existing_handshake_secrets(maybe_secrets: Option<AppSiloedHandshakeSecrets>) {

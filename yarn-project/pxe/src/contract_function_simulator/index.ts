@@ -81,7 +81,7 @@ export { pickNotes } from './pick_notes.js';
 export type { IMiscOracle, IUtilityExecutionOracle, IPrivateExecutionOracle } from './oracle/interfaces.js';
 export type { FactCollection } from './noir-structs/fact_collection.js';
 export type { FieldChunks } from './noir-structs/field_chunks.js';
-export type { MlKemEncapsulationData } from './noir-structs/ml_kem_encapsulation_data.js';
+export type { MlKemEncapsulationResultData } from './noir-structs/ml_kem_encapsulation_result_data.js';
 export type { NoteData } from './noir-structs/note_data.js';
 export type { NullifierStatus } from './noir-structs/nullifier_status.js';
 export type { NoteOrigin } from './noir-structs/note_origin.js';

@@ -7,9 +7,6 @@ import { bufferFromExactFieldChunks, bufferToFieldChunks } from '../abi/buffer.j
 /**
  * The ciphertext of an ML-KEM-768 encapsulation.
  *
- * It is what whoever encapsulated to an account's post-quantum public key hands that account, for them to recover the
- * encapsulation's KEM shared secret. It reveals nothing about the secret to anyone else.
- *
  * TypeScript counterpart of aztec-nr's `KemCiphertext`, whose fields are this ciphertext's
  * {@link KemCiphertext.toFields} encoding.
  */
