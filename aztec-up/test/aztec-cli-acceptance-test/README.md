@@ -16,7 +16,7 @@ With an existing local install (fast inner loop):
 SKIP_INSTALL=1 ./run-test.sh
 ```
 
-With a fresh install from a specific version:
+With a fresh install from a specific version (the install retries through `ci3/retry`, so run `git submodule update --init ci3` first in a new worktree):
 ```bash
 VERSION=4.3.0 ./run-test.sh
 ```
