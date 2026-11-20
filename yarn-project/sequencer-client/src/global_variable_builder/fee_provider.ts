@@ -57,6 +57,11 @@ type FeeEntry = L1SyncPoint & {
   tips: { pending: CheckpointNumber; proven: CheckpointNumber };
 };
 
+/** Whether the entry answers a request tagged `asOf`: it describes that L1 block or a later one. */
+function servesTag(entry: FeeEntry | undefined, asOf: FeeAsOf): boolean {
+  return !!entry && (entry.blockHash.equals(asOf.blockHash) || entry.blockNumber > asOf.blockNumber);
+}
+
 /** The node clock a refresh derives its slots and timestamps from, read once per refresh. */
 type FeeClock = {
   /** Timestamp of the next L1 block, the earliest a transaction priced now can land. */
@@ -181,7 +186,7 @@ export class FeeProviderImpl implements FeeProvider {
 
     const timer = new Timer();
     for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
-      if (this.entry && (this.entry.blockHash.equals(asOf.blockHash) || this.entry.blockNumber > asOf.blockNumber)) {
+      if (servesTag(this.entry, asOf)) {
         return this.entry;
       }
       const remainingMs = asOf.maxWaitMs === undefined ? undefined : asOf.maxWaitMs - timer.ms();
@@ -191,7 +196,7 @@ export class FeeProviderImpl implements FeeProvider {
       await this.awaitRefresh(remainingMs);
     }
 
-    if (!this.entry?.blockHash.equals(asOf.blockHash)) {
+    if (!servesTag(this.entry, asOf)) {
       this.log.debug(`Serving fees for another L1 block than the one requested`, {
         requestedBlockNumber: asOf.blockNumber,
         requestedBlockHash: asOf.blockHash.toString(),
