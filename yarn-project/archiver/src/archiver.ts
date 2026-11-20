@@ -145,6 +145,12 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, L1P
   /** In-memory cache for L2 chain tips. */
   private readonly l2FrontierCache: L2FrontierCache;
 
+  /**
+   * The L1 sync point last announced through {@link L2BlockSourceEvents.L1SyncPointUpdated}. Compared against the
+   * last announcement rather than the pass's starting point, because a pass moves the sync point before its writes.
+   */
+  private announcedL1SyncPoint: L1SyncPoint | undefined;
+
   /** Consensus timing model used for proposed-checkpoint arrival expectations. */
   private readonly timetable: ConsensusTimetable;
 
@@ -576,6 +582,24 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, L1P
         toTips,
       });
     }
+    this.announceL1SyncPoint();
+  }
+
+  /**
+   * Tells listeners that read L1 at the archiver's sync point, such as the fee caches, that it moved, once this pass's
+   * writes have committed. A new L1 block can change the fee oracle or governance values without moving any L2 data,
+   * so this fires for every new sync point, not just for passes that changed the chain.
+   */
+  private announceL1SyncPoint(): void {
+    const l1SyncPoint = this.l2FrontierCache.getL1SyncPoint();
+    if (l1SyncPoint === undefined || this.announcedL1SyncPoint?.blockHash.equals(l1SyncPoint.blockHash)) {
+      return;
+    }
+    this.announcedL1SyncPoint = l1SyncPoint;
+    this.events.emit(L2BlockSourceEvents.L1SyncPointUpdated, {
+      type: L2BlockSourceEvents.L1SyncPointUpdated,
+      l1SyncPoint,
+    });
   }
 
   /**

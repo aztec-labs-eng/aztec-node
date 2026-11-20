@@ -311,7 +311,6 @@ describe('aztec node', () => {
       rollupContract,
       epochCache,
       signatureContext: { chainId: 12345, rollupAddress: EthAddress.ZERO },
-      dateProvider: new MockDateProvider(),
     });
 
     createNode = (configOverrides: Partial<AztecNodeConfig> = {}, depsOverrides: Partial<AztecNodeServiceDeps> = {}) =>

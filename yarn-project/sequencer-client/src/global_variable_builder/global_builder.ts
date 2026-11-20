@@ -48,15 +48,15 @@ export class GlobalVariableBuilder implements GlobalVariableBuilderInterface {
 
   /**
    * Builds global variables that are constant throughout a checkpoint.
-   * @param options - Optional L1 block number to pin the fee read to, so the fee describes the same L1 state
-   * the caller planned the block from.
+   * @param options - Optional L1 block to pin the fee read to, so the fee describes the same L1 state the caller
+   * planned the block from. A block hash takes precedence over a number.
    */
   public async buildCheckpointGlobalVariables(
     coinbase: EthAddress,
     feeRecipient: AztecAddress,
     slotNumber: SlotNumber,
     simulationOverridesPlan?: SimulationOverridesPlan,
-    options?: { blockNumber?: bigint },
+    options?: { blockNumber?: bigint; blockHash?: `0x${string}` },
   ): Promise<CheckpointGlobalVariables> {
     const { chainId, version } = this;
 

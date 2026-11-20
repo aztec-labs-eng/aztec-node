@@ -1,3 +1,5 @@
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+
 import type { ManaUsageEstimate } from '../gas/fee_math.js';
 import type { GasFees } from '../gas/gas_fees.js';
 
@@ -6,8 +8,13 @@ import type { GasFees } from '../gas/gas_fees.js';
  * snapshot's L1 sync point, so its plan and the fees describe the same L1 block.
  */
 export type FeeAsOf = {
-  /** L1 block number the fees should describe; the provider answers with its closest view when it cannot. */
+  /** Number of the L1 block the fees should describe. */
   blockNumber: bigint;
+  /**
+   * Hash of the L1 block the fees should describe. The provider waits for its view to reach this block, and
+   * answers with its current view once it has or when it cannot.
+   */
+  blockHash: Buffer32;
   /** Upper bound on how long to wait for a refresh when the provider has not reached that block yet. */
   maxWaitMs?: number;
 };
