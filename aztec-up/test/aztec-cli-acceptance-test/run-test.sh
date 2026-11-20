@@ -33,7 +33,12 @@ else
   echo ">>> Installing latest LTS Node via NVM"
   nvm install --lts
   echo ">>> Installing aztec ${VERSION}"
-  NO_NEW_SHELL=1 VERSION="${VERSION}" bash <(curl -sL https://install.aztec.network)
+  # This test starts as soon as the release finishes publishing, but npmjs keeps each new version
+  # staged, and not installable, for several minutes. Retry up to 8 times, 60s apart, while npm still
+  # reports a package or version as missing; any other install failure fails at once. Each attempt
+  # reruns the whole installer, so the wait is about 15 minutes on ubuntu and about 22 on macOS.
+  RETRY_ATTEMPTS=8 RETRY_SLEEP=60 "$script_dir/../../../ci3/retry" -p 'npm error code (E404|ETARGET)' \
+    "curl -fsSL https://install.aztec.network -o /tmp/aztec-install.sh && NO_NEW_SHELL=1 VERSION='${VERSION}' bash /tmp/aztec-install.sh"
 fi
 
 # Mirrors update_path_env_var() in aztec-install — profile files aren't sourced in non-interactive shells.
