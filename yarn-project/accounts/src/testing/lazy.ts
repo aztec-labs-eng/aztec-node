@@ -10,15 +10,9 @@ import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { getSchnorrInitializerlessAccountContractAddress } from '../schnorr/initializerless/lazy.js';
 import { getSchnorrAccountContractAddress } from '../schnorr/private_immutable/lazy.js';
 import { deriveSecretKeyFromSigningKey } from '../utils/key_derivation.js';
-import {
-  INITIAL_TEST_ACCOUNT_SALTS,
-  INITIAL_TEST_SECRET_KEYS,
-  INITIAL_TEST_SIGNING_KEYS,
-  type InitialAccountData,
-  type InitialAccountType,
-} from './configuration.js';
+import { INITIAL_TEST_ACCOUNT_KEYS, type InitialAccountData, type InitialAccountType } from './configuration.js';
 
-export { INITIAL_TEST_ACCOUNT_SALTS, INITIAL_TEST_SECRET_KEYS, INITIAL_TEST_SIGNING_KEYS } from './configuration.js';
+export { INITIAL_TEST_ACCOUNT_KEYS, INITIAL_TEST_ACCOUNT_SALTS, INITIAL_TEST_SECRET_KEYS } from './configuration.js';
 
 /** Derives the account contract address for the given type */
 function getTestAccountAddress(type: InitialAccountType, signingKey: GrumpkinScalar, salt: Fr, secret?: Fr) {
@@ -32,16 +26,10 @@ function getTestAccountAddress(type: InitialAccountType, signingKey: GrumpkinSca
  */
 export function getInitialTestAccountsData(): Promise<InitialAccountData[]> {
   return Promise.all(
-    INITIAL_TEST_SECRET_KEYS.map(async (secret, i) => ({
-      secret,
-      signingKey: INITIAL_TEST_SIGNING_KEYS[i],
-      salt: INITIAL_TEST_ACCOUNT_SALTS[i],
+    INITIAL_TEST_ACCOUNT_KEYS.map(async keys => ({
+      ...keys,
       type: 'schnorr_initializerless' as const,
-      address: await getSchnorrInitializerlessAccountContractAddress(
-        INITIAL_TEST_SIGNING_KEYS[i],
-        INITIAL_TEST_ACCOUNT_SALTS[i],
-        secret,
-      ),
+      address: await getSchnorrInitializerlessAccountContractAddress(keys.signingKey, keys.salt, keys.secret),
     })),
   );
 }
