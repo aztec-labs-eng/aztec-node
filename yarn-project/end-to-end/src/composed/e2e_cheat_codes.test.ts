@@ -105,13 +105,16 @@ describe('e2e_cheat_codes', () => {
     const [alice, bob] = await registerInitialLocalNetworkAccountsInWallet(wallet);
     const { contract: token } = await deployToken(wallet, alice, 0n, logger);
 
+    // The PXE rejects a private log that is a day old in a block that is not final only when an earlier log of the
+    // same sender and recipient is final, so the mint has to be final before the transfer that the warp makes old.
     const { receipt: mint } = await token.methods.mint_to_private(alice, 100n).send({ from: alice });
     await waitForProvenBlock(aztecNode, mint.blockNumber!);
     await cheatCodes.eth.mineUntilFinalized(await cheatCodes.eth.blockNumber());
     await waitForBlockNumber(aztecNode, mint.blockNumber!, { tag: 'finalized' });
 
-    await token.methods.transfer(bob, 1n).send({ from: alice });
+    const { receipt: transfer } = await token.methods.transfer(bob, 1n).send({ from: alice });
     await nodeDebug.warpL2TimeAtLeastBy(24 * 60 * 60);
+    expect(await aztecNode.getBlockNumber('finalized')).toBeGreaterThanOrEqual(transfer.blockNumber!);
     await token.methods.transfer(bob, 1n).send({ from: alice });
 
     const { result: bobBalance } = await token.methods.balance_of_private(bob).simulate({ from: bob });
