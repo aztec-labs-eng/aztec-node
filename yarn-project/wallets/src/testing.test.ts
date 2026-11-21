@@ -20,15 +20,38 @@ const addresses = await registerInitialLocalNetworkAccountsInWallet(wallet);
 console.log(JSON.stringify(addresses.map(String)));
 `;
 
-describe('registerInitialLocalNetworkAccountsInWallet', () => {
-  it('registers the initial test accounts when Node.js loads the built package without a transform', async () => {
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      ['--input-type=module', '--eval', REGISTER_ACCOUNTS_SCRIPT],
-      { cwd: PACKAGE_ROOT },
-    );
+const LIST_ARTIFACTS_LOADED_ON_IMPORT_SCRIPT = `
+import { registerHooks } from 'node:module';
 
+const artifacts = [];
+registerHooks({
+  load(url, context, nextLoad) {
+    if (url.includes('/accounts/artifacts/')) {
+      artifacts.push(url);
+    }
+    return nextLoad(url, context);
+  },
+});
+await import('@aztec-labs/wallets/testing');
+console.log(JSON.stringify(artifacts));
+`;
+
+async function runInNode(script: string): Promise<unknown> {
+  const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], {
+    cwd: PACKAGE_ROOT,
+  });
+  return JSON.parse(stdout);
+}
+
+describe('@aztec-labs/wallets/testing, loaded by Node.js from the built package without a transform', () => {
+  it('registers the initial test accounts in the wallet', async () => {
     const initialTestAccounts = await getInitialTestAccountsData();
-    expect(JSON.parse(stdout)).toEqual(initialTestAccounts.map(({ address }) => address.toString()));
+    expect(await runInNode(REGISTER_ACCOUNTS_SCRIPT)).toEqual(
+      initialTestAccounts.map(({ address }) => address.toString()),
+    );
+  });
+
+  it('loads no account contract artifact on import, so a browser bundle can load the artifacts lazily', async () => {
+    expect(await runInNode(LIST_ARTIFACTS_LOADED_ON_IMPORT_SCRIPT)).toEqual([]);
   });
 });
