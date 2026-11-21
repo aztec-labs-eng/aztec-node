@@ -187,7 +187,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Fixes
 
-- **`registerInitialLocalNetworkAccountsInWallet` registers the initial test accounts in Node.js** ([#766](https://github.com/aztec-labs-eng/aztec-node/pull/766)). The function, from `@aztec-labs/wallets/testing`, stopped with `ERR_IMPORT_ATTRIBUTE_MISSING` for `SchnorrInitializerlessAccount.json`: it derived each address through the browser-only import of the account contract artifact. It now gives the wallet the keys of the initial test accounts and loads no artifact. `@aztec-labs/accounts/testing` and `@aztec-labs/accounts/testing/lazy` export `INITIAL_TEST_ACCOUNT_KEYS` for this.
+- **`registerInitialLocalNetworkAccountsInWallet` registers the initial test accounts in Node.js** ([#767](https://github.com/aztec-labs-eng/aztec-node/pull/767)). The function, from `@aztec-labs/wallets/testing`, stopped with `ERR_IMPORT_ATTRIBUTE_MISSING` for `SchnorrInitializerlessAccount.json`: it derived each address through the browser-only import of the account contract artifact. It now gives the wallet the keys of the initial test accounts and loads no artifact. `@aztec-labs/accounts/testing` and `@aztec-labs/accounts/testing/lazy` export `INITIAL_TEST_ACCOUNT_KEYS` for this.
 - **An ephemeral browser `EmbeddedWallet` keeps its PXE data in memory** ([#571](https://github.com/aztec-labs-eng/aztec-node/pull/571)). `EmbeddedWallet.create(node, { ephemeral: true })` persisted its PXE store in the browser, so a second ephemeral wallet on the same page failed with `SQLite-OPFS pool ... is already in use by another store instance`.
 
 ### CLI
