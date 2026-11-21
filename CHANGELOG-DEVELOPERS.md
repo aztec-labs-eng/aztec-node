@@ -165,7 +165,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
-- **`EthCheatCodes.mineUntilFinalized` mines L1 blocks until a block is final** ([#767](https://github.com/aztec-labs-eng/aztec-node/pull/767)). `cheatCodes.eth.mineUntilFinalized(blockNumber)` mines blocks on anvil until the block that anvil reports as finalized is at or after `blockNumber`. An optional second argument sets the largest number of blocks to mine.
+- **`EthCheatCodes.mineUntilFinalized` mines L1 blocks until a block is final** ([#768](https://github.com/aztec-labs-eng/aztec-node/pull/768)). `cheatCodes.eth.mineUntilFinalized(blockNumber)` mines blocks on anvil until the block that anvil reports as finalized is at or after `blockNumber`. An optional second argument sets the largest number of blocks to mine.
 - **`getAllPublicEvents` returns every public event that matches a filter, oldest first** ([#624](https://github.com/aztec-labs-eng/aztec-node/pull/624)), from `@aztec-labs/aztec.js/events`. The filter is either a block range, whose `fromBlock` is required, or a `txHash`. Every page the read fetches comes from the fork of its `referenceBlock`, which defaults to the node's latest block when the read starts: the read throws if that block leaves the chain, and returns no events after it. One call can make many requests to the node and holds every event in memory, so split long ranges.
 
 #### Breaking changes
