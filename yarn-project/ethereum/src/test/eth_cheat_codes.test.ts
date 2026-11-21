@@ -298,6 +298,39 @@ describeAcrossL1Forks('EthCheatCodes', () => {
     });
   });
 
+  describe('mineUntilFinalized', () => {
+    const finalizedBlockNumber = async () =>
+      Number((await cheatCodes.publicClient.getBlock({ blockTag: 'finalized' })).number);
+
+    it.each([1, 10])('makes the latest block final on a chain of %i blocks', async chainLength => {
+      await cheatCodes.mine(chainLength);
+      const target = await cheatCodes.blockNumber();
+
+      await cheatCodes.mineUntilFinalized(target);
+
+      expect(await finalizedBlockNumber()).toBeGreaterThanOrEqual(target);
+    });
+
+    it('mines nothing when the block is final already', async () => {
+      await cheatCodes.mine(10);
+      const blockNumber = await cheatCodes.blockNumber();
+
+      await cheatCodes.mineUntilFinalized(await finalizedBlockNumber());
+
+      expect(await cheatCodes.blockNumber()).toBe(blockNumber);
+    });
+
+    it('stops at the maximum number of blocks', async () => {
+      await cheatCodes.mine(10);
+      const target = await cheatCodes.blockNumber();
+
+      await cheatCodes.mineUntilFinalized(target, 1);
+
+      expect(await cheatCodes.blockNumber()).toBe(target + 1);
+      expect(await finalizedBlockNumber()).toBeLessThan(target);
+    });
+  });
+
   describe('startIntervalMiningWithFreshBlock', () => {
     const expectAutoBlockAfter = async (blockNumber: number) => {
       for (let i = 0; i < 20; i++) {
