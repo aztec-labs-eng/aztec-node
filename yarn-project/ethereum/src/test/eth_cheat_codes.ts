@@ -193,6 +193,24 @@ export class EthCheatCodes {
   }
 
   /**
+   * Mines blocks until the block that the chain reports as finalized is at or after `blockNumber`.
+   * @param maxBlocks - The call mines at most this many blocks, so it can return before the block is final.
+   */
+  public async mineUntilFinalized(blockNumber: number | bigint, maxBlocks = Infinity): Promise<void> {
+    let blocksLeft = maxBlocks;
+    while (blocksLeft > 0) {
+      const finalized = await this.publicClient.getBlock({ blockTag: 'finalized', includeTransactions: false });
+      const blocksBehind = Number(BigInt(blockNumber) - finalized.number);
+      if (blocksBehind <= 0) {
+        return;
+      }
+      const blocks = Math.min(blocksBehind, blocksLeft);
+      await this.mine(blocks);
+      blocksLeft -= blocks;
+    }
+  }
+
+  /**
    * Mines a single block with evm_mine
    */
   public async evmMine(): Promise<void> {
