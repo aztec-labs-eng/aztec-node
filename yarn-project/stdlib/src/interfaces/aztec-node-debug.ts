@@ -39,6 +39,10 @@ export interface AztecNodeDebug {
    * advancing the L2 timestamp to at least the target. The warp is serialized with block building, so it never
    * interleaves with an in-flight build. A no-op when `targetTimestamp` is already at or behind the current L1 time.
    *
+   * On a node that proves epochs by itself, such as the local network, the warp first proves the checkpoints to date
+   * and mines the L1 blocks that make them final, as far as those blocks fit in the warped time. A warp longer than
+   * the L1 finality delay (64 L1 slots on a default anvil) thus leaves each earlier block final.
+   *
    * @param targetTimestamp - Target L1 timestamp, in seconds.
    * @throws If no automine sequencer is running (only the automine sequencer supports time warps).
    */
@@ -47,7 +51,7 @@ export interface AztecNodeDebug {
   /**
    * Warps L1 time forward by at least `duration` seconds from the current L1 time and builds an empty L2 checkpoint
    * at the next slot boundary. The warp is serialized with block building, so it never interleaves with an in-flight
-   * build.
+   * build. It makes the earlier checkpoints final as {@link warpL2TimeAtLeastTo} does.
    *
    * @param duration - Number of seconds to advance; must be positive.
    * @throws If no automine sequencer is running, or if `duration` is not positive.

@@ -660,9 +660,10 @@ export class AutomineSequencer {
 
   /**
    * Warps L1 timestamp to (or past) `targetTimestampSec`, rounded up to the next aztec-slot
-   * boundary, by queuing an empty-checkpoint build at that slot. Mines exactly one L1 block
-   * (the one holding the propose tx), with the timestamp pre-set so the mined block lands on
-   * the slot boundary.
+   * boundary, by queuing an empty-checkpoint build at that slot. The L1 block that holds the
+   * propose tx has its timestamp pre-set, so it lands on the slot boundary. With
+   * {@link AutomineSequencerDeps.autoSettle}, the checkpoints from before the warp are settled and
+   * made final first (see {@link settleAndFinalize}).
    */
   private async runWarp(targetTimestampSec: number): Promise<void> {
     await this.reconcileDateProvider();
@@ -673,6 +674,10 @@ export class AutomineSequencer {
       if (targetTimestampSec <= currentL1Ts) {
         this.log.debug(`Warp target ${targetTimestampSec} is not in the future of current L1 ts ${currentL1Ts}`);
         return;
+      }
+
+      if (this.deps.autoSettle) {
+        await this.settleAndFinalize(targetTimestampSec - currentL1Ts);
       }
 
       // Round up to the next aztec-slot boundary so the next build naturally lands on a new slot.
@@ -687,6 +692,25 @@ export class AutomineSequencer {
 
       this.log.verbose(`Warped L1 to slot boundary`, { slot: targetSlot + 1, timestamp: slotBoundaryTs });
     });
+  }
+
+  /**
+   * Settles the checkpoints to date and mines the L1 blocks that put the settlement at or before the L1 finalized
+   * block. L1 produces these blocks in the time that a warp skips. Without them, a warp leaves checkpoints that are
+   * old in L2 time but not final, and the PXE rejects a private log that is older than the maximum tx lifetime in a
+   * block that is not final.
+   *
+   * Each mined L1 block moves L1 time on by one Ethereum slot, so this mines only the blocks that fit in
+   * `l1TimeBudgetSec`. A warp shorter than the L1 finality depth can thus leave the newest checkpoints not final.
+   */
+  private async settleAndFinalize(l1TimeBudgetSec: number): Promise<void> {
+    const maxL1Blocks = Math.floor(l1TimeBudgetSec / this.deps.l1Constants.ethereumSlotDuration);
+    if (maxL1Blocks < 1) {
+      return;
+    }
+    await this.runProve();
+    const settledAtL1Block = await this.deps.ethCheatCodes.blockNumber();
+    await this.deps.ethCheatCodes.mineUntilFinalized(settledAtL1Block, maxL1Blocks - 1);
   }
 
   /**
