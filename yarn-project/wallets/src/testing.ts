@@ -24,6 +24,11 @@ export async function createFundedInitializerlessAccounts(
   return accountManagers;
 }
 
+/**
+ * Registers the initial test accounts of the local network in the wallet and returns their addresses. The wallet
+ * derives each address, so this function loads no account contract artifact. Do not derive the addresses here: in
+ * Node.js, the lazy artifact import of `getInitialTestAccountsData` fails with `ERR_IMPORT_ATTRIBUTE_MISSING`.
+ */
 export function registerInitialLocalNetworkAccountsInWallet(
   wallet: WalletWithSchnorrAccounts,
 ): Promise<AztecAddress[]> {
