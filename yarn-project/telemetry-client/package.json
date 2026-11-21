@@ -30,7 +30,7 @@
   "dependencies": {
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": ">=1.9.0 <1.10.0",
     "@opentelemetry/api-logs": "^0.55.0",
     "@opentelemetry/core": "^1.28.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.55.0",
