@@ -100,6 +100,18 @@ describe('e2e_cheat_codes', () => {
     expect(await aztecNode.getBlockNumber()).toBe(blockNumberBefore);
   });
 
+  it('warpL2TimeAtLeastBy completes when the next L1 block already has a later timestamp set', async () => {
+    await waitForProvenBlock(aztecNode, await aztecNode.getBlockNumber());
+    const l1Timestamp = await cheatCodes.eth.lastBlockTimestamp();
+    const { slotDuration } = await aztecNode.getL1Constants();
+    await cheatCodes.eth.setNextBlockTimestamp(l1Timestamp + 60 * 60);
+
+    await nodeDebug.warpL2TimeAtLeastBy(slotDuration);
+
+    const block = await aztecNode.getBlock(await aztecNode.getBlockNumber());
+    expect(Number(block!.header.globalVariables.timestamp)).toBeGreaterThanOrEqual(l1Timestamp + slotDuration);
+  });
+
   it('a wallet sends a transaction right after a warp of 24 hours', async () => {
     const wallet = await TestWallet.create(aztecNode);
     const [alice, bob] = await registerInitialLocalNetworkAccountsInWallet(wallet);

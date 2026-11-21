@@ -98,8 +98,9 @@ export type AutomineSequencerDeps = {
   pollIntervalMs?: number;
   /**
    * When true, run a loop that synthetically settles epochs (writes outbox roots and advances the
-   * proven tip) as checkpoints land, replacing the standalone `EpochTestSettler`. Local-network only;
-   * e2e tests leave this off and drive proving explicitly.
+   * proven tip) as checkpoints land, replacing the standalone `EpochTestSettler`. A warp then also settles the
+   * checkpoints to date and makes them final before it moves the clock. Local-network only; e2e tests leave this
+   * off and drive proving explicitly.
    */
   autoSettle?: boolean;
   /** How often the auto-settle / clock-reconcile loop runs while {@link autoSettle} is enabled. Defaults to 200ms. */
@@ -677,7 +678,7 @@ export class AutomineSequencer {
       }
 
       if (this.deps.autoSettle) {
-        await this.settleAndFinalize(targetTimestampSec - currentL1Ts);
+        await this.settleAndFinalize(targetTimestampSec);
       }
 
       // Round up to the next aztec-slot boundary so the next build naturally lands on a new slot.
@@ -700,17 +701,23 @@ export class AutomineSequencer {
    * old in L2 time but not final, and the PXE rejects a private log that is older than the maximum tx lifetime in a
    * block that is not final.
    *
-   * Each mined L1 block moves L1 time on by one Ethereum slot, so this mines only the blocks that fit in
-   * `l1TimeBudgetSec`. A warp shorter than the L1 finality depth can thus leave the newest checkpoints not final.
+   * Mines only the L1 blocks whose timestamps are at or before `targetTimestampSec`: the next block takes the pending
+   * timestamp, and each later block adds one Ethereum slot. A warp shorter than the L1 finality depth can thus leave
+   * the newest checkpoints not final.
    */
-  private async settleAndFinalize(l1TimeBudgetSec: number): Promise<void> {
-    const maxL1Blocks = Math.floor(l1TimeBudgetSec / this.deps.l1Constants.ethereumSlotDuration);
-    if (maxL1Blocks < 1) {
+  private async settleAndFinalize(targetTimestampSec: number): Promise<void> {
+    const { ethCheatCodes, l1Constants } = this.deps;
+    const l1BlocksThatFit = async () => {
+      const pendingTs = await ethCheatCodes.nextBlockTimestamp();
+      return pendingTs > targetTimestampSec
+        ? 0
+        : 1 + Math.floor((targetTimestampSec - pendingTs) / l1Constants.ethereumSlotDuration);
+    };
+    if ((await l1BlocksThatFit()) < 1) {
       return;
     }
     await this.runProve();
-    const settledAtL1Block = await this.deps.ethCheatCodes.blockNumber();
-    await this.deps.ethCheatCodes.mineUntilFinalized(settledAtL1Block, maxL1Blocks - 1);
+    await ethCheatCodes.mineUntilFinalized(await ethCheatCodes.blockNumber(), await l1BlocksThatFit());
   }
 
   /**
