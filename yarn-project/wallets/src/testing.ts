@@ -1,5 +1,9 @@
 import type { InitialAccountData } from '@aztec-labs/accounts/testing';
-import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import {
+  INITIAL_TEST_ACCOUNT_SALTS,
+  INITIAL_TEST_SECRET_KEYS,
+  INITIAL_TEST_SIGNING_KEYS,
+} from '@aztec-labs/accounts/testing/lazy';
 import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
 import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -24,14 +28,17 @@ export async function createFundedInitializerlessAccounts(
   return accountManagers;
 }
 
-export async function registerInitialLocalNetworkAccountsInWallet(
+export function registerInitialLocalNetworkAccountsInWallet(
   wallet: WalletWithSchnorrAccounts,
 ): Promise<AztecAddress[]> {
-  const testAccounts = await getInitialTestAccountsData();
   return Promise.all(
-    testAccounts.map(async account => {
-      return (await wallet.createSchnorrInitializerlessAccount(account.secret, account.salt, account.signingKey))
-        .address;
+    INITIAL_TEST_SECRET_KEYS.map(async (secret, i) => {
+      const account = await wallet.createSchnorrInitializerlessAccount(
+        secret,
+        INITIAL_TEST_ACCOUNT_SALTS[i],
+        INITIAL_TEST_SIGNING_KEYS[i],
+      );
+      return account.address;
     }),
   );
 }

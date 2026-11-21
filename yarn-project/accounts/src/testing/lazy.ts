@@ -18,7 +18,7 @@ import {
   type InitialAccountType,
 } from './configuration.js';
 
-export { INITIAL_TEST_ACCOUNT_SALTS, INITIAL_TEST_SECRET_KEYS } from './configuration.js';
+export { INITIAL_TEST_ACCOUNT_SALTS, INITIAL_TEST_SECRET_KEYS, INITIAL_TEST_SIGNING_KEYS } from './configuration.js';
 
 /** Derives the account contract address for the given type */
 function getTestAccountAddress(type: InitialAccountType, signingKey: GrumpkinScalar, salt: Fr, secret?: Fr) {
