@@ -77,8 +77,9 @@ export type AztecNodeConfig = ArchiverConfig &
     /**
      * Test-only: have the AutomineSequencer automatically prove epochs (write epoch out hashes into
      * the L1 Outbox and advance the proven tip) as checkpoints land, replacing the standalone
-     * `EpochTestSettler`. Set by the local network/sandbox; the e2e `AUTOMINE_E2E_OPTS` fixture leaves
-     * it off so tests drive proving manually via `prove` / `cheatCodes.rollup.markAsProven`.
+     * `EpochTestSettler`. A time warp then also proves the checkpoints to date and makes them final. Set by the
+     * local network/sandbox; the e2e `AUTOMINE_E2E_OPTS` fixture leaves it off so tests drive proving manually via
+     * `prove` / `cheatCodes.rollup.markAsProven`.
      */
     automineEnableProveEpoch?: boolean;
   };
@@ -151,7 +152,8 @@ export const aztecNodeConfigMappings: ConfigMappingsType<AztecNodeConfig> = {
   },
   automineEnableProveEpoch: {
     env: 'AUTOMINE_ENABLE_PROVE_EPOCH',
-    description: 'Test-only: have the AutomineSequencer automatically prove epochs as checkpoints land.',
+    description:
+      'Test-only: have the AutomineSequencer prove epochs as checkpoints land, and make them final in a time warp.',
     ...booleanConfigHelper(false),
   },
 };
