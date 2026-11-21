@@ -59,7 +59,7 @@ export type CreateAutomineSequencerArgs = {
     >;
   p2pClient: P2P & Pick<ConcreteP2PClient, 'sync'>;
   l1Constants: { l1GenesisTime: bigint; slotDuration: number; ethereumSlotDuration: number };
-  /** When true, run the auto-settle / clock-reconcile loop (local-network only). */
+  /** When true, run the auto-settle / clock-reconcile loop and make each warp settle first (local-network only). */
   autoSettle?: boolean;
   log: Logger;
 };

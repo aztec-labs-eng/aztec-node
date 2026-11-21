@@ -4,6 +4,11 @@ import { CheatCodes } from '@aztec-labs/aztec/testing';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { createAztecNodeDebugClient } from '@aztec-labs/stdlib/interfaces/client';
+import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
+
+import { deployToken } from '../fixtures/token_utils.js';
+import { waitForBlockNumber, waitForProvenBlock } from '../fixtures/wait_helpers.js';
+import { TestWallet } from '../test-wallet/test_wallet.js';
 
 const { AZTEC_NODE_URL = 'http://localhost:8080', ETHEREUM_HOSTS = 'http://localhost:8545' } = process.env;
 
@@ -93,5 +98,38 @@ describe('e2e_cheat_codes', () => {
 
     await expect(cheatCodes.warpL2TimeAtLeastTo(nodeDebug, pastTimestamp)).resolves.toBeUndefined();
     expect(await aztecNode.getBlockNumber()).toBe(blockNumberBefore);
+  });
+
+  it('warpL2TimeAtLeastBy completes when the next L1 block already has a later timestamp set', async () => {
+    await waitForProvenBlock(aztecNode, await aztecNode.getBlockNumber());
+    const l1Timestamp = await cheatCodes.eth.lastBlockTimestamp();
+    const { slotDuration } = await aztecNode.getL1Constants();
+    await cheatCodes.eth.setNextBlockTimestamp(l1Timestamp + 60 * 60);
+
+    await nodeDebug.warpL2TimeAtLeastBy(slotDuration);
+
+    const block = await aztecNode.getBlock(await aztecNode.getBlockNumber());
+    expect(Number(block!.header.globalVariables.timestamp)).toBeGreaterThanOrEqual(l1Timestamp + slotDuration);
+  });
+
+  it('a wallet sends a transaction right after a warp of 24 hours', async () => {
+    const wallet = await TestWallet.create(aztecNode);
+    const [alice, bob] = await registerInitialLocalNetworkAccountsInWallet(wallet);
+    const { contract: token } = await deployToken(wallet, alice, 0n, logger);
+
+    // The PXE rejects a private log that is a day old in a block that is not final only when an earlier log of the
+    // same sender and recipient is final, so the mint has to be final before the transfer that the warp makes old.
+    const { receipt: mint } = await token.methods.mint_to_private(alice, 100n).send({ from: alice });
+    await waitForProvenBlock(aztecNode, mint.blockNumber!);
+    await cheatCodes.eth.mineUntilFinalized(await cheatCodes.eth.blockNumber());
+    await waitForBlockNumber(aztecNode, mint.blockNumber!, { tag: 'finalized' });
+
+    const { receipt: transfer } = await token.methods.transfer(bob, 1n).send({ from: alice });
+    await nodeDebug.warpL2TimeAtLeastBy(24 * 60 * 60);
+    expect(await aztecNode.getBlockNumber('finalized')).toBeGreaterThanOrEqual(transfer.blockNumber!);
+    await token.methods.transfer(bob, 1n).send({ from: alice });
+
+    const { result: bobBalance } = await token.methods.balance_of_private(bob).simulate({ from: bob });
+    expect(bobBalance).toBe(2n);
   });
 });

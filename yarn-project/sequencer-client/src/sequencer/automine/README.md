@@ -31,7 +31,7 @@ Public entry points:
 | --- | --- |
 | `buildIfPending()` | Enqueues a mempool-driven build. Coalesces bursts into one job. |
 | `buildEmptyBlock()` | Enqueues a forced empty-block build. |
-| `warpTo(ts)` / `warpBy(delta)` | Advances L1 time to a slot boundary. |
+| `warpTo(ts)` / `warpBy(delta)` | Advances L1 time to a slot boundary. With `automineEnableProveEpoch`, first proves the checkpoints to date and makes them final (see [Epoch proving](#epoch-proving)). |
 | `prove(upToCheckpoint?)` | Synthetically proves epochs up to a checkpoint (default: the latest checkpointed): writes the epoch out hashes into the L1 Outbox so L2-to-L1 messages become consumable, then advances the proven tip. No real proof. Clamps to the checkpointed tip and no-ops when already proven. |
 | `revertToCheckpoint(n)` | Rolls L1 back to the block that published checkpoint `n`, then resets archiver, world-state, and P2P pool. The archiver's L1 sync loop is stopped for the whole operation and resumed at the end, so no sync pass can re-download the checkpoints being removed while they are still on L1. |
 | `syncPoint()` | Awaits the queue reaching idle. |
@@ -40,7 +40,7 @@ Public entry points:
 
 The AutomineSequencer owns L1 time in the local network (replacing the deleted `AnvilTestWatcher`). It builds and publishes each checkpoint at the next aztec-slot boundary, and `warpTo` / `warpBy` advance the clock by publishing an empty checkpoint at the target slot. Before every build, warp, and prove it reconciles the injected `TestDateProvider` to the latest *mined* L1 timestamp, so node-side consumers of `dateProvider.now()` stay aligned with L1 even when an unrelated L1 tx mines a block between our builds. It never advances the clock to the pending, un-mined timestamp.
 
-Each build and warp pins the next L1 block's timestamp to the target slot's start and pauses anvil mining until the propose is sent. Unrelated L1 txs sent meanwhile wait in the pool and are mined together with the propose, so they cannot move L1 time out of the slot before the propose lands.
+Each build and warp pins the next L1 block's timestamp to the target slot's start and pauses anvil mining until the propose is sent. Unrelated L1 txs sent meanwhile wait in the pool and are mined together with the propose, so they cannot move L1 time out of the slot before the propose lands. A warp that makes earlier checkpoints final mines its L1 blocks before the pin, and the first of them takes the waiting txs.
 
 ## Publish-failure recovery
 
@@ -59,4 +59,5 @@ There is no real prover in the automine setup, so epochs are settled synthetical
 Who drives proving depends on the `automineEnableProveEpoch` config flag:
 
 - **Local network / sandbox** (`automineEnableProveEpoch: true`): the AutomineSequencer runs an auto-prove loop that calls `prove()` as checkpoints land, through the same serial queue as its builds. This replaces the standalone `EpochTestSettler`, which used to race the build loop. The loop also reconciles the clock on each tick.
+  A warp skips the L1 blocks that L1 finality counts, so before it moves the clock it proves the checkpoints to date and mines the L1 blocks that put them behind the L1 finalized block. It mines only the blocks that fit in the warped time, at one Ethereum slot each, so L1 time does not pass the warp target. Without this, a warp of a day leaves blocks that are a day old but not final, and the PXE rejects a private log that is older than the maximum tx lifetime in a block that is not final.
 - **e2e tests** (`AUTOMINE_E2E_OPTS`, flag off): proving is manual so tests stay deterministic. Cross-epoch tests advance the proven anchor explicitly via `node.prove(...)`, `cheatCodes.rollup.markAsProven(...)`, or a hand-driven `EpochTestSettler`. See `e2e_pruned_blocks.test.ts` and `e2e_epochs/epochs_partial_proof_multi_root.test.ts` for real examples.
