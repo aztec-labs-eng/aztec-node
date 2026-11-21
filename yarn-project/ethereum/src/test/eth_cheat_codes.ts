@@ -194,7 +194,7 @@ export class EthCheatCodes {
 
   /**
    * Mines blocks until the block that the chain reports as finalized is at or after `blockNumber`.
-   * @param maxBlocks - The most blocks to mine. When the call mines this many, it returns with the block not yet final.
+   * @param maxBlocks - The call mines at most this many blocks, so it can return before the block is final.
    */
   public async mineUntilFinalized(blockNumber: number | bigint, maxBlocks = Infinity): Promise<void> {
     let blocksLeft = maxBlocks;
