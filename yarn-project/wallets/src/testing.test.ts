@@ -6,6 +6,7 @@ import { promisify } from 'util';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
+// @dependency ./testing.ts
 const REGISTER_ACCOUNTS_SCRIPT = `
 import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/accounts/schnorr';
 import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
