@@ -1,5 +1,5 @@
 import type { InitialAccountData } from '@aztec-labs/accounts/testing';
-import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import { INITIAL_TEST_ACCOUNT_KEYS } from '@aztec-labs/accounts/testing/lazy';
 import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
 import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -24,14 +24,18 @@ export async function createFundedInitializerlessAccounts(
   return accountManagers;
 }
 
-export async function registerInitialLocalNetworkAccountsInWallet(
+/**
+ * Registers the initial test accounts of the local network in the wallet and returns their addresses. The wallet
+ * derives each address, so this function loads no account contract artifact. Do not derive the addresses here: in
+ * Node.js, the lazy artifact import of `getInitialTestAccountsData` fails with `ERR_IMPORT_ATTRIBUTE_MISSING`.
+ */
+export function registerInitialLocalNetworkAccountsInWallet(
   wallet: WalletWithSchnorrAccounts,
 ): Promise<AztecAddress[]> {
-  const testAccounts = await getInitialTestAccountsData();
   return Promise.all(
-    testAccounts.map(async account => {
-      return (await wallet.createSchnorrInitializerlessAccount(account.secret, account.salt, account.signingKey))
-        .address;
-    }),
+    INITIAL_TEST_ACCOUNT_KEYS.map(
+      async ({ secret, salt, signingKey }) =>
+        (await wallet.createSchnorrInitializerlessAccount(secret, salt, signingKey)).address,
+    ),
   );
 }
