@@ -5,7 +5,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
-import { retryFastUntil, retryUntil } from '@aztec-labs/foundation/retry';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ProvingJob, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
 import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
@@ -15,17 +15,9 @@ import { jest } from '@jest/globals';
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
 import { ChonkCache } from './chonk-cache.js';
-import {
-  type CheckpointTopTreeData,
-  type EpochProofRegistry,
-  TopTreeCancelledError,
-  TopTreeOrchestrator,
-} from './top-tree-orchestrator.js';
+import { type CheckpointTopTreeData, TopTreeCancelledError, TopTreeOrchestrator } from './top-tree-orchestrator.js';
 
 const logger = createLogger('prover-client:test:top-tree-orchestrator');
-
-/** What a checkpoint's sub-tree hands the top tree once its blocks are proven. */
-type SubTreeProofs = Awaited<CheckpointTopTreeData['subTreeProofs']>;
 
 /** A full tx-worth of L2-to-L1 messages, padded to the per-tx maximum. */
 const makeL2ToL1Messages = (count: number) =>
@@ -61,7 +53,7 @@ describe('prover/orchestrator/top-tree', () => {
    * Drives a checkpoint fixture through `CheckpointSubTreeOrchestrator`, feeding block `i` the message slice
    * `messagesPerBlock[i]`, and returns the assembled `CheckpointTopTreeData` plus the originating fixture.
    */
-  async function driveFixture(fixture: CheckpointFixture, messagesPerBlock: Fr[][]) {
+  async function driveFixture(fixture: CheckpointFixture, messagesPerBlock: Fr[][], prioritySlot?: SlotNumber) {
     const subTree = await CheckpointSubTreeOrchestrator.start(
       context.worldState,
       subTreeProver,
@@ -75,6 +67,9 @@ describe('prover/orchestrator/top-tree', () => {
       fixture.startInboxRollingHash,
       fixture.blocks.length,
       fixture.previousBlockHeader,
+      undefined,
+      undefined,
+      prioritySlot,
     );
     const resultPromise = subTree.getSubTreeResult();
 
@@ -169,138 +164,29 @@ describe('prover/orchestrator/top-tree', () => {
     });
     subTreeProver = context.brokerProverFacade;
 
+    // The first sub-tree is given no slot and uses the slot of its checkpoint. The second is given one.
     const a = await driveSubTree(2, 2);
-    const b = await driveSubTree(1, 1);
     const slotA = a.fixture.constants.slotNumber;
-    const slotB = b.fixture.constants.slotNumber;
+    const blockLevelJobsOfA = enqueued.length;
+    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([slotA]));
+
+    const givenSlot = SlotNumber(slotA + 40);
+    const fixtureB = await context.makeCheckpoint(1, { numTxsPerBlock: 1 });
+    const b = await driveFixture(fixtureB, [fixtureB.l1ToL2Messages], givenSlot);
     const blockLevelJobs = enqueued.length;
-    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([slotA, slotB]));
+    expect(new Set(enqueued.slice(blockLevelJobsOfA).map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
 
     const challenges = await context.getFinalBlobChallenges();
-    const registryCalls: unknown[][] = [];
-    const registry: EpochProofRegistry = {
-      registerEpochProof: (epochNumber, lastSlot, proofId) => {
-        registryCalls.push(['register', epochNumber, lastSlot, proofId, enqueued.length]);
-        return Promise.resolve();
-      },
-      unregisterEpochProof: proofId => {
-        registryCalls.push(['unregister', proofId]);
-        return Promise.resolve();
-      },
-    };
-    const topTree = new TopTreeOrchestrator(
-      context.brokerProverFacade,
-      EthAddress.ZERO,
-      makeTestDeferredJobQueue(),
-      undefined,
-      undefined,
-      registry,
-    );
+    const topTree = new TopTreeOrchestrator(context.brokerProverFacade, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      topTree.registerProof(EpochNumber(1), slotB);
-      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData]);
+      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], givenSlot);
     } finally {
       await topTree.stop();
     }
-    // The proof is registered under its last slot before any of its jobs is sent, and unregistered when it is done.
-    await retryFastUntil(() => registryCalls.length === 2, 'unregistered');
-    const proofId = registryCalls[0][3];
-    expect(registryCalls).toEqual([
-      ['register', EpochNumber(1), slotB, proofId, blockLevelJobs],
-      ['unregister', proofId],
-    ]);
-    // Both checkpoint roots carry the last slot of the proof, not the slot of their own checkpoint.
+    // Every job of the top tree carries the slot given to `prove`, not the slot of its own checkpoint.
     const topTreeJobs = enqueued.slice(blockLevelJobs);
     expect(topTreeJobs.length).toBeGreaterThan(0);
-    expect(new Set(topTreeJobs.map(job => job.prioritySlot))).toEqual(new Set([slotB]));
-  });
-
-  it('unregisters a proof that was registered and then cancelled before proving', async () => {
-    const unregistered = promiseWithResolvers<string>();
-    const registered: string[] = [];
-    const registry: EpochProofRegistry = {
-      registerEpochProof: (_epochNumber, _lastSlot, proofId) => {
-        registered.push(proofId);
-        return Promise.resolve();
-      },
-      unregisterEpochProof: proofId => {
-        unregistered.resolve(proofId);
-        return Promise.resolve();
-      },
-    };
-    const topTree = new TopTreeOrchestrator(
-      context.prover,
-      EthAddress.ZERO,
-      makeTestDeferredJobQueue(),
-      undefined,
-      undefined,
-      registry,
-    );
-
-    topTree.registerProof(EpochNumber(1), SlotNumber(7));
-    topTree.cancel({ abortJobs: true });
-
-    await expect(unregistered.promise).resolves.toEqual(registered[0]);
-    await topTree.stop();
-  });
-
-  it('can be cancelled while the broker has not answered the registration', async () => {
-    const { topTreeData } = await driveSubTree(1, 1);
-    const challenges = await context.getFinalBlobChallenges();
-    const registry: EpochProofRegistry = {
-      registerEpochProof: () => promiseWithResolvers<void>().promise,
-      unregisterEpochProof: () => Promise.resolve(),
-    };
-    const topTree = new TopTreeOrchestrator(
-      context.prover,
-      EthAddress.ZERO,
-      makeTestDeferredJobQueue(),
-      undefined,
-      undefined,
-      registry,
-    );
-
-    const pending = { ...topTreeData, subTreeProofs: promiseWithResolvers<SubTreeProofs>().promise };
-    topTree.registerProof(EpochNumber(1), SlotNumber(7));
-    const proving = topTree.prove(EpochNumber(1), 1, challenges, [pending]);
-    topTree.cancel({ abortJobs: true });
-
-    await expect(proving).rejects.toBeInstanceOf(TopTreeCancelledError);
-    await topTree.stop();
-  });
-
-  it('keeps the proof registered when a second prove call is rejected', async () => {
-    const { topTreeData } = await driveSubTree(1, 1);
-    const challenges = await context.getFinalBlobChallenges();
-    const unregistered: string[] = [];
-    const registry: EpochProofRegistry = {
-      registerEpochProof: () => Promise.resolve(),
-      unregisterEpochProof: proofId => {
-        unregistered.push(proofId);
-        return Promise.resolve();
-      },
-    };
-    const topTree = new TopTreeOrchestrator(
-      context.prover,
-      EthAddress.ZERO,
-      makeTestDeferredJobQueue(),
-      undefined,
-      undefined,
-      registry,
-    );
-
-    const subTreeProofs = promiseWithResolvers<SubTreeProofs>();
-    const pending = { ...topTreeData, subTreeProofs: subTreeProofs.promise };
-    topTree.registerProof(EpochNumber(1), SlotNumber(7));
-    const first = topTree.prove(EpochNumber(1), 1, challenges, [pending]);
-    await expect(topTree.prove(EpochNumber(1), 1, challenges, [pending])).rejects.toThrow(/prove called twice/);
-    await sleep(50);
-    expect(unregistered).toEqual([]);
-
-    subTreeProofs.resolve(await topTreeData.subTreeProofs);
-    await first;
-    await retryFastUntil(() => unregistered.length === 1, 'unregistered');
-    await topTree.stop();
+    expect(new Set(topTreeJobs.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
   });
 
   it('produces an epoch proof for a checkpoint carrying L1-to-L2 messages', async () => {

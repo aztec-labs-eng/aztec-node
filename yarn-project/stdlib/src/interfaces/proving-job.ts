@@ -352,13 +352,18 @@ type ProvingJobShape = {
   epochNumber: EpochNumber;
   inputsUri: ProofUri;
   /**
-   * The slot the job belongs to. A block-level job carries the slot of its block. A job of the top tree carries the
-   * slot of the last checkpoint its epoch proof covers. It is not part of the job id.
+   * The slot the broker orders the job by within its epoch. It is not part of the job id.
    *
-   * The broker uses it to hold back work an outstanding epoch proof does not need: while a proof that ends at slot
-   * `k` is registered with `ProvingJobProducer.registerEpochProof`, jobs of that epoch with a higher slot wait for
-   * the jobs at or below `k`. A job without a slot is never held back, and neither is a root rollup. Between jobs
-   * of the same proof type, the lower slot goes first.
+   * The broker hands out the jobs of a lower slot first and orders jobs of the same slot by proof type. A job
+   * without a slot goes ahead of the jobs of its epoch that have one.
+   *
+   * The producer chooses the slot so that a job carries the last slot of the earliest epoch proof that can need it:
+   *
+   * - A block-level job carries the slot of its block while the epoch is still running, because a partial proof
+   *   can end there.
+   * - A block-level job of an epoch that is already over carries the last slot of that epoch. Only proofs of the
+   *   whole epoch are expected then, so all its jobs share one slot and the proof type decides.
+   * - A job of the top tree carries the highest slot among the jobs of its proof's checkpoints.
    */
   prioritySlot?: SlotNumber;
 };

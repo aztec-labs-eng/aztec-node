@@ -156,6 +156,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
    */
   private blocksOnly = false;
 
+  /** The priority slot given to `start`, if any. */
+  private requestedPrioritySlot: SlotNumber | undefined;
+
   /** Resolved when a block's root proof is ready, keyed by block number. */
   private readonly blockRootProven = new Map<BlockNumber, PromiseWithResolvers<void>>();
 
@@ -163,9 +166,12 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     return this.metrics.tracer;
   }
 
-  /** Every job of the sub-tree is ordered at the broker by the slot of its checkpoint. */
+  /**
+   * The slot every job of the sub-tree carries, see `ProvingJob.prioritySlot`. It is the slot given to `start`, or
+   * the slot of the checkpoint when none was given.
+   */
   private get prioritySlot(): SlotNumber | undefined {
-    return this.provingState?.constants.slotNumber;
+    return this.requestedPrioritySlot ?? this.provingState?.constants.slotNumber;
   }
 
   public getProverId(): EthAddress {
@@ -205,6 +211,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
    *
    * If the internal start rejects, the partially-constructed sub-tree is stopped
    * before the error propagates, so no broker resources leak.
+   *
+   * @param prioritySlot - The slot the sub-tree's jobs carry, see `ProvingJob.prioritySlot`. Defaults to the slot
+   *   of the checkpoint.
    */
   public static async start(
     dbProvider: ReadonlyWorldStateAccess & ForkMerkleTreeOperations,
@@ -221,6 +230,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     headerOfLastBlockInPreviousCheckpoint: BlockHeader,
     telemetryClient: TelemetryClient = getTelemetryClient(),
     bindings?: LoggerBindings,
+    prioritySlot?: SlotNumber,
   ): Promise<CheckpointSubTreeOrchestrator> {
     const subTree = new CheckpointSubTreeOrchestrator(
       dbProvider,
@@ -233,6 +243,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       telemetryClient,
       bindings,
     );
+    subTree.requestedPrioritySlot = prioritySlot;
     try {
       await subTree.startCheckpoint(
         checkpointConstants,

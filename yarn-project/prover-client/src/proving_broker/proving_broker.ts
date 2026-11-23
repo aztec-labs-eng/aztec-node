@@ -1,5 +1,4 @@
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { compactArray } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { PriorityMemoryQueue } from '@aztec-labs/foundation/queue';
@@ -137,12 +136,6 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
   private epochHeight = 0;
   private maxEpochsToKeepResultsFor = 1;
 
-  /**
-   * The epoch proofs producers are working on, by proof id, see `registerEpochProof`. Kept in memory only, so a
-   * broker restart forgets the proofs in flight. Holds at most `MAX_OUTSTANDING_EPOCH_PROOFS`, oldest dropped first.
-   */
-  private outstandingProofs = new Map<string, OutstandingEpochProof>();
-
   private started = false;
 
   private debugReplayEnabled: boolean;
@@ -238,31 +231,6 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
 
   public cancelProvingJob(id: ProvingJobId): Promise<void> {
     return this.#cancelProvingJob(id);
-  }
-
-  /**
-   * Registers an epoch proof, see `ProvingJobProducer.registerEpochProof`. A proof of an epoch the broker no longer
-   * keeps is ignored. Registrations are kept in memory only, and the oldest is dropped beyond
-   * `MAX_OUTSTANDING_EPOCH_PROOFS`.
-   */
-  public registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
-    if (epochNumber < this.oldestEpochToKeep()) {
-      return Promise.resolve();
-    }
-    this.outstandingProofs.delete(proofId);
-    if (this.outstandingProofs.size >= MAX_OUTSTANDING_EPOCH_PROOFS) {
-      const [oldest] = this.outstandingProofs.keys();
-      this.outstandingProofs.delete(oldest);
-    }
-    this.outstandingProofs.set(proofId, { epochNumber, lastSlot });
-    this.logger.debug(`Registered epoch proof ${proofId}`, { epochNumber, lastSlot, proofId });
-    return Promise.resolve();
-  }
-
-  /** Forgets an epoch proof, see `ProvingJobProducer.unregisterEpochProof`. Unknown ids are ignored. */
-  public unregisterEpochProof(proofId: string): Promise<void> {
-    this.outstandingProofs.delete(proofId);
-    return Promise.resolve();
   }
 
   /** Lowers a job's slot, see `ProvingJobProducer.lowerProvingJobPrioritySlot`. Never creates or revives a job. */
@@ -594,7 +562,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     // behind the continuous arrival of new higher-priority-type jobs. The legacy L1-to-L2 tree got this ordering
     // for free (block roots waited on parity outputs); the streaming inbox parity only gates the checkpoint
     // root, so a purely type-major order would leave it unscheduled under sustained block production.
-    // `pickNextProvingJob` also holds back the work of slots after the last slot of a registered epoch proof.
+    // Within the oldest epoch `pickNextProvingJob` takes the lowest slot first, see there.
     //
     // The outer loop re-selects when the winner turns out to have no inputs: the losing candidates went back
     // onto their queues, while the claimed winner was popped and stays off, so it cannot be re-selected.
@@ -625,7 +593,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         }
       }
 
-      const selected = pickNextProvingJob(heads, this.outstandingProofs.values());
+      const selected = pickNextProvingJob(heads);
       for (const head of heads) {
         if (head !== selected) {
           this.queues[head.type].put(head.enqueuedJob);
@@ -900,12 +868,6 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       }
     }
 
-    for (const [proofId, proof] of this.outstandingProofs) {
-      if (proof.epochNumber < epochNumber) {
-        this.outstandingProofs.delete(proofId);
-      }
-    }
-
     if (jobsToClean.length > 0) {
       this.cleanUpProvingJobState(jobsToClean);
       this.logger.verbose(`Cleaned up proving jobs=${jobsToClean.length}`);
@@ -975,10 +937,13 @@ type ProvingQueues = {
 };
 
 /**
- * Orders the entries of one proof type's queue: the older epoch first, then the lower priority slot. A job without
- * a priority slot goes ahead of the jobs of its epoch that have one.
+ * Orders jobs by epoch and slot: the older epoch first, then the lower priority slot. A job without a priority slot
+ * goes ahead of the jobs of its epoch that have one. Each proof type's queue is kept in this order.
  */
-function provingJobComparator(a: EnqueuedProvingJob, b: EnqueuedProvingJob): -1 | 0 | 1 {
+function provingJobComparator(
+  a: Pick<ProvingJob, 'epochNumber' | 'prioritySlot'>,
+  b: Pick<ProvingJob, 'epochNumber' | 'prioritySlot'>,
+): -1 | 0 | 1 {
   if (a.epochNumber !== b.epochNumber) {
     return a.epochNumber < b.epochNumber ? -1 : 1;
   }
@@ -994,58 +959,20 @@ function isLowerSlot(slot: SlotNumber | undefined, than: SlotNumber | undefined)
 /** What the broker reads of a job to decide which one goes next. */
 export type SchedulableProvingJob = Pick<ProvingJob, 'type' | 'epochNumber' | 'prioritySlot'>;
 
-/** An epoch proof a producer is working on: its epoch and the slot of its last checkpoint. */
-export type OutstandingEpochProof = { epochNumber: EpochNumber; lastSlot: SlotNumber };
-
-/** How many registered epoch proofs the broker keeps. A prover node has a handful in flight per epoch. */
-const MAX_OUTSTANDING_EPOCH_PROOFS = 1024;
-
 /**
  * Picks the job an agent gets next.
  *
  * 1. Only the jobs of the oldest epoch among the candidates are considered.
- * 2. The cutoff is the lowest last slot of an outstanding epoch proof of that epoch that still has a candidate at
- *    or below it. Jobs with a priority slot above the cutoff are held back: they belong to a checkpoint that landed
- *    after that proof was requested, or to a proof that ends later. A proof with no candidate at or below its last
- *    slot sets no cutoff, so a proof that was abandoned without being unregistered holds nothing back once its
- *    slots are done. A job without a slot is never held back. Neither is a root rollup: it is the last job of a
- *    proof that covers every slot of the proofs that end before it.
+ * 2. Of those, only the jobs with the lowest priority slot. A job without a slot counts as lower than any slot.
  * 3. Among the jobs that are left, the proof type decides, in `PROOF_TYPES_IN_PRIORITY_ORDER`.
+ *
+ * The producer chooses the slot of each job, see `ProvingJob.prioritySlot`. Jobs that share a slot are ordered as
+ * they were before slots existed. A job with a higher slot waits for every job the agent accepts with a lower one.
  *
  * @param candidates - The first job of each queue the agent accepts.
  */
-export function pickNextProvingJob<T extends SchedulableProvingJob>(
-  candidates: T[],
-  outstandingProofs: Iterable<OutstandingEpochProof> = [],
-): T | undefined {
-  if (candidates.length === 0) {
-    return undefined;
-  }
-  const epoch = Math.min(...candidates.map(job => job.epochNumber));
-  const inEpoch = candidates.filter(job => job.epochNumber === epoch);
-
-  // A proof has a candidate at or below its last slot exactly when the lowest candidate slot is.
-  const slots = compactArray(inEpoch.map(job => job.prioritySlot));
-  let cutoff: SlotNumber | undefined;
-  if (slots.length > 0) {
-    const lowestSlot = Math.min(...slots);
-    for (const proof of outstandingProofs) {
-      if (
-        proof.epochNumber === epoch &&
-        proof.lastSlot >= lowestSlot &&
-        (cutoff === undefined || proof.lastSlot < cutoff)
-      ) {
-        cutoff = proof.lastSlot;
-      }
-    }
-  }
-
-  const isHeldBack = (job: T) =>
-    cutoff !== undefined &&
-    job.prioritySlot !== undefined &&
-    job.prioritySlot > cutoff &&
-    job.type !== ProvingRequestType.ROOT_ROLLUP;
-  return inEpoch.filter(job => !isHeldBack(job)).sort((a, b) => proofTypeComparator(a.type, b.type))[0];
+export function pickNextProvingJob<T extends SchedulableProvingJob>(candidates: T[]): T | undefined {
+  return [...candidates].sort((a, b) => provingJobComparator(a, b) || proofTypeComparator(a.type, b.type))[0];
 }
 
 /**
@@ -1088,7 +1015,8 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
  *   every one of them had an agent, and the newest checkpoint is the one the whole proof waits for.
  *
  * The second rule alone would also put the blocks of checkpoints that land after a partial proof was requested ahead
- * of that proof's checkpoint roots. `pickNextProvingJob` holds those blocks back.
+ * of that proof's checkpoint roots. `pickNextProvingJob` compares slots before proof types, and those blocks carry
+ * a higher slot than the proof's checkpoint roots.
  */
 export const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
   ProvingRequestType.ROOT_ROLLUP,

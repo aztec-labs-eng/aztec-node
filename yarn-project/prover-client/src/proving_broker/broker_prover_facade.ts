@@ -219,26 +219,6 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
     return job.deferred.promise as Promise<ProvingJobResultsMap[T]>;
   }
 
-  /**
-   * Registers an epoch proof with the broker, see `ProvingJobProducer.registerEpochProof`. A broker that cannot
-   * take the registration still proves the jobs, in its own order, so a failure is only logged.
-   */
-  public async registerEpochProof(epochNumber: EpochNumber, lastSlot: SlotNumber, proofId: string): Promise<void> {
-    try {
-      await this.broker.registerEpochProof(epochNumber, lastSlot, proofId);
-    } catch (err) {
-      this.log.warn(`Could not register epoch proof ${proofId} with the broker`, { epochNumber, lastSlot, err });
-    }
-  }
-
-  public async unregisterEpochProof(proofId: string): Promise<void> {
-    try {
-      await this.broker.unregisterEpochProof(proofId);
-    } catch (err) {
-      this.log.warn(`Could not unregister epoch proof ${proofId} from the broker`, { proofId, err });
-    }
-  }
-
   private async lowerPrioritySlot(job: ProvingJob, prioritySlot: SlotNumber): Promise<void> {
     try {
       // The broker ignores a slot for a job it does not have yet.
