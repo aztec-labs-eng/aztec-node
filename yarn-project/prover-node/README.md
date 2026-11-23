@@ -448,6 +448,7 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 | Block-level job of a block proven before its checkpoint lands | The block's own slot |
 | Block-level job of a checkpoint registered after its epoch is complete | The last slot of the epoch |
 | Top-tree job | The highest slot that the block-level jobs of its proof's checkpoints carry |
+| Inbox parity proof of a checkpoint without L1-to-L2 messages | None |
 
 - A partial epoch proof can end at any checkpoint of a running epoch. With the own slot, the blocks of later
   checkpoints wait for the jobs of that proof.
@@ -457,10 +458,15 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
   Under own slots the chonk verifier and inbox parity proofs of early checkpoints would run before the AVM proofs
   of later ones. In a simulation of an epoch with expensive public transactions and 1000 agents this delayed the
   last AVM proof by 137 s and the epoch proof by 12%.
-- A top-tree job never has a lower slot than a block-level job its proof waits for, so the broker does not hand
-  out checkpoint roots ahead of that job.
+- The slot of a top-tree job is not lower than the slot the node gives any block-level job its proof waits for,
+  so the broker does not hand out checkpoint roots ahead of that job.
+- Consecutive checkpoints without messages have the same inbox parity inputs and share one proof. Any of them can
+  be the first to request it, because each checkpoint gathers its transactions before it starts proving. The proof
+  therefore carries no slot, and the broker hands it out before the slotted jobs of its epoch.
 
-The broker keeps the slot with the job in its database, so a job has the same slot after a broker restart.
+The broker keeps the slot with the job in its database, so a job has the same slot after a broker restart. A job
+requested again under another slot keeps the slot it has, unless it was cancelled in between: then it takes the
+slot of the request that brings it back.
 
 The slot of a checkpoint's jobs is fixed when the checkpoint is registered. If the archiver cannot say whether the
 epoch is complete, the checkpoint gets its own slot and a warning is logged. Its jobs then go ahead of the jobs of
@@ -506,6 +512,3 @@ that epoch's checkpoints that carry the last slot.
   before block-level work of the same proof, or an old job before a new one that ranks higher by proof type.
 - A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
   same epoch keeps the slot it was first requested for.
-- A job that two slots share keeps the slot of its first request: the inbox parity proof of an empty inbox, and
-  checkpoint padding. If a later slot requests it first, an earlier slot that needs it waits behind the jobs of
-  the slots in between. Checkpoints are registered in order, so the first request normally has the lowest slot.
