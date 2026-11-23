@@ -23,10 +23,8 @@ function setup_environment {
     jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
     echo "GCP key stored"
   fi
-  # Log SSM mode settings (defaults are baked into aws_request_instance_type).
-  if [ "${CI_USE_SSH:-0}" -eq 0 ]; then
-    echo "SSM mode: instance profile ${CI3_INSTANCE_PROFILE_NAME:-ci3-build-instance-profile}, SG ${CI3_SECURITY_GROUP_ID:-sg-01fe61a1c1aaeb393}"
-  fi
+  # Defaults are baked into aws_request_instance_type.
+  echo "Build instance: profile ${CI3_INSTANCE_PROFILE_NAME:-ci3-build-instance-profile}, SG ${CI3_SECURITY_GROUP_ID:-sg-01fe61a1c1aaeb393}"
 }
 
 function check_cache {

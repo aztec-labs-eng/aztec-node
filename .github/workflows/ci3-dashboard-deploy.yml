@@ -2,24 +2,26 @@ name: CI3 Dashboard Deploy
 
 on:
   # Dashboard push is currently manual.
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - "ci3/dashboard/**"
-  #     - ".github/workflows/ci3-dashboard-deploy.yml"
   workflow_dispatch:
+    inputs:
+      commit:
+        description: "aztec-labs-eng/ci3 branch or commit to deploy (default: main)"
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # BUILD_INSTANCE_SSH_KEY lives only in this environment, not as a repo-wide secret,
-    # so it is exposed solely to this approved deploy. release-approval gates the run on
-    # reviewer sign-off and restricts it to main.
+    # The deploy role runs a script as root on the dashboard host over SSM. It trusts only
+    # this environment, which gates the run on reviewer sign-off and restricts it to main.
     environment: release-approval
     steps:
       - name: Checkout
@@ -28,14 +30,14 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::278380418400:role/gha-aztec-labs-eng-aztec-node-ci3-dashboard-deploy
+          aws-region: us-east-2
+          role-session-name: ci3-dashboard-deploy-${{ github.run_id }}
+
       - name: Deploy ci3 dashboard
         env:
-          BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
-        run: |
-          set -eu
-          mkdir -p ~/.ssh
-          echo "${BUILD_INSTANCE_SSH_KEY}" | base64 --decode > ~/.ssh/build_instance_key
-          chmod 600 ~/.ssh/build_instance_key
-          ssh-keyscan -H ci.aztec-labs.com >> ~/.ssh/known_hosts 2>/dev/null
-
-          ./ci3/dashboard/deploy.sh
+          COMMIT: ${{ inputs.commit }}
+        run: ./ci3/dashboard/deploy.sh "$COMMIT"
