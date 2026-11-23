@@ -664,6 +664,17 @@ describe.each([
         expect(await nextJobIds(3)).toEqual([other, revived, undefined]);
       });
 
+      it('hands out a job once, under its first slot, when it is requested again while it is being saved', async () => {
+        const id = makeRandomProvingJobId();
+        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
+        const again = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const beforeSaved = await nextJobId();
+        await Promise.all([saving, again]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect([beforeSaved, ...(await nextJobIds(3))]).toEqual([undefined, other, id, undefined]);
+      });
+
       it('keeps the slot and the inputs a job was first saved with after a restart', async () => {
         const id = makeRandomProvingJobId();
         const job = { id, type: ProvingRequestType.INBOX_PARITY, epochNumber: epoch, inputsUri: makeInputsUri() };
