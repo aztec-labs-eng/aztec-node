@@ -249,6 +249,8 @@ describe('CheckpointProver', () => {
     // Holds the sub-tree's creation until the prover is cancelled, so the test reads what the prover asked for and no
     // block runs.
     const requestedPrioritySlot = async (args: Partial<CheckpointProverArgs>) => {
+      // No transactions, so the provider's empty answer is a complete one.
+      checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, txsPerBlock: 0 });
       txProvider.getTxsForBlock.mockReset();
       txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
       const requested = promiseWithResolvers<SlotNumber | undefined>();
@@ -270,7 +272,7 @@ describe('CheckpointProver', () => {
     };
 
     it('starts its sub-tree with the slot it was given', async () => {
-      const given = SlotNumber(checkpoint.header.slotNumber + 7);
+      const given = SlotNumber(1000);
       expect(await requestedPrioritySlot({ prioritySlot: given })).toEqual(given);
     });
 
