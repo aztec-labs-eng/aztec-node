@@ -451,8 +451,9 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 
 - A partial epoch proof can end at any checkpoint of a running epoch. With the own slot, the blocks of later
   checkpoints wait for the jobs of that proof.
-- `CheckpointStore.addOrUpdate` asks the archiver whether the epoch is complete. A complete epoch is proven as a
-  whole, so all its jobs share one slot and the broker orders them by proof type, as it did before jobs had slots.
+- `CheckpointStore.addOrUpdate` asks the archiver whether the epoch is complete. Checkpoints registered after that
+  belong to an epoch that is proven as a whole, so their jobs share one slot and the broker orders them by proof
+  type, as it did before jobs had slots.
   Under own slots the chonk verifier and inbox parity proofs of early checkpoints would run before the AVM proofs
   of later ones. In a simulation of an epoch with expensive public transactions and 1000 agents this delayed the
   last AVM proof by 137 s and the epoch proof by 12%.
@@ -462,7 +463,8 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 The broker keeps the slot with the job in its database, so a job has the same slot after a broker restart.
 
 The slot of a checkpoint's jobs is fixed when the checkpoint is registered. If the archiver cannot say whether the
-epoch is complete, the checkpoint gets its own slot and a warning is logged.
+epoch is complete, the checkpoint gets its own slot and a warning is logged. Its jobs then go ahead of the jobs of
+that epoch's checkpoints that carry the last slot.
 
 ## Known limitations
 
@@ -494,6 +496,10 @@ epoch is complete, the checkpoint gets its own slot and a warning is logged.
   block-level jobs carry the last slot of the epoch, like those of every other checkpoint of that epoch.
 - A checkpoint registered just before its epoch completes keeps its own slot, and its jobs go ahead of those of
   checkpoints registered after.
+- The jobs of a pruned checkpoint, and of a pruned block that was proven early, stay with the broker. They keep
+  their slot, so the broker hands them out before every job of a later slot in the epoch, including the jobs of
+  the checkpoint that replaces them, until they are proven. Before jobs had slots they only went ahead of jobs of
+  their own proof type.
 - The broker keeps the slot a job was first requested under. A prover node that restarts after an epoch has ended
   registers that epoch's checkpoints again, now under the epoch's last slot, while the jobs it requested before the
   restart keep their own slots at the broker. Until those are done, the broker can hand out a checkpoint root
