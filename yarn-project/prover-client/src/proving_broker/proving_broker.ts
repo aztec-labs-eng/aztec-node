@@ -557,12 +557,13 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         ? [...filter.allowList]
         : Object.values(ProvingRequestType).filter((x): x is ProvingRequestType => typeof x === 'number');
 
-    // Select the oldest-epoch job across the allowed queues, tie-breaking by proof-type priority: an epoch's
-    // remaining jobs always outrank younger epochs' work, so the oldest epoch completes instead of starving
-    // behind the continuous arrival of new higher-priority-type jobs. The legacy L1-to-L2 tree got this ordering
-    // for free (block roots waited on parity outputs); the streaming inbox parity only gates the checkpoint
-    // root, so a purely type-major order would leave it unscheduled under sustained block production.
-    // Within the oldest epoch `pickNextProvingJob` takes the lowest slot first, see there.
+    // Select the oldest-epoch job across the allowed queues. An epoch's remaining jobs always outrank younger
+    // epochs' work, so the oldest epoch completes instead of starving behind the continuous arrival of new
+    // higher-priority-type jobs. The legacy L1-to-L2 tree got this ordering for free (block roots waited on parity
+    // outputs); the streaming inbox parity only gates the checkpoint root, so a purely type-major order would
+    // leave it unscheduled under sustained block production.
+    // Within the oldest epoch `pickNextProvingJob` takes the lowest slot first, and the proof-type priority
+    // decides between jobs of the same slot.
     //
     // The outer loop re-selects when the winner turns out to have no inputs: the losing candidates went back
     // onto their queues, while the claimed winner was popped and stays off, so it cannot be re-selected.
@@ -1003,7 +1004,8 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
 }
 
 /**
- * Relative priority of each proof type within one epoch. Proofs higher up on the list are picked first.
+ * Relative priority of each proof type among jobs of one epoch and one slot. Proofs higher up on the list are
+ * picked first.
  *
  * The order follows two rules:
  *

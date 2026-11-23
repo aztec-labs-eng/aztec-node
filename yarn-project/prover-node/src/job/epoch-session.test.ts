@@ -128,11 +128,12 @@ describe('EpochSession', () => {
         numBlocks: 1,
         slotNumber: SlotNumber(cp.header.slotNumber + 1),
       });
-      // The first checkpoint was registered while the epoch was running and orders its jobs by its own slot. The
-      // second was registered after the epoch ended, with empty slots behind it, and orders them by the last slot.
+      // Both checkpoints were registered after the epoch ended. The first orders its jobs by the epoch's last slot.
+      // The read of whether the epoch is complete failed for the second, which fell back to its own slot. The
+      // session is a partial one that ends at the second checkpoint.
       const epochLastSlot = SlotNumber(lastCp.header.slotNumber + 3);
-      const provers = [makeStubProver(cp), makeStubProver(lastCp, { prioritySlot: epochLastSlot })];
-      const spec = { ...makeSpec(), toSlot: epochLastSlot };
+      const provers = [makeStubProver(cp, { prioritySlot: epochLastSlot }), makeStubProver(lastCp)];
+      const spec: SessionSpec = { ...makeSpec(), kind: 'partial', toSlot: lastCp.header.slotNumber };
       const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
       await new TestEpochSession(spec, provers, deps).start();
 
