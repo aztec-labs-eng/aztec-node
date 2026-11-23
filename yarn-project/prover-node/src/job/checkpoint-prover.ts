@@ -63,6 +63,11 @@ export type CheckpointProverArgs = {
   checkpoint: Checkpoint;
   /** Epoch the checkpoint belongs to (derivable from slot + L1 constants; cached at register time). */
   epochNumber: EpochNumber;
+  /**
+   * The slot the broker orders the checkpoint's block-level jobs by, see `ProvingJob.prioritySlot`. Defaults to the
+   * slot of the checkpoint.
+   */
+  prioritySlot?: SlotNumber;
   /** The packed attestations tuple exactly as posted to L1; what an epoch proof submission has to reproduce. */
   verbatimAttestations: ViemCommitteeAttestations;
   previousBlockHeader: BlockHeader;
@@ -98,6 +103,8 @@ export class CheckpointProver {
   readonly checkpoint: Checkpoint;
   readonly epochNumber: EpochNumber;
   readonly slotNumber: SlotNumber;
+  /** The slot the broker orders this checkpoint's block-level jobs by. */
+  readonly prioritySlot: SlotNumber;
   readonly verbatimAttestations: ViemCommitteeAttestations;
   readonly previousBlockHeader: BlockHeader;
   readonly l1ToL2Messages: Fr[];
@@ -136,6 +143,7 @@ export class CheckpointProver {
     this.checkpoint = args.checkpoint;
     this.epochNumber = args.epochNumber;
     this.slotNumber = args.checkpoint.header.slotNumber;
+    this.prioritySlot = args.prioritySlot ?? this.slotNumber;
     this.verbatimAttestations = args.verbatimAttestations;
     this.previousBlockHeader = args.previousBlockHeader;
     this.l1ToL2Messages = args.l1ToL2Messages;
@@ -149,6 +157,7 @@ export class CheckpointProver {
       checkpointNumber: this.checkpoint.number,
       epochNumber: this.epochNumber,
       slotNumber: this.slotNumber,
+      prioritySlot: this.prioritySlot,
       blockCount: this.checkpoint.blocks.length,
       l1ToL2MessageCount: this.l1ToL2Messages.length,
       archiveRoot: this.checkpoint.archive.root.toString(),
@@ -337,6 +346,7 @@ export class CheckpointProver {
         this.previousInboxRollingHash,
         this.checkpoint.blocks.length,
         this.previousBlockHeader,
+        this.prioritySlot,
       );
       subTreeStarted = true;
       // Bridge the sub-tree's result onto subTreeProofs.

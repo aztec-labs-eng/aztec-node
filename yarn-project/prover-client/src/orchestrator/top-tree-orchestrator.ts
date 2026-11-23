@@ -18,11 +18,7 @@ import type { SerialQueue } from '@aztec-labs/foundation/queue';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { MerkleTreeCalculator, type TreeNodeLocation, shaMerkleHash } from '@aztec-labs/foundation/trees';
 import type { EthAddress } from '@aztec-labs/stdlib/block';
-import type {
-  ProvingJobProducer,
-  PublicInputsAndRecursiveProof,
-  ServerCircuitProver,
-} from '@aztec-labs/stdlib/interfaces/server';
+import type { PublicInputsAndRecursiveProof, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
 import { computeCheckpointOutHash } from '@aztec-labs/stdlib/messaging';
 import type { ParityPublicInputs } from '@aztec-labs/stdlib/parity';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
@@ -36,7 +32,6 @@ import {
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
-import { randomUUID } from 'node:crypto';
 
 import { buildBlobHints, toProofData } from './block-building-helpers.js';
 import type { CheckpointSubTreeProofs } from './checkpoint-sub-tree-orchestrator.js';
@@ -60,9 +55,6 @@ export type CheckpointTopTreeData = {
   /** Sibling path of the archive tree before any block in this checkpoint landed. */
   previousArchiveSiblingPath: Tuple<Fr, typeof ARCHIVE_HEIGHT>;
 };
-
-/** Where the top tree registers its epoch proof while it runs, in practice the proving broker. */
-export type EpochProofRegistry = Pick<ProvingJobProducer, 'registerEpochProof' | 'unregisterEpochProof'>;
 
 /** Result of proving the top tree. */
 export type TopTreeResult = {
@@ -100,8 +92,6 @@ export class TopTreeOrchestrator extends ProvingScheduler {
   private state: TopTreeProvingState | undefined;
   private cancelled = false;
   private prioritySlot: SlotNumber | undefined;
-  private registration: { proofId: string; registered: Promise<void> } | undefined;
-  private proveCalled = false;
 
   constructor(
     protected readonly prover: ServerCircuitProver,
@@ -109,7 +99,6 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     deferredJobQueue: SerialQueue,
     _telemetryClient: TelemetryClient = getTelemetryClient(),
     bindings?: LoggerBindings,
-    private readonly proofRegistry?: EpochProofRegistry,
   ) {
     super(deferredJobQueue, 'prover-client:top-tree-orchestrator', bindings);
   }
@@ -122,83 +111,24 @@ export class TopTreeOrchestrator extends ProvingScheduler {
    * Proves the top tree from per-checkpoint data and pending block-proofs promises.
    * Resolves with the final epoch proof, or rejects with `TopTreeCancelledError` if
    * `cancel()` is invoked, or any other error if a circuit fails.
-   * Call `registerProof` first to have the broker order the top tree's jobs by the proof's last slot.
+   * @param prioritySlot - The slot every job of the top tree carries, see `ProvingJob.prioritySlot`. It must not
+   *   be lower than the slot of any block-level job the proof waits for, or the broker hands out the checkpoint
+   *   roots ahead of that job.
    */
   public async prove(
     epochNumber: EpochNumber,
     totalNumCheckpoints: number,
     finalBlobBatchingChallenges: FinalBlobBatchingChallenges,
     checkpointData: CheckpointTopTreeData[],
-  ): Promise<TopTreeResult> {
-    if (this.proveCalled) {
-      throw new Error('TopTreeOrchestrator.prove called twice; construct a new orchestrator per epoch.');
-    }
-    this.proveCalled = true;
-    try {
-      return await this.proveTopTree(epochNumber, totalNumCheckpoints, finalBlobBatchingChallenges, checkpointData);
-    } finally {
-      this.unregisterProof();
-    }
-  }
-
-  /**
-   * Sets the slot the top tree's jobs carry, and registers the epoch proof with the broker, which then holds back
-   * the work of slots after `lastSlot`. Call it before `prove`, as early as the last slot is known, so the broker
-   * knows of the proof while the caller prepares the inputs. A call after `prove` has started does nothing. The
-   * proof is unregistered when `prove` ends or the orchestrator is cancelled.
-   *
-   * Does not wait for the broker: the request is sent before any job of the top tree, and a broker that is slow to
-   * answer must not delay the proof or its cancellation. Block-level jobs of the proof's checkpoints may already be
-   * with the broker; the order changes once the broker has processed the registration.
-   */
-  public registerProof(epochNumber: EpochNumber, lastSlot: SlotNumber): void {
-    if (this.registration || this.cancelled || this.proveCalled) {
-      return;
-    }
-    this.prioritySlot = lastSlot;
-    if (!this.proofRegistry) {
-      return;
-    }
-    const proofId = randomUUID();
-    const registered = this.proofRegistry
-      .registerEpochProof(epochNumber, lastSlot, proofId)
-      .catch(err =>
-        this.logger.warn(`Could not register epoch proof ${proofId}`, { proofId, epochNumber, lastSlot, err }),
-      );
-    this.registration = { proofId, registered };
-  }
-
-  /**
-   * Not awaited: the proof is done or given up at this point, and its caller must not wait for the broker. The
-   * call is sent after the registration, so the two cannot reach the broker in the wrong order.
-   */
-  private unregisterProof(): void {
-    const registration = this.registration;
-    if (!registration || !this.proofRegistry) {
-      return;
-    }
-    this.registration = undefined;
-    const registry = this.proofRegistry;
-    void registration.registered
-      .then(() => registry.unregisterEpochProof(registration.proofId))
-      .catch(err =>
-        this.logger.warn(`Could not unregister epoch proof ${registration.proofId}`, {
-          proofId: registration.proofId,
-          err,
-        }),
-      );
-  }
-
-  private async proveTopTree(
-    epochNumber: EpochNumber,
-    totalNumCheckpoints: number,
-    finalBlobBatchingChallenges: FinalBlobBatchingChallenges,
-    checkpointData: CheckpointTopTreeData[],
+    prioritySlot?: SlotNumber,
   ): Promise<TopTreeResult> {
     if (checkpointData.length !== totalNumCheckpoints) {
       throw new Error(
         `checkpointData length (${checkpointData.length}) does not match totalNumCheckpoints (${totalNumCheckpoints}).`,
       );
+    }
+    if (this.state) {
+      throw new Error('TopTreeOrchestrator.prove called twice; construct a new orchestrator per epoch.');
     }
     // If cancel() was already called before prove() ran (e.g. a removeCheckpoint that
     // landed while the caller was still preparing inputs), short-circuit the whole
@@ -208,6 +138,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     if (this.cancelled) {
       throw new TopTreeCancelledError();
     }
+    this.prioritySlot = prioritySlot;
 
     const { promise: completionPromise, resolve, reject } = promiseWithResolvers<void>();
     // The completion promise is awaited below. Attach a no-op catch here as well so any
@@ -285,7 +216,6 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     this.cancelled = true;
     this.resetSchedulerState(abortJobs);
     this.state?.cancel();
-    this.unregisterProof();
   }
 
   /** Standard shutdown — preserve the broker queue (`abortJobs: false`). */

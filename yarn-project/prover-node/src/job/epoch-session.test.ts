@@ -121,19 +121,20 @@ describe('EpochSession', () => {
       await expect(session.whenDone()).resolves.toBe('completed');
     });
 
-    it('registers the top tree under the slot of the last checkpoint', async () => {
+    it('gives the top tree the highest slot its checkpoints order their jobs by', async () => {
       publishingService.submit.mockResolvedValue('published');
       topTree.prove.mockResolvedValue(synthProof);
       const lastCp = await Checkpoint.random(CheckpointNumber(2), {
         numBlocks: 1,
         slotNumber: SlotNumber(cp.header.slotNumber + 1),
       });
-      // The session's range ends after its last checkpoint, as it does when an epoch ends with empty slots.
-      const spec = { ...makeSpec(), toSlot: SlotNumber(lastCp.header.slotNumber + 3) };
+      // The first checkpoint was registered after its epoch ended and orders its jobs by the epoch's last slot.
+      const epochLastSlot = SlotNumber(lastCp.header.slotNumber + 3);
+      const provers = [makeStubProver(cp, { prioritySlot: epochLastSlot }), makeStubProver(lastCp)];
       const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
-      await new TestEpochSession(spec, [stubProver, makeStubProver(lastCp)], deps).start();
+      await new TestEpochSession(makeSpec(), provers, deps).start();
 
-      expect(topTree.registerProof).toHaveBeenCalledWith(spec.epochNumber, lastCp.header.slotNumber);
+      expect(topTree.prove.mock.calls.map(call => call[4])).toEqual([epochLastSlot]);
     });
 
     it('submits a candidate whose id, kind, range, and checkpoint bounds come from the session', async () => {
@@ -580,7 +581,7 @@ class TestEpochSession extends EpochSession {
  */
 function makeStubProver(
   checkpoint: Checkpoint,
-  opts: { subTreeProofsError?: Error; isFailed?: boolean; isCancelled?: boolean } = {},
+  opts: { subTreeProofsError?: Error; isFailed?: boolean; isCancelled?: boolean; prioritySlot?: SlotNumber } = {},
 ): CheckpointProver {
   const id = CheckpointProver.idFor(checkpoint);
   // By default whenSubTreeProofsReady never resolves in these tests; the prove override
@@ -596,6 +597,7 @@ function makeStubProver(
     checkpoint,
     epochNumber: EpochNumber(5),
     slotNumber: checkpoint.header.slotNumber,
+    prioritySlot: opts.prioritySlot ?? checkpoint.header.slotNumber,
     previousBlockHeader: BlockHeader.empty(),
     l1ToL2Messages: [],
     previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),

@@ -4,11 +4,7 @@ import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
-import {
-  type OutstandingEpochProof,
-  PROOF_TYPES_IN_PRIORITY_ORDER,
-  pickNextProvingJob,
-} from '../proving_broker/proving_broker.js';
+import { PROOF_TYPES_IN_PRIORITY_ORDER, pickNextProvingJob } from '../proving_broker/proving_broker.js';
 
 // Job represents a proving task with its hierarchical context
 type Job = {
@@ -59,6 +55,12 @@ type TestConfig = {
   requestedCheckpoints?: number;
   /** When each checkpoint lands, by checkpoint index. A checkpoint with no entry is there from the start. */
   arrivalMs?: number[];
+  /**
+   * Whether the epoch was already over when the prover node started on its checkpoints, as when a node catches up.
+   * Every job then carries the epoch's last slot. Otherwise a block-level job carries the slot of its checkpoint
+   * and a top-tree job the slot of the last checkpoint its proof covers.
+   */
+  epochComplete?: boolean;
   /**
    * How long after a proof finishes its dependent jobs are enqueued. The agent that finished takes its next job at
    * once, and the producer only learns of the result when it next polls the broker. Defaults to 0.
@@ -708,7 +710,6 @@ function assignWork(
   start: number,
   availableWorkers: number,
   prioritySlotOf: (job: Job) => SlotNumber,
-  outstandingProofs: () => OutstandingEpochProof[],
 ): void {
   const schedulable = (job: Job) => ({
     job,
@@ -722,7 +723,7 @@ function assignWork(
       const lowestSlot = Math.min(...queue.map(job => job.prioritySlot));
       return queue.filter(job => job.prioritySlot === lowestSlot).slice(0, 1);
     });
-    const selected = pickNextProvingJob(heads, outstandingProofs());
+    const selected = pickNextProvingJob(heads);
     if (!selected) {
       break;
     }
@@ -774,11 +775,13 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const workerPool: Worker[] = [];
   const completed: Completion[] = [];
 
-  // A block-level job carries its own checkpoint, a top-tree job the last checkpoint the proof covers.
-  const prioritySlotOf = (job: Job) => SlotNumber(TOP_TREE_TYPES.includes(job.type) ? requested : job.checkpoint);
-  // The producer registers the epoch proof when it starts on it and unregisters it when the root rollup is proven.
-  const outstandingProofs = () =>
-    state.rootRollupComplete ? [] : [{ epochNumber: EpochNumber(1), lastSlot: SlotNumber(requested) }];
+  // The slot the producer sends with each job, see `TestConfig.epochComplete`. Checkpoint `n` is in slot `n`.
+  const prioritySlotOf = (job: Job) => {
+    if (config.epochComplete) {
+      return SlotNumber(checkpoints.length);
+    }
+    return SlotNumber(TOP_TREE_TYPES.includes(job.type) ? requested : job.checkpoint);
+  };
 
   // Jobs enter the queues at these times: when a checkpoint lands, and when the producer learns that a proof
   // finished and enqueues the jobs that depend on it.
@@ -803,7 +806,7 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
   const workerActivity: WorkerActivityPoint[] = [];
 
   // Initial assignment
-  assignWork(queues, workerPool, time, workerCount, prioritySlotOf, outstandingProofs);
+  assignWork(queues, workerPool, time, workerCount, prioritySlotOf);
 
   // Record initial worker activity
   workerActivity.push({
@@ -839,7 +842,7 @@ function runSimulationWithConfig(config: TestConfig): SimulationResult {
     enqueueArrivalsUpTo(time);
 
     // Assign available workers to new jobs
-    assignWork(queues, workerPool, time, workerCount, prioritySlotOf, outstandingProofs);
+    assignWork(queues, workerPool, time, workerCount, prioritySlotOf);
 
     // Record worker activity at this time step
     workerActivity.push({
@@ -972,8 +975,9 @@ const testConfigs: TestConfig[] = [
 describe('epoch proving simulation', () => {
   const allResults: SimulationResult[] = [];
 
+  // Every checkpoint is queued at the start, which is what a node catching up on a finished epoch does.
   it.each(testConfigs)('$name', config => {
-    const result = runSimulationWithConfig(config);
+    const result = runSimulationWithConfig({ ...config, epochComplete: true });
     allResults.push(result);
 
     //console.log(`=== ${config.name} ===`);
@@ -982,6 +986,16 @@ describe('epoch proving simulation', () => {
 
     expect(result.results.jobBreakdown['ROOT_ROLLUP']).toBe(1);
     expect(result.results.totalTimeMs).toBeLessThan(30 * 72 * 1000); // targeting root rollup in less than 30 slots
+  });
+
+  // Ordered by their own slots, the short jobs of early checkpoints go ahead of the long AVM proofs of later ones,
+  // and the epoch proof waits for those.
+  it('proves an epoch queued at once sooner under one shared slot than under each checkpoint slot', () => {
+    const config = testConfigs.find(c => c.name === 'alpha 1tps expensive public txs 1000 workers, with messages')!;
+    const sharedSlot = runSimulationWithConfig({ ...config, epochComplete: true }).results.totalTimeMs;
+    const ownSlots = runSimulationWithConfig(config).results.totalTimeMs;
+
+    expect(sharedSlot).toBeLessThan(ownSlots);
   });
 });
 
@@ -1113,7 +1127,7 @@ describe('partial epoch proof requested mid-epoch', () => {
   });
 
   // The proof covers one checkpoint, the first of its epoch, so no checkpoint root exists until its blocks are
-  // proven. The registration of the proof is what keeps the second checkpoint behind it.
+  // proven. The lower slot of its block-level jobs is what keeps the second checkpoint behind it.
   it('keeps the next checkpoint behind a proof of the first checkpoint of an epoch', () => {
     const avmMs = 150_000;
     const slowCheckpoint: Checkpoint = [[8, [8, avmMs]]];

@@ -1,5 +1,5 @@
 import { type ACVMConfig, type BBConfig, BBNativeRollupProver, TestCircuitProver } from '@aztec-labs/bb-prover';
-import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -50,6 +50,8 @@ export interface EpochProverFactory {
    * Constructs and starts a `CheckpointSubTreeOrchestrator` for a single checkpoint
    * against the supplied shared `chonkCache`. The cache is owned by the prover-node
    * and survives across epochs / sessions.
+   * @param prioritySlot - The slot the sub-tree's jobs carry, see `ProvingJob.prioritySlot`. Defaults to the slot
+   *   of the checkpoint.
    */
   createCheckpointSubTreeOrchestrator(
     chonkCache: ChonkCache,
@@ -59,6 +61,7 @@ export interface EpochProverFactory {
     startInboxRollingHash: Fr,
     totalNumBlocks: number,
     headerOfLastBlockInPreviousCheckpoint: BlockHeader,
+    prioritySlot?: SlotNumber,
   ): Promise<CheckpointSubTreeOrchestrator>;
   /**
    * Constructs and starts a blocks-only `CheckpointSubTreeOrchestrator`, which proves the blocks of a checkpoint
@@ -148,6 +151,7 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
     startInboxRollingHash: Fr,
     totalNumBlocks: number,
     headerOfLastBlockInPreviousCheckpoint: BlockHeader,
+    prioritySlot?: SlotNumber,
   ): Promise<CheckpointSubTreeOrchestrator> {
     return CheckpointSubTreeOrchestrator.start(
       this.worldState,
@@ -164,6 +168,7 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
       headerOfLastBlockInPreviousCheckpoint,
       this.telemetry,
       this.log.getBindings(),
+      prioritySlot,
     );
   }
 
@@ -188,14 +193,12 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
   }
 
   public createTopTreeOrchestrator(): TopTreeOrchestrator {
-    const facade = this.getFacade();
     return new TopTreeOrchestrator(
-      facade,
+      this.getFacade(),
       this.config.proverId,
       this.getDeferredJobQueue(),
       this.telemetry,
       this.log.getBindings(),
-      facade,
     );
   }
 

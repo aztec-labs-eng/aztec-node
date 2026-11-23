@@ -437,6 +437,30 @@ does not reach L1 and cannot fail, so a copy would add state without removing a 
 memoized copy before it was split. `SessionManager` keeps one because it computes a session's deadline in a
 synchronous method.
 
+### Each proving job carries a slot
+
+The broker hands out the jobs of the oldest epoch first, then the jobs of the lowest slot, then by proof type. The
+node chooses the slot of each job so that it is the last slot of the earliest epoch proof that can need the job:
+
+| Job | Slot it carries |
+| --- | --- |
+| Block-level job of a checkpoint registered while its epoch is running | The checkpoint's own slot |
+| Block-level job of a block proven before its checkpoint lands | The block's own slot |
+| Block-level job of a checkpoint registered after its epoch is complete | The last slot of the epoch |
+| Top-tree job | The highest slot among the checkpoints of its proof |
+
+- A partial epoch proof can end at any checkpoint of a running epoch. With the own slot, the blocks of later
+  checkpoints wait for the jobs of that proof.
+- `CheckpointStore.addOrUpdate` asks the archiver whether the epoch is complete. A complete epoch is proven as a
+  whole, so all its jobs share one slot and the broker orders them by proof type, as it did before jobs had slots.
+  Under own slots the chonk verifier and inbox parity proofs of early checkpoints would run before the AVM proofs
+  of later ones. In a simulation of an epoch with expensive public transactions and 1000 agents this delayed the
+  last AVM proof by 137 s and the epoch proof by 12%.
+- A top-tree job never has a lower slot than a block-level job its proof waits for, so the broker does not hand
+  out checkpoint roots ahead of that job.
+
+The broker keeps the slot with the job in its database, so the order does not change when the broker restarts.
+
 ## Known limitations
 
 - A failed `CheckpointProver` is not retried. A transaction fetch that times out leaves the epoch unproven by this
@@ -457,26 +481,18 @@ synchronous method.
   sessions. What is lost is the attempt to open a full session for the affected epochs on the prune itself.
 - Cancelling a session aborts its top-tree jobs. A replacement session that already requested the same jobs gets
   the abort too and ends `failed`.
-- The broker holds back the blocks of later slots while an epoch proof that ends earlier is outstanding. An agent
-  with nothing else to do still takes one of those blocks' jobs and finishes it. A job of the proof that becomes
-  ready meanwhile waits for an agent, for at most the length of one such job. This can happen again each time the
-  proof moves to its next job, so with few agents the waits add up along the proof's chain of jobs.
-- The broker does not look at which agents are idle. An agent that accepts every proof type can take a job of the
-  outstanding proof that an agent restricted to that type could have taken, and leave a later slot's job waiting.
-- The root rollup of an epoch proof is never held back, because it finishes a proof that covers the slots of every
-  proof that ends before it. A shorter proof of the same epoch waits for the root rollups of all longer proofs of
-  the epoch that are ready at the same time.
-- The top tree does not wait for the broker to answer the registration. Until the broker has processed it, later
-  slots are not held back.
+- The broker gives the jobs of a lower slot first. An agent with nothing else to do still takes a job of a later
+  slot and finishes it. A job of an earlier slot that becomes ready meanwhile waits for an agent, for at most the
+  length of one such job. This can happen again each time a proof moves to its next job, so with few agents the
+  waits add up along the proof's chain of jobs.
+- The broker does not look at which agents are idle. An agent that accepts every proof type can take a job of an
+  earlier slot that an agent restricted to that type could have taken, and leave a later slot's job waiting.
+- A partial proof of an epoch that was complete when its checkpoints were registered gets no help from slots. Its
+  block-level jobs carry the last slot of the epoch, like those of every other checkpoint of that epoch.
+- A checkpoint registered just before its epoch completes keeps its own slot, and its jobs go ahead of those of
+  checkpoints registered after.
 - A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
   same epoch keeps the slot it was first requested for.
-- The broker keeps at most 1024 registered epoch proofs and drops the oldest one beyond that.
-- The broker keeps the epoch proofs it was told about in memory. After a broker restart, the blocks of later
-  slots are not held back for a proof that was already running.
-- A prover node that is killed does not unregister its epoch proofs. The same holds for a node that shuts down
-  while the broker has not yet answered a registration: the unregister request is sent after that answer and the
-  shutdown does not wait for it. If a reorg then replaces checkpoints of such a proof, the jobs of the replaced
-  checkpoints stay queued and go ahead of later slots until they are proven.
 - A job whose slot is lowered while it waits has two queue entries until the broker reaches the old one. The
   queue-depth metric counts both. Only jobs that two slots share are lowered: the inbox parity proof of an empty
   inbox and checkpoint padding.
