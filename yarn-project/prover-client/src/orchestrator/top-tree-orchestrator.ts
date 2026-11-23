@@ -113,14 +113,15 @@ export class TopTreeOrchestrator extends ProvingScheduler {
    * `cancel()` is invoked, or any other error if a circuit fails.
    * @param prioritySlot - The slot every job of the top tree carries, see `ProvingJob.prioritySlot`. It must not
    *   be lower than the slot of any block-level job the proof waits for, or the broker hands out the checkpoint
-   *   roots ahead of that job.
+   *   roots ahead of that job. Without a slot the jobs go ahead of every job of the epoch that has one, which is
+   *   only right when the block-level jobs carry no slot either.
    */
   public async prove(
     epochNumber: EpochNumber,
     totalNumCheckpoints: number,
     finalBlobBatchingChallenges: FinalBlobBatchingChallenges,
     checkpointData: CheckpointTopTreeData[],
-    prioritySlot?: SlotNumber,
+    prioritySlot: SlotNumber | undefined,
   ): Promise<TopTreeResult> {
     if (checkpointData.length !== totalNumCheckpoints) {
       throw new Error(

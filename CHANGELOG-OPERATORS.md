@@ -52,15 +52,15 @@ The default is `false`, which keeps the previous behaviour. With the flag on:
 
 Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs: transaction merges, base rollups, AVM and chonk verifier. It gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once. The newest checkpoint's transactions and parity proof then waited until every one of those roots had an agent.
 
-Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, and the root rollup stays first.
+Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, and the root rollup stays first. This order by proof type applies between jobs of the same epoch and the same slot.
 
 Each job also carries a slot, and the broker now orders jobs by epoch, then by slot, then by proof type. The prover node chooses the slot:
 
 - A block-level job carries the slot of its block while the block's epoch is still running.
 - A block-level job of an epoch that was already complete when the prover node picked up its checkpoints carries the last slot of that epoch. This is the case after the node was down or behind.
-- A checkpoint root, checkpoint merge or root rollup carries the highest slot among the checkpoints of its epoch proof.
+- A checkpoint root, checkpoint merge or root rollup carries the highest slot that the block-level jobs of its epoch proof's checkpoints carry.
 
-A checkpoint that lands in the same epoch after a partial proof was requested therefore does not go ahead of that proof: its jobs have a higher slot than every job of the proof. The root rollup of a proof that ends later now waits for the jobs of a proof that ends earlier. An agent still takes a job of a later slot when there is nothing else it can do, and finishes it, so a job of the proof that becomes ready meanwhile can wait for up to one such job each time the proof moves to its next job. The broker stores the slot with the job, so the order is the same after a broker restart.
+A checkpoint that lands in the same epoch after a partial proof was requested therefore does not go ahead of that proof: its jobs have a higher slot than every job of the proof. The root rollup of a proof that ends later now waits for the jobs of a proof that ends earlier. An agent still takes a job of a later slot when there is nothing else it can do, and finishes it, so a job of the proof that becomes ready meanwhile can wait for up to one such job each time the proof moves to its next job. The broker stores the slot with the job, so a job has the same slot after a broker restart. The slot is the one of the job's first request: after a prover node restart that crosses the end of an epoch, jobs requested before the restart keep their own slots while new ones carry the epoch's last slot, and the two are ordered by those slots until the old jobs are done.
 
 Results of a scheduling simulation of a partial proof of 16 checkpoints, with later checkpoints landing one slot apart after the request. The prover node enqueues a follow-up job 1 s after the proof it depends on finishes:
 
@@ -70,9 +70,9 @@ Results of a scheduling simulation of a partial proof of 16 checkpoints, with la
 | 16 agents, slow newest checkpoint, 4 later checkpoints | 518 s | 569 s | 880 s |
 | 16 agents, slow newest checkpoint, 12 later checkpoints | 518 s | 569 s | 1952 s |
 
-An epoch that is proven after it is complete has one slot for all its jobs, so the broker orders them by proof type as before. In the simulation its proving time is the same as without slots in each of 7 workloads. An epoch whose checkpoints are proven as they land, one slot apart, also takes the same time as without slots in those workloads.
+An epoch that is proven after it is complete has one slot for all its jobs, so the broker orders them by proof type as before. In the simulation its proving time is the same as without slots in each of 7 workloads.
 
-The prover node sends the slot with each job. Both the prover node and the broker have to run this version for the new order to apply. Jobs from a prover node of an earlier version carry no slot. The broker gives them before the jobs of their epoch that have a slot, and orders them by proof type. A broker of an earlier version ignores the slot and has no `lowerProvingJobPrioritySlot` method. The prover node logs a warning when that call fails and proves as before.
+The prover node sends the slot with each job. Both the prover node and the broker have to run this version for the new order to apply. Jobs from a prover node of an earlier version carry no slot. The broker gives them before the jobs of their epoch that have a slot, and orders them by proof type. A broker of a version without job slots ignores the slot and has no `lowerProvingJobPrioritySlot` method. The prover node logs a warning when that call fails and proves as before.
 
 **Migration**: none.
 

@@ -128,11 +128,13 @@ describe('EpochSession', () => {
         numBlocks: 1,
         slotNumber: SlotNumber(cp.header.slotNumber + 1),
       });
-      // The first checkpoint was registered after its epoch ended and orders its jobs by the epoch's last slot.
+      // The first checkpoint was registered while the epoch was running and orders its jobs by its own slot. The
+      // second was registered after the epoch ended, with empty slots behind it, and orders them by the last slot.
       const epochLastSlot = SlotNumber(lastCp.header.slotNumber + 3);
-      const provers = [makeStubProver(cp, { prioritySlot: epochLastSlot }), makeStubProver(lastCp)];
+      const provers = [makeStubProver(cp), makeStubProver(lastCp, { prioritySlot: epochLastSlot })];
+      const spec = { ...makeSpec(), toSlot: epochLastSlot };
       const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
-      await new TestEpochSession(makeSpec(), provers, deps).start();
+      await new TestEpochSession(spec, provers, deps).start();
 
       expect(topTree.prove.mock.calls.map(call => call[4])).toEqual([epochLastSlot]);
     });
