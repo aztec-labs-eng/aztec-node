@@ -78,16 +78,6 @@ const LOCAL_PACKAGES = {
   "@aztec-foundation/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
   "@aztec-foundation/wsdb-linux-arm64": "portal:wsdb/ts/packages/wsdb-linux-arm64",
   "@aztec-foundation/wsdb-linux-x64": "portal:wsdb/ts/packages/wsdb-linux-x64",
-  "@aztec-labs/kv-sqlite": "portal:native-packages/kv-sqlite/ts",
-  "@aztec-labs/kv-sqlite-darwin-arm64":
-    "portal:native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-arm64",
-  "@aztec-labs/kv-sqlite-darwin-x64":
-    "portal:native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64",
-  "@aztec-labs/kv-sqlite-linux-arm64":
-    "portal:native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64",
-  "@aztec-labs/kv-sqlite-linux-x64":
-    "portal:native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64",
-  "@aztec-labs/kv-sqlite-files": "portal:native-packages/kv-sqlite/files",
   "@aztec-foundation/noir-acvm_js": "portal:noir/packages/acvm_js",
   "@aztec-foundation/noir-types": "portal:noir/packages/types",
   "@aztec-foundation/noir-noirc_abi": "portal:noir/packages/noirc_abi",
