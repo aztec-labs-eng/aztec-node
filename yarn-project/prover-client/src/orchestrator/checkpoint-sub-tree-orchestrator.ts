@@ -133,7 +133,10 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     private readonly chonkCache: ChonkCache,
     /** The epoch this sub-tree proves into. */
     private readonly epochNumber: EpochNumber,
-    /** The slot the jobs of the sub-tree carry, see `ProvingJob.prioritySlot`. */
+    /**
+     * The slot the jobs of the sub-tree carry, see `ProvingJob.prioritySlot`. The inbox parity proof of a checkpoint
+     * without messages is the exception and carries no slot, see `enqueueInboxParityCircuit`.
+     */
     private readonly prioritySlot: SlotNumber,
     private readonly cancelJobsOnStop: boolean = false,
     deferredJobQueue: SerialQueue,
@@ -912,13 +915,17 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
 
     const inputs = checkpointProvingState.getInboxParityInputs();
     const circuitName = `inbox-parity-${inputs.size}` satisfies CircuitName;
+    // Consecutive checkpoints without messages have the same parity inputs and share one proof. The broker keeps
+    // the slot of the first request for it, and that request can come from a later checkpoint when an earlier one
+    // is slow to gather its transactions. Without a slot the proof goes ahead of the slotted jobs of its epoch,
+    // which is right for whichever checkpoint needs it first.
+    const prioritySlot = inputs.numMessages === 0 ? undefined : this.prioritySlot;
 
     this.deferredProving(
       checkpointProvingState,
       this.wrapCircuitCall(
         'getInboxParityProof',
-        signal =>
-          this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber, this.prioritySlot),
+        signal => this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber, prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: circuitName },
       ),
       result => {

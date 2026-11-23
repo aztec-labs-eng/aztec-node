@@ -364,8 +364,11 @@ type ProvingJobShape = {
    * - A block-level job of an epoch that is already over carries the last slot of that epoch. Only proofs of the
    *   whole epoch are expected then, so all its jobs share one slot and the proof type decides.
    * - A job of the top tree carries the highest slot among the jobs of its proof's checkpoints.
+   * - The inbox parity proof of a checkpoint without messages carries no slot. Consecutive checkpoints without
+   *   messages share it, and it must not wait behind the slot of a later one.
    *
-   * A job requested again under another slot keeps the slot of the request that created it.
+   * A job requested again under another slot keeps the slot it has. Its slot is the one of the request that
+   * created it, or of the request that brought it back after it was cancelled.
    */
   prioritySlot?: SlotNumber;
 };

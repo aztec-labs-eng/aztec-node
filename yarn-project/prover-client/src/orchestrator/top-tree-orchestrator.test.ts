@@ -165,17 +165,23 @@ describe('prover/orchestrator/top-tree', () => {
     });
     subTreeProver = context.brokerProverFacade;
 
-    // The first sub-tree is given no slot and uses the slot of its checkpoint. The second is given one.
+    // The first sub-tree is given no slot and uses the slot of its checkpoint. Its checkpoint has no messages, so
+    // its inbox parity proof can be shared with other checkpoints and carries no slot.
     const a = await driveSubTree(2, 2);
     const slotA = a.fixture.constants.slotNumber;
     const blockLevelJobsOfA = enqueued.length;
-    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([slotA]));
+    const isParity = (job: ProvingJob) => job.type === ProvingRequestType.INBOX_PARITY;
+    expect(new Set(enqueued.filter(job => !isParity(job)).map(job => job.prioritySlot))).toEqual(new Set([slotA]));
+    expect(enqueued.filter(isParity).map(job => job.prioritySlot)).toEqual([undefined]);
 
+    // The second sub-tree is given a slot. Its checkpoint has messages, so its parity proof carries the slot too.
     const givenSlot = SlotNumber(slotA + 40);
-    const fixtureB = await context.makeCheckpoint(1, { numTxsPerBlock: 1 });
+    const fixtureB = await context.makeCheckpoint(1, { numTxsPerBlock: 1, numL1ToL2Messages: 2 });
     const b = await driveFixture(fixtureB, [fixtureB.l1ToL2Messages], givenSlot);
     const blockLevelJobs = enqueued.length;
-    expect(new Set(enqueued.slice(blockLevelJobsOfA).map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
+    const jobsOfB = enqueued.slice(blockLevelJobsOfA);
+    expect(jobsOfB.filter(isParity)).toHaveLength(1);
+    expect(new Set(jobsOfB.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
 
     const challenges = await context.getFinalBlobChallenges();
     const topTree = new TopTreeOrchestrator(context.brokerProverFacade, EthAddress.ZERO, makeTestDeferredJobQueue());
