@@ -463,9 +463,9 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 - Consecutive checkpoints without messages have the same inbox parity inputs and share one proof. Any of them can
   be the first to request it, because each checkpoint gathers its transactions before it starts proving. The proof
   therefore carries no slot, and the broker hands it out before the slotted jobs of its epoch.
-  - This costs one job per run of checkpoints without messages: the first such checkpoint after one with messages
-    starts a new proof, and that proof goes ahead of every slotted job of the epoch, including the jobs of an
-    earlier partial proof that does not need it.
+  - This costs one job per run of checkpoints without messages within an epoch. The first such checkpoint of an
+    epoch, and the first one after a checkpoint with messages, starts a new proof. That proof goes ahead of every
+    slotted job of the epoch, including the jobs of an earlier partial proof that does not need it.
   - It is the smallest inbox parity circuit.
 
 The broker keeps the slot with the job in its database, so a job has the same slot after a broker restart. A job
@@ -515,4 +515,5 @@ that epoch's checkpoints that carry the last slot.
   restart keep their own slots at the broker. Until those are done, the broker can hand out a checkpoint root
   before block-level work of the same proof, or an old job before a new one that ranks higher by proof type.
 - A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
-  same epoch keeps the slot it was first requested for.
+  same epoch keeps the slot it was first requested for. So does the inbox parity proof of a checkpoint with
+  messages when a reorg replaces that checkpoint with one in an earlier slot that consumes the same messages.
