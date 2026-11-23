@@ -48,18 +48,17 @@ function build_ec2 {
     exit 1
   fi
 
-  # Request new instance.
+  # Request new instance. Like every build instance it has no key pair, and the build runs over SSM.
   instance_name=build_image_$(echo -n "$branch" | tr -c 'a-zA-Z0-9-' '_')_$arch
-  ip_sir=$(NO_SPOT=1 aws_request_instance $instance_name $cpus $arch)
-  IFS=':' read -r -a parts <<< "$ip_sir"
-  ip="${parts[0]}"
-  sir="${parts[1]}"
-  iid="${parts[2]}"
-  trap 'aws_terminate_instance $iid $sir || true' EXIT
+  state_dir=$(mktemp -d /tmp/aws_request_instance.XXXXXX)
+  trap 'aws_terminate_instance $state_dir || true' EXIT
+  NO_SPOT=1 aws_request_instance $instance_name $cpus $arch $state_dir
+  iid=$(tr -d '\n\r ' < $state_dir/iid)
 
-  ssh -F $ci3/aws/build_instance_ssh_config ubuntu@$ip "
+  SSM_RUN_AS=ubuntu SSM_POLL_TIMEOUT=$((${AWS_SHUTDOWN_TIME:-60} * 60)) ssm_send_command "$iid" "
     set -euo pipefail
-    export DOCKERHUB_PASSWORD=$DOCKERHUB_PASSWORD
+    export DOCKERHUB_PASSWORD=$(printf %q "$DOCKERHUB_PASSWORD")
+    cd ~
     mkdir aztec-node
     cd aztec-node
     git init . &>/dev/null
