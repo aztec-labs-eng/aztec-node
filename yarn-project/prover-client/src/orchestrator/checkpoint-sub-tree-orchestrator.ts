@@ -133,6 +133,8 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     private readonly chonkCache: ChonkCache,
     /** The epoch this sub-tree proves into. */
     private readonly epochNumber: EpochNumber,
+    /** The slot the jobs of the sub-tree carry, see `ProvingJob.prioritySlot`. */
+    private readonly prioritySlot: SlotNumber,
     private readonly cancelJobsOnStop: boolean = false,
     deferredJobQueue: SerialQueue,
     telemetryClient: TelemetryClient = getTelemetryClient(),
@@ -156,22 +158,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
    */
   private blocksOnly = false;
 
-  /** The priority slot given to `start`, if any. */
-  private requestedPrioritySlot: SlotNumber | undefined;
-
   /** Resolved when a block's root proof is ready, keyed by block number. */
   private readonly blockRootProven = new Map<BlockNumber, PromiseWithResolvers<void>>();
 
   public get tracer(): Tracer {
     return this.metrics.tracer;
-  }
-
-  /**
-   * The slot every job of the sub-tree carries, see `ProvingJob.prioritySlot`. It is the slot given to `start`, or
-   * the slot of the checkpoint when none was given.
-   */
-  private get prioritySlot(): SlotNumber | undefined {
-    return this.requestedPrioritySlot ?? this.provingState?.constants.slotNumber;
   }
 
   public getProverId(): EthAddress {
@@ -238,12 +229,12 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       proverId,
       chonkCache,
       epochNumber,
+      prioritySlot ?? checkpointConstants.slotNumber,
       cancelJobsOnStop,
       deferredJobQueue,
       telemetryClient,
       bindings,
     );
-    subTree.requestedPrioritySlot = prioritySlot;
     try {
       await subTree.startCheckpoint(
         checkpointConstants,
@@ -290,6 +281,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       proverId,
       chonkCache,
       epochNumber,
+      checkpointConstants.slotNumber,
       /* cancelJobsOnStop */ false,
       deferredJobQueue,
       telemetryClient,

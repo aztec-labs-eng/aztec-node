@@ -1,6 +1,6 @@
 import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec-labs/constants';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
+import { padArrayEnd, times, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -9,6 +9,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ProvingJob, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
 import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
 import { jest } from '@jest/globals';
 
@@ -187,6 +188,33 @@ describe('prover/orchestrator/top-tree', () => {
     const topTreeJobs = enqueued.slice(blockLevelJobs);
     expect(topTreeJobs.length).toBeGreaterThan(0);
     expect(new Set(topTreeJobs.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
+  });
+
+  // One checkpoint needs checkpoint padding, and three need a checkpoint merge. Two need neither.
+  it.each([
+    [1, ProvingRequestType.CHECKPOINT_PADDING_ROLLUP],
+    [3, ProvingRequestType.CHECKPOINT_MERGE_ROLLUP],
+  ])('sends every top-tree job of a proof of %s checkpoint(s) with the slot given to prove', async (count, type) => {
+    const checkpoints = await timesAsync(count, () => driveSubTree(1, 1));
+    const challenges = await context.getFinalBlobChallenges();
+
+    const enqueued: ProvingJob[] = [];
+    const enqueue = context.broker.enqueueProvingJob.bind(context.broker);
+    jest.spyOn(context.broker, 'enqueueProvingJob').mockImplementation(job => {
+      enqueued.push(job);
+      return enqueue(job);
+    });
+    const givenSlot = SlotNumber(77);
+    const topTree = new TopTreeOrchestrator(context.brokerProverFacade, EthAddress.ZERO, makeTestDeferredJobQueue());
+    try {
+      const topTreeData = checkpoints.map(checkpoint => checkpoint.topTreeData);
+      await topTree.prove(EpochNumber(1), count, challenges, topTreeData, givenSlot);
+    } finally {
+      await topTree.stop();
+    }
+
+    expect(enqueued.map(job => job.type)).toContain(type);
+    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
   });
 
   it('produces an epoch proof for a checkpoint carrying L1-to-L2 messages', async () => {

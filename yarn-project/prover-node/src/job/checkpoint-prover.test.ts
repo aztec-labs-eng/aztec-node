@@ -262,11 +262,10 @@ describe('CheckpointProver', () => {
       const prover = makeProver(args);
       const prioritySlot = await requested.promise;
       prover.cancel();
-      created.resolve({
-        getSubTreeResult: () => new Promise<never>(() => {}),
-        cancel: () => {},
-        stop: () => Promise.resolve(),
-      } as unknown as CheckpointSubTreeOrchestrator);
+      const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.getSubTreeResult.mockReturnValue(new Promise<never>(() => {}));
+      subTree.stop.mockResolvedValue();
+      created.resolve(subTree);
       await cleanup(prover);
       return prioritySlot;
     };

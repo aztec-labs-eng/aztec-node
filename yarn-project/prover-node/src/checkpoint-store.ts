@@ -137,30 +137,6 @@ export class CheckpointStore {
   }
 
   /**
-   * The slot a new prover's block-level jobs carry, see `addOrUpdate`. If the archiver cannot say whether the epoch
-   * is complete, the checkpoint's own slot is used: the slot only orders proving jobs, and a failed read must not
-   * keep the checkpoint from being proven.
-   */
-  private async getPrioritySlot(
-    checkpoint: Checkpoint,
-    epochNumber: EpochNumber,
-    epochLastSlot: SlotNumber,
-  ): Promise<SlotNumber> {
-    const ownSlot = checkpoint.header.slotNumber;
-    try {
-      return (await this.l2BlockSource.isEpochComplete(epochNumber)) ? epochLastSlot : ownSlot;
-    } catch (err) {
-      this.log.warn(`Could not read whether epoch ${epochNumber} is complete. Ordering jobs by the checkpoint slot.`, {
-        epochNumber,
-        checkpointNumber: checkpoint.number,
-        slotNumber: ownSlot,
-        err,
-      });
-      return ownSlot;
-    }
-  }
-
-  /**
    * Installs test-only hooks applied to every prover constructed from now on. Used by the e2e harness to
    * force a checkpoint sub-tree failure without monkey-patching the prover factory.
    */
@@ -245,5 +221,29 @@ export class CheckpointStore {
   /** Provers whose slot falls within `[fromSlot, toSlot]`, sorted by checkpoint number. */
   public listInSlotRange(fromSlot: SlotNumber, toSlot: SlotNumber): CheckpointProver[] {
     return this.list().filter(p => p.slotNumber >= fromSlot && p.slotNumber <= toSlot);
+  }
+
+  /**
+   * The slot a new prover's block-level jobs carry, see `addOrUpdate`. If the archiver cannot say whether the epoch
+   * is complete, the checkpoint's own slot is used: the slot only orders proving jobs, and a failed read must not
+   * keep the checkpoint from being proven.
+   */
+  private async getPrioritySlot(
+    checkpoint: Checkpoint,
+    epochNumber: EpochNumber,
+    epochLastSlot: SlotNumber,
+  ): Promise<SlotNumber> {
+    const ownSlot = checkpoint.header.slotNumber;
+    try {
+      return (await this.l2BlockSource.isEpochComplete(epochNumber)) ? epochLastSlot : ownSlot;
+    } catch (err) {
+      this.log.warn(`Could not read whether epoch ${epochNumber} is complete. Ordering jobs by the checkpoint slot.`, {
+        epochNumber,
+        checkpointNumber: checkpoint.number,
+        slotNumber: ownSlot,
+        err,
+      });
+      return ownSlot;
+    }
   }
 }
