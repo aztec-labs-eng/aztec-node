@@ -13,7 +13,6 @@ You are fixing one flaky test in the aztec-node repo. Work only in your worktree
 - Already checked by the orchestrator: `<what Step 2 found: no fix on main since <date>, no PR mentions it / related PRs: ...>`
 - Sibling flakes in this run, being fixed in parallel: `<test, log hash, branch>` for each, or "none". If your root cause turns out to be in code a sibling also exercises, say so prominently.
 - Mode: `<single: go straight through | multiple: stop at checkpoint A>`
-- `CI_PASSWORD`: `<value, if the orchestrator had to ask for it>`
 
 ## Environment
 

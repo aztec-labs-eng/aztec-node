@@ -15,10 +15,12 @@ When you need to analyze logs from ci.aztec-labs.com, delegate to the `analyze-l
    The dashboard is https-only and redirects, but the urls printed inside the logs still
    say `http://` — always take the hash and hand that to `dlog`, never fetch the url.
 
-2. **Check `CI_PASSWORD` is set** before spawning anything. Without a redis tunnel it is
-   the only credential that reaches the logs, and the subagent cannot ask for it — only
-   you can. If `[ -z "$CI_PASSWORD" ]`, ask the user for the value and pass it to the
-   subagent so it can export it for the download.
+2. **Check the user is signed in to the dashboard** before spawning anything, by
+   downloading one log yourself: `yarn ci dlog <hash> > /tmp/<hash>.log 2>&1`. Without a
+   redis tunnel, the dashboard is the only route to the logs. If it says "not signed in to
+   the CI dashboard", ask the user to run `! ./ci.sh dashboard-login`, which shows a code to
+   approve with their Google account. Neither you nor the subagent can complete that sign-in;
+   once done, it lasts until Google revokes it and every agent on the machine shares it.
 
 3. **Spawn the `analyze-logs` subagent** using the Task tool with the hash and focus area (e.g. "errors", "test \<name>", or a custom question) in the prompt.
 
@@ -33,9 +35,8 @@ When you need to analyze logs from ci.aztec-labs.com, delegate to the `analyze-l
 ## Do NOT
 
 - Do NOT use WebFetch to access ci.aztec-labs.com (requires auth)
-- Do NOT guess or invent a `CI_PASSWORD` value, and do not retry the download hoping it
-  will work: `dlog` exits with "CI_PASSWORD not set for http fallback" and the only fix
-  is to ask the user
+- Do NOT retry the download hoping it will work when `dlog` says "not signed in to the CI
+  dashboard": the only fix is the user running `./ci.sh dashboard-login`
 - Do NOT try to curl the URL directly. An http url 308s to https, and curl follows
   neither the redirect nor fails on it, so you get an empty body and a zero exit; a hash
   the dashboard does not hold answers 200 with the body `Key not found`. `dlog` handles

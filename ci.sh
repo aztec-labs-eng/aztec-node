@@ -9,6 +9,12 @@ NO_TERMINATE=${NO_TERMINATE:-0}
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
 ci3_workflow_id=128853861
 
+# The CI dashboard's sign-in for scripts (ci3 dashboard_token): a Google OAuth client of the
+# "TVs and Limited Input devices" kind, whose secret is not confidential.
+export CI_DASHBOARD_OAUTH_CLIENT_ID=${CI_DASHBOARD_OAUTH_CLIENT_ID:-}
+export CI_DASHBOARD_OAUTH_CLIENT_SECRET=${CI_DASHBOARD_OAUTH_CLIENT_SECRET:-}
+export CI_DASHBOARD_LOGIN_HINT="./ci.sh dashboard-login"
+
 function echo_cmd {
   local name=$1
   shift
@@ -38,6 +44,7 @@ function print_usage {
   echo_cmd "shell-container"       "Shell into a running build container. Optional filter tokens (e.g. 'pr-123 bench') select the instance; defaults to the current branch."
   echo_cmd "shell-host"            "Shell into a running build host. Same instance selection as shell-container."
   echo_cmd "log"                   "Display the log of the given log ID."
+  echo_cmd "dashboard-login"       "Sign in to the CI dashboard with your Google account, for log downloads outside redis."
   echo_cmd "test-timings"          "Download per-test timing JSONL for a job: test-timings <ci_log_id> <folder>."
   echo_cmd "kill"                  "Terminate running build instances matching the filter tokens (default: current branch)."
   echo_cmd "draft"                 "Mark the current PR as draft (no automatic CI runs when pushing)."
@@ -470,14 +477,12 @@ case "$cmd" in
     elif [ "$CI_REDIS_AVAILABLE" -eq 1 ] && [ "$(redis_cli EXISTS "$key")" == "1" ]; then
       redis_getz "$key" | $pager
     else
-      if [ -z "${CI_PASSWORD:-}" ]; then
-        echo "Log not found in redis and CI_PASSWORD not set for https fallback."
-        exit 1
-      fi
+      # Prints why when not signed in: dashboard-login fixes it.
+      token=$(dashboard_token) || exit 1
       # The dashboard 308s http to https, and curl neither follows nor fails on a 3xx,
       # so an http url here downloads nothing and still exits 0.
       tmp_log=$(mktemp)
-      if ! curl -sfL -u "aztec:$CI_PASSWORD" -o "$tmp_log" "https://ci.aztec-labs.com/$key.txt"; then
+      if ! curl -sfL -H "Authorization: Bearer $token" -o "$tmp_log" "https://ci.aztec-labs.com/$key.txt"; then
         rm -f "$tmp_log"
         echo "Failed to fetch log via https."
         exit 1
@@ -492,6 +497,10 @@ case "$cmd" in
       $pager < "$tmp_log"
       rm -f "$tmp_log"
     fi
+    ;;
+
+  dashboard-login)
+    dashboard_token login >/dev/null
     ;;
 
   test-timings)
