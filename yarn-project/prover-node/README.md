@@ -506,6 +506,6 @@ that epoch's checkpoints that carry the last slot.
   before block-level work of the same proof, or an old job before a new one that ranks higher by proof type.
 - A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
   same epoch keeps the slot it was first requested for.
-- A job whose slot is lowered while it waits has two queue entries until the broker reaches the old one. The
-  queue-depth metric counts both. Only jobs that two slots share are lowered: the inbox parity proof of an empty
-  inbox and checkpoint padding.
+- A job that two slots share keeps the slot of its first request: the inbox parity proof of an empty inbox, and
+  checkpoint padding. If a later slot requests it first, an earlier slot that needs it waits behind the jobs of
+  the slots in between. Checkpoints are registered in order, so the first request normally has the lowest slot.

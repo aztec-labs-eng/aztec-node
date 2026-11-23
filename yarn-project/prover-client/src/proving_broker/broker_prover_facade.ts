@@ -60,12 +60,6 @@ type ProvingJob = {
   deferred: PromiseWithResolvers<any>;
   abortFn: () => void;
   signal?: AbortSignal;
-  /** The lowest slot the broker has for the job, see `ProvingJob.prioritySlot` of the broker interface. */
-  prioritySlot?: SlotNumber;
-  /** Whether the request that enqueues the job has left for the broker. */
-  enqueueSent?: boolean;
-  /** Settles once the broker has answered that request. */
-  sentToBroker: PromiseWithResolvers<void>;
 };
 
 export class BrokerCircuitProverFacade implements ServerCircuitProver {
@@ -127,7 +121,6 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       deferred: promise,
       abortFn,
       signal,
-      sentToBroker: promiseWithResolvers<void>(),
     };
 
     this.jobs.set(id, job);
@@ -144,17 +137,9 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
   ): Promise<ProvingJobResultsMap[T]> {
     const { job: job, isEnqueued } = this.getOrCreateProvingJob(id, type, signal);
     if (isEnqueued) {
-      // The same job requested again for an earlier slot: the broker has to order it by that slot.
-      if (prioritySlot !== undefined && job.prioritySlot !== undefined && prioritySlot < job.prioritySlot) {
-        if (job.enqueueSent) {
-          void this.lowerPrioritySlot(job, prioritySlot);
-        } else {
-          job.prioritySlot = prioritySlot;
-        }
-      }
+      // The job keeps the slot of its first request, see `ProvingJob.prioritySlot` of the broker interface.
       return job.deferred.promise;
     }
-    job.prioritySlot = prioritySlot;
 
     try {
       const inputsUri = await this.proofStore.saveProofInput(id, type, inputs);
@@ -168,16 +153,7 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       }
 
       // Send the job to the broker
-      // The slot is read here: a request for a lower one may have come in while the inputs were saved.
-      job.enqueueSent = true;
-      const jobStatus = await this.broker.enqueueProvingJob({
-        id,
-        type,
-        inputsUri,
-        epochNumber,
-        prioritySlot: job.prioritySlot,
-      });
-      job.sentToBroker.resolve();
+      const jobStatus = await this.broker.enqueueProvingJob({ id, type, inputsUri, epochNumber, prioritySlot });
 
       const jobLogText = `id=${id} type=${ProvingRequestType[type]} epochNumber=${epochNumber}`;
       const jobLogData = {
@@ -212,34 +188,10 @@ export class BrokerCircuitProverFacade implements ServerCircuitProver {
       }
     } catch (err) {
       this.jobs.delete(job.id);
-      job.sentToBroker.resolve();
       job.deferred.reject(err);
     }
 
     return job.deferred.promise as Promise<ProvingJobResultsMap[T]>;
-  }
-
-  private async lowerPrioritySlot(job: ProvingJob, prioritySlot: SlotNumber): Promise<void> {
-    try {
-      // The broker ignores a slot for a job it does not have yet.
-      await job.sentToBroker.promise;
-      // No check of the first caller's signal: the job may have live callers, and the broker ignores a lower slot
-      // for a job that was cancelled.
-      if (this.jobs.get(job.id) !== job) {
-        return;
-      }
-      await this.broker.lowerProvingJobPrioritySlot(job.id, prioritySlot);
-      // Recorded only now, so a request that failed is sent again the next time the job is requested.
-      if (job.prioritySlot === undefined || prioritySlot < job.prioritySlot) {
-        job.prioritySlot = prioritySlot;
-      }
-    } catch (err) {
-      this.log.warn(`Could not lower the priority slot of job id=${job.id}`, {
-        provingJobId: job.id,
-        prioritySlot,
-        err,
-      });
-    }
   }
 
   public start() {

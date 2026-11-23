@@ -364,6 +364,8 @@ type ProvingJobShape = {
    * - A block-level job of an epoch that is already over carries the last slot of that epoch. Only proofs of the
    *   whole epoch are expected then, so all its jobs share one slot and the proof type decides.
    * - A job of the top tree carries the highest slot among the jobs of its proof's checkpoints.
+   *
+   * A job requested again under another slot keeps the slot of the request that created it.
    */
   prioritySlot?: SlotNumber;
 };

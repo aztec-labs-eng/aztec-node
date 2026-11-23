@@ -72,7 +72,7 @@ Results of a scheduling simulation of a partial proof of 16 checkpoints, with la
 
 An epoch whose checkpoints the prover node all picks up after the epoch is complete has one slot for all its jobs, so the broker orders them by proof type as before. In the simulation, in which every checkpoint has L1-to-L2 messages, its proving time is the same as without slots in each of 7 workloads.
 
-The prover node sends the slot with each job. Both the prover node and the broker have to run this version for the new order to apply. Jobs from a prover node of an earlier version carry no slot. The broker gives them before the jobs of their epoch that have a slot, and orders them by proof type. A broker of a version without job slots ignores the slot and has no `lowerProvingJobPrioritySlot` method. The prover node logs a warning when that call fails and proves as before.
+The prover node sends the slot with each job. Both the prover node and the broker have to run this version for the new order to apply. Jobs from a prover node of an earlier version carry no slot. The broker gives them before the jobs of their epoch that have a slot, and orders them by proof type. A broker of a version without job slots ignores the slot. A job requested again under another slot keeps the slot of its first request.
 
 **Migration**: none.
 

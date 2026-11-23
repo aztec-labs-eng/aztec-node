@@ -1,4 +1,4 @@
-import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { PriorityMemoryQueue } from '@aztec-labs/foundation/queue';
@@ -31,8 +31,8 @@ type InProgressMetadata = {
 };
 
 /**
- * A queue entry. A job can have several, one for each slot it was queued under; only the one with its current slot
- * is valid.
+ * A queue entry. A job that was cancelled and then requested again has two: the one from before the cancellation
+ * and the one of the new request. If the new request carries another slot, only the entry with that slot is valid.
  */
 type EnqueuedProvingJob = Pick<ProvingJob, 'id' | 'epochNumber' | 'prioritySlot'>;
 
@@ -233,11 +233,6 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     return this.#cancelProvingJob(id);
   }
 
-  /** Lowers a job's slot, see `ProvingJobProducer.lowerProvingJobPrioritySlot`. Never creates or revives a job. */
-  public lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
-    return this.#lowerPrioritySlot(id, prioritySlot);
-  }
-
   public getProvingJobStatus(id: ProvingJobId): Promise<ProvingJobStatus> {
     return this.#getProvingJobStatus(id);
   }
@@ -310,7 +305,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       // Identity check is metadata-only: `inputsUri` now lives in the database, not memory, and job ids
       // are content-addressed (same id ⇒ same inputs), so a mismatch shows up in id/type/epochNumber.
       // `prioritySlot` is left out: it is not derived from the inputs, so two requests for the same job can carry
-      // different slots.
+      // different slots. The job keeps the slot of the request that created or revived it.
       assert.deepStrictEqual(
         { id: job.id, type: job.type, epochNumber: job.epochNumber },
         { id: existing?.id, type: existing?.type, epochNumber: existing?.epochNumber },
@@ -355,11 +350,8 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
           epochNumber: job.epochNumber,
         });
         this.instrumentation.incCachedJobs(job.type);
-        if (job.prioritySlot !== undefined) {
-          await this.#lowerPrioritySlot(job.id, job.prioritySlot);
-        }
         // Return the job's current status. This reads the fulfilled proof value from the DB when needed;
-        // the await is fine here because this branch does not create the job, so it is outside the lock span.
+        // the await is fine here because this branch does not enqueue, so it is outside the lock span.
         return await this.#getProvingJobStatus(job.id);
       }
     }
@@ -371,15 +363,12 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       throw new Error(`Epoch too old: job epoch ${job.epochNumber}, current epoch: ${this.epochHeight}`);
     }
 
-    // A revival waits for the database above. A request for a lower slot that arrived meanwhile wins.
-    job = this.withLowestRequestedSlot(job);
-
     this.logger.info(`New proving job id=${job.id} epochNumber=${job.epochNumber}`, { provingJobId: job.id });
     try {
       // do this first so it acts as a "lock". If this job is enqueued again while we're saving it the if at the top will catch it.
       this.jobsCache.set(job.id, toJobMetadata(job));
       await this.database.addProvingJob(job);
-      await this.queueUnderLowestRequestedSlot(job);
+      this.enqueueJobInternal(job);
       this.instrumentation.incTotalJobs(job.type);
     } catch (err) {
       this.logger.error(`Failed to save proving job id=${job.id}: ${err}`, err, { provingJobId: job.id });
@@ -387,78 +376,6 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       throw err;
     }
     return jobStatus;
-  }
-
-  /**
-   * Queues a job that was just saved. A lower slot requested while the job was being written is saved first, and the
-   * job is queued under it. The job is already saved by then, so a failed write here only loses the lower slot after
-   * a restart. No await separates the last slot check from the queue entry: a lower slot requested in between would
-   * only be recorded, and the entry queued under the old slot would be skipped.
-   */
-  private async queueUnderLowestRequestedSlot(job: ProvingJob): Promise<void> {
-    try {
-      for (let lowest = this.withLowestRequestedSlot(job); lowest !== job; lowest = this.withLowestRequestedSlot(job)) {
-        job = lowest;
-        await this.database.addProvingJob(job);
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to save the lower priority slot of proving job id=${job.id}`, {
-        provingJobId: job.id,
-        prioritySlot: job.prioritySlot,
-        err,
-      });
-    }
-    this.enqueueJobInternal(this.withLowestRequestedSlot(job));
-  }
-
-  private withLowestRequestedSlot(job: ProvingJob): ProvingJob {
-    const cached = this.jobsCache.get(job.id);
-    return cached && isLowerSlot(cached.prioritySlot, job.prioritySlot)
-      ? { ...job, prioritySlot: cached.prioritySlot }
-      : job;
-  }
-
-  /**
-   * Orders an unsettled job by `prioritySlot` if that is lower than its current slot. Never creates or revives a
-   * job. A job that is still being saved or revived only has its slot recorded: it is saved and queued under the
-   * recorded slot once that finishes, and not before, because it cannot be handed out yet. Otherwise the queue
-   * entry is added before the database write, so a failed write only loses the lower slot after a restart. The
-   * entry with the old slot is skipped when it is reached.
-   */
-  async #lowerPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
-    const existing = this.jobsCache.get(id);
-    if (
-      !existing ||
-      !isLowerSlot(prioritySlot, existing.prioritySlot) ||
-      this.resultsCache.has(id) ||
-      this.isJobStale(existing)
-    ) {
-      return;
-    }
-    const lowered: ProvingJobMetadata = { ...existing, prioritySlot };
-    this.jobsCache.set(id, lowered);
-    // No promise yet: the job is still being saved or revived.
-    if (!this.promises.has(id)) {
-      return;
-    }
-    if (!this.inProgress.has(id)) {
-      this.queues[lowered.type].put({ id, epochNumber: lowered.epochNumber, prioritySlot });
-    }
-    try {
-      // The stored inputs stay: a second request for the job may name another location for the same inputs.
-      const inputsUri = await this.database.getProvingJobInputs(id);
-      // The job may have been lowered again, settled or cleaned up during the read. Only its current slot is saved.
-      const current = this.jobsCache.get(id);
-      if (inputsUri && current && !this.resultsCache.has(id)) {
-        await this.database.addProvingJob({ ...current, inputsUri });
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to save the lower priority slot of proving job id=${id}`, {
-        provingJobId: id,
-        prioritySlot,
-        err,
-      });
-    }
   }
 
   async #cancelProvingJob(id: ProvingJobId): Promise<void> {
@@ -576,9 +493,9 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         // or has already been completed
         // this can happen if the broker crashes and restarts
         // it's possible agents will report progress or results for jobs that are in the queue (after the restart)
-        // An entry whose slot differs from the job's current one is a leftover: the job was revived or its slot
-        // was lowered since. A job without a promise is still being saved or revived and cannot be handed out
-        // yet; it gets a fresh entry when that is done.
+        // An entry whose slot differs from the job's current one is a leftover: the job was cancelled and then
+        // requested again under another slot. A job without a promise is still being saved or revived and cannot
+        // be handed out yet; it gets a fresh entry when that is done.
         while ((enqueuedJob = queue.getImmediate())) {
           const meta = this.jobsCache.get(enqueuedJob.id);
           if (
@@ -951,10 +868,6 @@ function provingJobComparator(
   const slotA = a.prioritySlot ?? -1;
   const slotB = b.prioritySlot ?? -1;
   return slotA < slotB ? -1 : slotA > slotB ? 1 : 0;
-}
-
-function isLowerSlot(slot: SlotNumber | undefined, than: SlotNumber | undefined): boolean {
-  return slot !== undefined && than !== undefined && slot < than;
 }
 
 /** What the broker reads of a job to decide which one goes next. */

@@ -1,6 +1,5 @@
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from '@aztec-labs/stdlib/interfaces/server';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
@@ -647,39 +646,13 @@ describe.each([
         expect(await nextJobIds(2)).toEqual([older, newer]);
       });
 
-      it('orders a job that two requests share by the lower of their slots', async () => {
-        // The inbox parity proof of slot 6 has the same inputs as the one the proof ending at slot 5 needs.
+      it('keeps the slot a job was first requested under', async () => {
+        // The inbox parity proof of slot 6 has the same inputs as the one a proof ending at slot 5 needs.
         const parity = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
         const checkpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
         await enqueue(ProvingRequestType.INBOX_PARITY, 5, parity);
 
-        expect(await nextJobIds(3)).toEqual([parity, checkpointRoot, undefined]);
-      });
-
-      it('orders a shared job by its lower slot when saving that slot fails', async () => {
-        const shared = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
-        const other = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
-        jest.spyOn(database, 'addProvingJob').mockRejectedValueOnce(new Error('db down'));
-        await enqueue(ProvingRequestType.INBOX_PARITY, 5, shared);
-
-        expect(await nextJobIds(3)).toEqual([shared, other, undefined]);
-      });
-
-      it('orders a queued job by a lower slot requested for it', async () => {
-        const lowered = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
-        const other = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
-        await broker.lowerProvingJobPrioritySlot(lowered, SlotNumber(5));
-
-        expect(await nextJobIds(3)).toEqual([lowered, other, undefined]);
-      });
-
-      it('does not bring back a cancelled job when a lower slot is requested for it', async () => {
-        const cancelled = await enqueue(ProvingRequestType.INBOX_PARITY, 7);
-        await broker.cancelProvingJob(cancelled);
-        await broker.lowerProvingJobPrioritySlot(cancelled, SlotNumber(5));
-
-        expect(await nextJobId()).toBeUndefined();
-        await assertJobStatus(cancelled, 'aborted');
+        expect(await nextJobIds(3)).toEqual([checkpointRoot, parity, undefined]);
       });
 
       it('skips the queue entry a cancelled job left behind once it is revived with another slot', async () => {
@@ -691,56 +664,14 @@ describe.each([
         expect(await nextJobIds(3)).toEqual([other, revived, undefined]);
       });
 
-      it('hands out a job once when a lower slot arrives while it is being saved', async () => {
-        const id = makeRandomProvingJobId();
-        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
-        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
-        const beforeSaved = await nextJobId();
-        await Promise.all([saving, lowering]);
-        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
-
-        expect([beforeSaved, ...(await nextJobIds(3))]).toEqual([undefined, id, other, undefined]);
-
-        await restartBroker();
-        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
-      });
-
-      it('hands out a job whose lower slot arrives at any point while it is being saved', async () => {
-        for (let ticks = 0; ticks < 8; ticks++) {
-          const id = makeRandomProvingJobId();
-          const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
-          for (let i = 0; i < ticks; i++) {
-            await Promise.resolve();
-          }
-          await Promise.all([saving, enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id)]);
-
-          const job = (await broker.getProvingJob())?.job;
-          expect({ id: job?.id, prioritySlot: job?.prioritySlot }).toEqual({ id, prioritySlot: SlotNumber(5) });
-          // Settled, so a job that times out is not handed out again in a later round.
-          await broker.reportProvingJobSuccess(id, makeOutputsUri());
-        }
-      });
-
-      it('keeps the inputs a job was first saved with when a second request lowers its slot', async () => {
+      it('keeps the slot and the inputs a job was first saved with after a restart', async () => {
         const id = makeRandomProvingJobId();
         const job = { id, type: ProvingRequestType.INBOX_PARITY, epochNumber: epoch, inputsUri: makeInputsUri() };
         await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(7) });
         await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(5), inputsUri: makeInputsUri() });
 
         await restartBroker();
-        expect((await broker.getProvingJob())?.job).toEqual({ ...job, prioritySlot: SlotNumber(5) });
-      });
-
-      it('keeps a job whose lower slot, requested while it was being saved, fails to save', async () => {
-        const id = makeRandomProvingJobId();
-        const add = database.addProvingJob.bind(database);
-        jest.spyOn(database, 'addProvingJob').mockImplementationOnce(add).mockRejectedValueOnce(new Error('db down'));
-        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
-        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
-        await Promise.all([saving, lowering]);
-        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
-
-        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
+        expect((await broker.getProvingJob())?.job).toEqual({ ...job, prioritySlot: SlotNumber(7) });
       });
 
       it('does not hand out a cancelled job again before its revival is saved', async () => {
@@ -763,35 +694,16 @@ describe.each([
         expect(await nextJobIds(2)).toEqual([id, undefined]);
       });
 
-      it('hands out a job once when a lower slot arrives while it is being revived', async () => {
+      it('hands out a job once, under the slot of its revival, when it is requested again meanwhile', async () => {
         const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
         await broker.cancelProvingJob(id);
         const reviving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
-        const lowering = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const again = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
         const beforeRevived = await nextJobId();
-        await Promise.all([reviving, lowering]);
+        await Promise.all([reviving, again]);
         const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7);
 
-        expect([beforeRevived, ...(await nextJobIds(3))]).toEqual([undefined, id, other, undefined]);
-      });
-
-      it('saves the lowest slot when two requests lower a job at once', async () => {
-        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
-        const inputs = database.getProvingJobInputs.bind(database);
-        const firstRead = promiseWithResolvers<void>();
-        jest.spyOn(database, 'getProvingJobInputs').mockImplementationOnce(async jobId => {
-          await firstRead.promise;
-          return inputs(jobId);
-        });
-        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
-
-        const slower = broker.lowerProvingJobPrioritySlot(id, SlotNumber(7));
-        await broker.lowerProvingJobPrioritySlot(id, SlotNumber(5));
-        firstRead.resolve();
-        await slower;
-
-        await restartBroker();
-        expect(await nextJobIds(3)).toEqual([id, other, undefined]);
+        expect([beforeRevived, ...(await nextJobIds(3))]).toEqual([undefined, other, id, undefined]);
       });
 
       it('hands the slot to the agent with the job', async () => {

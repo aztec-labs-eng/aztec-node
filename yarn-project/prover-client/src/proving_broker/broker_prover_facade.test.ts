@@ -4,11 +4,7 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
-import {
-  type ProvingJobId,
-  type ProvingJobStatus,
-  makePublicInputsAndRecursiveProof,
-} from '@aztec-labs/stdlib/interfaces/server';
+import { type ProvingJobStatus, makePublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
 import { makeRecursiveProof } from '@aztec-labs/stdlib/proofs';
 import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec-labs/stdlib/testing';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
@@ -152,99 +148,25 @@ describe('BrokerCircuitProverFacade', () => {
     }
   });
 
-  describe('a job requested again for an earlier slot', () => {
+  it('sends a job to the broker once, under the slot of its first request', async () => {
     const inputs = makeInboxParityPrivateInputs();
-    let calls: string[];
-    let enqueueSent: boolean;
-    let brokerAnswers: Promise<void>;
-    let jobId: ProvingJobId;
-
-    beforeEach(() => {
-      calls = [];
-      enqueueSent = false;
-      brokerAnswers = Promise.resolve();
-      const enqueue = broker.enqueueProvingJob.bind(broker);
-      jest.spyOn(broker, 'enqueueProvingJob').mockImplementation(async job => {
-        enqueueSent = true;
-        jobId = job.id;
-        await brokerAnswers;
-        const status = await enqueue(job);
-        calls.push(`enqueue ${job.prioritySlot}`);
-        return status;
-      });
-      const lower = broker.lowerProvingJobPrioritySlot.bind(broker);
-      jest.spyOn(broker, 'lowerProvingJobPrioritySlot').mockImplementation(async (id, slot) => {
-        await lower(id, slot);
-        calls.push(`lower ${slot}`);
-      });
-      jest.spyOn(prover, 'getInboxParityProof').mockReturnValue(promiseWithResolvers<any>().promise);
+    const sentSlots: (SlotNumber | undefined)[] = [];
+    const enqueue = broker.enqueueProvingJob.bind(broker);
+    jest.spyOn(broker, 'enqueueProvingJob').mockImplementation(job => {
+      sentSlots.push(job.prioritySlot);
+      return enqueue(job);
     });
+    jest.spyOn(prover, 'getInboxParityProof').mockReturnValue(promiseWithResolvers<any>().promise);
+    const request = (slot: number) =>
+      void facade.getInboxParityProof(inputs, undefined, EpochNumber(42), SlotNumber(slot)).catch(() => {});
 
-    const request = (slot: number, signal?: AbortSignal) =>
-      void facade.getInboxParityProof(inputs, signal, EpochNumber(42), SlotNumber(slot)).catch(() => {});
+    request(6);
+    request(5);
+    await retryFastUntil(() => sentSlots.length >= 1, 'the job reaches the broker');
+    request(4);
 
-    it('is sent with the lowest slot requested before it left for the broker', async () => {
-      request(6);
-      request(5);
-      request(7);
-
-      await retryFastUntil(() => calls.length >= 1, 'the job reaches the broker');
-      await sleep(50);
-      expect(calls).toEqual(['enqueue 5']);
-    });
-
-    it('has its slot lowered at the broker once the broker has it', async () => {
-      request(6);
-      await retryFastUntil(() => calls.length >= 1, 'the job reaches the broker');
-      request(5);
-      request(7);
-
-      await retryFastUntil(() => calls.length >= 2, 'the lower slot reaches the broker');
-      await sleep(50);
-      expect(calls).toEqual(['enqueue 6', 'lower 5']);
-    });
-
-    it('has its slot lowered only after the broker has answered the request that enqueues it', async () => {
-      const answer = promiseWithResolvers<void>();
-      brokerAnswers = answer.promise;
-
-      request(6);
-      await retryFastUntil(() => enqueueSent, 'the request leaves for the broker');
-      request(5);
-      await sleep(50);
-      expect(calls).toEqual([]);
-
-      answer.resolve();
-      await retryFastUntil(() => calls.length >= 2, 'the lower slot reaches the broker');
-      expect(calls).toEqual(['enqueue 6', 'lower 5']);
-    });
-
-    it('stays cancelled at the broker when it is requested again for an earlier slot', async () => {
-      const controller = new AbortController();
-      request(6, controller.signal);
-      await retryFastUntil(() => calls.length >= 1, 'the job reaches the broker');
-      controller.abort();
-      await retryFastUntil(async () => (await broker.getProvingJobStatus(jobId)).status === 'aborted', 'job aborted');
-      request(5, controller.signal);
-
-      await sleep(50);
-      expect((await broker.getProvingJobStatus(jobId)).status).toEqual('aborted');
-    });
-
-    it('has its slot lowered for a live caller when its first caller gave up before the broker answered', async () => {
-      const answer = promiseWithResolvers<void>();
-      brokerAnswers = answer.promise;
-      const controller = new AbortController();
-
-      request(6, controller.signal);
-      await retryFastUntil(() => enqueueSent, 'the request leaves for the broker');
-      controller.abort();
-      request(5);
-      answer.resolve();
-
-      await retryFastUntil(() => calls.length >= 2, 'the lower slot reaches the broker');
-      expect(calls).toEqual(['enqueue 6', 'lower 5']);
-    });
+    await sleep(50);
+    expect(sentSlots).toEqual([SlotNumber(6)]);
   });
 
   it('handles proof errors', async () => {

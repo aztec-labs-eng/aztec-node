@@ -99,10 +99,6 @@ class RecordingBrokerProxy implements ProvingJobBroker {
     return this.inner.getCompletedJobs(ids);
   }
 
-  public lowerProvingJobPrioritySlot(...args: Parameters<ProvingBroker['lowerProvingJobPrioritySlot']>): Promise<void> {
-    return this.inner.lowerProvingJobPrioritySlot(...args);
-  }
-
   getProvingJob(filter?: ProvingJobFilter): Promise<GetProvingJobResponse | undefined> {
     return this.agentsPaused ? Promise.resolve(undefined) : this.inner.getProvingJob(this.withCapture(filter));
   }
