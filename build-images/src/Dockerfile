@@ -196,6 +196,7 @@ RUN apt update && \
         lcov \
         less \
         libfuse2 \
+        linux-tools-generic \
         lldb \
         lsb-release \
         man \
@@ -222,6 +223,10 @@ RUN apt update && \
         m4 \
         bison \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Ubuntu's /usr/bin/perf wrapper only runs the tools built for the exact running kernel, which rarely matches the host
+# kernel of a container. Put the generic kernel's perf first on PATH instead.
+RUN ln -s /usr/lib/linux-tools/*-generic/perf /usr/local/bin/perf
 
 # Install gh (github cli).
 RUN mkdir -p -m 755 /etc/apt/keyrings && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg > /etc/apt/keyrings/githubcli-archive-keyring.gpg \
