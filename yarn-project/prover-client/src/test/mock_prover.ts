@@ -3,7 +3,6 @@ import {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import type { AvmCircuitInputs } from '@aztec-labs/stdlib/avm';
 import {
@@ -95,10 +94,6 @@ export class TestBroker implements ProvingJobProducer {
 
   getCompletedJobs(ids: ProvingJobId[]): Promise<ProvingJobId[]> {
     return this.broker.getCompletedJobs(ids);
-  }
-
-  public lowerProvingJobPrioritySlot(id: ProvingJobId, prioritySlot: SlotNumber): Promise<void> {
-    return this.broker.lowerProvingJobPrioritySlot(id, prioritySlot);
   }
 }
 

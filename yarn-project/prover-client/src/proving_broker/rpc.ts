@@ -1,4 +1,4 @@
-import { EpochNumberSchema, SlotNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { createSafeJsonRpcClient } from '@aztec-labs/foundation/json-rpc/client';
 import {
   type GetProvingJobResponse,
@@ -57,7 +57,6 @@ export const ProvingJobProducerSchema: ApiSchemaFor<ProvingJobProducer> = {
   enqueueProvingJob: z.function({ input: z.tuple([ProvingJob]), output: ProvingJobStatus }),
   getProvingJobStatus: z.function({ input: z.tuple([ProvingJobId]), output: ProvingJobStatus }),
   cancelProvingJob: z.function({ input: z.tuple([ProvingJobId]), output: z.void() }),
-  lowerProvingJobPrioritySlot: z.function({ input: z.tuple([ProvingJobId, SlotNumberSchema]), output: z.void() }),
   getCompletedJobs: z.function({
     input: z.tuple([z.array(ProvingJobId).max(MAX_COMPLETED_JOBS_QUERY_LEN)]),
     output: z.array(ProvingJobId),
