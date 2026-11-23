@@ -5,6 +5,10 @@
   "type": "module",
   "exports": {
     "./embedded": {
+      "react-native": {
+        "types": "./dest/embedded/entrypoints/browser.d.ts",
+        "default": "./dest/embedded/entrypoints/browser.js"
+      },
       "browser": {
         "types": "./dest/embedded/entrypoints/browser.d.ts",
         "default": "./dest/embedded/entrypoints/browser.js"

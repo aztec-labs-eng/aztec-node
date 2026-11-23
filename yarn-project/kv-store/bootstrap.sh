@@ -10,7 +10,7 @@ hash=$(../bootstrap.sh hash)
 # silently until the CI timeout kills it. test_cmds therefore refuses to emit
 # anything it cannot classify.
 browser_dirs="src/deprecated/indexeddb src/sqlite-opfs"
-node_dirs="src/interfaces src/lmdb src/lmdb-v2 src/stores"
+node_dirs="src/interfaces src/kv-sqlite src/lmdb src/lmdb-v2 src/stores"
 # Benchmarks self-skip unless VITE_BENCH=1, so there is nothing for CI to run.
 unscheduled_dirs="src/bench"
 

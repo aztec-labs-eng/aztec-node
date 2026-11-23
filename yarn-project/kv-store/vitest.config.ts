@@ -1,7 +1,9 @@
 import { playwright } from '@vitest/browser-playwright';
-import { existsSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { searchForWorkspaceRoot } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 import { cacheDir } from './vitest.global-setup.js';
@@ -14,8 +16,19 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync(systemPlaywrightPath)) {
   process.env.PLAYWRIGHT_BROWSERS_PATH = systemPlaywrightPath;
 }
 
+// @aztec-labs/kv-sqlite fetches its wasm module from its own directory, which is outside the workspace when the
+// package is a portal into the foundation tree; the dev server has to be allowed to serve it.
+const kvSqliteDir = path.dirname(
+  path.dirname(realpathSync(createRequire(import.meta.url).resolve('@aztec-labs/kv-sqlite'))),
+);
+
 export default defineConfig({
   cacheDir,
+  server: {
+    fs: {
+      allow: [searchForWorkspaceRoot(process.cwd()), kvSqliteDir],
+    },
+  },
   define: {
     'process.env': {},
   },
@@ -37,9 +50,9 @@ export default defineConfig({
       'idb-keyval',
       'comlink',
     ],
-    // sqlite3mc-wasm ships its own .wasm asset loader; let Vite serve it as a static asset
-    // rather than pre-bundling, per the upstream docs' recommendation.
-    exclude: ['@aztec-labs/sqlite3mc-wasm'],
+    // These load their .wasm modules relative to their own files (`new URL(..., import.meta.url)`); let Vite serve
+    // them as they are rather than pre-bundling, which would move the code away from its assets.
+    exclude: ['@aztec-labs/sqlite3mc-wasm', '@aztec-labs/kv-sqlite'],
   },
   test: {
     globals: true,
@@ -57,6 +70,7 @@ export default defineConfig({
           environment: 'node',
           include: [
             './src/lmdb/**/*.test.ts',
+            './src/kv-sqlite/**/*.test.ts',
             './src/lmdb-v2/**/*.test.ts',
             './src/stores/**/*.test.ts',
             './src/interfaces/**/*.test.ts',

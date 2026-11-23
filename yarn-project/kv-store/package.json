@@ -8,15 +8,21 @@
     "./lmdb": "./dest/lmdb/index.js",
     "./lmdb-v2": "./dest/lmdb-v2/index.js",
     "./deprecated/indexeddb": "./dest/deprecated/indexeddb/index.js",
-    "./sqlite-opfs": "./dest/sqlite-opfs/index.js",
+    "./kv-sqlite": "./dest/kv-sqlite/index.js",
+    "./sqlite-opfs": {
+      "react-native": "./dest/sqlite-opfs/react_native.js",
+      "default": "./dest/sqlite-opfs/index.js"
+    },
     "./stores": "./dest/stores/index.js"
   },
   "imports": {
     "#msgpackr": {
+      "react-native": "./dest/sqlite-opfs/internal/msgpackr-no-eval.js",
       "browser": "msgpackr/index-no-eval",
       "default": "msgpackr"
     },
     "#ordered-binary": {
+      "react-native": "./dest/sqlite-opfs/internal/ordered-binary-browser.js",
       "browser": "./dest/sqlite-opfs/internal/ordered-binary-browser.js",
       "default": "ordered-binary"
     }
@@ -37,8 +43,9 @@
   ],
   "dependencies": {
     "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/kv-sqlite": "0.1.0-dummy",
+    "@aztec-labs/kv-sqlite-files": "0.1.0-dummy",
     "@aztec-labs/native": "workspace:^",
-    "@aztec-labs/sqlite3mc-wasm": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "buffer": "^6.0.3",
     "idb": "^8.0.0",
@@ -48,6 +55,7 @@
     "ordered-binary": "^1.5.3"
   },
   "devDependencies": {
+    "@aztec-labs/sqlite3mc-wasm": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",
