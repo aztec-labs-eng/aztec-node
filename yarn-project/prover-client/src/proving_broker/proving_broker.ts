@@ -31,9 +31,10 @@ type InProgressMetadata = {
 };
 
 /**
- * A queue entry. A job that was cancelled and then requested again can have two: the one from before the
- * cancellation, if it was not reached yet, and the one of the new request. If the new request carries another
- * slot, only the entry with that slot is valid.
+ * A queue entry. A job that was cancelled and then requested again has one entry for each time it was queued, until
+ * the broker reaches the old ones. An entry whose slot differs from the job's current slot is skipped. Entries with
+ * the current slot are all valid, and the job is still handed out once, because dispatch skips a job that is in
+ * progress or settled.
  */
 type EnqueuedProvingJob = Pick<ProvingJob, 'id' | 'epochNumber' | 'prioritySlot'>;
 
