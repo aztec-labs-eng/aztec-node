@@ -19,7 +19,7 @@ Files in this skill: `agent-brief.md` (the prompt each fix agent gets) and `pr-t
 
 ## Step 0: Prerequisites
 
-- `CI_PASSWORD` must be set (see `ci-logs`). If `[ -z "$CI_PASSWORD" ]`, ask the user for it before dispatching anything, and pass it to the agents. Agents cannot ask the user for it themselves.
+- The user must be signed in to the CI dashboard (see `ci-logs`). Check with one `yarn ci dlog <hash>` before dispatching anything; if it says "not signed in to the CI dashboard", ask the user to run `! ./ci.sh dashboard-login`. Agents cannot complete that sign-in themselves, but once it is done they all share it.
 - With no argument you need the Slack MCP (`slack_read_channel`). If it is not connected, ask the user for the runs or tests instead of guessing.
 - `git fetch origin` so every comparison against `main` is fresh.
 
