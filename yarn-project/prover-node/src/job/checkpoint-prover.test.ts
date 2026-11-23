@@ -246,18 +246,26 @@ describe('CheckpointProver', () => {
   });
 
   describe('priority slot', () => {
-    // Parks the sub-tree's creation, so the test reads what the prover asked for and cancels before any block runs.
+    // Holds the sub-tree's creation until the prover is cancelled, so the test reads what the prover asked for and no
+    // block runs.
     const requestedPrioritySlot = async (args: Partial<CheckpointProverArgs>) => {
       txProvider.getTxsForBlock.mockReset();
       txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
       const requested = promiseWithResolvers<SlotNumber | undefined>();
+      const created = promiseWithResolvers<CheckpointSubTreeOrchestrator>();
       proverFactory.createCheckpointSubTreeOrchestrator.mockImplementation((...factoryArgs) => {
         requested.resolve(factoryArgs[7]);
-        return new Promise<never>(() => {});
+        return created.promise;
       });
       const prover = makeProver(args);
       const prioritySlot = await requested.promise;
       prover.cancel();
+      created.resolve({
+        getSubTreeResult: () => new Promise<never>(() => {}),
+        cancel: () => {},
+        stop: () => Promise.resolve(),
+      } as unknown as CheckpointSubTreeOrchestrator);
+      await cleanup(prover);
       return prioritySlot;
     };
 

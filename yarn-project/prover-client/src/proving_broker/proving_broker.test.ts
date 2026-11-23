@@ -635,7 +635,7 @@ describe.each([
       });
 
       it('gives the jobs of an older epoch before a job of a newer epoch that has no slot', async () => {
-        const newer = makeRandomProvingJobId();
+        const newer = makeRandomProvingJobId(EpochNumber(2));
         await broker.enqueueProvingJob({
           id: newer,
           type: ProvingRequestType.BLOCK_ROOT_ROLLUP,

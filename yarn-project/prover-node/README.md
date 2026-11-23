@@ -447,7 +447,7 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 | Block-level job of a checkpoint registered while its epoch is running | The checkpoint's own slot |
 | Block-level job of a block proven before its checkpoint lands | The block's own slot |
 | Block-level job of a checkpoint registered after its epoch is complete | The last slot of the epoch |
-| Top-tree job | The highest slot among the checkpoints of its proof |
+| Top-tree job | The highest slot that the block-level jobs of its proof's checkpoints carry |
 
 - A partial epoch proof can end at any checkpoint of a running epoch. With the own slot, the blocks of later
   checkpoints wait for the jobs of that proof.
@@ -459,7 +459,10 @@ node chooses the slot of each job so that it is the last slot of the earliest ep
 - A top-tree job never has a lower slot than a block-level job its proof waits for, so the broker does not hand
   out checkpoint roots ahead of that job.
 
-The broker keeps the slot with the job in its database, so the order does not change when the broker restarts.
+The broker keeps the slot with the job in its database, so a job has the same slot after a broker restart.
+
+The slot of a checkpoint's jobs is fixed when the checkpoint is registered. If the archiver cannot say whether the
+epoch is complete, the checkpoint gets its own slot and a warning is logged.
 
 ## Known limitations
 
@@ -491,6 +494,10 @@ The broker keeps the slot with the job in its database, so the order does not ch
   block-level jobs carry the last slot of the epoch, like those of every other checkpoint of that epoch.
 - A checkpoint registered just before its epoch completes keeps its own slot, and its jobs go ahead of those of
   checkpoints registered after.
+- The broker keeps the slot a job was first requested under. A prover node that restarts after an epoch has ended
+  registers that epoch's checkpoints again, now under the epoch's last slot, while the jobs it requested before the
+  restart keep their own slots at the broker. Until those are done, the broker can hand out a checkpoint root
+  before block-level work of the same proof, or an old job before a new one that ranks higher by proof type.
 - A chonk verifier proof that is still running when its transaction is included again in an earlier slot of the
   same epoch keeps the slot it was first requested for.
 - A job whose slot is lowered while it waits has two queue entries until the broker reaches the old one. The

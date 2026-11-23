@@ -118,7 +118,13 @@ describe('prover/bb_prover/full-rollup', () => {
         const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
         let epochResult;
         try {
-          epochResult = await topTree.prove(EpochNumber(1), numCheckpoints, finalBlobChallenges, topTreeData);
+          epochResult = await topTree.prove(
+            EpochNumber(1),
+            numCheckpoints,
+            finalBlobChallenges,
+            topTreeData,
+            undefined,
+          );
         } finally {
           await topTree.stop();
         }

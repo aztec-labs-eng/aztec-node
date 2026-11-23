@@ -132,7 +132,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
       expect(result.batchedBlobInputs).toBeDefined();
@@ -148,7 +148,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], undefined);
       expect(result.proof).toBeDefined();
     } finally {
       await topTree.stop();
@@ -196,7 +196,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
     } finally {
@@ -212,7 +212,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
 
@@ -244,7 +244,13 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 3, challenges, [a.topTreeData, b.topTreeData, c.topTreeData]);
+      const result = await topTree.prove(
+        EpochNumber(1),
+        3,
+        challenges,
+        [a.topTreeData, b.topTreeData, c.topTreeData],
+        undefined,
+      );
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
 
@@ -273,7 +279,7 @@ describe('prover/orchestrator/top-tree', () => {
     try {
       // Top tree proves in the background; it should be able to advance ckpt0's root
       // rollup before we resolve ckpt1's promise.
-      const provePromise = topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, ckpt1]);
+      const provePromise = topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, ckpt1], undefined);
 
       // Give the orchestrator a chance to enqueue ckpt0's root rollup.
       await sleep(50);
@@ -297,7 +303,7 @@ describe('prover/orchestrator/top-tree', () => {
     const stuckData = { ...topTreeData, subTreeProofs: stuck } as CheckpointTopTreeData;
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
-    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [stuckData]);
+    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [stuckData], undefined);
 
     // Yield then cancel.
     await sleep(10);
@@ -321,7 +327,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     let actual: unknown;
     try {
-      await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
     } catch (err) {
       actual = err;
     }
@@ -335,9 +341,11 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const first = topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const first = topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       // Second call before first settles should throw synchronously inside the function
-      await expect(topTree.prove(EpochNumber(1), 1, challenges, [topTreeData])).rejects.toThrow(/prove called twice/);
+      await expect(topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined)).rejects.toThrow(
+        /prove called twice/,
+      );
       await first;
     } finally {
       await topTree.stop();
@@ -358,7 +366,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [badData]);
+      const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [badData], undefined);
       const hung = Symbol('hung');
       const outcome = await Promise.race([
         provePromise.then(
@@ -396,7 +404,7 @@ describe('prover/orchestrator/top-tree', () => {
     const failingData = { ...topTreeData, subTreeProofs: observableSubTreeProofs as any } as CheckpointTopTreeData;
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
-    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [failingData]);
+    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [failingData], undefined);
 
     // Wait until prove() has finished its pre-loop setup and registered the subTreeProofs handler.
     await retryUntil(() => handlerAttached, 'prove() attaches subTreeProofs handler', 5, 0.005);
@@ -428,7 +436,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      await expect(topTree.prove(EpochNumber(1), 2, challenges, [topTreeData])).rejects.toThrow(
+      await expect(topTree.prove(EpochNumber(1), 2, challenges, [topTreeData], undefined)).rejects.toThrow(
         /does not match totalNumCheckpoints/,
       );
     } finally {
