@@ -33,27 +33,33 @@ export type EarlyBlockProverDeps = BlockExecutionDeps & {
 };
 
 /**
- * Starts block-level proving for a block as soon as the archiver holds it, without waiting for its checkpoint to
- * land on L1.
+ * Starts block-level proving for a proposed block before its checkpoint lands on L1.
  *
- * The proofs it starts are not handed to anything. When the checkpoint lands, the node proves it through the
- * usual `CheckpointProver`, which requests proving jobs with the same inputs. The proving broker identifies a job
- * by its inputs, so it serves those requests from the jobs started here. The jobs of a block that is pruned before
- * its checkpoint lands are used only if a block with the same inputs is proposed again.
+ * The proofs it starts are not handed to anything. When the checkpoint lands, its `CheckpointProver` requests proving
+ * jobs with the same inputs. The proving broker identifies a job by its inputs, so it serves those requests from the
+ * jobs started here.
  *
- * The archiver must hold proposed blocks for this to do anything. A node that does not re-execute block proposals
- * only learns of blocks from their checkpoints, and then no block is ever proven early.
+ * Which blocks are proven early:
+ * - Only blocks the archiver holds before their checkpoint lands. A node that does not re-execute block proposals
+ *   learns of blocks only from their checkpoints, so it never proves a block early.
+ * - Only blocks of an epoch that already has a landed checkpoint. The broker drops the jobs of old epochs once it
+ *   sees a job of a newer epoch, and a block can be proposed shortly before its epoch starts. Proving it then would
+ *   make the broker drop the jobs of an epoch whose proof-submission window is still open.
+ * - Only slots seen from their first block. A block's proving inputs depend on the earlier blocks of its slot.
+ * - At most `MAX_SLOTS_IN_PROGRESS` slots at a time.
  *
- * Early proving never aborts a broker job. A `CheckpointProver` may be waiting on the same job, and an abort would
- * fail it. The jobs of a pruned block therefore run to completion on the agents.
+ * What happens to a slot's work:
+ * - Its checkpoint lands: the slot is released, and its `CheckpointProver` reuses the jobs.
+ * - A prune removes one of its blocks: the slot is released. Its jobs are used only if a block with the same inputs is
+ *   proposed again.
+ * - Early proving fails: the failure is logged, and the rest of the slot is left to its checkpoint. The checkpoint is
+ *   still proven the usual way.
  *
- * A failure here is logged and stops early proving for the affected slot. Its checkpoint is still proven the usual
- * way. One failure does reach the checkpoint: the broker stores a job that failed after all its retries, and
- * answers the `CheckpointProver`'s request for the same job with that failure.
+ * One failure does reach the checkpoint. The broker stores a job that failed after all its retries, and it answers the
+ * `CheckpointProver`'s request for the same job with that failure.
  *
- * A block is proven early only if a checkpoint of its epoch has already landed. The broker drops the jobs of old
- * epochs once it sees a job of a newer epoch, and a block can be proposed shortly before its epoch starts. Proving
- * it then would make the broker drop the jobs of an epoch whose proof-submission window is still open.
+ * Early proving never aborts a broker job. The jobs of a released slot run to completion on the agents. A
+ * `CheckpointProver` may be waiting on the same job, and an abort would fail it.
  */
 export class EarlyBlockProver {
   private readonly log: Logger;
@@ -110,8 +116,14 @@ export class EarlyBlockProver {
   }
 
   /**
-   * Adds every block between the last one handled and the tip. If a read fails part-way, the blocks after the
-   * failure are picked up when the proposed tip moves again.
+   * Adds every block after the last one handled, up to the tip.
+   *
+   * - Checkpointed blocks are not added. Their `CheckpointProver` proves them.
+   * - A block of an epoch with no landed checkpoint is passed over for good, because the cursor moves past it. If a
+   *   checkpoint of its epoch lands while its slot is still being proposed, `addBlock` skips the slot's remaining
+   *   blocks too, because the slot was not seen from its first block.
+   *
+   * If a read fails part-way, the blocks after the failure are picked up when the proposed tip moves again.
    */
   private async catchUpTo(tip: BlockNumber): Promise<void> {
     // Checkpointed blocks are proven by their `CheckpointProver`. On the first call this also places the cursor,
@@ -147,6 +159,19 @@ export class EarlyBlockProver {
     }
   }
 
+  /**
+   * Hands a block to the early proving of its slot.
+   *
+   * - Its slot is in progress: the block is added to it.
+   * - It is its slot's first block: a `SlotInProgress` is created from the previous block's header, and the oldest
+   *   slots are dropped if more than `MAX_SLOTS_IN_PROGRESS` are in progress.
+   * - It is not its slot's first block: it is skipped. The rest of the slot is skipped the same way, so the slot is
+   *   left to its checkpoint. A block's proving inputs depend on the earlier blocks of its slot.
+   *
+   * A slot whose early proving failed stays in progress, so its later blocks are added to it and ignored there.
+   *
+   * @throws If the archiver has no header for the previous block.
+   */
   private async addBlock(block: L2Block): Promise<void> {
     const slot = block.slot;
     let work = this.slots.get(slot);
@@ -157,8 +182,6 @@ export class EarlyBlockProver {
         throw new Error(`Header of block ${block.number - 1} not found`);
       }
       if (previousHeader.getSlot() === slot) {
-        // The slot's first block was not proven early. A block's proving inputs depend on the blocks before it in
-        // the slot, so the rest of the slot is left to its checkpoint.
         this.log.debug(`Not proving block ${block.number} early: slot ${slot} is not being proven from its start`, {
           blockNumber: block.number,
           slot,
@@ -172,6 +195,7 @@ export class EarlyBlockProver {
     work.add(block);
   }
 
+  /** Releases every slot whose blocks are all checkpointed. Their `CheckpointProver`s reuse the jobs started here. */
   private releaseCheckpointed(checkpointedBlock: BlockNumber): void {
     for (const [slot, work] of this.slots) {
       if (work.lastBlockNumber <= checkpointedBlock) {
@@ -180,9 +204,15 @@ export class EarlyBlockProver {
     }
   }
 
+  /**
+   * Releases every slot that holds a block above `prunedToBlock`, together with the chonk-verifier cache entries of
+   * its removed blocks.
+   *
+   * The cursor moves back to the lower of `prunedToBlock` and the block before the first block of each released slot.
+   * The next proposed tip then adds a released slot's surviving blocks again, together with the blocks that replace
+   * the removed ones. They are added again because a slot is proven early only from its first block.
+   */
   private dropPruned(prunedToBlock: BlockNumber): void {
-    // Where the next proposed tip resumes from. A slot is proven from its first block on, so when a slot loses
-    // some of its blocks, its surviving blocks are picked up again together with whatever replaces the lost ones.
     let resumeAfter = prunedToBlock;
     for (const [slot, work] of this.slots) {
       if (work.lastBlockNumber <= prunedToBlock) {
@@ -200,21 +230,29 @@ export class EarlyBlockProver {
     }
   }
 
+  /**
+   * Releases the oldest slots until at most `MAX_SLOTS_IN_PROGRESS` remain, together with all their chonk-verifier
+   * cache entries.
+   *
+   * The entries are released now because nothing tracks a dropped slot afterwards, so a later prune could not release
+   * them. If the slot is checkpointed instead, its `CheckpointProver` requests the proofs again and the broker serves
+   * them.
+   */
   private dropOldestSlots(): void {
     while (this.slots.size > MAX_SLOTS_IN_PROGRESS) {
       const oldest = SlotNumber(Math.min(...this.slots.keys()));
       this.log.warn(`Dropping early proving for slot ${oldest}: too many slots without a checkpoint`, { slot: oldest });
-      // Nothing tracks this slot from here on, so nothing would release its chonk proofs if it were pruned later.
-      // If it is checkpointed instead, its `CheckpointProver` requests them again and the broker serves them.
       this.release(oldest, { releaseChonkProofsAbove: BlockNumber.ZERO });
     }
   }
 
   /**
-   * Removes a slot and unwinds its work in the background. With `releaseChonkProofsAbove`, the chonk-verifier
-   * cache entries of the slot's blocks above that block number are released once the work has stopped: while it
-   * runs, it can still add entries. Entries of checkpointed blocks are released when their epoch expires; blocks
-   * that never reach a checkpoint have only this.
+   * Removes a slot from `slots` and stops its work in the background.
+   *
+   * With `releaseChonkProofsAbove`, the chonk-verifier cache entries of the slot's blocks above that block number are
+   * released once the work has stopped. They are not released earlier because running work can still add entries.
+   * Entries of checkpointed blocks are released when their epoch expires. Blocks that never reach a checkpoint have no
+   * other release.
    */
   private release(slot: SlotNumber, opts: { releaseChonkProofsAbove?: BlockNumber } = {}): void {
     const work = this.slots.get(slot);
@@ -237,13 +275,25 @@ export class EarlyBlockProver {
   }
 }
 
-/** Early proving of the blocks proposed so far in one slot. */
+/**
+ * Early proving of the blocks proposed so far in one slot.
+ *
+ * Blocks are proven one at a time, in the order they were added, on one blocks-only sub-tree created with the first
+ * block. The blocks must be consecutive and start with the slot's first block.
+ *
+ * The first failure marks the slot failed for good. Its later blocks are then ignored, and its checkpoint proves them
+ * the usual way. Two kinds of failure count:
+ * - a block that cannot be proven, for example because a transaction is missing;
+ * - a proving job that fails after its block was executed.
+ */
 class SlotInProgress {
   private readonly blocks: L2Block[] = [];
   private readonly abortController = new AbortController();
   /** Blocks are proven one after the other, in the order they were added. */
   private readonly queue = new SerialQueue();
+  /** Created when the slot's first block is proven, and cleared when it is stopped. */
   private subTree: CheckpointSubTreeOrchestrator | undefined;
+  /** Set on the first failure. Never cleared. */
   private failed = false;
 
   constructor(
@@ -260,6 +310,7 @@ class SlotInProgress {
     return BlockNumber(this.previousHeader.getBlockNumber() + 1);
   }
 
+  /** Computed from the block count, which is correct because the blocks are consecutive. */
   public get lastBlockNumber(): BlockNumber {
     return BlockNumber(this.firstBlockNumber + this.blocks.length - 1);
   }
@@ -268,6 +319,7 @@ class SlotInProgress {
     return this.blocks;
   }
 
+  /** Queues the block behind the blocks added before it, and returns without waiting for it to be proven. */
   public add(block: L2Block): void {
     const parentHeader = this.blocks.at(-1)?.header ?? this.previousHeader;
     this.blocks.push(block);
@@ -284,6 +336,7 @@ class SlotInProgress {
     await this.stopSubTree();
   }
 
+  /** Proves the block unless the slot has failed or been released. A failure marks the slot failed. */
   private async proveOrGiveUp(block: L2Block, parentHeader: BlockHeader, sinceAdded: Timer): Promise<void> {
     if (this.failed || this.abortController.signal.aborted) {
       return;
@@ -330,6 +383,16 @@ class SlotInProgress {
     await subTree?.stop();
   }
 
+  /**
+   * Proves one block on the slot's sub-tree. The steps run in this order:
+   * 1. sync world state to the block, read its L1-to-L2 messages, and gather its transactions;
+   * 2. create the sub-tree, on the slot's first block only;
+   * 3. start the chonk-verifier circuits of its public transactions;
+   * 4. re-execute it with `executeBlock`, which enqueues its proving jobs with the broker.
+   *
+   * It returns early if the slot is released, or has failed, between steps. It throws if a transaction is missing or
+   * a step fails.
+   */
   private async prove(block: L2Block, parentHeader: BlockHeader, sinceAdded: Timer): Promise<void> {
     const signal = this.abortController.signal;
 
