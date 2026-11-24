@@ -4,13 +4,11 @@ import { KvService } from '@aztec-labs/kv-sqlite';
 import { AztecKvSqliteStore, initStore, validateEncryption } from '../kv-sqlite/store.js';
 import { SqlitePoolBusyError } from './errors.js';
 
-export {
-  SqliteCorruptionError,
-  SqliteEncryptionError,
-  SqlitePoolBusyError,
-  SqliteWebLocksUnavailableError,
-} from './errors.js';
-export type { SqliteEncryptionErrorCode } from './errors.js';
+// The kv-sqlite store throws its own encryption and corruption errors, so this entry exports those classes, not the
+// browser's, for `instanceof` to match.
+export { SqliteCorruptionError, SqliteEncryptionError } from '../kv-sqlite/errors.js';
+export type { SqliteEncryptionErrorCode } from '../kv-sqlite/errors.js';
+export { SqlitePoolBusyError, SqliteWebLocksUnavailableError } from './errors.js';
 
 /**
  * The app's files, as @aztec-foundation/react-native installs them on the JavaScript runtime. The store needs the app

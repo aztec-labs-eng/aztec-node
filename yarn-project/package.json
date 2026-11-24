@@ -107,7 +107,6 @@
     "@aztec-labs/kv-sqlite-darwin-x64": "portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64",
     "@aztec-labs/kv-sqlite-linux-arm64": "portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64",
     "@aztec-labs/kv-sqlite-linux-x64": "portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64",
-    "@aztec-labs/kv-sqlite-files": "portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/files",
     "@aztec-foundation/noir-acvm_js": "6.1.0",
     "@aztec-foundation/noir-types": "6.1.0",
     "@aztec-foundation/noir-noirc_abi": "6.1.0",

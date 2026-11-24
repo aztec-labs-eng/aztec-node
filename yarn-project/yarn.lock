@@ -1653,15 +1653,6 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@aztec-labs/kv-sqlite-files@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/files::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite-files@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/files::locator=%40aztec%2Faztec3-packages%40workspace%3A."
-  dependencies:
-    msgpackr: "npm:^1.11.2"
-    tslib: "npm:^2.4.0"
-  languageName: node
-  linkType: soft
-
 "@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
@@ -1707,7 +1698,6 @@ __metadata:
   dependencies:
     "@aztec-labs/foundation": "workspace:^"
     "@aztec-labs/kv-sqlite": "npm:0.1.0-dummy"
-    "@aztec-labs/kv-sqlite-files": "npm:0.1.0-dummy"
     "@aztec-labs/native": "workspace:^"
     "@aztec-labs/sqlite3mc-wasm": "workspace:^"
     "@aztec-labs/stdlib": "workspace:^"

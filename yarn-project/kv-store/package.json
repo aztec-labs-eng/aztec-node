@@ -44,8 +44,8 @@
   "dependencies": {
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/kv-sqlite": "0.1.0-dummy",
-    "@aztec-labs/kv-sqlite-files": "0.1.0-dummy",
     "@aztec-labs/native": "workspace:^",
+    "@aztec-labs/sqlite3mc-wasm": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "buffer": "^6.0.3",
     "idb": "^8.0.0",
@@ -55,7 +55,6 @@
     "ordered-binary": "^1.5.3"
   },
   "devDependencies": {
-    "@aztec-labs/sqlite3mc-wasm": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

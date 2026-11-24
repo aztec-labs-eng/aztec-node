@@ -15,6 +15,6 @@ The backend is selected at import time, you import `createStore` (and friends) f
 
 - `@aztec-labs/kv-store/lmdb-v2`: server / Node. The current default for node components.
 - `@aztec-labs/kv-store/lmdb`: the legacy LMDB backend, backed by [`lmdb-js`](https://github.com/kriszyp/lmdb-js).
-- `@aztec-labs/kv-store/sqlite-opfs`: the recommended browser backend, encryption-at-rest capable, backed by SQLite over the Origin Private File System (OPFS): `@aztec-labs/kv-sqlite`'s wasm module on a worker, its files in OPFS.
-- `@aztec-labs/kv-store/kv-sqlite`: the same store over any of `@aztec-labs/kv-sqlite`'s backends (its native library or process in node, the library through JSI in React Native), so a database has one format everywhere.
+- `@aztec-labs/kv-store/sqlite-opfs`: the recommended browser backend, encryption-at-rest capable, backed by SQLite over the Origin Private File System (OPFS). Under the `react-native` export condition it resolves to the `kv-sqlite` store instead, with the same API and its database in the app's data directory.
+- `@aztec-labs/kv-store/kv-sqlite`: a store over `@aztec-labs/kv-sqlite`'s C++ Kv service: its native library or process in node, the library through JSI in React Native.
 - `@aztec-labs/kv-store/deprecated/indexeddb`: **deprecated** browser backend, backed by IndexedDB. New browser code must use `@aztec-labs/kv-store/sqlite-opfs`, as this backend is on its way to being fully deprecated.

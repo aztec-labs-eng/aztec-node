@@ -1,43 +1,91 @@
 import type { Logger } from '@aztec-labs/foundation/log';
-import { AsyncApi, type KvCreateOptions } from '@aztec-labs/kv-sqlite';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
 
-import { AztecKvSqliteStore, typedInitError, validateEncryption } from '../kv-sqlite/store.js';
-import type { WorkerRequest, WorkerResponse } from './messages.js';
+import type { AztecAsyncArray } from '../interfaces/array.js';
+import type { Key, StoreSize, Value } from '../interfaces/common.js';
+import type { AztecAsyncCounter } from '../interfaces/counter.js';
+import type { AztecAsyncMap } from '../interfaces/map.js';
+import type { AztecAsyncMultiMap } from '../interfaces/multi_map.js';
+import type { AztecAsyncSet } from '../interfaces/set.js';
+import type { AztecAsyncSingleton } from '../interfaces/singleton.js';
+import type { AztecAsyncKVStore } from '../interfaces/store.js';
+import { SQLiteOPFSAztecArray } from './array.js';
+import { SqliteCorruptionError, SqliteEncryptionError, isCorruptionMessage } from './errors.js';
+import { SQLiteOPFSAztecMap } from './map.js';
+import type { ResultRow, SqlValue, WorkerRequest, WorkerResponse } from './messages.js';
+import { SQLiteOPFSAztecMultiMap } from './multi_map.js';
 import { quarantineDuplicatePool } from './pool_integrity.js';
 import { type PoolLockLease, acquirePoolLock, normalizePoolDirectory } from './pool_lock.js';
-
-type KvBackend = Exclude<KvCreateOptions['backend'], string | undefined>;
+import { SQLiteOPFSAztecSet } from './set.js';
+import { SQLiteOPFSAztecSingleton } from './singleton.js';
 
 /**
- * Main-thread handle for a store persisted to OPFS: the Kv service's wasm module runs on a dedicated Web Worker
- * (OPFS sync access handles exist only there), keeping its files in an SAH pool directory in the layout SQLite's
- * opfs-sahpool VFS writes, so stores written before open unchanged. Every command is the generated client's bytes,
- * posted to the worker.
+ * Main-thread handle for a SQLite database persisted to OPFS via the `opfs-sahpool`
+ * VFS. Owns a dedicated Web Worker (the SAH Pool VFS requires Worker context) and
+ * routes every SQL op through it via typed postMessage RPC.
+ *
+ * Transaction ordering is guaranteed by a `SerialQueue` on the main thread combined
+ * with an `#inTx` flag: outside a `transactionAsync` block, each op acquires the
+ * queue for its own auto-commit; inside a block, the outer call holds the queue and
+ * nested ops bypass it to avoid deadlock.
  */
-export class AztecSQLiteOPFSStore extends AztecKvSqliteStore {
+export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
+  readonly #worker: Worker;
+  readonly #pending = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (err: Error) => void }>();
+  readonly #txQueue = new SerialQueue();
+  readonly #name: string;
+  readonly #log: Logger;
+  #nextId = 0;
+  #inTx = false;
+  #closed = false;
+  #workerFailed = false;
+
   private constructor(
-    backend: WorkerBackend,
+    worker: Worker,
+    name: string,
     log: Logger,
-    isEphemeral: boolean,
+    public readonly isEphemeral: boolean,
     private readonly poolLock?: PoolLockLease,
   ) {
-    super(new AsyncApi(backend), log, isEphemeral);
+    this.#worker = worker;
+    this.#name = name;
+    this.#log = log;
+    this.#worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
+      const { id } = ev.data;
+      const handler = this.#pending.get(id);
+      if (!handler) {
+        this.#log.warn(`SQLite worker: no pending handler for id ${id}`);
+        return;
+      }
+      this.#pending.delete(id);
+      handler.resolve(ev.data);
+    };
+    this.#worker.onerror = ev => {
+      this.#workerFailed = true;
+      this.#log.error(`SQLite worker crashed: ${ev.message}`);
+      this.#rejectPending(`SQLite worker crashed: ${ev.message}`);
+    };
+    this.#txQueue.start();
   }
 
   /**
-   * Opens (or creates) a store in the OPFS SAH pool. When `ephemeral` is true the database lives only in memory and
-   * is lost when the worker terminates. Pass `poolDirectory` to place the SAH pool in a non-default OPFS
-   * subdirectory — required when multiple stores coexist in the same tab, because a pool's files are held by one
-   * store at a time.
+   * Opens (or creates) a SQLite database stored in the OPFS SAH Pool. When `ephemeral`
+   * is true the database lives only in memory and is lost when the worker terminates.
+   * Pass `poolDirectory` to place the SAH Pool in a non-default OPFS subdirectory —
+   * required when multiple stores coexist in the same tab, because the SAH Pool holds
+   * an exclusive lock on its directory.
    *
-   * Persistent stores hold an origin-wide Web Lock for the pool directory until close or delete. If another store
-   * instance already owns it, open fails immediately with `SqlitePoolBusyError`.
+   * Persistent stores hold an origin-wide Web Lock for the pool directory until close
+   * or delete. If another store instance already owns it, open fails immediately with
+   * `SqlitePoolBusyError`.
    *
-   * Pass `encryptionKey` (exactly 32 bytes) to enable at-rest encryption via sqlite3mc's ChaCha20 page cipher. The
-   * key buffer is **transferred** to the worker — its ArrayBuffer detaches on the caller side after `postMessage`.
-   * This is intentional: the API encodes a one-key-one-owner invariant. A caller that wants to use the same key for
-   * multiple stores must explicitly clone it per call (e.g. `new Uint8Array(savedKey)`), making the duplication a
-   * visible, deliberate decision rather than a silent structured-clone operation. The default path (one `.open()`,
+   * Pass `encryptionKey` (exactly 32 bytes) to enable at-rest encryption via sqlite3mc's
+   * ChaCha20 page cipher. The key buffer is **transferred** to the worker — its
+   * ArrayBuffer detaches on the caller side after `postMessage`. This is intentional:
+   * the API encodes a one-key-one-owner invariant. A caller that wants to use the same
+   * key for multiple stores must explicitly clone it per call (e.g.
+   * `new Uint8Array(savedKey)`), making the duplication a visible, deliberate decision
+   * rather than a silent structured-clone operation. The default path (one `.open()`,
    * one consumption of the key) leaves zero key bytes on the main thread after the call.
    */
   static async open(
@@ -47,14 +95,25 @@ export class AztecSQLiteOPFSStore extends AztecKvSqliteStore {
     poolDirectory?: string,
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
-    validateEncryption(encryptionKey, ephemeral);
+    if (encryptionKey !== undefined && encryptionKey.length !== 32) {
+      throw new SqliteEncryptionError(
+        'invalid_key_length',
+        `encryptionKey must be 32 bytes (got ${encryptionKey.length})`,
+      );
+    }
+    if (encryptionKey !== undefined && ephemeral) {
+      throw new SqliteEncryptionError(
+        'encryption_not_supported_for_ephemeral',
+        'encryptionKey is not supported for ephemeral (:memory:) stores',
+      );
+    }
     const dbName = name && !ephemeral ? name : `tmp-${globalThis.crypto.getRandomValues(new Uint8Array(8)).join('')}`;
     log.debug(
       `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
     );
     const effectivePoolDirectory = ephemeral ? undefined : normalizePoolDirectory(poolDirectory);
     const poolLock = effectivePoolDirectory ? await acquirePoolLock(effectivePoolDirectory) : undefined;
-    let backend: WorkerBackend | undefined;
+    let worker: Worker | undefined;
     try {
       if (effectivePoolDirectory) {
         const quarantine = await quarantineDuplicatePool(effectivePoolDirectory);
@@ -63,114 +122,210 @@ export class AztecSQLiteOPFSStore extends AztecKvSqliteStore {
         }
       }
       // @dependency ./worker.ts
-      backend = new WorkerBackend(new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }), log);
-      await backend
-        .request(
-          {
-            type: 'open',
-            id: 0,
-            path: ephemeral ? undefined : normalizeDbPath(dbName),
-            poolDirectory: effectivePoolDirectory,
-            encryptionKey,
-          },
-          // Transfer (not clone) the key buffer to the worker so we don't leave a second copy on the main thread.
-          encryptionKey ? [encryptionKey.buffer as ArrayBuffer] : undefined,
-        )
-        .catch(err => {
-          throw typedInitError(err);
-        });
-      return new AztecSQLiteOPFSStore(backend, log, ephemeral, poolLock);
+      worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+      const store = new AztecSQLiteOPFSStore(worker, dbName, log, ephemeral, poolLock);
+      // Transfer (not clone) the key buffer to the worker so we don't leave a
+      // second copy on the main thread. Caveat: this detaches the caller's
+      // encryptionKey.buffer — subsequent reads from the same Uint8Array are empty.
+      const transfer = encryptionKey ? [encryptionKey.buffer as ArrayBuffer] : undefined;
+      await store.#sendRequest(
+        { type: 'init', id: store.#allocId(), dbName, ephemeral, poolDirectory: effectivePoolDirectory, encryptionKey },
+        transfer,
+      );
+      return store;
     } catch (err) {
-      backend?.terminate();
+      worker?.terminate();
       await poolLock?.release();
       throw err;
     }
   }
 
-  protected override async release(): Promise<void> {
-    try {
-      await super.release();
-    } finally {
-      await this.poolLock?.release();
+  openMap<K extends Key, V extends Value>(name: string): AztecAsyncMap<K, V> {
+    return new SQLiteOPFSAztecMap<K, V>(this, name);
+  }
+
+  openSet<K extends Key>(name: string): AztecAsyncSet<K> {
+    return new SQLiteOPFSAztecSet<K>(this, name);
+  }
+
+  openMultiMap<K extends Key, V extends Value>(name: string): AztecAsyncMultiMap<K, V> {
+    return new SQLiteOPFSAztecMultiMap<K, V>(this, name);
+  }
+
+  openCounter<K extends Key>(_name: string): AztecAsyncCounter<K> {
+    throw new Error('Method not implemented.');
+  }
+
+  openArray<T extends Value>(name: string): AztecAsyncArray<T> {
+    return new SQLiteOPFSAztecArray<T>(this, name);
+  }
+
+  openSingleton<T extends Value>(name: string): AztecAsyncSingleton<T> {
+    return new SQLiteOPFSAztecSingleton<T>(this, name);
+  }
+
+  transactionAsync<T>(callback: () => Promise<T>): Promise<T> {
+    // Nested calls join the outer transaction — SQLite does not support nested BEGIN,
+    // and re-acquiring the SerialQueue while the outer call holds it would deadlock.
+    // Errors in the nested callback propagate to the outer catch, which rolls back the
+    // whole thing (the standard "nested tx = savepoint-free join" semantic).
+    if (this.#inTx) {
+      return callback();
     }
-  }
-}
-
-/** The Kv service's backend on the store's worker: each call posts the command's bytes and awaits the answer's. */
-class WorkerBackend implements KvBackend {
-  readonly #pending = new Map<number, { resolve: (bytes: Uint8Array) => void; reject: (err: Error) => void }>();
-  #nextId = 0;
-  #failed: string | undefined;
-
-  constructor(
-    private readonly worker: Worker,
-    private readonly log: Logger,
-  ) {
-    worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
-      const resp = ev.data;
-      const handler = this.#pending.get(resp.id);
-      if (!handler) {
-        this.log.warn(`SQLite worker: no pending handler for id ${resp.id}`);
-        return;
+    return this.#txQueue.put(async () => {
+      this.#inTx = true;
+      await this.#sendRequest({ type: 'begin', id: this.#allocId() });
+      try {
+        const result = await callback();
+        await this.#sendRequest({ type: 'commit', id: this.#allocId() });
+        return result;
+      } catch (err) {
+        await this.#sendRequest({ type: 'rollback', id: this.#allocId() }).catch(rollbackErr =>
+          this.#log.warn(`SQLite ROLLBACK failed: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`),
+        );
+        throw err;
+      } finally {
+        this.#inTx = false;
       }
-      this.#pending.delete(resp.id);
-      if (resp.type === 'err') {
-        handler.reject(new Error(resp.message));
-      } else {
-        handler.resolve(resp.bytes ?? new Uint8Array());
-      }
-    };
-    worker.onerror = ev => {
-      this.#failed = `SQLite worker crashed: ${ev.message}`;
-      this.log.error(this.#failed);
-      this.#rejectPending(this.#failed);
-    };
-  }
-
-  call(bytes: Uint8Array): Promise<Uint8Array> {
-    return this.request({ type: 'call', id: 0, bytes });
-  }
-
-  /** Ends the service (releasing the pool's handles before it answers), then the worker. */
-  async destroy(): Promise<void> {
-    try {
-      if (!this.#failed) {
-        await this.request({ type: 'close', id: 0 }).catch(() => {});
-      }
-    } finally {
-      this.terminate();
-    }
-  }
-
-  terminate(): void {
-    this.worker.terminate();
-    this.#failed ??= 'SQLite store closed';
-    this.#rejectPending(this.#failed);
-  }
-
-  request(req: WorkerRequest, transfer?: Transferable[]): Promise<Uint8Array> {
-    if (this.#failed) {
-      return Promise.reject(new Error(this.#failed));
-    }
-    const id = ++this.#nextId;
-    return new Promise<Uint8Array>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
-      this.worker.postMessage({ ...req, id }, transfer ?? []);
     });
   }
 
+  async clear(): Promise<void> {
+    await this.runAsync('DELETE FROM data');
+  }
+
+  async delete(): Promise<void> {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    try {
+      await this.#txQueue.end();
+      await this.#sendRequest({ type: 'deleteDb', id: this.#allocId(), dbName: this.#name }).catch(err =>
+        this.#log.warn(`SQLite deleteDb failed: ${err instanceof Error ? err.message : err}`),
+      );
+    } finally {
+      this.#worker.terminate();
+      this.#rejectPending('SQLite store deleted');
+      await this.poolLock?.release();
+    }
+  }
+
   /**
-   * Rejects every in-flight request with `reason`, so callers awaiting a worker that has ended don't hang forever.
+   * Placeholder — returns zeros to mirror the IndexedDB backend. SQLite exposes real
+   * numbers cheaply via `PRAGMA page_count` / `page_size` / `freelist_count` and
+   * `SELECT COUNT(*) FROM data`, which would populate `physicalFileSize`, `actualSize`,
+   * and `numItems` meaningfully (`mappingSize` stays 0 — it's an LMDB mmap concept).
+   * Upgrade when any caller actually consumes these values; all current consumers
+   * tolerate zeros.
+   */
+  estimateSize(): Promise<StoreSize> {
+    return Promise.resolve({ mappingSize: 0, physicalFileSize: 0, actualSize: 0, numItems: 0 });
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    try {
+      await this.#txQueue.end();
+      await this.#sendRequest({ type: 'close', id: this.#allocId() }).catch(() => {});
+    } finally {
+      this.#worker.terminate();
+      this.#rejectPending('SQLite store closed');
+      await this.poolLock?.release();
+    }
+  }
+
+  backupTo(_dstPath: string, _compact?: boolean): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+
+  /**
+   * Returns a raw SQLite image (bytes suitable for writing as a `.sqlite` file and
+   * opening in any SQLite tool). Works only for non-ephemeral DBs because the OPFS
+   * SAH Pool has to be initialized. Useful for inspection/debugging.
+   */
+  async exportDb(): Promise<Uint8Array> {
+    const resp = await this.#sendRequest({ type: 'export', id: this.#allocId() });
+    if (!('bytes' in resp) || !resp.bytes) {
+      throw new Error('exportDb: worker returned no bytes');
+    }
+    return resp.bytes;
+  }
+
+  /**
+   * Runs a write statement (INSERT/UPDATE/DELETE/DDL). If called inside a
+   * `transactionAsync` block, bypasses the queue; otherwise acquires it so the
+   * op runs in its own auto-commit.
+   */
+  runAsync(sql: string, bind?: SqlValue[]): Promise<{ changes: number }> {
+    const send = () =>
+      this.#sendRequest({ type: 'run', id: this.#allocId(), sql, bind }).then(r => ({
+        changes: 'changes' in r ? (r.changes ?? 0) : 0,
+      }));
+    return this.#inTx ? send() : this.#txQueue.put(send);
+  }
+
+  /** Runs a SELECT statement and returns rows in array row-mode. */
+  allAsync(sql: string, bind?: SqlValue[]): Promise<ResultRow[]> {
+    const send = () =>
+      this.#sendRequest({ type: 'all', id: this.#allocId(), sql, bind }).then(r => ('rows' in r ? (r.rows ?? []) : []));
+    return this.#inTx ? send() : this.#txQueue.put(send);
+  }
+
+  #allocId(): number {
+    return ++this.#nextId;
+  }
+
+  /**
+   * Reject any in-flight requests with `reason`, so callers awaiting a response to a
+   * request sent to a now-terminated worker don't hang forever. Called from
+   * close()/delete() and from the worker.onerror handler.
    */
   #rejectPending(reason: string): void {
+    if (this.#pending.size === 0) {
+      return;
+    }
     const err = new Error(reason);
     for (const { reject } of this.#pending.values()) {
       reject(err);
     }
     this.#pending.clear();
   }
-}
 
-function normalizeDbPath(dbName: string): string {
-  return dbName.startsWith('/') ? dbName : `/${dbName}`;
+  #sendRequest(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse> {
+    if (this.#workerFailed) {
+      return Promise.reject(new Error('SQLite worker has crashed'));
+    }
+    return new Promise<WorkerResponse>((resolve, reject) => {
+      this.#pending.set(req.id, {
+        resolve: resp => {
+          if (resp.type === 'err') {
+            // Re-hydrate typed errors so consumers can pattern-match on
+            // `instanceof`. Encryption is tagged on the wire (some cases are
+            // pre-flight throws with no message to match); corruption is a
+            // single unambiguous message, so we classify it here rather than
+            // adding a redundant wire field. Everything else stays a plain Error.
+            if (resp.encryptionCode !== undefined) {
+              reject(new SqliteEncryptionError(resp.encryptionCode, resp.message));
+            } else if (isCorruptionMessage(resp.message)) {
+              reject(new SqliteCorruptionError(resp.message));
+            } else {
+              reject(new Error(resp.message));
+            }
+          } else {
+            resolve(resp);
+          }
+        },
+        reject,
+      });
+      if (transfer && transfer.length > 0) {
+        this.#worker.postMessage(req, transfer);
+      } else {
+        this.#worker.postMessage(req);
+      }
+    });
+  }
 }

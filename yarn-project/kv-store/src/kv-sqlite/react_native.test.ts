@@ -57,6 +57,10 @@ describe('AztecSQLiteOPFSStore (React Native)', () => {
     expect(await listStores()).toEqual([]);
   });
 
+  it('rejects a key that is not 32 bytes with the SqliteEncryptionError it exports', async () => {
+    await expect(open('x', new Uint8Array(16))).rejects.toBeInstanceOf(SqliteEncryptionError);
+  });
+
   it('says what is missing when the app has not imported @aztec-foundation/react-native', async () => {
     delete (globalThis as any).__aztecReactNative;
     await expect(open('x')).rejects.toThrow(/@aztec-foundation\/react-native/);

@@ -41,7 +41,7 @@ export class IndexedDBAztecArray<T extends Value> implements AztecAsyncArray<T> 
     for (const val of vals) {
       await this.db.put({
         value: val,
-        hash: positionalHash(val, length),
+        hash: hash(val),
         container: this.#container,
         key: [this.#name],
         keyCount: length + 1,
@@ -89,7 +89,7 @@ export class IndexedDBAztecArray<T extends Value> implements AztecAsyncArray<T> 
 
     await this.db.put({
       value: val,
-      hash: positionalHash(val, index),
+      hash: hash(val),
       container: this.#container,
       key: [this.#name],
       keyCount: index + 1,
@@ -119,12 +119,4 @@ export class IndexedDBAztecArray<T extends Value> implements AztecAsyncArray<T> 
   #slot(index: number): string {
     return `array:${this.#name}:slot:${index}`;
   }
-}
-
-/**
- * The store's (container, key, hash) index is unique, and an array may hold a value more than once, so an entry's
- * hash names its position too. Entries written before carry the bare hash, which never equals a suffixed one.
- */
-function positionalHash(val: unknown, position: number): string {
-  return `${hash(val)}#${position + 1}`;
 }

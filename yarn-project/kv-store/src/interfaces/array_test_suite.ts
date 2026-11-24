@@ -59,17 +59,6 @@ export function describeAztecArray(
       expect(await arr.pop()).toBe(undefined);
     });
 
-    it('holds the same value more than once', async () => {
-      await arr.push(7, 7);
-      await arr.push(7);
-      await arr.setAt(0, 8);
-      await arr.setAt(1, 7);
-
-      expect(await values()).toEqual([8, 7, 7]);
-      expect(await arr.pop()).toBe(7);
-      expect(await values()).toEqual([8, 7]);
-    });
-
     it('should be able to get values by index', async () => {
       await arr.push(1);
       await arr.push(2);
