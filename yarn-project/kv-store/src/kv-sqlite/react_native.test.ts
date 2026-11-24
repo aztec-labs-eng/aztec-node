@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -55,6 +55,12 @@ describe('AztecSQLiteOPFSStore (React Native)', () => {
     await b.close();
 
     await deleteStore('pxe_data_1');
+    expect(await listStores()).toEqual([]);
+  });
+
+  it('lists only store directories', async () => {
+    mkdirSync(join(dataDir, 'kv-store'), { recursive: true });
+    writeFileSync(join(dataDir, 'kv-store', '.aztec-kv-stray'), '');
     expect(await listStores()).toEqual([]);
   });
 
