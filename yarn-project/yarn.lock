@@ -1639,37 +1639,37 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@aztec-labs/kv-sqlite-darwin-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
+"@aztec-labs/kv-sqlite-darwin-arm64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite-darwin-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
+  resolution: "@aztec-labs/kv-sqlite-darwin-arm64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: soft
 
-"@aztec-labs/kv-sqlite-darwin-x64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
+"@aztec-labs/kv-sqlite-darwin-x64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite-darwin-x64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
+  resolution: "@aztec-labs/kv-sqlite-darwin-x64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-darwin-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
   conditions: os=darwin & cpu=x64
   languageName: node
   linkType: soft
 
-"@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
+"@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
+  resolution: "@aztec-labs/kv-sqlite-linux-arm64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-arm64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
   conditions: os=linux & cpu=arm64
   languageName: node
   linkType: soft
 
-"@aztec-labs/kv-sqlite-linux-x64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
+"@aztec-labs/kv-sqlite-linux-x64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite-linux-x64@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
+  resolution: "@aztec-labs/kv-sqlite-linux-x64@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts/packages/kv-sqlite-linux-x64::locator=%40aztec%2Faztec3-packages%40workspace%3A."
   conditions: os=linux & cpu=x64
   languageName: node
   linkType: soft
 
-"@aztec-labs/kv-sqlite@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
+"@aztec-labs/kv-sqlite@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts::locator=%40aztec%2Faztec3-packages%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec-labs/kv-sqlite@portal:../../aztec-packages-rn-parity/native-packages/kv-sqlite/ts::locator=%40aztec%2Faztec3-packages%40workspace%3A."
+  resolution: "@aztec-labs/kv-sqlite@portal:../../aztec-packages-ipc-audit-fixes/native-packages/kv-sqlite/ts::locator=%40aztec%2Faztec3-packages%40workspace%3A."
   dependencies:
     "@aztec-foundation/ipc-runtime": "@aztec-foundation/ipc-runtime"
     "@aztec-labs/kv-sqlite-darwin-arm64": "npm:0.1.0"
