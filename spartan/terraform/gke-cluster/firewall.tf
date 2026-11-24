@@ -56,12 +56,12 @@ resource "google_compute_firewall" "ethereum_p2p" {
 
   allow {
     protocol = "tcp"
-    ports    = ["32200", "32201", "32300", "32301"]
+    ports    = ["32200", "32201", "32300", "32301", "32400", "32401"]
   }
 
   allow {
     protocol = "udp"
-    ports    = ["32201", "32301"]
+    ports    = ["32201", "32301", "32400", "32401"]
   }
 
   direction     = "INGRESS"
