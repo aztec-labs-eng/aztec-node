@@ -1,15 +1,16 @@
 locals {
-  # Slot whose clients back the public mainnet Kong routes; null routes them to the legacy pair.
+  # Slot whose clients back the public routes, in-cluster Services, and health scrapes.
   mainnet_serving_slot = "blue"
 
   # Deployment membership must not depend on remembering a local var file during routine applies.
   mainnet_instances = {
     blue = {
-      reth_image          = "ghcr.io/paradigmxyz/reth:v2.11.0"
-      lighthouse_image    = "sigp/lighthouse:v8.3.3"
-      reth_p2p_port       = 32400
-      lighthouse_p2p_port = 32401
-      reth_storage_gib    = 3584
+      reth_image             = "ghcr.io/paradigmxyz/reth:v2.11.0"
+      lighthouse_image       = "sigp/lighthouse:v8.3.3"
+      reth_p2p_port          = 32400
+      lighthouse_p2p_port    = 32401
+      reth_storage_gib       = 3584
+      avoid_release_prefixes = ["mainnet"]
       source_snapshots = {
         reth       = "mainnet-live-20261111-162729-26781-reth"
         lighthouse = "mainnet-live-20261111-162729-26781-lighthouse"
@@ -20,7 +21,7 @@ locals {
   mainnet_instance_defaults = {
     reth_storage_gib        = 3328
     lighthouse_storage_gib  = 512
-    avoid_release_prefixes  = ["mainnet"]
+    avoid_release_prefixes  = []
     liveness_probes_enabled = false
   }
   mainnet_instance_configs = {
@@ -71,7 +72,7 @@ module "mainnet_instances" {
   AVOID_RELEASE_PREFIXES  = each.value.avoid_release_prefixes
   LIVENESS_PROBES_ENABLED = each.value.liveness_probes_enabled
   RESERVED_P2P_PORTS = concat(
-    flatten([for chain in local.ethereum_chains : [chain.reth_p2p_port, chain.lighthouse_p2p_port]]),
+    [local.ethereum_chains.sepolia.reth_p2p_port, local.ethereum_chains.sepolia.lighthouse_p2p_port],
     flatten([
       for slot, instance in local.mainnet_instance_configs : [instance.reth_p2p_port, instance.lighthouse_p2p_port]
       if slot != each.key
@@ -82,12 +83,7 @@ module "mainnet_instances" {
 }
 
 locals {
-  mainnet_serving_releases = local.mainnet_serving_slot == null ? {
-    reth       = module.ethereum_nodes["mainnet"].reth_release_name
-    lighthouse = module.ethereum_nodes["mainnet"].lighthouse_release_name
-    } : {
-    for client, instance in module.mainnet_instances[local.mainnet_serving_slot].clients : client => instance.release_name
-  }
+  mainnet_serving_clients = module.mainnet_instances[local.mainnet_serving_slot].clients
 
   mainnet_serving_services = {
     reth = {
@@ -114,7 +110,7 @@ resource "kubernetes_service_v1" "mainnet_serving" {
   spec {
     type = "ClusterIP"
     selector = {
-      "app.kubernetes.io/instance" = local.mainnet_serving_releases[each.key]
+      "app.kubernetes.io/instance" = local.mainnet_serving_clients[each.key].release_name
       "app.kubernetes.io/name"     = each.key
     }
 
