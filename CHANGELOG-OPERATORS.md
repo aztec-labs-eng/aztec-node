@@ -63,13 +63,15 @@ Each job also carries a slot, and the broker now orders jobs by epoch, then by s
 
 A checkpoint that lands in the same epoch after a partial proof was requested therefore does not go ahead of that proof: its jobs have a higher slot than every job of the proof. The known limitations in the prover node README list the cases where this does not hold. The root rollup of a proof that ends later now waits for the jobs of a proof that ends earlier. An agent still takes a job of a later slot when there is nothing else it can do, and finishes it, so a job of the proof that becomes ready meanwhile can wait for up to one such job each time the proof moves to its next job. The broker stores the slot with the job, so a job has the same slot after a broker restart. The slot is the one of the job's first request: after a prover node restart that crosses the end of an epoch, jobs requested before the restart keep their own slots while new ones carry the epoch's last slot, and the two are ordered by those slots until the old jobs are done.
 
-Results of a scheduling simulation of a partial proof of 16 checkpoints, with later checkpoints landing one slot apart after the request. The prover node enqueues a follow-up job 1 s after the proof it depends on finishes:
+The table shows how long a partial proof of 16 checkpoints takes in a scheduling simulation. In the last two columns, more checkpoints of the same epoch land one slot apart after the proof was requested. The prover node enqueues a follow-up job 1 s after the proof it depends on finishes.
 
-| Case | Alone | With later checkpoints | With later checkpoints, ordered by type alone |
+| Case | No later checkpoints | Later checkpoints, new order | Later checkpoints, previous order |
 | --- | --- | --- | --- |
 | 4 agents, 4 later checkpoints | 570 s | 579 s | 1049 s |
 | 16 agents, slow newest checkpoint, 4 later checkpoints | 518 s | 569 s | 880 s |
 | 16 agents, slow newest checkpoint, 12 later checkpoints | 518 s | 569 s | 1952 s |
+
+With the previous order, the block-level jobs of each later checkpoint went ahead of the proof's checkpoint roots, so the proof took longer with every checkpoint that landed. With the new order, the 16-agent proof takes 569 s whether 4 or 12 checkpoints land.
 
 An epoch whose checkpoints the prover node all picks up after the epoch is complete has one slot for all its jobs except that parity proof, so the broker orders them by proof type as before. In the simulation, in which every checkpoint has L1-to-L2 messages, its proving time is the same as without slots in each of 7 workloads.
 
