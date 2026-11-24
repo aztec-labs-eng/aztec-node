@@ -33,8 +33,8 @@ export class NodeLogsProvider {
    * request briefly when the node has not seen that block yet — a client that synced one block ahead through another
    * node is then answered instead of failed over a transient skew.
    *
-   * A bare hash that never arrives is still passed on, so the logs source's own check — which runs inside the read's
-   * transaction and is the authoritative one — raises the error it always did. An anchor also claims a height, and
+   * A bare hash that never arrives is still passed on, so the logs source's authoritative check raises the error
+   * it always did. An anchor also claims a height, and
    * nothing below here checks it, so an anchor the hold-off could not confirm fails here: handing the logs source
    * the bare hash would let a block arriving later be served without the height ever being checked.
    */
