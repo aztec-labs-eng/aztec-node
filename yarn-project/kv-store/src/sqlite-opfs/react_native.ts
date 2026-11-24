@@ -4,11 +4,13 @@ import { KvService } from '@aztec-labs/kv-sqlite';
 import { AztecKvSqliteStore, initStore, validateEncryption } from '../kv-sqlite/store.js';
 import { SqlitePoolBusyError } from './errors.js';
 
-// The kv-sqlite store throws its own encryption and corruption errors, so this entry exports those classes, not the
-// browser's, for `instanceof` to match.
-export { SqliteCorruptionError, SqliteEncryptionError } from '../kv-sqlite/errors.js';
-export type { SqliteEncryptionErrorCode } from '../kv-sqlite/errors.js';
-export { SqlitePoolBusyError, SqliteWebLocksUnavailableError } from './errors.js';
+export {
+  SqliteCorruptionError,
+  SqliteEncryptionError,
+  SqlitePoolBusyError,
+  SqliteWebLocksUnavailableError,
+} from './errors.js';
+export type { SqliteEncryptionErrorCode } from './errors.js';
 
 /**
  * The app's files, as @aztec-foundation/react-native installs them on the JavaScript runtime. The store needs the app
@@ -120,12 +122,13 @@ export class AztecSQLiteOPFSStore extends AztecKvSqliteStore {
 }
 
 /** The effective names of the stores in the app's data directory, as the browser's lists those in its origin. */
-export function listStores(): Promise<string[]> {
+// eslint-disable-next-line require-await -- async so a failure rejects, as in the browser, rather than throwing
+export async function listStores(): Promise<string[]> {
   const root = storesRoot();
   const names = files().isDirectory(root) ? files().listDirectory(root) : [];
-  return Promise.resolve(
-    names.filter(name => name.startsWith(OPFS_POOL_DIR_PREFIX)).map(name => name.slice(OPFS_POOL_DIR_PREFIX.length)),
-  );
+  return names
+    .filter(name => name.startsWith(OPFS_POOL_DIR_PREFIX) && files().isDirectory(`${root}/${name}`))
+    .map(name => name.slice(OPFS_POOL_DIR_PREFIX.length));
 }
 
 /** Permanently deletes a store by effective name. The store must be closed. */
@@ -134,13 +137,13 @@ export function deleteStore(effectiveName: string): Promise<void> {
 }
 
 /** Permanently deletes a store's directory. Its store must be closed. */
-export function deletePoolDirectory(poolDirectory: string): Promise<void> {
+// eslint-disable-next-line require-await -- async so a failure rejects, as in the browser, rather than throwing
+export async function deletePoolDirectory(poolDirectory: string): Promise<void> {
   const directory = normalizePoolDirectory(poolDirectory);
   if (openDirectories.has(directory)) {
-    return Promise.reject(new SqlitePoolBusyError(directory));
+    throw new SqlitePoolBusyError(directory);
   }
   files().removeDirectory(`${storesRoot()}/${directory}`);
-  return Promise.resolve();
 }
 
 export function openTmpStore(ephemeral: boolean = false): Promise<AztecSQLiteOPFSStore> {

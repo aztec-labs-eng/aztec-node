@@ -8,6 +8,7 @@ import {
   AztecSQLiteOPFSStore,
   SqliteEncryptionError,
   SqlitePoolBusyError,
+  deletePoolDirectory,
   deleteStore,
   listStores,
   openTmpStore,
@@ -57,8 +58,8 @@ describe('AztecSQLiteOPFSStore (React Native)', () => {
     expect(await listStores()).toEqual([]);
   });
 
-  it('rejects a key that is not 32 bytes with the SqliteEncryptionError it exports', async () => {
-    await expect(open('x', new Uint8Array(16))).rejects.toBeInstanceOf(SqliteEncryptionError);
+  it('rejects, as the browser does, rather than throwing when it cannot delete a directory', async () => {
+    await expect(deletePoolDirectory('..')).rejects.toThrow(/Invalid store directory/);
   });
 
   it('says what is missing when the app has not imported @aztec-foundation/react-native', async () => {

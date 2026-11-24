@@ -1,3 +1,4 @@
+import { toArray } from '@aztec-labs/foundation/iterable';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -11,8 +12,8 @@ import { mockLogger } from '../interfaces/utils.js';
 import { SqliteEncryptionError } from './errors.js';
 import { AztecKvSqliteStore } from './store.js';
 
-// The browser store runs the same containers over the wasm module (sqlite-opfs/); these run them over each node
-// backend, in memory.
+// The React Native store (sqlite-opfs/react_native.ts) runs these containers over the library linked into the app;
+// these run them over each node backend, in memory.
 for (const backend of ['process', 'napi', 'wasm'] as const) {
   describe(`AztecKvSqliteStore (${backend})`, () => {
     const open = () => AztecKvSqliteStore.create(mockLogger, { backend });
@@ -21,6 +22,20 @@ for (const backend of ['process', 'napi', 'wasm'] as const) {
     describeAztecArray('AztecArray', open);
     describeAztecSet('AztecSet', open);
     describeAztecSingleton('AztecSingleton', open);
+
+    it('holds the same value more than once in an array', async () => {
+      const store = await open();
+      const arr = store.openArray<number>('arr');
+      await arr.push(7, 7);
+      await arr.push(7);
+      await arr.setAt(0, 8);
+      await arr.setAt(1, 7);
+
+      expect(await toArray(arr.valuesAsync())).toEqual([8, 7, 7]);
+      expect(await arr.pop()).toBe(7);
+      expect(await toArray(arr.valuesAsync())).toEqual([8, 7]);
+      await store.close();
+    });
   });
 }
 
