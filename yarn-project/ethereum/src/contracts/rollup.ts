@@ -11,12 +11,12 @@ import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { Buffer } from 'buffer';
 import chunk from 'lodash.chunk';
 import {
+  type Abi,
   type AbiParameter,
   type Account,
   BaseError,
@@ -52,6 +52,15 @@ import { formatViemError, mergeAbis } from '../utils.js';
 import type { ViemCommitteeAttestations } from './committee_attestations.js';
 import { GSEContract } from './gse.js';
 import type { L1EventLog } from './log.js';
+import { MULTI_CALL_3_ADDRESS } from './multicall.js';
+import {
+  type RollupRead,
+  type RollupReadOutcome,
+  type RollupReadOutcomes,
+  getReadValue,
+  rollupReads,
+  toCheckpointLog,
+} from './rollup_reads.js';
 import { SlasherContract } from './slasher_contract.js';
 import { SlashingProposerContract } from './slashing_proposer.js';
 import { checkBlockTag } from './utils.js';
@@ -195,6 +204,21 @@ export type L1FeeData = {
   baseFee: bigint;
   blobFee: bigint;
 };
+
+/**
+ * The L1 block a read is pinned to. A block hash takes precedence over a number, and a read pinned to a hash fails
+ * when that block is no longer canonical, so values read at one hash all describe the same chain.
+ */
+export type L1ReadPin = { blockNumber?: bigint; blockHash?: Hex };
+
+/** Turns a {@link L1ReadPin} into viem's block parameters, checking a number pin against the node's history. */
+async function toBlockParams(pin: L1ReadPin | undefined, client: ViemClient) {
+  if (pin?.blockHash !== undefined) {
+    return { blockHash: pin.blockHash, requireCanonical: true };
+  }
+  await checkBlockTag(pin?.blockNumber, client);
+  return { blockNumber: pin?.blockNumber };
+}
 
 /**
  * Field offsets within the CompressedTempCheckpointLog struct in Solidity storage. The `SlotNumber`
@@ -528,9 +552,8 @@ export class RollupContract {
   }
 
   /** Returns the mana target. Not memoized: governance can raise it. */
-  async getManaTarget(options?: { blockNumber?: bigint }): Promise<bigint> {
-    await checkBlockTag(options?.blockNumber, this.client);
-    return await this.rollup.read.getManaTarget(options);
+  async getManaTarget(options?: L1ReadPin): Promise<bigint> {
+    return await this.rollup.read.getManaTarget(await toBlockParams(options, this.client));
   }
 
   /** Returns the proving cost per mana in ETH. Not memoized: governance can change it. */
@@ -844,65 +867,58 @@ export class RollupContract {
     return EthAddress.fromString(result);
   }
 
-  async getCheckpoint(checkpointNumber: CheckpointNumber, options?: { blockNumber?: bigint }): Promise<CheckpointLog> {
-    await checkBlockTag(options?.blockNumber, this.client);
-    const result = await this.rollup.read.getCheckpoint([BigInt(checkpointNumber)], options);
+  async getCheckpoint(checkpointNumber: CheckpointNumber, options?: L1ReadPin): Promise<CheckpointLog> {
+    const result = await this.rollup.read.getCheckpoint(
+      [BigInt(checkpointNumber)],
+      await toBlockParams(options, this.client),
+    );
+    return toCheckpointLog(result);
+  }
+
+  /** Reads a checkpoint and the mana target in a single L1 request pinned to `blockHash`. */
+  async getCheckpointAndManaTarget(
+    checkpointNumber: CheckpointNumber,
+    blockHash: Hex,
+  ): Promise<{ checkpoint: CheckpointLog; manaTarget: bigint }> {
+    const checkpointRead = rollupReads.checkpoint(checkpointNumber);
+    const manaTargetRead = rollupReads.manaTarget();
+    const outcomes = await this.readBatch([checkpointRead, manaTargetRead], blockHash);
     return {
-      archive: Fr.fromString(result.archive),
-      headerHash: Buffer32.fromString(result.headerHash),
-      blobCommitmentsHash: Buffer32.fromString(result.blobCommitmentsHash),
-      attestationsHash: Buffer32.fromString(result.attestationsHash),
-      payloadDigest: Buffer32.fromString(result.payloadDigest),
-      slotNumber: SlotNumber.fromBigInt(result.slotNumber),
-      feeHeader: {
-        excessMana: result.feeHeader.excessMana,
-        manaUsed: result.feeHeader.manaUsed,
-        ethPerFeeAsset: result.feeHeader.ethPerFeeAsset,
-        protocolFee: result.feeHeader.protocolFee,
-        proverCost: result.feeHeader.proverCost,
-      },
+      checkpoint: getReadValue(outcomes, checkpointRead)!,
+      manaTarget: getReadValue(outcomes, manaTargetRead)!,
     };
   }
 
   /**
-   * Returns the pending checkpoint from the rollup contract.
-   * @param options - Optional L1 block number to pin the queries to.
+   * Sends `reads` to L1 as a single Multicall3 `aggregate3` call pinned to `blockHash`. The call fails as a whole when
+   * that block is no longer canonical; a read that reverts only fails its own outcome. Look values up with
+   * {@link getReadValue}.
    */
-  getPendingCheckpoint(options?: { blockNumber?: bigint }) {
-    // We retry because of race conditions during prunes: we may get a pending checkpoint number which is immediately
-    // reorged out due to a prune happening, causing the subsequent getCheckpoint call to fail. So we try again in that case.
-    return retry(
-      async () => {
-        const pendingCheckpointNumber = await this.getCheckpointNumber(options);
-        const pendingCheckpoint = await this.getCheckpoint(pendingCheckpointNumber, options);
-        return pendingCheckpoint;
-      },
-      'getting pending checkpoint',
-      makeBackoff([0.5, 0.5, 0.5]),
-    );
-  }
-
-  /**
-   * Returns the effective pending checkpoint, accounting for potential prunes.
-   * When a prune can happen, the L1 contract uses the proven checkpoint instead of the pending one.
-   * This mirrors the behavior of getEffectivePendingCheckpointNumber in STFLib.sol.
-   * @param atTimestamp - The timestamp to evaluate pruneability at. Defaults to the current L1 block timestamp.
-   * @param options - Optional L1 block number to pin the queries to.
-   */
-  getEffectivePendingCheckpoint(atTimestamp?: bigint, options?: { blockNumber?: bigint }) {
-    return retry(
-      async () => {
-        const timestamp = atTimestamp ?? (await this.client.getBlock()).timestamp;
-        const canPrune = await this.canPruneAtTime(timestamp, options);
-        if (canPrune) {
-          const provenCheckpointNumber = await this.getProvenCheckpointNumber(options);
-          return await this.getCheckpoint(provenCheckpointNumber, options);
-        }
-        const pendingCheckpointNumber = await this.getCheckpointNumber(options);
-        return await this.getCheckpoint(pendingCheckpointNumber, options);
-      },
-      'getting effective pending checkpoint',
-      makeBackoff([0.5, 0.5, 0.5]),
+  async readBatch(reads: readonly RollupRead<unknown>[], blockHash: Hex): Promise<RollupReadOutcomes> {
+    // Typed as a plain `Abi`: the reads are only known at runtime, and the full rollup ABI is too deep to infer here.
+    const abi: Abi = RollupAbi;
+    const results = await this.client.multicall({
+      contracts: reads.map(read => ({
+        address: this.address,
+        abi,
+        functionName: read.functionName,
+        args: read.args,
+      })),
+      allowFailure: true,
+      // One request whatever the calldata size: splitting the batch would cost a request per chunk.
+      batchSize: 0,
+      multicallAddress: MULTI_CALL_3_ADDRESS,
+      blockHash,
+      requireCanonical: true,
+    });
+    return new Map(
+      reads.map((read, i): [string, RollupReadOutcome] => {
+        const result = results[i];
+        return [
+          read.key,
+          result.status === 'success' ? { ok: true, result: result.result } : { ok: false, error: result.error },
+        ];
+      }),
     );
   }
 
@@ -1093,8 +1109,9 @@ export class RollupContract {
   /**
    * Returns a state override that sets the pending and/or proven checkpoint numbers. Useful for simulations.
    * Both values share a single storage slot (pending in the upper 128 bits, proven in the lower 128 bits), so
-   * a single combined override is emitted to avoid the second state-diff clobbering the first. The current live
-   * value is read once to preserve any half not being overridden. Returns an empty override if neither is set.
+   * a single combined override is emitted to avoid the second state-diff clobbering the first. When only one is set,
+   * the live value is read once to preserve the other half; with both set, no L1 read is made. Returns an empty
+   * override if neither is set.
    *
    * Throws if the resulting `proven > pending`, which would crash the simulation: `STFLib.canPruneAtTime` calls
    * `getEpochForCheckpoint(proven + 1)` whenever `pending != proven`, and that asserts `_n <= tips.pending`.
@@ -1107,12 +1124,10 @@ export class RollupContract {
       return [];
     }
     const slot = RollupContract.stfStorageSlot;
-    const currentValue = await this.client.getStorageAt({ address: this.address, slot });
-    const currentRaw = currentValue ? hexToBigInt(currentValue) : 0n;
-    const currentPending = currentRaw >> 128n;
-    const currentProven = currentRaw & ((1n << 128n) - 1n);
-    const newPending = override.pending !== undefined ? BigInt(override.pending) : currentPending;
-    const newProven = override.proven !== undefined ? BigInt(override.proven) : currentProven;
+    const { pending: newPending, proven: newProven } =
+      override.pending !== undefined && override.proven !== undefined
+        ? { pending: BigInt(override.pending), proven: BigInt(override.proven) }
+        : await this.fillChainTipsOverride(slot, override);
     if (newProven > newPending) {
       throw new Error(`Invalid chain tips override: proven (${newProven}) > pending (${newPending})`);
     }
@@ -1123,6 +1138,19 @@ export class RollupContract {
         stateDiff: [{ slot, value: `0x${newValue.toString(16).padStart(64, '0')}` }],
       },
     ];
+  }
+
+  /** Completes a chain tips override that sets only one tip with the live value of the other. */
+  private async fillChainTipsOverride(
+    slot: Hex,
+    override: { pending?: CheckpointNumber; proven?: CheckpointNumber },
+  ): Promise<{ pending: bigint; proven: bigint }> {
+    const currentValue = await this.client.getStorageAt({ address: this.address, slot });
+    const currentRaw = currentValue ? hexToBigInt(currentValue) : 0n;
+    return {
+      pending: override.pending !== undefined ? BigInt(override.pending) : currentRaw >> 128n,
+      proven: override.proven !== undefined ? BigInt(override.proven) : currentRaw & ((1n << 128n) - 1n),
+    };
   }
 
   /**
@@ -1369,10 +1397,12 @@ export class RollupContract {
   async getManaMinFeeAt(
     timestamp: bigint,
     inFeeAsset: boolean,
-    options?: { stateOverride?: StateOverride; blockNumber?: bigint },
+    options?: { stateOverride?: StateOverride } & L1ReadPin,
   ): Promise<bigint> {
-    await checkBlockTag(options?.blockNumber, this.client);
-    return await this.rollup.read.getManaMinFeeAt([timestamp, inFeeAsset], options);
+    return await this.rollup.read.getManaMinFeeAt([timestamp, inFeeAsset], {
+      stateOverride: options?.stateOverride,
+      ...(await toBlockParams(options, this.client)),
+    });
   }
 
   async getManaMinFeeComponentsAt(timestamp: bigint, inFeeAsset: boolean): Promise<ManaMinFeeComponents> {

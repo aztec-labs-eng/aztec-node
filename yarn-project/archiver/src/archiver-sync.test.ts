@@ -33,6 +33,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
+  type L1SyncPointUpdatedEvent,
   type L2Block,
   L2BlockSourceEvents,
   type L2BlockSourceUpdatedEvent,
@@ -5721,6 +5722,41 @@ describe('Archiver Sync', () => {
       expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(2))).toBeDefined();
       expect(await archiverStore.blocks.getProposedCheckpointByNumber(CheckpointNumber(3))).toBeUndefined();
     }, 15_000);
+  });
+
+  describe('L1 sync point update event', () => {
+    let updateSpy: jest.Mock;
+
+    beforeEach(() => {
+      updateSpy = jest.fn();
+      archiver.events.on(L2BlockSourceEvents.L1SyncPointUpdated, updateSpy);
+    });
+
+    afterEach(() => {
+      archiver.events.off(L2BlockSourceEvents.L1SyncPointUpdated, updateSpy);
+    });
+
+    it('announces each new L1 sync point once, after the pass, even when no L2 data moved', async () => {
+      fake.setL1BlockNumber(100n);
+      await archiver.syncImmediate();
+      fake.setL1BlockNumber(101n);
+      await archiver.syncImmediate();
+
+      expect(updateSpy.mock.calls.map(([event]) => (event as L1SyncPointUpdatedEvent).l1SyncPoint)).toEqual([
+        { blockNumber: 100n, blockHash: fake.getL1BlockHash(100n) },
+        { blockNumber: 101n, blockHash: fake.getL1BlockHash(101n) },
+      ]);
+    });
+
+    it('does not announce a sync point it already announced', async () => {
+      fake.setL1BlockNumber(100n);
+      await archiver.syncImmediate();
+      updateSpy.mockClear();
+
+      await archiver.syncImmediate();
+
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('aggregate block source update event', () => {

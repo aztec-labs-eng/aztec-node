@@ -7,3 +7,4 @@ export * from './start_anvil.js';
 export * from './upgrade_utils.js';
 export * from './chain_monitor.js';
 export * from './rollup_cheat_codes.js';
+export * from './recording_rpc_server.js';

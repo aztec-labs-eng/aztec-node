@@ -518,9 +518,10 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
    * The head normally comes from memory: the plan from the archiver's in-memory frontier and the boundary fee
    * from the background-refreshed cache. At a boundary the cache has not priced yet, the request joins the
    * shared refresh for at most {@link QUOTE_MAX_WAIT_MS}, a budget the projections' wait shares so the whole
-   * quote stays under that bound. The head is omitted when the node cannot produce it in time — an L1 outage
-   * that outlasts the cache's cutoff, or a frontier with no header for its proposed tip — in which case the
-   * projections alone are returned, as before this method grew a head.
+   * quote stays under that bound. The head is omitted when the node cannot produce it in time — the boundary
+   * moved or the cached fee trails the archiver by more than one L1 block and the refresh misses the budget, or
+   * a frontier has no header for its proposed tip — in which case the projections alone are returned, as before
+   * this method grew a head.
    */
   public async getPredictedMinFees(manaUsage?: ManaUsageEstimate): Promise<GasFees[]> {
     const timer = new Timer();
@@ -528,9 +529,11 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
       this.log.warn(`Failed to compute the next-block min fee for a quote, serving L1 projections only`, err);
       return undefined;
     });
-    // Tagging the projections with the head's L1 sync point keeps both halves of the answer on one L1 block.
+    // Tagging the projections with the head's L1 sync point lets them wait, within the remaining budget, for the head's
+    // L1 block or a later one. A head may be priced one L1 block behind the archiver, and then the projections come
+    // from the block after.
     const asOf = head?.l1SyncPoint && {
-      blockNumber: head.l1SyncPoint.blockNumber,
+      ...head.l1SyncPoint,
       maxWaitMs: Math.max(0, QUOTE_MAX_WAIT_MS - timer.ms()),
     };
     const projections = await this.feeProvider.getPredictedMinFees(manaUsage, asOf);

@@ -1,12 +1,11 @@
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
-import type { L1SyncPoint, L2BlockSource, L2Frontier } from '@aztec-labs/stdlib/block';
+import type { L1SyncPoint, L2Frontier } from '@aztec-labs/stdlib/block';
 import type { GasFees, NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
 import { GlobalVariables } from '@aztec-labs/stdlib/tx';
 
 import { NextBlockFeeCache, type NextBlockFeeCacheDeps } from './next_block_fee_cache.js';
-import { type NextBlockPlan, computeBoundaryFeeKey, getClockSlot, planNextBlock } from './next_block_planner.js';
+import type { NextBlockPlan } from './next_block_planner.js';
 
 /**
  * How long a fee quote waits for a boundary refresh before answering with what it already has. Long enough for
@@ -24,9 +23,7 @@ export type NextBlockPrediction = {
 
 /** Dependencies required to build a {@link NextBlockPredictor}. */
 export interface NextBlockPredictorDeps {
-  blockSource: L2BlockSource;
   feeCache: NextBlockFeeCache;
-  epochCache: EpochCacheInterface;
   log?: Logger;
 }
 
@@ -43,15 +40,11 @@ export interface NextBlockPredictorDeps {
  * predicting inclusion) and a stale fee would make L1 reject its checkpoint.
  */
 export class NextBlockPredictor implements NextBlockMinFeesProvider {
-  private readonly blockSource: L2BlockSource;
   private readonly feeCache: NextBlockFeeCache;
-  private readonly epochCache: EpochCacheInterface;
   private readonly log: Logger;
 
   constructor(deps: NextBlockPredictorDeps) {
-    this.blockSource = deps.blockSource;
     this.feeCache = deps.feeCache;
-    this.epochCache = deps.epochCache;
     this.log = deps.log ?? createLogger('node:next-block-predictor');
   }
 
@@ -62,12 +55,7 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
    */
   public static create(deps: NextBlockFeeCacheDeps): NextBlockPredictor {
     const feeCache = new NextBlockFeeCache({ ...deps, log: deps.log?.createChild('fee-cache') });
-    return new NextBlockPredictor({
-      blockSource: deps.blockSource,
-      feeCache,
-      epochCache: deps.epochCache,
-      log: deps.log,
-    });
+    return new NextBlockPredictor({ feeCache, log: deps.log });
   }
 
   public start(pollingIntervalMs?: number): void {
@@ -91,20 +79,19 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
    *   are unknowable.
    *
    * Waits without a bound for a boundary fee it does not have cached, and surfaces the L1 failure if that read
-   * fails, as a simulation did before this cache existed.
+   * fails, as a simulation did before this cache existed. The plan is re-derived from a new snapshot after each wait,
+   * so the prediction describes the chain as it is once the fee is available.
    */
   public async predict(): Promise<NextBlockPrediction> {
-    const { frontier, plan, key } = await this.planFromFrontier();
+    const { frontier, plan, key, record } = await this.feeCache.lookupNextBlock();
     const blockNumber = BlockNumber.add(plan.latestBlockNumber, 1);
     if (!key) {
       return { plan, frontier, globals: this.copyGlobalsFromLatestBlock(frontier, blockNumber) };
     }
-
-    const checkpointGlobals = await this.feeCache.getBoundaryGlobals(key, frontier);
-    if (!checkpointGlobals) {
+    if (!record) {
       throw new Error(`Could not price the next block at slot ${key.targetSlot}: no boundary fee available`);
     }
-    return { plan, frontier, globals: GlobalVariables.from({ blockNumber, ...checkpointGlobals }) };
+    return { plan, frontier, globals: GlobalVariables.from({ blockNumber, ...record.globals }) };
   }
 
   /**
@@ -113,7 +100,8 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
    * boundary it is the cached L1 price, waited on for at most {@link QUOTE_MAX_WAIT_MS}; undefined when the node
    * has nothing usable, in which case the caller falls back to the fee provider's projections alone.
    *
-   * Returns the L1 block the answer describes so the caller can tag its own fee reads with the same anchor.
+   * Returns the L1 block the answer describes so the caller can tag its own fee reads with the same anchor: the block
+   * the boundary fee was priced at, which may be one block behind the archiver's.
    */
   public quoteMinFees(): Promise<{ fees: GasFees; l1SyncPoint: L1SyncPoint | undefined } | undefined> {
     return this.minFees(QUOTE_MAX_WAIT_MS);
@@ -144,7 +132,7 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
   private async minFees(
     maxWaitMs: number,
   ): Promise<{ fees: GasFees; l1SyncPoint: L1SyncPoint | undefined } | undefined> {
-    const { frontier, plan, key } = await this.planFromFrontier();
+    const { frontier, plan, key, record } = await this.feeCache.lookupNextBlock(maxWaitMs);
     if (!key) {
       const fees = frontier.latestBlockHeader?.globalVariables.gasFees;
       if (!fees) {
@@ -156,16 +144,7 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
       return { fees, l1SyncPoint: frontier.l1SyncPoint };
     }
 
-    const checkpointGlobals = await this.feeCache.getBoundaryGlobals(key, frontier, { maxWaitMs });
-    return checkpointGlobals ? { fees: checkpointGlobals.gasFees, l1SyncPoint: frontier.l1SyncPoint } : undefined;
-  }
-
-  /** Plans the next block from a fresh archiver snapshot; `key` is set only when that block opens a checkpoint. */
-  private async planFromFrontier() {
-    const frontier = await this.blockSource.getL2Frontier();
-    const plan = planNextBlock(frontier, getClockSlot(this.epochCache));
-    const key = computeBoundaryFeeKey(plan, frontier.pendingChainValidationStatus);
-    return { frontier, plan, key };
+    return record && { fees: record.globals.gasFees, l1SyncPoint: record.l1SyncPoint };
   }
 
   /**

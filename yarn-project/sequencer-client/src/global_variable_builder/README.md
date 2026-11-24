@@ -1,7 +1,9 @@
 # Fee Prediction
 
-The `FeePredictor` predicts min fees for upcoming L2 slots based on the current L1
-oracle state and an assumed mana usage pattern.
+`computeFeePredictions` predicts min fees for upcoming L2 slots based on the current L1
+oracle state and an assumed mana usage pattern. `FeeProviderImpl` reads that state from L1
+at the archiver's sync point, in one Multicall3 request per new L1 block in the common case,
+and serves the predictions after the current min fee.
 
 ## Prediction Window
 
