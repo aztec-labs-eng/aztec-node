@@ -11,7 +11,8 @@ variable "API_KEY_SECRET_NAMES" {
 
     "eth-mainnet-rpc-consumer-client1",
     "eth-mainnet-rpc-consumer-client2",
-    "eth-mainnet-rpc-consumer-client3"
+    "eth-mainnet-rpc-consumer-client3",
+    "eth-mainnet-rpc-consumer-client4"
   ]
 }
 
