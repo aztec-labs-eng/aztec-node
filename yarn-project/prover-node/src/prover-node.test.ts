@@ -909,7 +909,7 @@ describe('ProverNode', () => {
 
   /** Places the follower's catch-up cursor directly, as if it had already processed up to this checkpoint. */
   function setCursor(checkpoint: CheckpointNumber) {
-    (follower as unknown as { lastProcessedCheckpoint: CheckpointNumber }).lastProcessedCheckpoint = checkpoint;
+    follower['lastProcessedCheckpoint'] = checkpoint;
   }
 
   function createProverNode(config: ConstructorParameters<typeof TestProverNode>[10]): TestProverNode {
@@ -1148,6 +1148,6 @@ class TestProverNode extends ProverNode {
 
   /** The follower's private tips store, which shows whether a chain event was acknowledged. */
   public getTipsStore(): L2TipsMemoryStore {
-    return (this.checkpointFollower as unknown as { tipsStore: L2TipsMemoryStore }).tipsStore;
+    return this.checkpointFollower['tipsStore'];
   }
 }
