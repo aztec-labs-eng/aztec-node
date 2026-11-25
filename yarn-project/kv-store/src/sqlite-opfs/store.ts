@@ -20,17 +20,13 @@ import { type PoolLockLease, acquirePoolLock, normalizePoolDirectory } from './p
 import { SQLiteOPFSAztecSet } from './set.js';
 import { SQLiteOPFSAztecSingleton } from './singleton.js';
 
-/** Where the store sends its requests: the OPFS worker in a browser, or an adapter over another SQLite. */
-export interface SqliteWorkerPort {
-  postMessage(req: WorkerRequest, transfer?: Transferable[]): void;
+/** Runs the store's requests: the OPFS worker in a browser, op-sqlite on React Native. */
+export interface SqlitePort {
+  /** Runs a request and resolves with its response. `transfer` lists buffers the port may take rather than copy. */
+  request(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse>;
+  /** Stops the port and rejects the requests still running. */
   terminate(): void;
 }
-
-/** Connects a port to the store's handlers for its responses and for a crash of the port. */
-export type ConnectSqliteWorkerPort = (
-  onResponse: (resp: WorkerResponse) => void,
-  onCrash: (message: string) => void,
-) => SqliteWorkerPort;
 
 /**
  * Main-thread handle for a SQLite database persisted to OPFS via the `opfs-sahpool`
@@ -43,18 +39,16 @@ export type ConnectSqliteWorkerPort = (
  * nested ops bypass it to avoid deadlock.
  */
 export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
-  readonly #worker: SqliteWorkerPort;
-  readonly #pending = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (err: Error) => void }>();
+  readonly #port: SqlitePort;
   readonly #txQueue = new SerialQueue();
   readonly #name: string;
   readonly #log: Logger;
   #nextId = 0;
   #inTx = false;
   #closed = false;
-  #workerFailed = false;
 
   protected constructor(
-    connect: ConnectSqliteWorkerPort,
+    port: SqlitePort,
     name: string,
     log: Logger,
     public readonly isEphemeral: boolean,
@@ -62,22 +56,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
   ) {
     this.#name = name;
     this.#log = log;
-    this.#worker = connect(
-      resp => {
-        const handler = this.#pending.get(resp.id);
-        if (!handler) {
-          this.#log.warn(`SQLite worker: no pending handler for id ${resp.id}`);
-          return;
-        }
-        this.#pending.delete(resp.id);
-        handler.resolve(resp);
-      },
-      message => {
-        this.#workerFailed = true;
-        this.#log.error(`SQLite worker crashed: ${message}`);
-        this.#rejectPending(`SQLite worker crashed: ${message}`);
-      },
-    );
+    this.#port = port;
     this.#txQueue.start();
   }
 
@@ -119,7 +98,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
         }
       }
       return await AztecSQLiteOPFSStore.#init(
-        connectSqliteWorker,
+        connectSqliteWorker(log),
         log,
         dbName,
         ephemeral,
@@ -134,12 +113,12 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
   }
 
   /**
-   * Opens a store whose requests go to the port that `connect` returns, rather than to an OPFS worker. The store takes
-   * no OPFS pool lock: the port's owner keeps one store per database. `poolDirectory` reaches the port in the init
-   * request. The key rules are those of {@link AztecSQLiteOPFSStore.open}.
+   * Opens a store whose requests go to `port`, rather than to an OPFS worker. The store takes no OPFS pool lock: the
+   * port's owner keeps one store per database. `poolDirectory` reaches the port in the init request. The key rules are
+   * those of {@link AztecSQLiteOPFSStore.open}.
    */
   protected static openOnPort(
-    connect: ConnectSqliteWorkerPort,
+    port: SqlitePort,
     log: Logger,
     name?: string,
     ephemeral: boolean = false,
@@ -147,11 +126,11 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
     const dbName = validateOpen(name, ephemeral, encryptionKey);
-    return AztecSQLiteOPFSStore.#init(connect, log, dbName, ephemeral, poolDirectory, encryptionKey);
+    return AztecSQLiteOPFSStore.#init(port, log, dbName, ephemeral, poolDirectory, encryptionKey);
   }
 
   static async #init(
-    connect: ConnectSqliteWorkerPort,
+    port: SqlitePort,
     log: Logger,
     dbName: string,
     ephemeral: boolean,
@@ -162,7 +141,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     log.debug(
       `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
     );
-    const store = new AztecSQLiteOPFSStore(connect, dbName, log, ephemeral, poolLock);
+    const store = new AztecSQLiteOPFSStore(port, dbName, log, ephemeral, poolLock);
     try {
       // Transfer (not clone) the key buffer to the worker so we don't leave a
       // second copy on the main thread. Caveat: this detaches the caller's
@@ -174,7 +153,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
       );
       return store;
     } catch (err) {
-      store.#worker.terminate();
+      port.terminate();
       throw err;
     }
   }
@@ -244,8 +223,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
         this.#log.warn(`SQLite deleteDb failed: ${err instanceof Error ? err.message : err}`),
       );
     } finally {
-      this.#worker.terminate();
-      this.#rejectPending('SQLite store deleted');
+      this.#port.terminate();
       await this.poolLock?.release();
     }
   }
@@ -271,8 +249,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
       await this.#txQueue.end();
       await this.#sendRequest({ type: 'close', id: this.#allocId() }).catch(() => {});
     } finally {
-      this.#worker.terminate();
-      this.#rejectPending('SQLite store closed');
+      this.#port.terminate();
       await this.poolLock?.release();
     }
   }
@@ -318,54 +295,21 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     return ++this.#nextId;
   }
 
-  /**
-   * Reject any in-flight requests with `reason`, so callers awaiting a response to a
-   * request sent to a now-terminated worker don't hang forever. Called from
-   * close()/delete() and from the worker.onerror handler.
-   */
-  #rejectPending(reason: string): void {
-    if (this.#pending.size === 0) {
-      return;
+  async #sendRequest(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse> {
+    const resp = await this.#port.request(req, transfer);
+    if (resp.type !== 'err') {
+      return resp;
     }
-    const err = new Error(reason);
-    for (const { reject } of this.#pending.values()) {
-      reject(err);
+    // Re-hydrate typed errors so consumers can pattern-match on `instanceof`. Encryption is tagged on the wire (some
+    // cases are pre-flight throws with no message to match); corruption is a single unambiguous message, so we classify
+    // it here rather than adding a redundant wire field. Everything else stays a plain Error.
+    if (resp.encryptionCode !== undefined) {
+      throw new SqliteEncryptionError(resp.encryptionCode, resp.message);
     }
-    this.#pending.clear();
-  }
-
-  #sendRequest(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse> {
-    if (this.#workerFailed) {
-      return Promise.reject(new Error('SQLite worker has crashed'));
+    if (isCorruptionMessage(resp.message)) {
+      throw new SqliteCorruptionError(resp.message);
     }
-    return new Promise<WorkerResponse>((resolve, reject) => {
-      this.#pending.set(req.id, {
-        resolve: resp => {
-          if (resp.type === 'err') {
-            // Re-hydrate typed errors so consumers can pattern-match on
-            // `instanceof`. Encryption is tagged on the wire (some cases are
-            // pre-flight throws with no message to match); corruption is a
-            // single unambiguous message, so we classify it here rather than
-            // adding a redundant wire field. Everything else stays a plain Error.
-            if (resp.encryptionCode !== undefined) {
-              reject(new SqliteEncryptionError(resp.encryptionCode, resp.message));
-            } else if (isCorruptionMessage(resp.message)) {
-              reject(new SqliteCorruptionError(resp.message));
-            } else {
-              reject(new Error(resp.message));
-            }
-          } else {
-            resolve(resp);
-          }
-        },
-        reject,
-      });
-      if (transfer && transfer.length > 0) {
-        this.#worker.postMessage(req, transfer);
-      } else {
-        this.#worker.postMessage(req);
-      }
-    });
+    throw new Error(resp.message);
   }
 }
 

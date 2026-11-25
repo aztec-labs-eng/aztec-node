@@ -4,18 +4,13 @@ import { type DB, type Scalar, open as openOpSqlite } from '@op-engineering/op-s
 import { detectEncryptionCode } from './errors.js';
 import type { SqlValue, WorkerRequest, WorkerResponse } from './messages.js';
 import { SCHEMA_SQL } from './schema.js';
-import type { SqliteWorkerPort } from './store.js';
+import type { SqlitePort } from './store.js';
 
 /**
  * Runs the store's requests on op-sqlite, with the database `<location>/<name>`, or in memory when `location` is
- * `:memory:`. op-sqlite runs a database's queries in order on one thread, so the
- * responses come back in the order of the requests.
+ * `:memory:`. `onTerminate` runs when the store stops the port.
  */
-export function connectOpSqlite(
-  location: string,
-  onResponse: (resp: WorkerResponse) => void,
-  onTerminate: () => void,
-): SqliteWorkerPort {
+export function connectOpSqlite(location: string, onTerminate: () => void): SqlitePort {
   let db: DB | undefined;
   const requireDb = () => {
     if (!db) {
@@ -75,8 +70,10 @@ export function connectOpSqlite(
   };
 
   return {
-    postMessage: req =>
-      void handle(req).then(onResponse, (err: unknown) => {
+    request: async req => {
+      try {
+        return await handle(req);
+      } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (req.type === 'init') {
           try {
@@ -85,8 +82,9 @@ export function connectOpSqlite(
             // The store terminates the port after a failed init.
           }
         }
-        onResponse({ type: 'err', id: req.id, message, encryptionCode: detectEncryptionCode(req, err, message) });
-      }),
+        return { type: 'err', id: req.id, message, encryptionCode: detectEncryptionCode(req, err, message) };
+      }
+    },
     terminate: () => {
       try {
         closeDb();

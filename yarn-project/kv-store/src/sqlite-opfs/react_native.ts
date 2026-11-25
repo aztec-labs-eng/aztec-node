@@ -87,7 +87,7 @@ export class AztecSQLiteOPFSStore extends WorkerStore {
     }
     try {
       return await WorkerStore.openOnPort(
-        onResponse => connectOpSqlite(location, onResponse, release),
+        connectOpSqlite(location, release),
         log,
         name,
         ephemeral,
