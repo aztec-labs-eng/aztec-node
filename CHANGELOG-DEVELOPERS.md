@@ -12,7 +12,7 @@ Every version has one `###` section per component, each split into `#### New fea
 
 An entry goes under the component whose users have to act on it or will notice it: Aztec.nr for contract developers, including Noir tests written with `TestEnvironment`; PXE for wallet developers, including the PXE's hooks and its browser stores; Aztec.js for app developers, including `@aztec-labs/wallets` and `@aztec-labs/wallet-sdk`; CLI for the `aztec` and `aztec-wallet` commands. A change that asks something different of the users of two components gets an entry under each, each saying what those users see.
 
-Each entry is one bullet, newest first: a bold sentence saying what changed, a link to the PR, then what a developer sees and has to do.
+Each entry is one bullet, newest first: a bold sentence saying what changed, an (eventual) link to the PR, then what a developer sees and has to do. An entry written in the PR it describes can leave the link out, since it is added at release time. An entry written in another PR, such as a later docs PR, links the PR it describes.
 
 A change to any of the following is breaking, and its entry says how to migrate:
 

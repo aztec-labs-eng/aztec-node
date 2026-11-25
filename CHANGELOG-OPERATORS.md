@@ -8,7 +8,7 @@ The published [operator changelog](https://github.com/AztecProtocol/aztec-packag
 
 ## Format
 
-One `###` heading per change, under the `## Unreleased` section, newest first. Name the flag or variable in the heading when there is one, and link the PR.
+One `###` heading per change, under the `## Unreleased` section, newest first. Name the flag or variable in the heading when there is one, and end it with a link to the PR. An entry written in the PR it describes can leave the link out, since it is added at release time. An entry written in another PR, such as a later docs PR, links the PR it describes.
 
 Give the before and after for anything an operator has configured, and a **Migration** line whenever the change needs action. A change that needs none says so.
 
