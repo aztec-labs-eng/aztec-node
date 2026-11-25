@@ -26,8 +26,8 @@
       "default": "ordered-binary"
     },
     "#sqlite-worker": {
-      "react-native": "./dest/sqlite-opfs/create_worker.react_native.js",
-      "default": "./dest/sqlite-opfs/create_worker.js"
+      "react-native": "./dest/sqlite-opfs/connect_worker.react_native.js",
+      "default": "./dest/sqlite-opfs/connect_worker.js"
     }
   },
   "scripts": {

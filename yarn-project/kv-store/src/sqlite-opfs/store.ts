@@ -1,4 +1,4 @@
-import { createSqliteWorker } from '#sqlite-worker';
+import { connectSqliteWorker } from '#sqlite-worker';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 
@@ -108,7 +108,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     poolDirectory?: string,
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
-    const dbName = AztecSQLiteOPFSStore.#validateOpen(log, name, ephemeral, encryptionKey);
+    const dbName = validateOpen(name, ephemeral, encryptionKey);
     const effectivePoolDirectory = ephemeral ? undefined : normalizePoolDirectory(poolDirectory);
     const poolLock = effectivePoolDirectory ? await acquirePoolLock(effectivePoolDirectory) : undefined;
     try {
@@ -118,14 +118,8 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
           log.warn(`Quarantined SQLite-OPFS pool with duplicate logical file mappings`, quarantine);
         }
       }
-      const connect: ConnectSqliteWorkerPort = (onResponse, onCrash) => {
-        const worker = createSqliteWorker();
-        worker.onmessage = (ev: MessageEvent<WorkerResponse>) => onResponse(ev.data);
-        worker.onerror = ev => onCrash(ev.message);
-        return worker;
-      };
       return await AztecSQLiteOPFSStore.#init(
-        connect,
+        connectSqliteWorker,
         log,
         dbName,
         ephemeral,
@@ -152,29 +146,8 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     poolDirectory?: string,
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
-    const dbName = AztecSQLiteOPFSStore.#validateOpen(log, name, ephemeral, encryptionKey);
+    const dbName = validateOpen(name, ephemeral, encryptionKey);
     return AztecSQLiteOPFSStore.#init(connect, log, dbName, ephemeral, poolDirectory, encryptionKey);
-  }
-
-  /** Checks the key and returns the database name: `name`, or a random one for an ephemeral or unnamed store. */
-  static #validateOpen(log: Logger, name: string | undefined, ephemeral: boolean, encryptionKey?: Uint8Array): string {
-    if (encryptionKey !== undefined && encryptionKey.length !== 32) {
-      throw new SqliteEncryptionError(
-        'invalid_key_length',
-        `encryptionKey must be 32 bytes (got ${encryptionKey.length})`,
-      );
-    }
-    if (encryptionKey !== undefined && ephemeral) {
-      throw new SqliteEncryptionError(
-        'encryption_not_supported_for_ephemeral',
-        'encryptionKey is not supported for ephemeral (:memory:) stores',
-      );
-    }
-    const dbName = name && !ephemeral ? name : `tmp-${globalThis.crypto.getRandomValues(new Uint8Array(8)).join('')}`;
-    log.debug(
-      `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
-    );
-    return dbName;
   }
 
   static async #init(
@@ -186,6 +159,9 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     encryptionKey: Uint8Array | undefined,
     poolLock?: PoolLockLease,
   ): Promise<AztecSQLiteOPFSStore> {
+    log.debug(
+      `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
+    );
     const store = new AztecSQLiteOPFSStore(connect, dbName, log, ephemeral, poolLock);
     try {
       // Transfer (not clone) the key buffer to the worker so we don't leave a
@@ -391,4 +367,21 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
       }
     });
   }
+}
+
+/** Checks the key and returns the database name: `name`, or a random one for an ephemeral or unnamed store. */
+function validateOpen(name: string | undefined, ephemeral: boolean, encryptionKey?: Uint8Array): string {
+  if (encryptionKey !== undefined && encryptionKey.length !== 32) {
+    throw new SqliteEncryptionError(
+      'invalid_key_length',
+      `encryptionKey must be 32 bytes (got ${encryptionKey.length})`,
+    );
+  }
+  if (encryptionKey !== undefined && ephemeral) {
+    throw new SqliteEncryptionError(
+      'encryption_not_supported_for_ephemeral',
+      'encryptionKey is not supported for ephemeral (:memory:) stores',
+    );
+  }
+  return name && !ephemeral ? name : `tmp-${globalThis.crypto.getRandomValues(new Uint8Array(8)).join('')}`;
 }
