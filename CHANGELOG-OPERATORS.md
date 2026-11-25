@@ -32,6 +32,16 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### The proving broker hands out block-level jobs before checkpoint roots (PR link pending)
+
+Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs (transaction merges, base rollups, AVM, chonk verifier), and gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once, so the newest checkpoint's transactions and parity proof waited until every one of those roots had an agent.
+
+Transaction-level jobs and the inbox parity proof now go before checkpoint roots. Block roots and block merges still go before them, the root rollup stays first, and jobs of an older epoch still go before jobs of a newer one.
+
+The effect depends on load. A partial proof whose newest checkpoint is still being proven finishes sooner. Checkpoints that land in the same epoch after the request bring block-level jobs that now go before the request's checkpoint roots, which delays it when agents are busy.
+
+**Migration**: none.
+
 ### The prover node no longer publishes the proof of a cancelled proving session (PR link pending)
 
 A proving session is cancelled when a prune changes its checkpoints or when its proof-submission window closes. Its epoch proof could still be sent to L1 in two cases: the session was cancelled just as its proof became ready, or its queued proof was withdrawn or expired while the node was acquiring a publisher. After a prune, the stale proof could also be chosen over the replacement session's proof and then fail L1's checks. Neither happens any more.
