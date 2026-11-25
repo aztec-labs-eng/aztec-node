@@ -4,9 +4,15 @@ import { padArrayEnd, sum, times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { L1ToL2MessageSponge, ScopedL2ToL1Message, computeBlockOutHash } from '@aztec-labs/stdlib/messaging';
+import type { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
+import { createHash } from 'node:crypto';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
@@ -169,6 +175,242 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
     } finally {
       await subTree.stop();
     }
+  });
+
+  describe('blocks-only sub-tree', () => {
+    /**
+     * Records every proof the agents compute, as its method name and a hash of its inputs. The sub-trees below
+     * request proofs through the broker, as a prover node does, so a request the broker has already served does
+     * not reach an agent and is not recorded again.
+     */
+    function recordComputedProofs(): string[] {
+      const computed: string[] = [];
+      const prover = context.prover as unknown as Record<string, (...args: any[]) => unknown>;
+      const proofMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(prover)).filter(
+        name => name.startsWith('get') && name.endsWith('Proof'),
+      );
+      for (const method of proofMethods) {
+        const original = prover[method].bind(prover);
+        jest.spyOn(prover, method).mockImplementation((...args: any[]) => {
+          const inputsHash = createHash('sha256').update(args[0].toBuffer()).digest('hex');
+          computed.push(`${method}:${inputsHash}`);
+          return original(...args);
+        });
+      }
+      return computed;
+    }
+
+    const methodsOf = (proofs: string[]) => proofs.map(proof => proof.split(':')[0]);
+
+    it('leaves the sub-tree of the landed checkpoint nothing to prove for the blocks it proved', async () => {
+      const numBlocks = 3;
+      const { constants, blocks, l1ToL2Messages, previousBlockHeader } = await context.makeCheckpoint(numBlocks, {
+        numTxsPerBlock: 2,
+      });
+      const messagesOf = (blockIndex: number) => (blockIndex === 0 ? l1ToL2Messages : []);
+      const computed = recordComputedProofs();
+
+      // The first two blocks are proven as they are proposed, before the checkpoint's block count is known.
+      const early = await CheckpointSubTreeOrchestrator.startBlocksOnly(
+        context.worldState,
+        context.brokerProverFacade,
+        EthAddress.ZERO,
+        chonkCache,
+        EpochNumber(1),
+        makeTestDeferredJobQueue(),
+        constants,
+        previousBlockHeader,
+      );
+      const proposed = blocks.slice(0, 2);
+      for (const [blockIndex, block] of proposed.entries()) {
+        const { blockNumber, timestamp } = block.header.globalVariables;
+        await early.startNewBlock(blockNumber, timestamp, block.txs.length, messagesOf(blockIndex));
+        await early.addTxs(block.txs);
+        await early.setBlockCompleted(blockNumber, block.header);
+      }
+      await Promise.all(proposed.map(block => early.whenBlockRootProven(block.header.globalVariables.blockNumber)));
+      await early.stop();
+      const computedEarly = [...computed];
+
+      // The early run stops at the block roots: merges and parity need the final checkpoint.
+      expect(methodsOf(computedEarly).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(2);
+      expect(methodsOf(computedEarly)).not.toContain('getBlockMergeRollupProof');
+      expect(methodsOf(computedEarly)).not.toContain('getInboxParityProof');
+
+      // The checkpoint lands with three blocks and is proven by a regular sub-tree, which executes all three.
+      const subTree = await CheckpointSubTreeOrchestrator.start(
+        context.worldState,
+        context.brokerProverFacade,
+        EthAddress.ZERO,
+        chonkCache,
+        EpochNumber(1),
+        false,
+        makeTestDeferredJobQueue(),
+        constants,
+        l1ToL2Messages,
+        Fr.ZERO,
+        numBlocks,
+        previousBlockHeader,
+      );
+      try {
+        for (const [blockIndex, block] of blocks.entries()) {
+          const { blockNumber, timestamp } = block.header.globalVariables;
+          await subTree.startNewBlock(blockNumber, timestamp, block.txs.length, messagesOf(blockIndex));
+          await subTree.addTxs(block.txs);
+          await subTree.setBlockCompleted(blockNumber, block.header);
+        }
+        const result = await subTree.getSubTreeResult();
+        expect(result.blockProofOutputs).toBeDefined();
+      } finally {
+        await subTree.stop();
+      }
+      const computedAfterLanding = computed.slice(computedEarly.length);
+
+      // Every job of the two early blocks was requested again with the same id, so no agent proved it twice. Only
+      // the third block, the block merges and the inbox parity proof were left.
+      expect(computedAfterLanding.filter(proof => computedEarly.includes(proof))).toEqual([]);
+      expect(new Set(computed).size).toBe(computed.length);
+      expect(methodsOf(computedAfterLanding).filter(method => method.startsWith('getBlockRoot'))).toHaveLength(1);
+      expect(methodsOf(computedAfterLanding)).toContain('getBlockMergeRollupProof');
+      expect(methodsOf(computedAfterLanding)).toContain('getInboxParityProof');
+    });
+  });
+
+  describe('a blocks-only sub-tree that does not finish a block', () => {
+    const startBlocksOnly = (
+      constants: CheckpointConstantData,
+      previousBlockHeader: BlockHeader,
+      deferredJobQueue = makeTestDeferredJobQueue(),
+    ) =>
+      CheckpointSubTreeOrchestrator.startBlocksOnly(
+        context.worldState,
+        context.prover,
+        EthAddress.ZERO,
+        chonkCache,
+        EpochNumber(1),
+        deferredJobQueue,
+        constants,
+        previousBlockHeader,
+      );
+
+    it('does not request a proof that was waiting to be sent when the sub-tree was cancelled', async () => {
+      const { constants, blocks, previousBlockHeader } = await context.makeCheckpoint(1, { numTxsPerBlock: 0 });
+      const { blockNumber, timestamp } = blocks[0].header.globalVariables;
+      const proveBlock = jest.spyOn(context.prover, 'getBlockRootNoTxsRollupProof');
+      // Not started yet, so the block root request stays queued.
+      const deferredJobQueue = new SerialQueue();
+
+      const subTree = await startBlocksOnly(constants, previousBlockHeader, deferredJobQueue);
+      await subTree.startNewBlock(blockNumber, timestamp, 0, []);
+      await subTree.stop();
+      deferredJobQueue.start(1);
+      await deferredJobQueue.syncPoint();
+
+      expect(proveBlock).not.toHaveBeenCalled();
+      await deferredJobQueue.end();
+    });
+
+    it('does not report a block root as proven when the block fails its header check', async () => {
+      const { constants, blocks, previousBlockHeader } = await context.makeCheckpoint(1, { numTxsPerBlock: 0 });
+      const { blockNumber, timestamp } = blocks[0].header.globalVariables;
+      const proveBlock = context.prover.getBlockRootNoTxsRollupProof.bind(context.prover);
+      const blockRootProof = promiseWithResolvers<void>();
+      jest.spyOn(context.prover, 'getBlockRootNoTxsRollupProof').mockImplementation(async (...args) => {
+        const result = await proveBlock(...args);
+        blockRootProof.resolve();
+        return result;
+      });
+
+      const subTree = await startBlocksOnly(constants, previousBlockHeader);
+      try {
+        const proven = subTree.whenBlockRootProven(blockNumber).then(() => 'proven');
+        await subTree.startNewBlock(blockNumber, timestamp, 0, []);
+        // The root proof of an empty block is requested when the block starts, and returns before the block completes.
+        await blockRootProof.promise;
+        await sleep(100);
+
+        await expect(subTree.setBlockCompleted(blockNumber, BlockHeader.empty())).rejects.toThrow(
+          'Block header mismatch',
+        );
+        expect(await Promise.race([proven, sleep(100).then(() => 'pending')])).toEqual('pending');
+      } finally {
+        await subTree.stop();
+      }
+    });
+
+    it('does not report a block root as proven when the sub-tree is cancelled while the block is checked', async () => {
+      const { constants, blocks, previousBlockHeader } = await context.makeCheckpoint(1, { numTxsPerBlock: 0 });
+      const { blockNumber, timestamp } = blocks[0].header.globalVariables;
+      const proveBlock = context.prover.getBlockRootNoTxsRollupProof.bind(context.prover);
+      const blockRootProof = promiseWithResolvers<void>();
+      jest.spyOn(context.prover, 'getBlockRootNoTxsRollupProof').mockImplementation(async (...args) => {
+        const result = await proveBlock(...args);
+        blockRootProof.resolve();
+        return result;
+      });
+
+      const subTree = await startBlocksOnly(constants, previousBlockHeader);
+      const proven = subTree.whenBlockRootProven(blockNumber).then(() => 'proven');
+      await subTree.startNewBlock(blockNumber, timestamp, 0, []);
+      await blockRootProof.promise;
+      await sleep(100);
+
+      // The check compares the built archive with the synced one, which it reads from a world state snapshot.
+      const getSnapshot = context.worldState.getSnapshot.bind(context.worldState);
+      const checking = promiseWithResolvers<void>();
+      const cancelled = promiseWithResolvers<void>();
+      jest.spyOn(context.worldState, 'getSnapshot').mockImplementation(snapshotBlock => {
+        const snapshot = getSnapshot(snapshotBlock);
+        const getTreeInfo = snapshot.getTreeInfo.bind(snapshot);
+        jest.spyOn(snapshot, 'getTreeInfo').mockImplementation(async treeId => {
+          checking.resolve();
+          await cancelled.promise;
+          return getTreeInfo(treeId);
+        });
+        return snapshot;
+      });
+      const completing = subTree.setBlockCompleted(blockNumber, blocks[0].header);
+      await checking.promise;
+      await subTree.stop();
+      cancelled.resolve();
+      // The block itself passes its check, so the call gets past it and returns the header.
+      await expect(completing).resolves.toEqual(blocks[0].header);
+
+      expect(await Promise.race([proven, sleep(100).then(() => 'pending')])).toEqual('pending');
+    });
+
+    it('closes a world state fork that arrives after the sub-tree is cancelled', async () => {
+      const { constants, blocks, previousBlockHeader } = await context.makeCheckpoint(2, { numTxsPerBlock: 0 });
+      const [first, second] = blocks.map(block => block.header.globalVariables);
+      const subTree = await startBlocksOnly(constants, previousBlockHeader);
+      await subTree.startNewBlock(first.blockNumber, first.timestamp, 0, []);
+
+      const fork = context.worldState.fork.bind(context.worldState);
+      const forkRequested = promiseWithResolvers<void>();
+      const cancelled = promiseWithResolvers<void>();
+      const closed = promiseWithResolvers<void>();
+      jest.spyOn(context.worldState, 'fork').mockImplementationOnce(async (...args) => {
+        forkRequested.resolve();
+        await cancelled.promise;
+        const db = await fork(...args);
+        const close = db.close.bind(db);
+        jest.spyOn(db, 'close').mockImplementation(async () => {
+          await close();
+          closed.resolve();
+        });
+        return db;
+      });
+
+      const starting = subTree.startNewBlock(second.blockNumber, second.timestamp, 0, []);
+      await forkRequested.promise;
+      await subTree.stop();
+      cancelled.resolve();
+
+      await expect(starting).rejects.toThrow('cancelled');
+      expect(await Promise.race([closed.promise.then(() => 'closed'), sleep(100).then(() => 'open')])).toEqual(
+        'closed',
+      );
+    });
   });
 
   it('proves a checkpoint carrying L1-to-L2 messages', async () => {

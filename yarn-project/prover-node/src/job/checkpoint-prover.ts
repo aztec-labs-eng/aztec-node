@@ -1,31 +1,27 @@
 import type { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
-import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type {
   CheckpointSubTreeOrchestrator,
   CheckpointSubTreeProofs,
   ChonkCache,
 } from '@aztec-labs/prover-client/orchestrator';
-import type { PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
-import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
 import type { L2Block } from '@aztec-labs/stdlib/block';
 import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
-import { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
-import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
-import type { BlockHeader, ProcessedTx, Tx, TxHash } from '@aztec-labs/stdlib/tx';
+import type { BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ProverNodeJobMetrics } from '../metrics.js';
+import { executeBlock, makeCheckpointConstants } from './block-execution.js';
 
 /** Dependencies a `CheckpointProver` needs at construction. */
 export type CheckpointProverDeps = {
@@ -316,17 +312,11 @@ export class CheckpointProver {
       // `getTxsForUpload` re-fetches them by hash if a post-mortem upload needs them.
 
       const { chainId, version } = this.checkpoint.blocks[0].header.globalVariables;
-      const checkpointConstants = CheckpointConstantData.from({
-        chainId,
-        version,
-        vkTreeRoot: getVKTreeRoot(),
-        protocolContractsHash: protocolContractsHash,
-        proverId: this.deps.proverId.toField(),
-        slotNumber: this.checkpoint.header.slotNumber,
-        coinbase: this.checkpoint.header.coinbase,
-        feeRecipient: this.checkpoint.header.feeRecipient,
-        gasFees: this.checkpoint.header.gasFees,
-      });
+      const { slotNumber, coinbase, feeRecipient, gasFees } = this.checkpoint.header;
+      const checkpointConstants = makeCheckpointConstants(
+        { chainId, version, slotNumber, coinbase, feeRecipient, gasFees },
+        this.deps.proverId,
+      );
 
       this.deps.log.info(`Starting processing checkpoint ${this.checkpoint.number}`, {
         checkpointNumber: this.checkpoint.number,
@@ -397,42 +387,12 @@ export class CheckpointProver {
       for (let blockIndex = 0; blockIndex < this.checkpoint.blocks.length; blockIndex++) {
         const blockTimer = new Timer();
         const block = this.checkpoint.blocks[blockIndex];
-        const globalVariables = block.header.globalVariables;
         const blockTxs = this.getTxsForBlock(block, txs);
-        const blockMessages = messagesPerBlock[blockIndex];
-
-        await this.subTree.startNewBlock(block.number, globalVariables.timestamp, blockTxs.length, blockMessages);
-        if (signal.aborted) {
+        // The abort signal stops public execution inside the block, so a prune-driven cancel does not have to wait
+        // for the block to finish.
+        if (!(await executeBlock(this.subTree, block, blockTxs, messagesPerBlock[blockIndex], this.deps, signal))) {
           return;
         }
-
-        const db = await this.createFork(BlockNumber(block.number - 1), blockMessages);
-        try {
-          if (signal.aborted) {
-            return;
-          }
-          const config = PublicSimulatorConfig.from({
-            proverId: this.deps.proverId.toField(),
-            skipFeeEnforcement: false,
-            collectDebugLogs: false,
-            collectHints: true,
-            collectPublicInputs: true,
-            collectStatistics: false,
-          });
-          const publicProcessor = this.deps.publicProcessorFactory.create(db, globalVariables, config);
-          const processed = await this.processTxs(publicProcessor, blockTxs);
-          if (signal.aborted) {
-            return;
-          }
-          await this.subTree.addTxs(processed);
-        } finally {
-          await db.close();
-        }
-        if (signal.aborted) {
-          return;
-        }
-
-        await this.subTree.setBlockCompleted(block.number, block.header);
         this.deps.metrics.recordBlockProcessing(blockTimer.ms());
         if (signal.aborted) {
           return;
@@ -568,38 +528,5 @@ export class CheckpointProver {
 
   private getTxsForBlock(block: L2Block, txs: Map<string, Tx>): Tx[] {
     return block.body.txEffects.map(txEffect => txs.get(txEffect.txHash.toString())!);
-  }
-
-  private async processTxs(publicProcessor: PublicProcessor, txs: Tx[]): Promise<ProcessedTx[]> {
-    // Pass the abort signal so a prune-driven cancel stops the current block's public execution
-    // immediately, rather than running it to completion before the next `signal.aborted` check.
-    // On abort `process` returns a partial result, the length check below throws, and
-    // `gatherAndExecute` swallows it via its `cancelled` guard.
-    const [processedTxs, failedTxs] = await publicProcessor.process(txs, {
-      deadline: this.deps.deadline,
-      signal: this.abortController.signal,
-    });
-
-    if (failedTxs.length) {
-      const failedTxHashes = await Promise.all(failedTxs.map(({ tx }) => tx.getTxHash()));
-      throw new Error(
-        `Txs failed processing: ${failedTxs
-          .map(({ error }, index) => `${failedTxHashes[index]} (${error})`)
-          .join(', ')}`,
-      );
-    }
-
-    if (processedTxs.length !== txs.length) {
-      throw new Error(`Failed to process all txs: processed ${processedTxs.length} out of ${txs.length}`);
-    }
-
-    return processedTxs;
-  }
-
-  private async createFork(blockNumber: BlockNumber, l1ToL2Messages: Fr[]) {
-    const db = await this.deps.dbProvider.fork(blockNumber);
-    // Append the block's real message leaves unpadded at compact indices.
-    await db.appendLeaves(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, l1ToL2Messages);
-    return db;
   }
 }

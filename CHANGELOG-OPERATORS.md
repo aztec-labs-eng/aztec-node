@@ -32,6 +32,22 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### `PROVER_NODE_EARLY_BLOCK_PROVING` starts block-level proving before the checkpoint lands (PR link pending)
+
+A prover node started block-level proving for a block only once the block's checkpoint had landed on L1. With `PROVER_NODE_EARLY_BLOCK_PROVING=true` it starts as soon as the block is proposed, so more of a checkpoint's block proofs are done when a partial epoch proof is requested. When the checkpoint lands, the node proves it as before and the proving broker serves the jobs that were already started. A proposed block that is pruned before its checkpoint lands is dropped; its proofs are used only if a block with the same inputs is proposed again.
+
+The node's archiver has to hold proposed blocks for this to have any effect. A node that does not re-execute block proposals only learns of blocks from their checkpoints.
+
+The node logs `Block-level proofs ready for block N ahead of its checkpoint` with a `durationMs` field: the time from the block reaching the prover to its block root proof. The line appears only for blocks whose proofs are ready before their checkpoint lands.
+
+The default is `false`, which keeps the previous behaviour. With the flag on:
+
+- The node executes each block's transactions a second time when the checkpoint lands.
+- The proving jobs of a proposed block that is pruned keep running on the agents until they finish.
+- If a proving job started early fails after all its retries, the broker keeps that failure, and the checkpoint's own request for the same job fails with it.
+
+**Migration**: none. Set the variable to turn the feature on.
+
 ### The proving broker hands out block-level jobs before checkpoint roots (PR link pending)
 
 Within one epoch the broker used to give agents checkpoint root and checkpoint merge jobs before transaction-level jobs (transaction merges, base rollups, AVM, chonk verifier), and gave them the inbox parity proof last. A partial epoch proof makes the checkpoint roots of all earlier checkpoints runnable at once, so the newest checkpoint's transactions and parity proof waited until every one of those roots had an agent.
