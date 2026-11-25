@@ -1268,6 +1268,29 @@ describe('SessionManager', () => {
     expect(stubs).toHaveLength(0);
   });
 
+  it('startProof returns the running partial session after a prune shortened its checkpoints', async () => {
+    const epoch = EpochNumber(7);
+    // Epoch 7 covers slots [14, 15], with one checkpoint in each.
+    const first = proverForCheckpoint(1, 14);
+    const second = proverForCheckpoint(2, 15);
+    setStore([first, second]);
+    store.listForEpoch.mockResolvedValue([first, second]);
+    await manager.startProof(epoch);
+
+    // A prune removes the second checkpoint. The session is replaced by one over the first checkpoint only,
+    // which keeps the slot range it was requested with.
+    setStore([first]);
+    store.listForEpoch.mockResolvedValue([first]);
+    await manager.onPrune([epoch]);
+    expect(stubs).toHaveLength(2);
+    const running = stubs[1];
+    expect(running.provers).toEqual([first]);
+
+    // The same request now computes a shorter slot range, but asks for the checkpoints already being proven.
+    await expect(manager.startProof(epoch)).resolves.toBe(running.uuid);
+    expect(stubs).toHaveLength(2);
+  });
+
   it('startProof throws when the session limit is reached', async () => {
     manager = new TestSessionManager(
       {
