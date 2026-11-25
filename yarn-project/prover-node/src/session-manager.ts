@@ -1,5 +1,4 @@
-import type { RollupContract } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { unique } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -12,13 +11,13 @@ import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
-  getEpochAtSlot,
   getProofSubmissionDeadlineTimestamp,
   getSlotRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server';
 
 import type { CheckpointStore } from './checkpoint-store.js';
+import type { EpochProofStatus } from './epoch-proof-status.js';
 import { CheckpointProver } from './job/checkpoint-prover.js';
 import type { EpochProvingJobData } from './job/epoch-proving-job-data.js';
 import {
@@ -56,14 +55,11 @@ export type SessionManagerConfig = {
 
 export type SessionManagerDeps = {
   checkpointStore: CheckpointStore;
-  l2BlockSource: Pick<
-    L2BlockSource,
-    'isEpochComplete' | 'getCheckpoints' | 'getCheckpoint' | 'getL1Constants' | 'getBlockNumber' | 'getBlockData'
-  >;
+  l2BlockSource: Pick<L2BlockSource, 'isEpochComplete' | 'getCheckpoints' | 'getCheckpoint' | 'getL1Constants'>;
   proverFactory: EpochProverFactory;
   proverId: EthAddress;
-  /** Read to tell whether this prover already holds a full-epoch proof of an epoch the proven tip covers. */
-  rollupContract: Pick<RollupContract, 'getHasSubmittedFullEpochProof'>;
+  /** Read to tell which epochs the proven tip covers and whether this prover holds a full-epoch proof of them. */
+  proofStatus: Pick<EpochProofStatus, 'isBlockProven' | 'getNextUnprovenEpoch' | 'readOwnFullEpochProof'>;
   publishingService: ProofPublishingService;
   metrics: ProverNodeJobMetrics;
   dateProvider: DateProvider;
@@ -96,17 +92,6 @@ export class SessionManager {
    * freshly-constructed session.
    */
   private readonly reconcileQueue = new SerialQueue();
-  /**
-   * Reads of our full-epoch proof registration from the last L2 slot that did not find it missing: `true`
-   * (registered) or `undefined` (L1 could not be read), with the checkpoint count and when it was read. A covered
-   * epoch with no session is then read once per L2 slot rather than on every tick: a confirmed registration still
-   * notices an L1 reorg that drops it, and an L1 outage costs one slow read per slot instead of one per tick. Entries
-   * older than a slot are dropped on each read, so the map holds at most the epochs read within one slot.
-   */
-  private readonly ownFullEpochProofs = new Map<
-    EpochNumber,
-    { length: number; registered: true | undefined; readAtMs: number }
-  >();
   /** Cached L1 constants, populated on first read. */
   private cachedL1Constants: L1RollupConstants | undefined;
   /** Test-only hooks applied to every session this manager constructs. */
@@ -233,38 +218,6 @@ export class SessionManager {
       throw new Error(`Failed to schedule partial proof for epoch ${epoch}`);
     }
     return created.getId();
-  }
-
-  /**
-   * Whether L1 registered this prover's proof of the epoch's `length` checkpoints as a full-epoch proof, or undefined
-   * if L1 could not be read. Callers decide what an unread registration means for them. Answers other than `false`
-   * are reused for one L2 slot.
-   */
-  public async readOwnFullEpochProof(epoch: EpochNumber, length: number): Promise<boolean | undefined> {
-    const { slotDuration } = await this.getL1Constants();
-    const now = this.deps.dateProvider.now();
-    for (const [cachedEpoch, entry] of this.ownFullEpochProofs) {
-      if (now - entry.readAtMs >= slotDuration * 1000) {
-        this.ownFullEpochProofs.delete(cachedEpoch);
-      }
-    }
-    const cached = this.ownFullEpochProofs.get(epoch);
-    // A failed read is reused whatever the count: while a catch-up fills the store, the count changes from tick to
-    // tick, and each change would otherwise retry L1 during an outage.
-    if (cached && (cached.registered === undefined || cached.length === length)) {
-      return cached.registered;
-    }
-    let registered: boolean | undefined;
-    try {
-      registered = await this.deps.rollupContract.getHasSubmittedFullEpochProof(epoch, length, this.deps.proverId);
-    } catch (err) {
-      this.log.warn(`Could not read our full-epoch proof registration for epoch ${epoch}`, { epoch, err });
-      registered = undefined;
-    }
-    if (registered !== false) {
-      this.ownFullEpochProofs.set(epoch, { length, registered, readAtMs: this.deps.dateProvider.now() });
-    }
-    return registered;
   }
 
   /** Stops the tick, drains the reconcile queue, and cancels every live session. */
@@ -404,7 +357,7 @@ export class SessionManager {
       if (!opts.openCovered) {
         return;
       }
-      const registered = await this.readOwnFullEpochProof(epoch, canonical.length);
+      const registered = await this.deps.proofStatus.readOwnFullEpochProof(epoch, canonical.length);
       if (registered === undefined) {
         this.log.debug(`Skipping full-session open for epoch ${epoch}: our full-epoch proof registration is unread`, {
           epoch,
@@ -581,7 +534,7 @@ export class SessionManager {
    * re-proved.
    */
   private async openFullSessionsOnTick(): Promise<void> {
-    const next = await this.nextUnprovenEpoch();
+    const next = await this.deps.proofStatus.getNextUnprovenEpoch();
     if (next !== undefined) {
       await this.openFullSessionIfReady(next, { openCovered: true, reservedSlots: 0 });
     }
@@ -613,22 +566,6 @@ export class SessionManager {
       case 'start-proof':
         return [];
     }
-  }
-
-  /**
-   * The next epoch to prove: the epoch containing the first block after the proven tip.
-   * Returns undefined when that block has not been mined yet (e.g. nothing new to prove).
-   * Subsequent ticks advance only once the chain's proven height moves forward, so epochs
-   * are proven in order rather than all at once.
-   */
-  private async nextUnprovenEpoch(): Promise<EpochNumber | undefined> {
-    const lastProven = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' })) ?? BlockNumber.ZERO;
-    const firstToProve = BlockNumber(lastProven + 1);
-    const header = (await this.deps.l2BlockSource.getBlockData({ number: firstToProve }))?.header;
-    if (!header) {
-      return undefined;
-    }
-    return getEpochAtSlot(header.getSlot(), await this.getL1Constants());
   }
 
   /** Distinct epochs with checkpoints in the store, ascending. The store drops an epoch once its window closes. */
@@ -688,14 +625,10 @@ export class SessionManager {
    * proved them: callers decide whether a covered set still needs a proof from this prover. Conservatively returns
    * false when nothing is proven yet.
    */
-  private async isProvenChainEncompassing(canonical: readonly CheckpointProver[]): Promise<boolean> {
-    const provenBlock = await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' });
-    if (!provenBlock || provenBlock <= 0) {
-      return false;
-    }
+  private isProvenChainEncompassing(canonical: readonly CheckpointProver[]): Promise<boolean> {
     const lastCheckpoint = canonical[canonical.length - 1].checkpoint;
     const lastBlock = lastCheckpoint.blocks[lastCheckpoint.blocks.length - 1].number;
-    return provenBlock >= lastBlock;
+    return this.deps.proofStatus.isBlockProven(lastBlock);
   }
 
   private async getL1Constants(): Promise<L1RollupConstants> {
