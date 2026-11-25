@@ -21,6 +21,13 @@ export const INITIAL_TEST_SIGNING_KEYS = [
 
 export const INITIAL_TEST_ACCOUNT_SALTS = [Fr.ZERO, Fr.ZERO, Fr.ZERO];
 
+/** The secret, the signing key and the salt of each initial test account. */
+export const INITIAL_TEST_ACCOUNT_KEYS = INITIAL_TEST_SECRET_KEYS.map((secret, i) => ({
+  secret,
+  signingKey: INITIAL_TEST_SIGNING_KEYS[i],
+  salt: INITIAL_TEST_ACCOUNT_SALTS[i],
+}));
+
 /**
  * The schnorr account contract variant a test account uses.
  */
