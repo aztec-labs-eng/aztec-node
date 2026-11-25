@@ -2,7 +2,7 @@ use crate::protocol::{address::AztecAddress, hash::poseidon2_hash_with_separator
 
 use crate::{
     context::{PrivateContext, UtilityContext},
-    keys::getters::{get_nhk_app, get_public_keys},
+    keys::getters::{get_public_keys, KeyType, try_get_sk_app},
     nullifier::utils::compute_nullifier_existence_request,
     oracle::nullifiers::check_nullifier_exists,
     state_vars::OwnedStateVariable,
@@ -136,7 +136,11 @@ impl SingleUseClaim<&mut PrivateContext> {
 impl SingleUseClaim<UtilityContext> {
     /// Returns `true` if an owner has claimed this single use claim.
     pub unconstrained fn has_claimed(self) -> bool {
-        let owner_nhk_app = get_nhk_app(get_public_keys(self.owner).npk_m_hash);
+        let owner = self.owner;
+        let owner_npk_m_hash = get_public_keys(owner).npk_m_hash;
+        let owner_nhk_app = try_get_sk_app(owner_npk_m_hash, KeyType::nullifier_hiding()).expect(
+            f"Key validation request denied: no scoped account has the nullifier hiding key of {owner}",
+        );
         check_nullifier_exists(self.compute_nullifier(owner_nhk_app))
     }
 }

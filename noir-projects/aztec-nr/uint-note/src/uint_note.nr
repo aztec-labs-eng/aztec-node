@@ -1,6 +1,6 @@
 use aztec::{
     context::{NullifierExistenceRequest, PrivateContext, PublicContext},
-    keys::getters::{get_nhk_app, get_public_keys, try_get_public_keys},
+    keys::getters::{get_public_keys, KeyType, try_get_public_keys, try_get_sk_app},
     macros::notes::custom_note,
     messages::{
         delivery::{do_private_message_delivery, MessageDelivery},
@@ -75,11 +75,9 @@ impl NoteHash for UintNote {
         owner: AztecAddress,
         note_hash_for_nullification: Field,
     ) -> Option<Field> {
-        try_get_public_keys(owner).map(|public_keys| {
-            let owner_npk_m_hash = public_keys.npk_m_hash;
-            let secret = get_nhk_app(owner_npk_m_hash);
-            compute_note_nullifier(note_hash_for_nullification, [secret])
-        })
+        try_get_public_keys(owner)
+            .and_then(|public_keys| try_get_sk_app(public_keys.npk_m_hash, KeyType::nullifier_hiding()))
+            .map(|secret| compute_note_nullifier(note_hash_for_nullification, [secret]))
     }
 }
 

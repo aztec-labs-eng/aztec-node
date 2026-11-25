@@ -2,6 +2,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type ACVMField, toACVMField } from '@aztec-labs/simulator/client';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 
@@ -12,8 +13,8 @@ import type { PendingTaggedLog } from '../noir-structs/pending_tagged_log.js';
 import type { ResolvedMessagingSecretStrategy } from '../noir-structs/resolved_messaging_secret_strategy.js';
 import { buildACIRCallback } from './acir_callback.js';
 import { LEGACY_ORACLE_REGISTRY, type LegacyOracleEntry } from './legacy_oracle_registry.js';
-import { FIELD, U32 } from './oracle_registry.js';
-import type { OutputSlot } from './oracle_type_mappings.js';
+import { FIELD, U32, makeEntry } from './oracle_registry.js';
+import { KEY_VALIDATION_REQUEST, type OutputSlot } from './oracle_type_mappings.js';
 
 // How aztec-nr serializes `OnchainDeliveryMode::onchain_unconstrained()` and `onchain_constrained()`. stdlib does not
 // export its own constants for these values, to keep its public API small.
@@ -224,6 +225,31 @@ describe('legacy oracle dispatch', () => {
 
     expect(modernElement.at(-1)).toEqual(pendingTaggedLog.messagingSecret);
     expect(legacyElement).toEqual(modernElement.slice(0, -1));
+  });
+
+  it('serves the retired getKeyValidationRequest name the request the V2 handler finds', async () => {
+    const request = KeyValidationRequest.random();
+    const handler = {
+      isUtility: true,
+      getKeyValidationRequestV2: () => Promise.resolve(Option.some(request)),
+    } as unknown as Handler;
+    const inputs = [[toACVMField(Fr.random())], [toACVMField(new Fr(0))]];
+
+    const legacyWire = await buildACIRCallback(handler)['aztec_utl_getKeyValidationRequest'](...inputs);
+
+    expect(legacyWire).toEqual(makeEntry({ returnType: KEY_VALIDATION_REQUEST }).serializeReturn(request));
+  });
+
+  it('fails the retired getKeyValidationRequest call when no account in scope has the key', async () => {
+    const handler = {
+      isUtility: true,
+      getKeyValidationRequestV2: () => Promise.resolve(Option.none()),
+    } as unknown as Handler;
+    const inputs = [[toACVMField(Fr.random())], [toACVMField(new Fr(0))]];
+
+    await expect(buildACIRCallback(handler)['aztec_utl_getKeyValidationRequest'](...inputs)).rejects.toThrow(
+      'Key validation request denied',
+    );
   });
 
   it('rejects a legacy name that collides with a live oracle', () => {

@@ -6,7 +6,7 @@ use aztec::macros::aztec;
 #[aztec]
 pub contract ScopeTest {
     use aztec::{
-        keys::getters::{get_nhk_app, get_public_keys},
+        keys::getters::{get_public_keys, KeyType, try_get_sk_app},
         macros::{functions::{external, initializer, view}, storage::storage},
         messages::delivery::MessageDelivery,
         protocol::address::AztecAddress,
@@ -30,6 +30,13 @@ pub contract ScopeTest {
     fn create_note(owner: AztecAddress, value: Field) {
         let note = FieldNote { value };
         self.storage.note.at(owner).initialize(note).deliver(MessageDelivery::onchain_unconstrained());
+    }
+
+    /// Creates a note for `owner`, delivered to `recipient` instead.
+    #[external("private")]
+    fn create_note_delivered_to(owner: AztecAddress, recipient: AztecAddress, value: Field) {
+        let note = FieldNote { value };
+        self.storage.note.at(owner).initialize(note).deliver_to(recipient, MessageDelivery::onchain_unconstrained());
     }
 
     /// Reads the note owned by the specified owner and returns its value.
@@ -68,7 +75,9 @@ pub contract ScopeTest {
     #[external("utility")]
     unconstrained fn get_nhk_utility(owner: AztecAddress) -> Field {
         let owner_npk_m_hash = get_public_keys(owner).npk_m_hash;
-        get_nhk_app(owner_npk_m_hash)
+        try_get_sk_app(owner_npk_m_hash, KeyType::nullifier_hiding()).expect(
+            f"Key validation request denied: no scoped account has the nullifier hiding key of {owner}",
+        )
     }
 
     mod test {
@@ -125,6 +134,25 @@ pub contract ScopeTest {
             env.call_private(alice, ScopeTest::at(contract_address).create_note(alice, value));
 
             let _read_value = env.call_private(bob, ScopeTest::at(contract_address).read_note(alice));
+        }
+
+        #[test]
+        unconstrained fn bob_can_read_own_notes_after_receiving_alice_note() {
+            let (mut env, contract_address) = setup();
+
+            let alice = env.create_light_account();
+            let bob = env.create_light_account();
+            let alice_value: Field = 42;
+            let bob_value: Field = 7;
+
+            env.call_private(bob, ScopeTest::at(contract_address).create_note(bob, bob_value));
+
+            // Bob can't compute the nullifier of Alice's note, since her nullifier hiding key is outside his scope, so
+            // his sync must skip it instead of failing.
+            env.call_private(alice, ScopeTest::at(contract_address).create_note_delivered_to(alice, bob, alice_value));
+
+            let read_value = env.call_private(bob, ScopeTest::at(contract_address).read_note(bob));
+            assert_eq(read_value, bob_value);
         }
 
         #[test]

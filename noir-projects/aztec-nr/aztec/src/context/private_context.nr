@@ -7,7 +7,7 @@ use crate::{
         block_header::get_block_header_at,
         call_private_function::call_private_function_internal,
         execution_cache,
-        key_validation_request::get_key_validation_request,
+        key_validation_request::try_get_key_validation_request,
         logs::notify_created_contract_class_log,
         notes::notify_nullified_note,
         nullifiers::notify_created_nullifier,
@@ -834,7 +834,11 @@ impl PrivateContext {
 
             // Safety: Kernels verify that the key validation request is valid and below we verify that a request for
             // the correct public key has been received.
-            let request = unsafe { get_key_validation_request(pk_m_hash, key_index) };
+            let request = unsafe {
+                try_get_key_validation_request(pk_m_hash, key_index).expect(
+                    f"Key validation request denied: no scoped account has a key with hash {pk_m_hash}",
+                )
+            };
             assert_eq(request.pk_m_hash, pk_m_hash, "Obtained key validation request for wrong pk_m_hash");
 
             self.key_validation_requests_and_separators.push(

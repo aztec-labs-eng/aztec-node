@@ -1,6 +1,7 @@
 /* eslint-disable camelcase */
 import { MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_CIPHERTEXT_LEN, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { createLogger } from '@aztec-labs/foundation/log';
+import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
@@ -22,6 +23,7 @@ import {
   EPHEMERAL_ARRAY,
   FIELD,
   FIXED_BOUNDED_VEC,
+  KEY_VALIDATION_REQUEST,
   RESOLVED_MESSAGING_SECRET_STRATEGY,
   RESOLVED_TX,
   STRUCT,
@@ -137,6 +139,20 @@ export const LEGACY_ORACLE_REGISTRY: Record<string, LegacyOracleEntry> = {
           return { type: 'non-interactive-handshake' };
         }
         return { type: 'unconstrained-secret', secret: result.secret };
+      },
+    },
+  }),
+  aztec_utl_getKeyValidationRequest: legacyOracle({
+    modernOracle: 'aztec_utl_getKeyValidationRequestV2',
+    returnType: {
+      legacyType: KEY_VALIDATION_REQUEST,
+      mapping: (result, [pkMHash]): KeyValidationRequest => {
+        if (!result.isSome()) {
+          throw new Error(
+            `Key validation request denied: no scoped account has a key with hash ${pkMHash.toString()}.`,
+          );
+        }
+        return result.value;
       },
     },
   }),
