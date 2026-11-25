@@ -32,7 +32,8 @@ export function connectOpSqlite(location: string, onTerminate: () => void): Sqli
         db = openOpSqlite({
           name: req.dbName.replace(/^\/+/, ''),
           location,
-          encryptionKey: req.encryptionKey && rawKey(req.encryptionKey),
+          // op-sqlite reads the key as a string whenever the option is present, so an unencrypted store leaves it out.
+          ...(req.encryptionKey && { encryptionKey: rawKey(req.encryptionKey) }),
         });
         await db.executeRaw(SCHEMA_SQL);
         return { type: 'ok', id: req.id };
