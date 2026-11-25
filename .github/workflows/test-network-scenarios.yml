@@ -208,7 +208,7 @@ jobs:
           TEST_SET: ${{ matrix.test_set }}
         run: |
           set -x # print next line
-          ./.github/ci3.sh network-scenarios "$ENV_FILE" "$NAMESPACE" "$DOCKER_IMAGE" "$TEST_SET"
+          exec ./.github/ci3.sh network-scenarios "$ENV_FILE" "$NAMESPACE" "$DOCKER_IMAGE" "$TEST_SET"
 
       - name: Cleanup network resources
         if: always()

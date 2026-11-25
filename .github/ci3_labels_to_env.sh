@@ -98,7 +98,7 @@ function main {
 
   # Benching modes run their benches on a dedicated, fixed-hardware box (stable numbers)
   # and publish the result; ci-fast never benches. For multi-instance runs only the first
-  # instance keeps BENCH_UPLOAD=1 — multi_job_run forces the rest to 0 so they bench inline
+  # instance keeps BENCH_UPLOAD=1 — bootstrap_ec2_multi forces the rest to 0 so they bench inline
   # as a breakage check without racing the upload. The destination (bench/main vs bench/prs)
   # is BENCH_BRANCH below.
   if [[ "$ci_mode" == "full" || "$ci_mode" == "full-no-test-cache" ]]; then

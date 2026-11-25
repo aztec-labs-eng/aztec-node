@@ -139,4 +139,4 @@ jobs:
           AWS_SHUTDOWN_TIME: 180
           DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
         run: |
-          ./.github/ci3.sh network-tests-kind "$DOCKER_IMAGE"
+          exec ./.github/ci3.sh network-tests-kind "$DOCKER_IMAGE"

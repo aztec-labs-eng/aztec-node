@@ -192,7 +192,7 @@ jobs:
           BENCH_SWEEP_LABEL: simulated-proving
           BENCH_BENCHMARK_TYPE: simulated-proving
         run: |
-          ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "$DOCKER_IMAGE"
+          exec ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "$DOCKER_IMAGE"
 
   cleanup-proving:
     if: ${{ always() }}
@@ -348,7 +348,7 @@ jobs:
           BENCH_SWEEP_LABEL: block-capacity
           BENCH_BENCHMARK_TYPE: block-capacity
         run: |
-          ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "$DOCKER_IMAGE"
+          exec ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "$DOCKER_IMAGE"
 
   cleanup-block-capacity:
     if: ${{ always() }}

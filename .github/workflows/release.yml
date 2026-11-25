@@ -73,7 +73,7 @@ jobs:
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
-        run: ./.github/ci3.sh release
+        run: exec ./.github/ci3.sh release
 
       - name: Post-Actions
         run: ./.github/ci3_success.sh

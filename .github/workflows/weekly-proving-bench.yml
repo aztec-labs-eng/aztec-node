@@ -151,7 +151,7 @@ jobs:
           BENCH_SWEEP_LABEL: real-proving
           BENCH_BENCHMARK_TYPE: real-proving
         run: |
-          ./.github/ci3.sh network-proving-bench prove-n-tps-real prove-n-tps-real
+          exec ./.github/ci3.sh network-proving-bench prove-n-tps-real prove-n-tps-real
 
   cleanup:
     if: ${{ always() }}
@@ -184,7 +184,7 @@ jobs:
           GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NO_SPOT: 1
-        run: ./.github/ci3.sh network-teardown prove-n-tps-real prove-n-tps-real
+        run: exec ./.github/ci3.sh network-teardown prove-n-tps-real prove-n-tps-real
 
   notify:
     if: (success() || failure()) && github.event_name != 'workflow_dispatch'

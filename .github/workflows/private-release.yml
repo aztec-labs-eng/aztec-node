@@ -89,7 +89,7 @@ jobs:
         # The private/ prefix routes the ref; everything downstream (semver, dist_tag, deploy_npm,
         # the image tags) wants the bare version, and GitHub Actions expressions have no
         # string-replace function.
-        run: REF_NAME=${REF_NAME#private/} ./.github/ci3.sh release
+        run: REF_NAME=${REF_NAME#private/} exec ./.github/ci3.sh release
 
       - name: Post-Actions
         run: ./.github/ci3_success.sh

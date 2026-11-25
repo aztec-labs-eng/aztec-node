@@ -155,7 +155,7 @@ jobs:
           namespace=run-$RUN_ID-${{ matrix.namespace_suffix }}
           echo "NAMESPACE=$namespace" >> $GITHUB_ENV
           set -x
-          ./.github/ci3.sh ${{ matrix.ci3_cmd }} ${{ matrix.scenario }} "$namespace" "$DOCKER_IMAGE"
+          exec ./.github/ci3.sh ${{ matrix.ci3_cmd }} ${{ matrix.scenario }} "$namespace" "$DOCKER_IMAGE"
 
       - name: Cleanup network resources
         if: always()
