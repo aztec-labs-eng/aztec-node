@@ -1,8 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { vi } from 'vitest';
 
+import { describeAztecArray } from '../interfaces/array_test_suite.js';
 import { describeAztecMap } from '../interfaces/map_test_suite.js';
+import { describeAztecMultiMap } from '../interfaces/multi_map_test_suite.js';
+import { describeAztecSet } from '../interfaces/set_test_suite.js';
+import { describeAztecSingleton } from '../interfaces/singleton_test_suite.js';
 import { mockLogger } from '../interfaces/utils.js';
 import {
   AztecSQLiteOPFSStore,
@@ -15,8 +21,49 @@ import {
   storePoolDirectory,
 } from '../sqlite-opfs/react_native.js';
 
+// op-sqlite runs only in an app, so node:sqlite stands in for it. node:sqlite has no SQLCipher: the fake keeps a
+// database's key beside it and fails a wrong or missing key as SQLCipher does, on the first statement.
+vi.mock('@op-engineering/op-sqlite', () => ({
+  open: ({ name, location, encryptionKey }: { name: string; location: string; encryptionKey?: string }) => {
+    const path = location === ':memory:' ? location : join(location, name);
+    const keyPath = `${path}.key`;
+    if (path !== ':memory:') {
+      mkdirSync(location, { recursive: true });
+      if (encryptionKey && !existsSync(path)) {
+        writeFileSync(keyPath, encryptionKey);
+      }
+    }
+    const storedKey = existsSync(keyPath) ? readFileSync(keyPath, 'utf8') : undefined;
+    const db = new DatabaseSync(path);
+    return {
+      executeRaw: (sql: string, params: SQLInputValue[] = []) => {
+        if (storedKey !== encryptionKey) {
+          return Promise.reject(new Error('file is not a database'));
+        }
+        if (params.length === 0 && sql.includes(';')) {
+          db.exec(sql);
+          return Promise.resolve({ rowsAffected: 0, rawRows: [] });
+        }
+        // op-sqlite returns blobs as ArrayBuffers.
+        const rows = db
+          .prepare(sql)
+          .all(...params)
+          .map(row => Object.values(row).map(value => (value instanceof Uint8Array ? value.slice().buffer : value)));
+        const { changes } = db.prepare('SELECT changes() AS changes').get() as { changes: number };
+        return Promise.resolve({ rowsAffected: changes, rawRows: rows });
+      },
+      close: () => db.close(),
+      delete: () => {
+        db.close();
+        rmSync(path, { force: true });
+        rmSync(keyPath, { force: true });
+      },
+    };
+  },
+}));
+
 // The browser store's React Native form, with the app's files (which @aztec-foundation/react-native installs) over
-// Node's; the Kv service runs on its node backend here, on the library linked into the app there.
+// Node's.
 describe('AztecSQLiteOPFSStore (React Native)', () => {
   let dataDir: string;
   beforeEach(() => {
@@ -34,6 +81,10 @@ describe('AztecSQLiteOPFSStore (React Native)', () => {
   });
 
   describeAztecMap('AztecMap', () => openTmpStore(true));
+  describeAztecMultiMap('AztecMultiMap', () => openTmpStore(true));
+  describeAztecArray('AztecArray', () => openTmpStore(true));
+  describeAztecSet('AztecSet', () => openTmpStore(true));
+  describeAztecSingleton('AztecSingleton', () => openTmpStore(true));
 
   const key = () => new Uint8Array(32).fill(3);
   const open = (name: string, encryptionKey?: Uint8Array) =>

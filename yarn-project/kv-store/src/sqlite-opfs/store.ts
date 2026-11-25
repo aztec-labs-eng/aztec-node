@@ -1,3 +1,4 @@
+import { createSqliteWorker } from '#sqlite-worker';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 
@@ -19,6 +20,18 @@ import { type PoolLockLease, acquirePoolLock, normalizePoolDirectory } from './p
 import { SQLiteOPFSAztecSet } from './set.js';
 import { SQLiteOPFSAztecSingleton } from './singleton.js';
 
+/** Where the store sends its requests: the OPFS worker in a browser, or an adapter over another SQLite. */
+export interface SqliteWorkerPort {
+  postMessage(req: WorkerRequest, transfer?: Transferable[]): void;
+  terminate(): void;
+}
+
+/** Connects a port to the store's handlers for its responses and for a crash of the port. */
+export type ConnectSqliteWorkerPort = (
+  onResponse: (resp: WorkerResponse) => void,
+  onCrash: (message: string) => void,
+) => SqliteWorkerPort;
+
 /**
  * Main-thread handle for a SQLite database persisted to OPFS via the `opfs-sahpool`
  * VFS. Owns a dedicated Web Worker (the SAH Pool VFS requires Worker context) and
@@ -30,7 +43,7 @@ import { SQLiteOPFSAztecSingleton } from './singleton.js';
  * nested ops bypass it to avoid deadlock.
  */
 export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
-  readonly #worker: Worker;
+  readonly #worker: SqliteWorkerPort;
   readonly #pending = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (err: Error) => void }>();
   readonly #txQueue = new SerialQueue();
   readonly #name: string;
@@ -40,31 +53,31 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
   #closed = false;
   #workerFailed = false;
 
-  private constructor(
-    worker: Worker,
+  protected constructor(
+    connect: ConnectSqliteWorkerPort,
     name: string,
     log: Logger,
     public readonly isEphemeral: boolean,
     private readonly poolLock?: PoolLockLease,
   ) {
-    this.#worker = worker;
     this.#name = name;
     this.#log = log;
-    this.#worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
-      const { id } = ev.data;
-      const handler = this.#pending.get(id);
-      if (!handler) {
-        this.#log.warn(`SQLite worker: no pending handler for id ${id}`);
-        return;
-      }
-      this.#pending.delete(id);
-      handler.resolve(ev.data);
-    };
-    this.#worker.onerror = ev => {
-      this.#workerFailed = true;
-      this.#log.error(`SQLite worker crashed: ${ev.message}`);
-      this.#rejectPending(`SQLite worker crashed: ${ev.message}`);
-    };
+    this.#worker = connect(
+      resp => {
+        const handler = this.#pending.get(resp.id);
+        if (!handler) {
+          this.#log.warn(`SQLite worker: no pending handler for id ${resp.id}`);
+          return;
+        }
+        this.#pending.delete(resp.id);
+        handler.resolve(resp);
+      },
+      message => {
+        this.#workerFailed = true;
+        this.#log.error(`SQLite worker crashed: ${message}`);
+        this.#rejectPending(`SQLite worker crashed: ${message}`);
+      },
+    );
     this.#txQueue.start();
   }
 
@@ -95,6 +108,56 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     poolDirectory?: string,
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
+    const dbName = AztecSQLiteOPFSStore.#validateOpen(log, name, ephemeral, encryptionKey);
+    const effectivePoolDirectory = ephemeral ? undefined : normalizePoolDirectory(poolDirectory);
+    const poolLock = effectivePoolDirectory ? await acquirePoolLock(effectivePoolDirectory) : undefined;
+    try {
+      if (effectivePoolDirectory) {
+        const quarantine = await quarantineDuplicatePool(effectivePoolDirectory);
+        if (quarantine) {
+          log.warn(`Quarantined SQLite-OPFS pool with duplicate logical file mappings`, quarantine);
+        }
+      }
+      const connect: ConnectSqliteWorkerPort = (onResponse, onCrash) => {
+        const worker = createSqliteWorker();
+        worker.onmessage = (ev: MessageEvent<WorkerResponse>) => onResponse(ev.data);
+        worker.onerror = ev => onCrash(ev.message);
+        return worker;
+      };
+      return await AztecSQLiteOPFSStore.#init(
+        connect,
+        log,
+        dbName,
+        ephemeral,
+        effectivePoolDirectory,
+        encryptionKey,
+        poolLock,
+      );
+    } catch (err) {
+      await poolLock?.release();
+      throw err;
+    }
+  }
+
+  /**
+   * Opens a store whose requests go to the port that `connect` returns, rather than to an OPFS worker. The store takes
+   * no OPFS pool lock: the port's owner keeps one store per database. `poolDirectory` reaches the port in the init
+   * request. The key rules are those of {@link AztecSQLiteOPFSStore.open}.
+   */
+  protected static openOnPort(
+    connect: ConnectSqliteWorkerPort,
+    log: Logger,
+    name?: string,
+    ephemeral: boolean = false,
+    poolDirectory?: string,
+    encryptionKey?: Uint8Array,
+  ): Promise<AztecSQLiteOPFSStore> {
+    const dbName = AztecSQLiteOPFSStore.#validateOpen(log, name, ephemeral, encryptionKey);
+    return AztecSQLiteOPFSStore.#init(connect, log, dbName, ephemeral, poolDirectory, encryptionKey);
+  }
+
+  /** Checks the key and returns the database name: `name`, or a random one for an ephemeral or unnamed store. */
+  static #validateOpen(log: Logger, name: string | undefined, ephemeral: boolean, encryptionKey?: Uint8Array): string {
     if (encryptionKey !== undefined && encryptionKey.length !== 32) {
       throw new SqliteEncryptionError(
         'invalid_key_length',
@@ -111,31 +174,31 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     log.debug(
       `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
     );
-    const effectivePoolDirectory = ephemeral ? undefined : normalizePoolDirectory(poolDirectory);
-    const poolLock = effectivePoolDirectory ? await acquirePoolLock(effectivePoolDirectory) : undefined;
-    let worker: Worker | undefined;
+    return dbName;
+  }
+
+  static async #init(
+    connect: ConnectSqliteWorkerPort,
+    log: Logger,
+    dbName: string,
+    ephemeral: boolean,
+    poolDirectory: string | undefined,
+    encryptionKey: Uint8Array | undefined,
+    poolLock?: PoolLockLease,
+  ): Promise<AztecSQLiteOPFSStore> {
+    const store = new AztecSQLiteOPFSStore(connect, dbName, log, ephemeral, poolLock);
     try {
-      if (effectivePoolDirectory) {
-        const quarantine = await quarantineDuplicatePool(effectivePoolDirectory);
-        if (quarantine) {
-          log.warn(`Quarantined SQLite-OPFS pool with duplicate logical file mappings`, quarantine);
-        }
-      }
-      // @dependency ./worker.ts
-      worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-      const store = new AztecSQLiteOPFSStore(worker, dbName, log, ephemeral, poolLock);
       // Transfer (not clone) the key buffer to the worker so we don't leave a
       // second copy on the main thread. Caveat: this detaches the caller's
       // encryptionKey.buffer — subsequent reads from the same Uint8Array are empty.
       const transfer = encryptionKey ? [encryptionKey.buffer as ArrayBuffer] : undefined;
       await store.#sendRequest(
-        { type: 'init', id: store.#allocId(), dbName, ephemeral, poolDirectory: effectivePoolDirectory, encryptionKey },
+        { type: 'init', id: store.#allocId(), dbName, ephemeral, poolDirectory, encryptionKey },
         transfer,
       );
       return store;
     } catch (err) {
-      worker?.terminate();
-      await poolLock?.release();
+      store.#worker.terminate();
       throw err;
     }
   }

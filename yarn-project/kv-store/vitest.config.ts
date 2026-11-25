@@ -57,7 +57,7 @@ export default defineConfig({
           environment: 'node',
           include: [
             './src/lmdb/**/*.test.ts',
-            './src/kv-sqlite/**/*.test.ts',
+            './src/react-native/**/*.test.ts',
             './src/lmdb-v2/**/*.test.ts',
             './src/stores/**/*.test.ts',
             './src/interfaces/**/*.test.ts',

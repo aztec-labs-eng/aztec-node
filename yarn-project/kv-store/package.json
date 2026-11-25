@@ -8,7 +8,6 @@
     "./lmdb": "./dest/lmdb/index.js",
     "./lmdb-v2": "./dest/lmdb-v2/index.js",
     "./deprecated/indexeddb": "./dest/deprecated/indexeddb/index.js",
-    "./kv-sqlite": "./dest/kv-sqlite/index.js",
     "./sqlite-opfs": {
       "react-native": "./dest/sqlite-opfs/react_native.js",
       "default": "./dest/sqlite-opfs/index.js"
@@ -25,6 +24,10 @@
       "react-native": "./dest/sqlite-opfs/internal/ordered-binary-browser.js",
       "browser": "./dest/sqlite-opfs/internal/ordered-binary-browser.js",
       "default": "ordered-binary"
+    },
+    "#sqlite-worker": {
+      "react-native": "./dest/sqlite-opfs/create_worker.react_native.js",
+      "default": "./dest/sqlite-opfs/create_worker.js"
     }
   },
   "scripts": {
@@ -43,7 +46,6 @@
   ],
   "dependencies": {
     "@aztec-labs/foundation": "workspace:^",
-    "@aztec-labs/kv-sqlite": "0.1.0-dummy",
     "@aztec-labs/native": "workspace:^",
     "@aztec-labs/sqlite3mc-wasm": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
@@ -56,6 +58,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.0.0",
+    "@op-engineering/op-sqlite": "19.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",
     "@typescript/native-preview": "7.0.0-dev.20260113.1",
@@ -111,5 +114,13 @@
     "setupFilesAfterEnv": [
       "../../foundation/src/jest/setupAfterEnv.mjs"
     ]
+  },
+  "peerDependencies": {
+    "@op-engineering/op-sqlite": "^19.0.5"
+  },
+  "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    }
   }
 }

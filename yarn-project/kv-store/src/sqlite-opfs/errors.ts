@@ -1,3 +1,5 @@
+import type { WorkerRequest } from './messages.js';
+
 /**
  * Typed error surface for sqlite3mc-backed page-level encryption failures.
  *
@@ -91,4 +93,32 @@ const SQLITE_CORRUPTION_ERROR_PATTERNS: readonly RegExp[] = [
  **/
 export function isCorruptionMessage(message: string): boolean {
   return SQLITE_CORRUPTION_ERROR_PATTERNS.some(p => p.test(message));
+}
+
+/**
+ * Maps a thrown error during request handling to a typed encryption code, so the
+ * main thread can re-hydrate it as a {@link SqliteEncryptionError}. Returns
+ * `undefined` for non-encryption errors (preserves the existing untyped path).
+ *
+ * Two sources:
+ *   - The error was already a `SqliteEncryptionError` (pre-flight throws inside
+ *     this worker — e.g. ephemeral + encryptionKey). Forward its code as-is.
+ *   - The error came from SQLite/sqlite3mc with a known decrypt-failure message
+ *     during an `init` request. Both "wrong key supplied" and "no key supplied
+ *     to an encrypted DB" surface as SQLITE_NOTADB ("file is not a database") —
+ *     we don't constrain on `req.encryptionKey` because the no-key-on-encrypted-DB
+ *     case is exactly when the caller most needs the typed signal.
+ */
+export function detectEncryptionCode(
+  req: WorkerRequest,
+  err: unknown,
+  message: string,
+): SqliteEncryptionErrorCode | undefined {
+  if (err instanceof SqliteEncryptionError) {
+    return err.code;
+  }
+  if (req.type === 'init' && isDecryptFailureMessage(message)) {
+    return 'decrypt_failed';
+  }
+  return undefined;
 }
