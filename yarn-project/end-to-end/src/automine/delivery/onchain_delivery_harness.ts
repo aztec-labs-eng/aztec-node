@@ -2,8 +2,10 @@ import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/ac
 import type { FieldLike } from '@aztec-labs/aztec.js/abi';
 import { NO_FROM } from '@aztec-labs/aztec.js/account';
 import type { AztecAddress, CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import { APP_MAX_CALLS } from '@aztec-labs/entrypoints/encoding';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import {
   type DeliveryEvent,
@@ -43,7 +45,7 @@ const formatMode = (mode: DeliveryMode): string => (typeof mode === 'string' ? m
 // the source truly reached it.
 export function buildMessageDeliveryTest(opts: {
   // Names the messaging-secret source, e.g. 'non-interactive handshake' or 'arbitrary secret'. The describe title is
-  // derived as `${strategy} x ${mode}`.
+  // derived as `${strategy} x ${mode}`, followed by ` in one tx` when `txs` is 'one for all sends'.
   strategy: string;
   mode: DeliveryMode;
   // Required: every cell states its source explicitly rather than leaning on the PXE default (covered by unit tests).
@@ -63,6 +65,11 @@ export function buildMessageDeliveryTest(opts: {
   //   send. The recipient PXE still holds no sender state.
   // - 'sender': the recipient is the sender itself, and so the sender PXE acts as the recipient PXE.
   recipientSetup?: 'recipient-pxe' | 'recipient-and-sender-pxes' | 'sender';
+  // How the sends are grouped into txs:
+  // - 'one per send' (the default): each send is its own tx.
+  // - 'one for all sends': every send goes in one tx, so each later send sees the earlier ones only as the tx's
+  //   pending state.
+  txs?: 'one per send' | 'one for all sends';
   // Extra `it()`s to register in this cell's suite, e.g. assertions against state a custom `senderHook` recorded.
   // Called inside the same `describe`, after the two baseline assertions below, so it shares their `beforeAll`
   // instead of depending on Jest's cross-`describe` execution order.
@@ -75,15 +82,18 @@ export function buildMessageDeliveryTest(opts: {
     recipientRegistration,
     customRequestResponder,
     recipientSetup = 'recipient-pxe',
+    txs = 'one per send',
     additionalTests,
   } = opts;
-  const description = `${strategy} x ${formatMode(mode)}`;
+  const description = `${strategy} x ${formatMode(mode)}${txs === 'one for all sends' ? ' in one tx' : ''}`;
 
   describe(description, () => {
     jest.setTimeout(300_000);
 
-    const eventValues = [10n, 20n, 30n];
-    const noteValues = [40n, 50n, 60n];
+    // A tx holds at most APP_MAX_CALLS calls, which a single-tx cell splits between its events and its notes.
+    const maxSendsPerKind = txs === 'one for all sends' ? Math.floor(APP_MAX_CALLS / 2) : Infinity;
+    const eventValues = [10n, 20n, 30n].slice(0, maxSendsPerKind);
+    const noteValues = [40n, 50n, 60n].slice(0, maxSendsPerKind);
 
     let aztecNode: AztecNode & AztecNodeDebug;
     let walletSender: TestWallet;
@@ -191,15 +201,23 @@ export function buildMessageDeliveryTest(opts: {
         additionalScopes: recipientSetup === 'recipient-and-sender-pxes' ? [recipient] : [],
       };
 
-      // Constrained sends to one pair are strictly ordered, so deliver one tx at a time. The first send bootstraps the
-      // handshake (when the source is a handshake); the rest reuse it.
+      // Constrained sends to one pair are strictly ordered, so separate txs are delivered one at a time. The first send
+      // bootstraps the handshake (when the source is a handshake); the rest reuse it.
       const blockNumbers: number[] = [];
-      for (const value of eventValues) {
-        const { receipt } = await sendEvent(value).send(sendOpts);
+      if (txs === 'one for all sends') {
+        const { receipt } = await new BatchCall(walletSender, [
+          ...eventValues.map(sendEvent),
+          ...noteValues.map(sendNote),
+        ]).send(sendOpts);
         blockNumbers.push(receipt.blockNumber!);
-      }
-      for (const value of noteValues) {
-        await sendNote(value).send(sendOpts);
+      } else {
+        for (const value of eventValues) {
+          const { receipt } = await sendEvent(value).send(sendOpts);
+          blockNumbers.push(receipt.blockNumber!);
+        }
+        for (const value of noteValues) {
+          await sendNote(value).send(sendOpts);
+        }
       }
 
       await walletRecipient.sync();

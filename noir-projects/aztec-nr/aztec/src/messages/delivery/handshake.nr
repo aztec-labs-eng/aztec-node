@@ -116,8 +116,6 @@ pub fn forgery_protected_eph_pk(eph_pk: EmbeddedCurvePoint, recipient_point: Emb
 ///
 /// Returns `None` when no handshake has been registered for the pair yet, in which case the caller decides how to
 /// source a messaging secret (see [`super::tag::resolve_delivery_messaging_secret`]).
-///
-/// Reads committed state, so it does not see a handshake created earlier in the same transaction.
 pub(crate) unconstrained fn get_existing_app_siloed_handshake_secrets(
     registry: AztecAddress,
     sender: AztecAddress,

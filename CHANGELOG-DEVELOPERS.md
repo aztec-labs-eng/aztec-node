@@ -105,6 +105,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Fixes
 
+- **A utility function called from a private function sees the notes and nullifiers the transaction created before the call**, as the private function itself does. These used to only see settled state, so e.g. several sends in one transaction to a recipient with no handshake each established a new handshake. The later sends now reuse the handshake the first one establishes instead of replacing it. A utility function called this way also passes its contract's initialization check in the transaction that initializes the contract. The change is in the PXE, so contracts need no recompilation.
 - **A note owned by another account in the same PXE no longer breaks the recipient's sync.** When a note's message reached an account other than its owner, for example through `deliver_to`, and the owner was another account in the recipient's PXE, the recipient's sync of that contract failed with `Key validation request denied`, and every later sync failed the same way. Discovery now skips such a note, as it already did for owners the PXE doesn't know. Notes declared with `#[note]` and `UintNote` get the fix once their contract is recompiled, and the recompiled contract needs a PXE on oracle interface 33.6 or later. A note with its own `compute_nullifier_unconstrained` should get the key with the new `try_get_sk_app`, which returns `None` when no account in scope has it.
 
   ```diff

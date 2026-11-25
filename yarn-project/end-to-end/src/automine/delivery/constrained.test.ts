@@ -72,9 +72,9 @@ describe('delivery/constrained', () => {
   });
 
   // Constrained sends to one recipient form a strictly ordered sequence, so concurrent and batched sends behave
-  // differently: parallel txs collide on the shared index nullifier, same-tx batches work only once the handshake is
-  // committed, and batches that bootstrap a brand-new recipient re-handshake onto separate secrets. Each test uses
-  // its own recipient.
+  // differently: parallel txs collide on the shared index nullifier, while sends batched into one tx extend a single
+  // sequence, on an established handshake or on one the batch's first send bootstraps. Each test uses its own
+  // recipient.
   describe('concurrency and batching', () => {
     // Constrained sends to one `(sender, recipient)` pair are strictly ordered: the first send bootstraps the
     // handshake and every send emits a nullifier keyed only on `(sender, recipient, secret, index)`. Two sends fired
@@ -89,9 +89,9 @@ describe('delivery/constrained', () => {
     });
 
     // CAN batch (1): a contract call may emit several constrained messages to one recipient in a single tx; each
-    // later emit proves the previous nullifier as a same-tx pending nullifier. The handshake must already be
-    // committed (see the re-handshake test below), so it is established first; a fresh recipient starts at index 0,
-    // so two emits land indices 0 and 1 and the next index is 2.
+    // later emit proves the previous nullifier as a same-tx pending nullifier. The handshake is established in an
+    // earlier tx, so the first emit proves it against the registry; a fresh recipient starts at index 0, so two emits
+    // land indices 0 and 1 and the next index is 2.
     it('lands multiple constrained sends from a single contract call on an established handshake', async () => {
       await registry.methods.non_interactive_handshake(sender, batchRecipient).send({ from: sender });
 
@@ -129,12 +129,11 @@ describe('delivery/constrained', () => {
       expect(index).toEqual(2n);
     });
 
-    // CANNOT batch onto a brand-new recipient, even within a single contract call. The registry lookup that decides
-    // reuse-vs-bootstrap is a utility call reading committed state, so the second emit cannot see the first emit's
-    // pending bootstrap and re-handshakes onto a fresh secret (each handshake mints a new shared secret). The registry
-    // keeps the second handshake, which holds a single log, so the next index is 1, not 2. This is why the
-    // established-handshake tests above seed the handshake first.
-    it('re-handshakes instead of reusing when sends bootstrap a new recipient in the same tx', async () => {
+    // CAN batch (3): sends to a brand-new recipient in one contract call share the handshake the first one bootstraps.
+    // The registry lookup that decides reuse-vs-bootstrap sees that handshake while it is still pending, so both emits
+    // land on one sequence and the next index is 2. A re-handshake would mint a fresh secret holding a single log, at
+    // next index 1.
+    it('reuses the handshake the first send bootstraps for a new recipient in the same tx', async () => {
       await contract.methods.emit_two_events(batchRecipient3).send({ from: sender });
 
       const { result: secret } = await contract.methods
@@ -145,13 +144,11 @@ describe('delivery/constrained', () => {
       const { result: index } = await contract.methods
         .next_index_for_secret(secret, ONCHAIN_CONSTRAINED_DELIVERY_MODE)
         .simulate({ from: sender });
-      expect(index).toEqual(1n);
+      expect(index).toEqual(2n);
     });
 
-    // The same new-recipient limitation holds via client-side BatchCall: the two aggregated emit_note calls each
-    // bootstrap and re-handshake onto separate secrets (the utility read can't see the first's pending bootstrap),
-    // so the next index is 1, not 2. Confirms the constraint is in the utility read, not the batching mechanism.
-    it('re-handshakes instead of reusing when BatchCall sends bootstrap a new recipient in the same tx', async () => {
+    // The same holds via client-side BatchCall, where the second emit_note is a separate call in the tx.
+    it('reuses the handshake the first BatchCall send bootstraps for a new recipient', async () => {
       await new BatchCall(wallet, [
         contract.methods.emit_note(batchRecipient4, 1),
         contract.methods.emit_note(batchRecipient4, 1),
@@ -165,7 +162,7 @@ describe('delivery/constrained', () => {
       const { result: index } = await contract.methods
         .next_index_for_secret(secret, ONCHAIN_CONSTRAINED_DELIVERY_MODE)
         .simulate({ from: sender });
-      expect(index).toEqual(1n);
+      expect(index).toEqual(2n);
     });
   });
 });

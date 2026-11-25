@@ -421,6 +421,7 @@ export class ContractFunctionSimulator {
       contractSyncService: this.contractSyncService,
       l2TipsStore: this.l2TipsStore,
       changeSetId,
+      noteCache: undefined,
       scopes,
       simulator: this.simulator,
       hooks: this.hooks,

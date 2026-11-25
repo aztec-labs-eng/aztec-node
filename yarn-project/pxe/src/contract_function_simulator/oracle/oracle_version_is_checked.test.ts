@@ -130,6 +130,7 @@ describe('Oracle Version Check test suite', () => {
         txResolver,
         contractSyncService,
         changeSetId: 'test',
+        noteCache: undefined,
         scopes: [],
         l2TipsStore,
         simulator,

@@ -167,8 +167,7 @@ impl MessageDelivery {
     ///
     /// Transactions that deliver on the same sequence must therefore land one after another, as concurrent ones can
     /// fail, while transactions that deliver to different recipients do not affect each other. Several messages on one
-    /// sequence can share a transaction, provided that the handshake behind it, if any, landed in an earlier
-    /// transaction.
+    /// sequence can share a transaction.
     ///
     /// Third parties cannot interfere with a sequence to make these transactions fail: only the sequence's senders can
     /// extend it.

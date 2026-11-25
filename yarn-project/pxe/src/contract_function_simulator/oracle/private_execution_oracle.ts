@@ -21,7 +21,7 @@ import {
   type OnchainDeliveryMode,
   type TaggingIndexRange,
 } from '@aztec-labs/stdlib/logs';
-import { Note, type NoteStatus } from '@aztec-labs/stdlib/note';
+import { Note } from '@aztec-labs/stdlib/note';
 import {
   CallContext,
   CountedContractClassLog,
@@ -36,19 +36,14 @@ import {
   type ResolveMessagingSecretStrategy,
   defaultMessagingSecretStrategy,
 } from '../../hooks/resolve_messaging_secret_strategy.js';
-import { NoteService } from '../../notes/note_service.js';
 import { assertAllowedScope, isAllowedScope } from '../../storage/allowed_scopes.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
 import { syncSenderTaggingIndexes } from '../../tagging/index.js';
 import type { ExecutionNoteCache } from '../execution_note_cache.js';
 import { ExecutionTaggingIndexCache } from '../execution_tagging_index_cache.js';
 import type { HashedValuesCache } from '../hashed_values_cache.js';
-import { BoundedVec } from '../noir-structs/bounded_vec.js';
-import type { NoteData } from '../noir-structs/note_data.js';
-import type { NullifierStatus } from '../noir-structs/nullifier_status.js';
 import { Option } from '../noir-structs/option.js';
 import type { ResolvedMessagingSecretStrategy } from '../noir-structs/resolved_messaging_secret_strategy.js';
-import { pickNotes } from '../pick_notes.js';
 import type { IPrivateExecutionOracle } from './interfaces.js';
 import { executePrivateFunction } from './private_execution.js';
 import { UtilityExecutionOracle, type UtilityExecutionOracleArgs } from './utility_execution_oracle.js';
@@ -90,7 +85,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   private readonly txContext: TxContext;
   private readonly protocolNullifier: Fr;
   private readonly executionCache: HashedValuesCache;
-  private readonly noteCache: ExecutionNoteCache;
+  declare protected readonly noteCache: ExecutionNoteCache;
   private readonly taggingIndexCache: ExecutionTaggingIndexCache;
   private readonly senderTaggingStore: SenderTaggingStore;
   private totalPublicCalldataCount: number;
@@ -107,7 +102,6 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     this.txContext = args.txContext;
     this.protocolNullifier = args.protocolNullifier;
     this.executionCache = args.executionCache;
-    this.noteCache = args.noteCache;
     this.taggingIndexCache = args.taggingIndexCache;
     this.senderTaggingStore = args.senderTaggingStore;
     this.totalPublicCalldataCount = args.totalPublicCalldataCount ?? 0;
@@ -419,103 +413,6 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       throw new Error(`Preimage for hash ${hash.toString()} not found in cache`);
     }
     return Promise.resolve(preimage);
-  }
-
-  protected override async getSiloedNullifierStatuses(siloedNullifiers: Fr[]): Promise<NullifierStatus[]> {
-    // This must be overridden because while utility execution can only meaningfully check if a nullifier exists in
-    // the anchor block, during private execution there's also the possibility of it being pending, i.e. created in
-    // the current transaction.
-
-    this.logger.debug(`Checking existence of ${siloedNullifiers.length} nullifiers`, {
-      contractAddress: this.contractAddress,
-      siloedNullifiers,
-    });
-
-    const pendingNullifiers = this.noteCache.getNullifiers(this.contractAddress);
-    const isPending = siloedNullifiers.map(nullifier => pendingNullifiers.has(nullifier.toBigInt()));
-    const settledStatuses = await super.getSiloedNullifierStatuses(siloedNullifiers.filter((_, i) => !isPending[i]));
-
-    const pendingStatus: NullifierStatus = { exists: true, originBlock: Option.none() };
-    let nextSettled = 0;
-    return isPending.map(pending => (pending ? pendingStatus : settledStatuses[nextSettled++]));
-  }
-
-  /**
-   * Gets some notes for a storage slot.
-   *
-   * @remarks
-   * Check for pending notes with matching slot.
-   * Real notes coming from DB will have a leafIndex which
-   * represents their index in the note hash tree.
-   *
-   * @param owner - The owner of the notes. If undefined, returns notes for all owners.
-   * @param storageSlot - The storage slot.
-   * @param numSelects - The number of valid selects in selectBy and selectValues.
-   * @param selectBy - An array of indices of the fields to selects.
-   * @param selectValues - The values to match.
-   * @param selectComparators - The comparators to match by.
-   * @param sortBy - An array of indices of the fields to sort.
-   * @param sortOrder - The order of the corresponding index in sortBy. (1: DESC, 2: ASC, 0: Do nothing)
-   * @param limit - The number of notes to retrieve per query.
-   * @param offset - The starting index for pagination.
-   * @param status - The status of notes to fetch.
-   * @returns Array of note data.
-   */
-  public override async getNotes(
-    owner: Option<AztecAddress>,
-    storageSlot: Fr,
-    numSelects: number,
-    selectByIndexes: number[],
-    selectByOffsets: number[],
-    selectByLengths: number[],
-    selectValues: Fr[],
-    selectComparators: number[],
-    sortByIndexes: number[],
-    sortByOffsets: number[],
-    sortByLengths: number[],
-    sortOrder: number[],
-    limit: number,
-    offset: number,
-    status: NoteStatus,
-    maxNotes: number,
-    packedHintedNoteLength: number,
-  ): Promise<BoundedVec<NoteData>> {
-    // Nullified pending notes are already removed from the list.
-    const pendingNotes = this.noteCache.getNotes(this.callContext.contractAddress, owner.value, storageSlot);
-
-    const pendingNullifiers = this.noteCache.getNullifiers(this.callContext.contractAddress);
-
-    const noteService = new NoteService(this.noteStore, this.aztecNode, this.anchorBlockHeader, this.changeSetId);
-    const dbNotes = await noteService.getNotes(
-      this.callContext.contractAddress,
-      owner.value,
-      storageSlot,
-      status,
-      this.scopes,
-    );
-    const dbNotesFiltered = dbNotes.filter(n => !pendingNullifiers.has((n.siloedNullifier as Fr).value));
-
-    const notes = pickNotes<NoteData>([...dbNotesFiltered, ...pendingNotes], {
-      selects: selectByIndexes.slice(0, numSelects).map((index, i) => ({
-        selector: { index, offset: selectByOffsets[i], length: selectByLengths[i] },
-        value: selectValues[i],
-        comparator: selectComparators[i],
-      })),
-      sorts: sortByIndexes.map((index, i) => ({
-        selector: { index, offset: sortByOffsets[i], length: sortByLengths[i] },
-        order: sortOrder[i],
-      })),
-      limit,
-      offset,
-    });
-
-    this.logger.debug(
-      `Returning ${notes.length} notes for ${this.callContext.contractAddress} at ${storageSlot}: ${notes
-        .map(n => `${n.noteNonce.toString()}:[${n.note.items.map(i => i.toString()).join(',')}]`)
-        .join(', ')}`,
-    );
-
-    return BoundedVec.from({ data: notes, maxLength: maxNotes, elementSize: packedHintedNoteLength });
   }
 
   /**
