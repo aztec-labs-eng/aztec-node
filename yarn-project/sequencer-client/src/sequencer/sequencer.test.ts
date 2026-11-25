@@ -842,6 +842,66 @@ describe('sequencer', () => {
       expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
     });
 
+    describe('L1 fee mismatch', () => {
+      const coveringBid = { maxFeePerGas: 12n, maxPriorityFeePerGas: 2n, maxFeePerBlobGas: 5n };
+
+      function quoteBid(bid: typeof coveringBid) {
+        publisherFactory.create.mockResolvedValueOnce({
+          attestorAddress: publisher.getSenderAddress(),
+          publisher,
+          feeQuote: { blockNumber: 1n, baseFee: 10n, competitiveTip: 2n, blobBaseFee: 5n, bid },
+        });
+      }
+
+      it.each([
+        ['execution base fee plus tip', { ...coveringBid, maxFeePerGas: 11n }],
+        ['competitive tip', { ...coveringBid, maxPriorityFeePerGas: 1n }],
+        ['blob base fee', { ...coveringBid, maxFeePerBlobGas: 4n }],
+      ] as const)('skips before gossip but still votes when the bid cannot cover the %s', async (_, bid) => {
+        await setupSingleTxBlock();
+        quoteBid(bid);
+        const payload = EthAddress.random();
+        sequencer.updateConfig({ governanceProposerPayload: payload });
+        validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
+        epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(signer.address));
+
+        await sequencer.work();
+        await sequencer.awaitLastProposalSubmission();
+
+        expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+        expect(p2p.broadcastProposal).not.toHaveBeenCalled();
+        expect(p2p.broadcastCheckpointProposal).not.toHaveBeenCalled();
+        expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+        expect(publisher.enqueueGovernanceCastSignal).toHaveBeenCalledWith(
+          payload,
+          SlotNumber(newSlotNumber),
+          expect.any(EthAddress),
+          expect.any(Function),
+        );
+      });
+
+      it('proposes despite an underbid when skipping is disabled', async () => {
+        sequencer.updateConfig({ skipProposingOnFeeMismatch: false });
+        await setupSingleTxBlock();
+        quoteBid({ ...coveringBid, maxFeePerGas: 11n });
+
+        await sequencer.work();
+        await sequencer.awaitLastProposalSubmission();
+
+        expectPublisherProposeL2Block();
+      });
+
+      it('proposes when the bid exactly covers execution and blob fees with skipping enabled', async () => {
+        await setupSingleTxBlock();
+        quoteBid(coveringBid);
+
+        await sequencer.work();
+        await sequencer.awaitLastProposalSubmission();
+
+        expectPublisherProposeL2Block();
+      });
+    });
+
     it('skips the slot without building or broadcasting when no publisher can afford the proposal', async () => {
       await setupSingleTxBlock();
       const recordPrecheckFailed = jest.spyOn(SequencerMetrics.prototype, 'recordCheckpointPrecheckFailed');

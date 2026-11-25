@@ -73,6 +73,15 @@ export type L1SimulationResult = {
   result: `0x${string}`;
 };
 
+/** A bounded bid and the market observation used to calculate it, in wei per gas. */
+export type L1FeeQuote = {
+  bid: FeesPerGas;
+  blockNumber: bigint | null;
+  baseFee: bigint;
+  competitiveTip: bigint;
+  blobBaseFee?: bigint;
+};
+
 export class ReadOnlyL1TxUtils {
   public config: Required<L1TxUtilsConfig>;
   protected interrupted = false;
@@ -116,6 +125,16 @@ export class ReadOnlyL1TxUtils {
     attempt: number = 0,
     previousFeesPerGas?: typeof attempt extends 0 ? never : FeesPerGas,
   ): Promise<FeesPerGas> {
+    return (await this.getFeeQuote(gasConfigOverrides, isBlobTx, attempt, previousFeesPerGas)).bid;
+  }
+
+  /** Quotes a bid together with its unpadded market inputs from the same L1 reads. */
+  public async getFeeQuote(
+    gasConfigOverrides?: L1TxUtilsConfig,
+    isBlobTx = false,
+    attempt = 0,
+    previousFeesPerGas?: FeesPerGas,
+  ): Promise<L1FeeQuote> {
     const gasConfig = merge(this.config, gasConfigOverrides);
 
     // Execute strategy - it handles all RPC calls internally and returns everything we need
@@ -259,9 +278,11 @@ export class ReadOnlyL1TxUtils {
     );
 
     return {
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-      ...(maxFeePerBlobGas && { maxFeePerBlobGas: maxFeePerBlobGas }),
+      bid: { maxFeePerGas, maxPriorityFeePerGas, ...(maxFeePerBlobGas && { maxFeePerBlobGas }) },
+      blockNumber: latestBlock.number,
+      baseFee,
+      competitiveTip: strategyResult.historicalTipAboveCap ?? strategyPriorityFee,
+      blobBaseFee,
     };
   }
 

@@ -148,6 +148,8 @@ export interface SequencerConfig {
    * check. Ignored when p2p is disabled by config.
    */
   minPeersToPropose?: number;
+  /** Skip proposing if the publisher cannot bid the estimated L1 fees before building. */
+  skipProposingOnFeeMismatch?: boolean;
   /**
    * Allow starting with fewer block opportunities per checkpoint than `MIN_BLOCKS_FOR_INBOX_CATCHUP`, which on a
    * real network leaves a proposer that can never clear a mandatory streaming-Inbox backlog and loses all of its
@@ -211,6 +213,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     skipBroadcastCheckpointProposal: z.boolean().optional(),
     pauseProposingForSlots: z.array(SlotNumberSchema).max(MAX_ADMIN_CONFIG_LIST_LEN).optional(),
     minPeersToPropose: z.number().nonnegative().optional(),
+    skipProposingOnFeeMismatch: z.boolean().optional(),
     allowUnsafeInboxCatchupCapacity: z.boolean().optional(),
   }),
 );
