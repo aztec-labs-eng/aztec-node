@@ -119,57 +119,17 @@ function get_latest_run_id {
 # Jobs in the ci dashboards are grouped on a single line by RUN_ID.
 export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
-function multi_job_run {
-  if [[ -z "${CI_DASHBOARD:-}" ]]; then
-    # Section = a mainline branch's own name (the default branch, v5, ...), "tags" for
-    # any tag, else "prs" (see ci_dashboard_section in source_refname). log_ci_run
-    # prefixes this with the repo. The trigger sets CI_DASHBOARD from .ci3.yml's
-    # push_branches; this is the fallback for direct/local ci.sh runs.
-    export CI_DASHBOARD="$(ci_dashboard_section)"
-  fi
-  export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-75}
-  export AWS_SHUTDOWN_TIME_ARM=${AWS_SHUTDOWN_TIME_ARM:-90}
-  export DENOISE=1
-  export DENOISE_WIDTH=32
-  # Only the first job (the amd64 full build) runs the dedicated bench box and uploads;
-  # the rest bench inline as a breakage check (see bootstrap.sh build_and_test). This
-  # de-races multi-instance runs that would otherwise all upload to the same bench cache key.
-  local bench_primary=${1%% *}
-  export bench_primary
-  run() {
-    [ -n "${4:-}" ] && export REF_NAME=$4
-    local bench_upload=0
-    [ "$1" == "$bench_primary" ] && bench_upload=${BENCH_UPLOAD:-0}
-    # Timestamp the bootstrap_ec2 (instance request) sublog. denoise runs the command
-    # under pipefail and bootstrap_ec2 handles spot-eviction retry internally (exec), so
-    # piping through add_timestamps preserves its exit code. DENOISE_DISPLAY_NAME keeps
-    # the parent log's "Executing:" line free of the pipe.
-    PARENT_LOG_ID=$RUN_ID JOB_ID=$1 INSTANCE_POSTFIX=$1 ARCH=$2 BENCH_UPLOAD=$bench_upload \
-      DENOISE_DISPLAY_NAME="bootstrap_ec2 './bootstrap.sh $3'" \
-      exec denoise "bootstrap_ec2 './bootstrap.sh $3' 2>&1 | add_timestamps"
-  }
-  export -f run
-
-  parallel --colsep ' ' --jobs 100 --termseq 'TERM,10000' \
-    --tagstring '{1}' \
-    --line-buffered --halt now,fail=1 \
-    'run {1} {2} {3} {4}' ::: "$@" | add_timestamps | DUP=1 cache_log "CI run" $RUN_ID
-}
-
-# Jobs in the ci dashboards are grouped on a single line by RUN_ID.
-export RUN_ID=${RUN_ID:-$(date +%s%3N)}
-
 case "$cmd" in
   dash)
     watch_ci -s main,prs --user --watch
     ;;
   fast)
     export CI_DASHBOARD="prs"
-    # Route through multi_job_run (even for a single instance) so the runner-side
+    # Route through bootstrap_ec2_multi (even for a single instance) so the runner-side
     # orchestration — including the spot/instance request — is captured into a
     # parent dashboard log. The job id stays "x-$cmd" so the GitHub status check
     # name is unchanged.
-    multi_job_run "x-$cmd amd64 ci-$cmd"
+    exec bootstrap_ec2_multi "x-$cmd amd64 ci-$cmd"
     ;;
   bench)
     # Launched by the build instance on uploadable runs to produce stable benchmark
@@ -197,16 +157,16 @@ case "$cmd" in
     export CPUS=16
     # Capture the runner-side output (incl. instance request) to a parent dashboard
     # log. No denoise here: this is an interactive debug mode where raw output matters.
-    PARENT_LOG_ID=$RUN_ID bootstrap_ec2 "./bootstrap.sh ci-socket-fix $*" 2>&1 | DUP=1 cache_log "CI run" $RUN_ID
+    PARENT_LOG_ID=$RUN_ID exec bootstrap_ec2 "./bootstrap.sh ci-socket-fix $*" > >(DUP=1 cache_log "CI run" $RUN_ID) 2>&1
     ;;
   full|full-no-test-cache)
-    # CI_DASHBOARD is left for multi_job_run to default: "main" for main-branch
+    # CI_DASHBOARD is left for bootstrap_ec2_multi to default: "main" for main-branch
     # runs (post-merge full CI), "prs" otherwise.
     # Roomier than the 75-min default: full CI also runs the backwards-compat e2e sweep
     # (~5 min per stable release with committed artifacts in legacy-contracts/) and reruns
     # every anvil-backed test against an Amsterdam L1 (yarn-project/scripts/echo_test_cmd.sh).
     export AWS_SHUTDOWN_TIME=120
-    multi_job_run "x-$cmd amd64 ci-$cmd"
+    exec bootstrap_ec2_multi "x-$cmd amd64 ci-$cmd"
     ;;
   grind)
     # Grind a default of 5 times.
@@ -214,11 +174,11 @@ case "$cmd" in
     export DENOISE=1
     export DENOISE_WIDTH=32
     run() {
-      JOB_ID=$1 INSTANCE_POSTFIX=$1 ARCH=$2 exec denoise "bootstrap_ec2 './bootstrap.sh $3'"
+      JOB_ID=$1 INSTANCE_POSTFIX=$1 ARCH=$2 exec denoise "exec bootstrap_ec2 './bootstrap.sh $3'"
     }
     export -f run
-    seq 1 ${1:-5} | parallel --jobs 100 --termseq 'TERM,10000' --tagstring '{= $_=~s/run (\w+).*/$1/; =}' --line-buffered \
-      'run $USER-x{}-full amd64 ci-full-no-test-cache'
+    exec parallel --jobs 100 --termseq 'TERM,10000' --tagstring '{= $_=~s/run (\w+).*/$1/; =}' --line-buffered \
+      'run $USER-x{}-full amd64 ci-full-no-test-cache' ::: $(seq 1 ${1:-5})
     ;;
   grind-test)
     full_cmd="$1"
@@ -236,7 +196,7 @@ case "$cmd" in
     export JOB_ID="grind-test-$test_hash"
     export INSTANCE_POSTFIX=$JOB_ID
     export CPUS=${CPUS:-192}
-    bootstrap_ec2 "./bootstrap.sh ci-grind-test $(printf %q "$full_cmd") $timeout $jobs_pct $memsuspend_pct $commit" | DUP=1 cache_log "Grind test CI run" $RUN_ID
+    exec bootstrap_ec2 "./bootstrap.sh ci-grind-test $(printf %q "$full_cmd") $timeout $jobs_pct $memsuspend_pct $commit" > >(DUP=1 cache_log "Grind test CI run" $RUN_ID)
     ;;
   ##########################################
   # NETWORK DEPLOYMENTS WITH BENCHES/TESTS #
@@ -257,7 +217,7 @@ case "$cmd" in
       local set=$1
       export JOB_ID="x-${namespace}-${set}"
       export INSTANCE_POSTFIX="n-deploy-${set}"
-      bootstrap_ec2 "./bootstrap.sh ci-network-deploy $scenario ${namespace}-${set} \"$docker_image\" $set"
+      exec bootstrap_ec2 "./bootstrap.sh ci-network-deploy $scenario ${namespace}-${set} \"$docker_image\" $set"
     }
     export -f run
     export scenario namespace docker_image
@@ -265,7 +225,7 @@ case "$cmd" in
     if [[ -n "$test_set" ]]; then
       run "$test_set"
     else
-      parallel --jobs 2 --line-buffered ::: 'run 1' 'run 2'
+      exec parallel --jobs 2 --termseq 'TERM,10000' --line-buffered ::: 'run 1' 'run 2'
     fi
     ;;
   network-deploy)
@@ -277,7 +237,7 @@ case "$cmd" in
     # Enough for the build, which should have a lot of caching, and the test harness.
     # Resources are on GCP.
     export CPUS=16
-    bootstrap_ec2 "./bootstrap.sh ci-network-deploy $*"
+    exec bootstrap_ec2 "./bootstrap.sh ci-network-deploy $*"
     ;;
   network-tests)
     # Args: <scenario> <namespace>
@@ -288,7 +248,7 @@ case "$cmd" in
     # Enough for the build, which should have a lot of caching, and the test harness.
     # Resources are on GCP.
     export CPUS=16
-    bootstrap_ec2 "./bootstrap.sh ci-network-tests $*"
+    exec bootstrap_ec2 "./bootstrap.sh ci-network-tests $*"
     ;;
   network-bench)
     # Args: <scenario> <namespace> [docker_image]
@@ -302,7 +262,7 @@ case "$cmd" in
     export CPUS=16
     skip_network_deploy=0
     [ "${SKIP_NETWORK_DEPLOY:-0}" = "1" ] && skip_network_deploy=1
-    bootstrap_ec2 "SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-bench $*"
+    exec bootstrap_ec2 "SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-bench $*"
     ;;
   network-proving-bench)
     # Args: <scenario> <namespace> [docker_image]
@@ -312,7 +272,7 @@ case "$cmd" in
     export INSTANCE_POSTFIX="n-proving-bench"
     skip_network_deploy=0
     [ "${SKIP_NETWORK_DEPLOY:-0}" = "1" ] && skip_network_deploy=1
-    bootstrap_ec2 "BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-} BENCH_BENCHMARK_TYPE=${BENCH_BENCHMARK_TYPE:-} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-proving-bench $*"
+    exec bootstrap_ec2 "BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-} BENCH_BENCHMARK_TYPE=${BENCH_BENCHMARK_TYPE:-} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-proving-bench $*"
     ;;
   network-block-capacity-bench)
     # Args: <scenario> <namespace> [docker_image]
@@ -322,7 +282,7 @@ case "$cmd" in
     export INSTANCE_POSTFIX="n-block-cap-bench"
     skip_network_deploy=0
     [ "${SKIP_NETWORK_DEPLOY:-0}" = "1" ] && skip_network_deploy=1
-    bootstrap_ec2 "BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-block-capacity} BENCH_BENCHMARK_TYPE=${BENCH_BENCHMARK_TYPE:-block-capacity} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-block-capacity-bench $*"
+    exec bootstrap_ec2 "BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-block-capacity} BENCH_BENCHMARK_TYPE=${BENCH_BENCHMARK_TYPE:-block-capacity} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-block-capacity-bench $*"
     ;;
   network-bench-10tps)
     # Args: <scenario> <namespace> [docker_image]
@@ -334,7 +294,7 @@ case "$cmd" in
     export INSTANCE_POSTFIX="n-bench-10tps"
     skip_network_deploy=0
     [ "${SKIP_NETWORK_DEPLOY:-0}" = "1" ] && skip_network_deploy=1
-    bootstrap_ec2 "SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-bench-10tps $*"
+    exec bootstrap_ec2 "SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-bench-10tps $*"
     ;;
   network-inclusion-sweep)
     # Args: <env_file> <namespace> [docker_image]
@@ -349,7 +309,7 @@ case "$cmd" in
     export INSTANCE_POSTFIX="n-incl-sweep"
     skip_network_deploy=0
     [ "${SKIP_NETWORK_DEPLOY:-0}" = "1" ] && skip_network_deploy=1
-    bootstrap_ec2 "TARGET_TPS=${TARGET_TPS:-10} BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-inclusion-sweep} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-inclusion-sweep $*"
+    exec bootstrap_ec2 "TARGET_TPS=${TARGET_TPS:-10} BENCH_SWEEP_ID=${BENCH_SWEEP_ID:-} BENCH_SWEEP_LABEL=${BENCH_SWEEP_LABEL:-inclusion-sweep} SKIP_NETWORK_DEPLOY=$skip_network_deploy ./bootstrap.sh ci-network-inclusion-sweep $*"
     ;;
   network-teardown)
     # Args: <scenario> <namespace>
@@ -357,7 +317,7 @@ case "$cmd" in
     export JOB_ID="x-${2:?namespace is required}-network-teardown"
     export CPUS=4
     export INSTANCE_POSTFIX="n-teardown"
-    bootstrap_ec2 "./bootstrap.sh ci-network-teardown $*"
+    exec bootstrap_ec2 "./bootstrap.sh ci-network-teardown $*"
     ;;
 
   network-tests-kind)
@@ -369,7 +329,7 @@ case "$cmd" in
     export CPUS=192
     export INSTANCE_POSTFIX="n-kind"
     docker_image="${1:-}"
-    bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests \"$docker_image\""
+    exec bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests \"$docker_image\""
     ;;
   deploy-rollup-upgrade)
     # Env vars: NETWORK, GCP_PROJECT_ID (for GCP secrets)
@@ -378,7 +338,7 @@ case "$cmd" in
     export JOB_ID="x-deploy-rollup-upgrade"
     export CPUS=8
     export INSTANCE_POSTFIX="rollup-upgrade"
-    bootstrap_ec2 "./bootstrap.sh ci-deploy-rollup-upgrade $*"
+    exec bootstrap_ec2 "./bootstrap.sh ci-deploy-rollup-upgrade $*"
     ;;
 
   ############
@@ -391,10 +351,12 @@ case "$cmd" in
     # Roomier instance lifetime than a standard run: the amd64 job builds and then publishes,
     # which together exceed the default 75 min shutdown.
     export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-180}
-    multi_job_run \
+    # Not exec'd, as the manifest step follows, so cancelling a release leaves its instances to
+    # their shutdown timers.
+    bootstrap_ec2_multi \
       'x-release amd64 ci-release' \
       'a-release arm64 ci-release'
-    # Both arch jobs have pushed their per-arch images (multi_job_run fails fast if either
+    # Both arch jobs have pushed their per-arch images (bootstrap_ec2_multi fails fast if either
     # died), so assemble the multi-arch manifest lists from here. imagetools only talks to
     # the registry: no local images or extra instance needed.
     release-image/bootstrap.sh release_docker_manifest

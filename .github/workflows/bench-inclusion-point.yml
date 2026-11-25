@@ -72,4 +72,4 @@ jobs:
           TARGET_NETWORK: ${{ inputs.network }}
           TARGET_NAMESPACE: ${{ inputs.namespace }}
           DOCKER_IMAGE: ${{ inputs.docker_image }}
-        run: ./.github/ci3.sh network-inclusion-sweep "$TARGET_NETWORK" "$TARGET_NAMESPACE" "$DOCKER_IMAGE"
+        run: exec ./.github/ci3.sh network-inclusion-sweep "$TARGET_NETWORK" "$TARGET_NAMESPACE" "$DOCKER_IMAGE"
