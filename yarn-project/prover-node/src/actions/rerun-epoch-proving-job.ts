@@ -1,6 +1,6 @@
 import { createArchiverStore, createContractDataSource } from '@aztec-labs/archiver';
 import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type ProverClientConfig, createProverClient } from '@aztec-labs/prover-client';
@@ -40,9 +40,13 @@ export async function rerunEpochProvingJob(localPath: string, log: Logger, confi
 
   log.info(`Rerunning epoch proving for epoch ${jobData.epochNumber}`);
 
+  const l1Constants = { epochDuration: config.aztecEpochDuration };
+  const [fromSlot, toSlot] = getSlotRangeForEpoch(jobData.epochNumber, l1Constants);
+
+  // The whole epoch is proven at once, so every job carries its last slot, as when a node catches up on an epoch.
   const provers: CheckpointProver[] = [];
   for (let i = 0; i < jobData.checkpoints.length; i++) {
-    provers.push(await buildCheckpointProver(ctx, i, log));
+    provers.push(await buildCheckpointProver(ctx, i, log, toSlot));
   }
 
   // Local rerun never publishes — stub the service so submit() always resolves 'published'
@@ -52,8 +56,6 @@ export async function rerunEpochProvingJob(localPath: string, log: Logger, confi
     withdraw: () => {},
   };
 
-  const l1Constants = { epochDuration: config.aztecEpochDuration };
-  const [fromSlot, toSlot] = getSlotRangeForEpoch(jobData.epochNumber, l1Constants);
   const spec: SessionSpec = { kind: 'full', epochNumber: jobData.epochNumber, fromSlot, toSlot };
 
   const session = new EpochSession(spec, provers, {
@@ -162,7 +164,12 @@ async function createRerunContext(
 }
 
 /** Reconstructs the `CheckpointProver` for the checkpoint at `index` in the job, ready to prove. */
-async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logger): Promise<CheckpointProver> {
+async function buildCheckpointProver(
+  ctx: RerunContext,
+  index: number,
+  log: Logger,
+  prioritySlot?: SlotNumber,
+): Promise<CheckpointProver> {
   const { jobData, worldState, prover, chonkCache, publicProcessorFactory, txProvider, metrics } = ctx;
   const checkpoint = jobData.checkpoints[index];
   const previousBlockHeader =
@@ -182,6 +189,7 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
     {
       checkpoint,
       epochNumber: jobData.epochNumber,
+      prioritySlot,
       verbatimAttestations,
       previousBlockHeader,
       l1ToL2Messages,

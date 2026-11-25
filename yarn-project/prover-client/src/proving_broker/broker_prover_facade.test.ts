@@ -1,5 +1,5 @@
 import { RECURSIVE_PROOF_LENGTH } from '@aztec-labs/constants';
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
@@ -145,6 +145,34 @@ describe('BrokerCircuitProverFacade', () => {
     for (const promise of promises) {
       await expect(promise).resolves.toEqual(result);
     }
+  });
+
+  it('sends a job to the broker once, under the slot of its first request', async () => {
+    const inputs = makeInboxParityPrivateInputs();
+    const sentSlots: (SlotNumber | undefined)[] = [];
+    const enqueue = broker.enqueueProvingJob.bind(broker);
+    jest.spyOn(broker, 'enqueueProvingJob').mockImplementation(job => {
+      sentSlots.push(job.prioritySlot);
+      return enqueue(job);
+    });
+    const proof = promiseWithResolvers<any>();
+    jest.spyOn(prover, 'getInboxParityProof').mockReturnValue(proof.promise);
+    const request = (slot: SlotNumber) => facade.getInboxParityProof(inputs, undefined, EpochNumber(42), slot);
+
+    const requests = [request(SlotNumber(6)), request(SlotNumber(5))];
+    await retryFastUntil(() => sentSlots.length >= 1, 'the job reaches the broker');
+    requests.push(request(SlotNumber(4)));
+
+    const result = makePublicInputsAndRecursiveProof(
+      makeParityPublicInputs(),
+      makeRecursiveProof(RECURSIVE_PROOF_LENGTH),
+      VerificationKeyData.makeFakeHonk(),
+    );
+    proof.resolve(result);
+
+    // Every caller has its proof by now, so a request that was going to reach the broker has done so.
+    expect(await Promise.all(requests)).toEqual([result, result, result]);
+    expect(sentSlots).toEqual([SlotNumber(6)]);
   });
 
   it('handles proof errors', async () => {

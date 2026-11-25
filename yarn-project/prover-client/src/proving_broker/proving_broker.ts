@@ -30,11 +30,20 @@ type InProgressMetadata = {
   lastUpdatedAt: number;
 };
 
-type EnqueuedProvingJob = Pick<ProvingJob, 'id' | 'epochNumber'>;
+/**
+ * A queue entry. A job that was cancelled and then requested again has one entry for each time it was queued, until
+ * the broker reaches the old ones. An entry whose slot differs from the job's current slot is skipped. Entries with
+ * the current slot are all valid, and the job is still handed out once, because dispatch skips a job that is in
+ * progress or settled.
+ */
+type EnqueuedProvingJob = Pick<ProvingJob, 'id' | 'epochNumber' | 'prioritySlot'>;
+
+/** The first valid entry of a queue, with the metadata of its job. */
+type QueueHead = ProvingJobMetadata & { enqueuedJob: EnqueuedProvingJob };
 
 /** In-memory scheduling metadata for a job. The large `inputsUri` is deliberately excluded — it lives
  * in the database and is read on demand when dispatching to an agent. */
-type ProvingJobMetadata = Pick<ProvingJob, 'id' | 'type' | 'epochNumber'>;
+type ProvingJobMetadata = Pick<ProvingJob, 'id' | 'type' | 'epochNumber' | 'prioritySlot'>;
 
 /** Settled state kept in memory: the status plus the small payloads (rejected reason, aborted). The
  * large fulfilled proof `value` is NOT kept here — it lives in the database (read on demand) and,
@@ -42,7 +51,7 @@ type ProvingJobMetadata = Pick<ProvingJob, 'id' | 'type' | 'epochNumber'>;
 type SettledRecord = { status: 'fulfilled' } | { status: 'rejected'; reason: string } | { status: 'aborted' };
 
 function toJobMetadata(job: ProvingJob): ProvingJobMetadata {
-  return { id: job.id, type: job.type, epochNumber: job.epochNumber };
+  return { id: job.id, type: job.type, epochNumber: job.epochNumber, prioritySlot: job.prioritySlot };
 }
 
 function toSettledRecord(result: ProvingJobSettledResult): SettledRecord {
@@ -78,7 +87,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     [ProvingRequestType.INBOX_PARITY]: new PriorityMemoryQueue<EnqueuedProvingJob>(provingJobComparator),
   };
 
-  // Scheduling metadata for every known job (id, type, epochNumber). The large `inputsUri` is NOT held
+  // Scheduling metadata for every known job (id, type, epochNumber, prioritySlot). The large `inputsUri` is NOT held
   // here — it lives in the database and is read on demand when a job is dispatched to an agent.
   private jobsCache = new Map<ProvingJobId, ProvingJobMetadata>();
   // Settled status for every settled job. The large fulfilled proof `value` is NOT held here — it lives
@@ -297,7 +306,13 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       const existing = this.jobsCache.get(job.id);
       // Identity check is metadata-only: `inputsUri` now lives in the database, not memory, and job ids
       // are content-addressed (same id ⇒ same inputs), so a mismatch shows up in id/type/epochNumber.
-      assert.deepStrictEqual(toJobMetadata(job), existing, 'Duplicate proving job ID');
+      // `prioritySlot` is left out: it is not derived from the inputs, so two requests for the same job can carry
+      // different slots. The job keeps the slot of the request that created or revived it.
+      assert.deepStrictEqual(
+        { id: job.id, type: job.type, epochNumber: job.epochNumber },
+        { id: existing?.id, type: existing?.type, epochNumber: existing?.epochNumber },
+        'Duplicate proving job ID',
+      );
 
       if (this.resultsCache.get(job.id)?.status === 'aborted') {
         // The producer is re-requesting a job it previously cancelled: revive it rather than
@@ -321,7 +336,13 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         });
         this.cleanUpProvingJobState([job.id]);
         this.jobsCache.set(job.id, toJobMetadata(job));
-        await this.database.deleteProvingJobResult(job.id);
+        try {
+          await this.database.deleteProvingJobResult(job.id);
+        } catch (err) {
+          // Back to aborted, so that the next request revives the job instead of finding it half revived.
+          this.resultsCache.set(job.id, { status: 'aborted' });
+          throw err;
+        }
         // The job is re-set in the cache and about to be re-enqueued below: its start status is in-queue.
         jobStatus = { status: 'in-queue' };
       } else {
@@ -454,45 +475,48 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
       Array.isArray(filter.allowList) && filter.allowList.length > 0
         ? [...filter.allowList]
         : Object.values(ProvingRequestType).filter((x): x is ProvingRequestType => typeof x === 'number');
-    allowedProofs.sort(proofTypeComparator);
 
-    // Select the oldest-epoch job across the allowed queues, tie-breaking by proof-type priority: an epoch's
-    // remaining jobs always outrank younger epochs' work, so the oldest epoch completes instead of starving
-    // behind the continuous arrival of new higher-priority-type jobs. The legacy L1-to-L2 tree got this ordering
-    // for free (block roots waited on parity outputs); the streaming inbox parity only gates the checkpoint
-    // root, so a purely type-major order would leave it unscheduled under sustained block production.
+    // Select the oldest-epoch job across the allowed queues. An epoch's remaining jobs always outrank younger
+    // epochs' work, so the oldest epoch completes instead of starving behind the continuous arrival of new
+    // higher-priority-type jobs. The legacy L1-to-L2 tree got this ordering for free (block roots waited on parity
+    // outputs); the streaming inbox parity only gates the checkpoint root, so a purely type-major order would
+    // leave it unscheduled under sustained block production.
+    // Within the oldest epoch `pickNextProvingJob` takes the lowest slot first, and the proof-type priority
+    // decides between jobs of the same slot.
     //
     // The outer loop re-selects when the winner turns out to have no inputs: the losing candidates went back
     // onto their queues, while the claimed winner was popped and stays off, so it cannot be re-selected.
     for (;;) {
-      let selected:
-        | { proofType: ProvingRequestType; enqueuedJob: EnqueuedProvingJob; meta: ProvingJobMetadata }
-        | undefined;
+      const heads: QueueHead[] = [];
       for (const proofType of allowedProofs) {
         const queue = this.queues[proofType];
         let enqueuedJob: EnqueuedProvingJob | undefined;
-        let candidate: { enqueuedJob: EnqueuedProvingJob; meta: ProvingJobMetadata } | undefined;
         // exhaust the queue and make sure we're not sending a job that's already in progress
         // or has already been completed
         // this can happen if the broker crashes and restarts
         // it's possible agents will report progress or results for jobs that are in the queue (after the restart)
+        // An entry whose slot differs from the job's current one is a leftover: the job was cancelled and then
+        // requested again under another slot. A job without a promise is still being saved or revived and cannot
+        // be handed out yet; it gets a fresh entry when that is done.
         while ((enqueuedJob = queue.getImmediate())) {
           const meta = this.jobsCache.get(enqueuedJob.id);
-          if (meta && !this.inProgress.has(enqueuedJob.id) && !this.resultsCache.has(enqueuedJob.id)) {
-            candidate = { enqueuedJob, meta };
+          if (
+            meta &&
+            meta.prioritySlot === enqueuedJob.prioritySlot &&
+            this.promises.has(enqueuedJob.id) &&
+            !this.inProgress.has(enqueuedJob.id) &&
+            !this.resultsCache.has(enqueuedJob.id)
+          ) {
+            heads.push({ ...meta, enqueuedJob });
             break;
           }
         }
-        if (!candidate) {
-          continue;
-        }
-        if (selected === undefined || candidate.enqueuedJob.epochNumber < selected.enqueuedJob.epochNumber) {
-          if (selected) {
-            this.queues[selected.proofType].put(selected.enqueuedJob);
-          }
-          selected = { proofType, ...candidate };
-        } else {
-          queue.put(candidate.enqueuedJob);
+      }
+
+      const selected = pickNextProvingJob(heads);
+      for (const head of heads) {
+        if (head !== selected) {
+          this.queues[head.type].put(head.enqueuedJob);
         }
       }
 
@@ -500,7 +524,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         return undefined;
       }
 
-      const { meta } = selected;
+      const meta: ProvingJobMetadata = selected;
       const time = this.msTimeSource();
       // Claim the job synchronously (before the await below) so a concurrent dispatch can't re-pick
       // it. The same id can sit in a queue more than once (an abort leaves a stale entry that a
@@ -532,7 +556,13 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         this.instrumentation.recordJobWait(meta.type, enqueuedAt);
         this.enqueuedAt.delete(meta.id);
       }
-      const job: ProvingJob = { id: meta.id, type: meta.type, epochNumber: meta.epochNumber, inputsUri };
+      const job: ProvingJob = {
+        id: meta.id,
+        type: meta.type,
+        epochNumber: meta.epochNumber,
+        prioritySlot: meta.prioritySlot,
+        inputsUri,
+      };
       return { job, time };
     }
   }
@@ -806,6 +836,7 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
     }
     this.queues[job.type].put({
       epochNumber: job.epochNumber,
+      prioritySlot: job.prioritySlot,
       id: job.id,
     });
     this.enqueuedAt.set(job.id, new Timer());
@@ -826,19 +857,38 @@ type ProvingQueues = {
 };
 
 /**
- * Compares two proving jobs and selects which one's more important
- * @param a - A proving job
- * @param b - Another proving job
- * @returns A number indicating the relative priority of the two proving jobs
+ * Orders jobs by epoch and slot: the older epoch first, then the lower priority slot. A job without a priority slot
+ * goes ahead of the jobs of its epoch that have one. Each proof type's queue is kept in this order.
  */
-function provingJobComparator(a: EnqueuedProvingJob, b: EnqueuedProvingJob): -1 | 0 | 1 {
-  if (a.epochNumber < b.epochNumber) {
-    return -1;
-  } else if (a.epochNumber > b.epochNumber) {
-    return 1;
-  } else {
-    return 0;
+function provingJobComparator(
+  a: Pick<ProvingJob, 'epochNumber' | 'prioritySlot'>,
+  b: Pick<ProvingJob, 'epochNumber' | 'prioritySlot'>,
+): -1 | 0 | 1 {
+  if (a.epochNumber !== b.epochNumber) {
+    return a.epochNumber < b.epochNumber ? -1 : 1;
   }
+  const slotA = a.prioritySlot ?? -1;
+  const slotB = b.prioritySlot ?? -1;
+  return slotA < slotB ? -1 : slotA > slotB ? 1 : 0;
+}
+
+/** What the broker reads of a job to decide which one goes next. */
+export type SchedulableProvingJob = Pick<ProvingJob, 'type' | 'epochNumber' | 'prioritySlot'>;
+
+/**
+ * Picks the job an agent gets next.
+ *
+ * 1. Only the jobs of the oldest epoch among the candidates are considered.
+ * 2. Of those, only the jobs with the lowest priority slot. A job without a slot counts as lower than any slot.
+ * 3. Among the jobs that are left, the proof type decides, in `PROOF_TYPES_IN_PRIORITY_ORDER`.
+ *
+ * The producer chooses the slot of each job, see `ProvingJob.prioritySlot`. Jobs that share a slot are ordered as
+ * they were before slots existed. A job with a higher slot waits for every job the agent accepts with a lower one.
+ *
+ * @param candidates - The first job of each queue the agent accepts.
+ */
+export function pickNextProvingJob<T extends SchedulableProvingJob>(candidates: T[]): T | undefined {
+  return [...candidates].sort((a, b) => provingJobComparator(a, b) || proofTypeComparator(a.type, b.type))[0];
 }
 
 /**
@@ -869,7 +919,8 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
 }
 
 /**
- * Relative priority of each proof type within one epoch. Proofs higher up on the list are picked first.
+ * Relative priority of each proof type among jobs of one epoch and one slot. Proofs higher up on the list are
+ * picked first.
  *
  * The order follows two rules:
  *
@@ -880,10 +931,9 @@ function proofTypeComparator(a: ProvingRequestType, b: ProvingRequestType): -1 |
  *   earlier checkpoints runnable at once. If they went first, the newest checkpoint's transactions would wait until
  *   every one of them had an agent, and the newest checkpoint is the one the whole proof waits for.
  *
- * The second rule has a cost. Checkpoints that land in the same epoch after a partial proof was requested also bring
- * block-level jobs, and those outrank the checkpoint roots the request is waiting for. While agents have spare
- * capacity the delay is the time to prove those blocks. With every agent busy, the roots wait until the block-level
- * work of the epoch runs out.
+ * The second rule alone would also put the blocks of checkpoints that land after a partial proof was requested ahead
+ * of that proof's checkpoint roots. `pickNextProvingJob` compares slots before proof types, and those blocks carry
+ * a higher slot than the proof's checkpoint roots.
  */
 export const PROOF_TYPES_IN_PRIORITY_ORDER: ProvingRequestType[] = [
   ProvingRequestType.ROOT_ROLLUP,

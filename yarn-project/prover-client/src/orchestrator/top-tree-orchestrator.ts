@@ -8,7 +8,7 @@ import {
   OUT_HASH_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
-import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -91,6 +91,7 @@ type OutHashHint = {
 export class TopTreeOrchestrator extends ProvingScheduler {
   private state: TopTreeProvingState | undefined;
   private cancelled = false;
+  private prioritySlot: SlotNumber | undefined;
 
   constructor(
     protected readonly prover: ServerCircuitProver,
@@ -110,12 +111,17 @@ export class TopTreeOrchestrator extends ProvingScheduler {
    * Proves the top tree from per-checkpoint data and pending block-proofs promises.
    * Resolves with the final epoch proof, or rejects with `TopTreeCancelledError` if
    * `cancel()` is invoked, or any other error if a circuit fails.
+   * @param prioritySlot - The slot every job of the top tree carries, see `ProvingJob.prioritySlot`. It must not
+   *   be lower than the slot of any block-level job the proof waits for, or the broker hands out the checkpoint
+   *   roots ahead of that job. Without a slot the jobs go ahead of every job of the epoch that has one, which is
+   *   only right when the block-level jobs carry no slot either.
    */
   public async prove(
     epochNumber: EpochNumber,
     totalNumCheckpoints: number,
     finalBlobBatchingChallenges: FinalBlobBatchingChallenges,
     checkpointData: CheckpointTopTreeData[],
+    prioritySlot: SlotNumber | undefined,
   ): Promise<TopTreeResult> {
     if (checkpointData.length !== totalNumCheckpoints) {
       throw new Error(
@@ -133,6 +139,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     if (this.cancelled) {
       throw new TopTreeCancelledError();
     }
+    this.prioritySlot = prioritySlot;
 
     const { promise: completionPromise, resolve, reject } = promiseWithResolvers<void>();
     // The completion promise is awaited below. Attach a no-op catch here as well so any
@@ -243,9 +250,14 @@ export class TopTreeOrchestrator extends ProvingScheduler {
           state,
           signal => {
             if (inputs instanceof CheckpointRootSingleBlockRollupPrivateInputs) {
-              return this.prover.getCheckpointRootSingleBlockRollupProof(inputs, signal, state.epochNumber);
+              return this.prover.getCheckpointRootSingleBlockRollupProof(
+                inputs,
+                signal,
+                state.epochNumber,
+                this.prioritySlot,
+              );
             }
-            return this.prover.getCheckpointRootRollupProof(inputs, signal, state.epochNumber);
+            return this.prover.getCheckpointRootRollupProof(inputs, signal, state.epochNumber, this.prioritySlot);
           },
           result => {
             this.logger.debug(`Completed checkpoint root proof for checkpoint ${checkpointIndex}`);
@@ -309,7 +321,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     const inputs = state.getCheckpointMergeRollupInputs(location);
     this.deferredProving(
       state,
-      signal => this.prover.getCheckpointMergeRollupProof(inputs, signal, state.epochNumber),
+      signal => this.prover.getCheckpointMergeRollupProof(inputs, signal, state.epochNumber, this.prioritySlot),
       result => {
         state.setCheckpointMergeRollupProof(location, result);
         this.checkAndEnqueueNextCheckpointMergeRollup(state, location);
@@ -324,7 +336,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     const inputs = state.getPaddingCheckpointInputs();
     this.deferredProving(
       state,
-      signal => this.prover.getCheckpointPaddingRollupProof(inputs, signal, state.epochNumber),
+      signal => this.prover.getCheckpointPaddingRollupProof(inputs, signal, state.epochNumber, this.prioritySlot),
       result => {
         state.setCheckpointPaddingProof(result);
         this.checkAndEnqueueRootRollup(state);
@@ -339,7 +351,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
     const inputs = state.getRootRollupInputs();
     this.deferredProving(
       state,
-      signal => this.prover.getRootRollupProof(inputs, signal, state.epochNumber),
+      signal => this.prover.getRootRollupProof(inputs, signal, state.epochNumber, this.prioritySlot),
       result => {
         this.logger.verbose(`Completed root rollup for epoch ${state.epochNumber}`);
         state.setRootRollupProof(result);

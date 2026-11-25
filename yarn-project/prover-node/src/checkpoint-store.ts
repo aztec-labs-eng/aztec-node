@@ -11,8 +11,8 @@ import {
   type CheckpointProverTestHooks,
 } from './job/checkpoint-prover.js';
 
-/** Register-time data needed to construct a `CheckpointProver` (everything except the checkpoint + epoch). */
-export type RegisterCheckpointData = Omit<CheckpointProverArgs, 'checkpoint' | 'epochNumber'>;
+/** Register-time data needed to construct a `CheckpointProver` (everything the store does not derive itself). */
+export type RegisterCheckpointData = Omit<CheckpointProverArgs, 'checkpoint' | 'epochNumber' | 'prioritySlot'>;
 
 /** Factory used by the store to construct new provers. Tests can inject a stub. */
 export type CheckpointProverFactory = (args: CheckpointProverArgs, deps: CheckpointProverDeps) => CheckpointProver;
@@ -45,7 +45,7 @@ export class CheckpointStore {
   private readonly log: Logger;
 
   constructor(
-    private readonly l2BlockSource: Pick<L2BlockSource, 'getL1Constants'>,
+    private readonly l2BlockSource: Pick<L2BlockSource, 'getL1Constants' | 'isEpochComplete'>,
     private readonly proverDeps: Omit<CheckpointProverDeps, 'log'>,
     bindings?: LoggerBindings,
     private readonly proverFactoryFn: CheckpointProverFactory = (args, deps) => new CheckpointProver(args, deps),
@@ -83,12 +83,33 @@ export class CheckpointStore {
    * Registers a checkpoint with the store. If a prover already exists for the
    * `(number, slot, archive root)` content key it is reused (an at-least-once re-registration of
    * still-canonical content); otherwise a new prover is constructed.
+   *
+   * A new prover also gets the slot the broker orders its block-level jobs by:
+   *
+   * - The checkpoint's own slot while its epoch is still running. A partial epoch proof can end at this checkpoint,
+   *   and the blocks of later slots must not go ahead of it.
+   * - The last slot of the epoch once the epoch is complete. The node is then catching up on an epoch that will be
+   *   proven as a whole, so all its block-level jobs share one slot and the broker orders them by proof type.
+   *   Ordered by their own slots, the short jobs of early checkpoints would go ahead of the long jobs of later
+   *   ones, which makes the whole epoch slower to prove.
+   *
+   * The slot is fixed when the prover is constructed. A checkpoint registered while its epoch was running keeps its
+   * own slot after the epoch completes.
    */
   public async addOrUpdate(checkpoint: Checkpoint, data: RegisterCheckpointData): Promise<CheckpointProver> {
     const l1Constants = await this.l2BlockSource.getL1Constants();
     const epochNumber = getEpochAtSlot(checkpoint.header.slotNumber, l1Constants);
     const id = CheckpointProver.idFor(checkpoint);
 
+    const registered = this.provers.get(id);
+    if (registered) {
+      return registered;
+    }
+
+    const [, epochLastSlot] = getSlotRangeForEpoch(epochNumber, l1Constants);
+    const prioritySlot = await this.getPrioritySlot(checkpoint, epochNumber, epochLastSlot);
+    // The read above gave way to other calls. Nothing is awaited between this lookup and the insert below, or two
+    // calls for one checkpoint would each construct a prover.
     const existing = this.provers.get(id);
     if (existing) {
       return existing;
@@ -108,7 +129,7 @@ export class CheckpointStore {
     }
 
     const prover = this.proverFactoryFn(
-      { ...data, checkpoint, epochNumber },
+      { ...data, checkpoint, epochNumber, prioritySlot },
       { ...this.proverDeps, checkpointProveOverride: this.testHooks.checkpointProveOverride, log: this.log },
     );
     this.provers.set(id, prover);
@@ -200,5 +221,29 @@ export class CheckpointStore {
   /** Provers whose slot falls within `[fromSlot, toSlot]`, sorted by checkpoint number. */
   public listInSlotRange(fromSlot: SlotNumber, toSlot: SlotNumber): CheckpointProver[] {
     return this.list().filter(p => p.slotNumber >= fromSlot && p.slotNumber <= toSlot);
+  }
+
+  /**
+   * The slot a new prover's block-level jobs carry, see `addOrUpdate`. If the archiver cannot say whether the epoch
+   * is complete, the checkpoint's own slot is used: the slot only orders proving jobs, and a failed read must not
+   * keep the checkpoint from being proven.
+   */
+  private async getPrioritySlot(
+    checkpoint: Checkpoint,
+    epochNumber: EpochNumber,
+    epochLastSlot: SlotNumber,
+  ): Promise<SlotNumber> {
+    const ownSlot = checkpoint.header.slotNumber;
+    try {
+      return (await this.l2BlockSource.isEpochComplete(epochNumber)) ? epochLastSlot : ownSlot;
+    } catch (err) {
+      this.log.warn(`Could not read whether epoch ${epochNumber} is complete. Ordering jobs by the checkpoint slot.`, {
+        epochNumber,
+        checkpointNumber: checkpoint.number,
+        slotNumber: ownSlot,
+        err,
+      });
+      return ownSlot;
+    }
   }
 }

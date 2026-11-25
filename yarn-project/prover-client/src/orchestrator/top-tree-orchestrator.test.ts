@@ -1,14 +1,17 @@
 import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec-labs/constants';
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
-import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd, times, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ProvingJob, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
 import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
+import { jest } from '@jest/globals';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
@@ -33,9 +36,11 @@ const makeL2ToL1Messages = (count: number) =>
  */
 describe('prover/orchestrator/top-tree', () => {
   let context: TestContext;
+  let subTreeProver: ServerCircuitProver;
 
   beforeEach(async () => {
     context = await TestContext.new(logger);
+    subTreeProver = context.prover;
   });
 
   afterEach(async () => {
@@ -49,10 +54,10 @@ describe('prover/orchestrator/top-tree', () => {
    * Drives a checkpoint fixture through `CheckpointSubTreeOrchestrator`, feeding block `i` the message slice
    * `messagesPerBlock[i]`, and returns the assembled `CheckpointTopTreeData` plus the originating fixture.
    */
-  async function driveFixture(fixture: CheckpointFixture, messagesPerBlock: Fr[][]) {
+  async function driveFixture(fixture: CheckpointFixture, messagesPerBlock: Fr[][], prioritySlot?: SlotNumber) {
     const subTree = await CheckpointSubTreeOrchestrator.start(
       context.worldState,
-      context.prover,
+      subTreeProver,
       EthAddress.ZERO,
       new ChonkCache(),
       EpochNumber(1),
@@ -63,6 +68,9 @@ describe('prover/orchestrator/top-tree', () => {
       fixture.startInboxRollingHash,
       fixture.blocks.length,
       fixture.previousBlockHeader,
+      undefined,
+      undefined,
+      prioritySlot,
     );
     const resultPromise = subTree.getSubTreeResult();
 
@@ -125,7 +133,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
       expect(result.batchedBlobInputs).toBeDefined();
@@ -141,11 +149,78 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], undefined);
       expect(result.proof).toBeDefined();
     } finally {
       await topTree.stop();
     }
+  });
+
+  it('sends each job to the broker with the slot the broker orders it by', async () => {
+    const enqueued: ProvingJob[] = [];
+    const enqueue = context.broker.enqueueProvingJob.bind(context.broker);
+    jest.spyOn(context.broker, 'enqueueProvingJob').mockImplementation(job => {
+      enqueued.push(job);
+      return enqueue(job);
+    });
+    subTreeProver = context.brokerProverFacade;
+
+    // The first sub-tree is given no slot and uses the slot of its checkpoint. Its checkpoint has no messages, so
+    // its inbox parity proof can be shared with other checkpoints and carries no slot.
+    const a = await driveSubTree(2, 2);
+    const slotA = a.fixture.constants.slotNumber;
+    const blockLevelJobsOfA = enqueued.length;
+    const isParity = (job: ProvingJob) => job.type === ProvingRequestType.INBOX_PARITY;
+    expect(new Set(enqueued.filter(job => !isParity(job)).map(job => job.prioritySlot))).toEqual(new Set([slotA]));
+    expect(enqueued.filter(isParity).map(job => job.prioritySlot)).toEqual([undefined]);
+
+    // The second sub-tree is given a slot. Its checkpoint has messages, so its parity proof carries the slot too.
+    const givenSlot = SlotNumber(slotA + 40);
+    const fixtureB = await context.makeCheckpoint(1, { numTxsPerBlock: 1, numL1ToL2Messages: 2 });
+    const b = await driveFixture(fixtureB, [fixtureB.l1ToL2Messages], givenSlot);
+    const blockLevelJobs = enqueued.length;
+    const jobsOfB = enqueued.slice(blockLevelJobsOfA);
+    expect(jobsOfB.filter(isParity)).toHaveLength(1);
+    expect(new Set(jobsOfB.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
+
+    const challenges = await context.getFinalBlobChallenges();
+    const topTree = new TopTreeOrchestrator(context.brokerProverFacade, EthAddress.ZERO, makeTestDeferredJobQueue());
+    try {
+      await topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, b.topTreeData], givenSlot);
+    } finally {
+      await topTree.stop();
+    }
+    // Every job of the top tree carries the slot given to `prove`, not the slot of its own checkpoint.
+    const topTreeJobs = enqueued.slice(blockLevelJobs);
+    expect(topTreeJobs.length).toBeGreaterThan(0);
+    expect(new Set(topTreeJobs.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
+  });
+
+  // One checkpoint needs checkpoint padding, and three need a checkpoint merge. Two need neither.
+  it.each([
+    [1, ProvingRequestType.CHECKPOINT_PADDING_ROLLUP],
+    [3, ProvingRequestType.CHECKPOINT_MERGE_ROLLUP],
+  ])('sends every top-tree job of a proof of %s checkpoint(s) with the slot given to prove', async (count, type) => {
+    const checkpoints = await timesAsync(count, () => driveSubTree(1, 1));
+    const challenges = await context.getFinalBlobChallenges();
+
+    const enqueued: ProvingJob[] = [];
+    const enqueue = context.broker.enqueueProvingJob.bind(context.broker);
+    jest.spyOn(context.broker, 'enqueueProvingJob').mockImplementation(job => {
+      enqueued.push(job);
+      return enqueue(job);
+    });
+    const givenSlot = SlotNumber(77);
+    const topTree = new TopTreeOrchestrator(context.brokerProverFacade, EthAddress.ZERO, makeTestDeferredJobQueue());
+    try {
+      const topTreeData = checkpoints.map(checkpoint => checkpoint.topTreeData);
+      await topTree.prove(EpochNumber(1), count, challenges, topTreeData, givenSlot);
+    } finally {
+      await topTree.stop();
+    }
+
+    expect(enqueued.map(job => job.type)).toContain(type);
+    expect(new Set(enqueued.map(job => job.prioritySlot))).toEqual(new Set([givenSlot]));
   });
 
   it('produces an epoch proof for a checkpoint carrying L1-to-L2 messages', async () => {
@@ -155,7 +230,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
     } finally {
@@ -171,7 +246,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const result = await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
 
@@ -203,7 +278,13 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const result = await topTree.prove(EpochNumber(1), 3, challenges, [a.topTreeData, b.topTreeData, c.topTreeData]);
+      const result = await topTree.prove(
+        EpochNumber(1),
+        3,
+        challenges,
+        [a.topTreeData, b.topTreeData, c.topTreeData],
+        undefined,
+      );
       expect(result.proof).toBeDefined();
       expect(result.publicInputs).toBeDefined();
 
@@ -232,7 +313,7 @@ describe('prover/orchestrator/top-tree', () => {
     try {
       // Top tree proves in the background; it should be able to advance ckpt0's root
       // rollup before we resolve ckpt1's promise.
-      const provePromise = topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, ckpt1]);
+      const provePromise = topTree.prove(EpochNumber(1), 2, challenges, [a.topTreeData, ckpt1], undefined);
 
       // Give the orchestrator a chance to enqueue ckpt0's root rollup.
       await sleep(50);
@@ -256,7 +337,7 @@ describe('prover/orchestrator/top-tree', () => {
     const stuckData = { ...topTreeData, subTreeProofs: stuck } as CheckpointTopTreeData;
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
-    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [stuckData]);
+    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [stuckData], undefined);
 
     // Yield then cancel.
     await sleep(10);
@@ -280,7 +361,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     let actual: unknown;
     try {
-      await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      await topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
     } catch (err) {
       actual = err;
     }
@@ -294,9 +375,11 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const first = topTree.prove(EpochNumber(1), 1, challenges, [topTreeData]);
+      const first = topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined);
       // Second call before first settles should throw synchronously inside the function
-      await expect(topTree.prove(EpochNumber(1), 1, challenges, [topTreeData])).rejects.toThrow(/prove called twice/);
+      await expect(topTree.prove(EpochNumber(1), 1, challenges, [topTreeData], undefined)).rejects.toThrow(
+        /prove called twice/,
+      );
       await first;
     } finally {
       await topTree.stop();
@@ -317,7 +400,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [badData]);
+      const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [badData], undefined);
       const hung = Symbol('hung');
       const outcome = await Promise.race([
         provePromise.then(
@@ -355,7 +438,7 @@ describe('prover/orchestrator/top-tree', () => {
     const failingData = { ...topTreeData, subTreeProofs: observableSubTreeProofs as any } as CheckpointTopTreeData;
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
-    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [failingData]);
+    const provePromise = topTree.prove(EpochNumber(1), 1, challenges, [failingData], undefined);
 
     // Wait until prove() has finished its pre-loop setup and registered the subTreeProofs handler.
     await retryUntil(() => handlerAttached, 'prove() attaches subTreeProofs handler', 5, 0.005);
@@ -387,7 +470,7 @@ describe('prover/orchestrator/top-tree', () => {
 
     const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
     try {
-      await expect(topTree.prove(EpochNumber(1), 2, challenges, [topTreeData])).rejects.toThrow(
+      await expect(topTree.prove(EpochNumber(1), 2, challenges, [topTreeData], undefined)).rejects.toThrow(
         /does not match totalNumCheckpoints/,
       );
     } finally {

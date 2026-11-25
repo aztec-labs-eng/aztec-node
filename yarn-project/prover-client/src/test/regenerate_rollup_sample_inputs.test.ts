@@ -262,7 +262,7 @@ describeOrSkip('prover/regenerate-rollup-sample-inputs', () => {
 
         const topTree = new TopTreeOrchestrator(context.prover, EthAddress.ZERO, makeTestDeferredJobQueue());
         try {
-          await topTree.prove(EpochNumber(1), numCheckpoints, finalBlobChallenges, topTreeData);
+          await topTree.prove(EpochNumber(1), numCheckpoints, finalBlobChallenges, topTreeData, undefined);
         } finally {
           await topTree.stop();
         }

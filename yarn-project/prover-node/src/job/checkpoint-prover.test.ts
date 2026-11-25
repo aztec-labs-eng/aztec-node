@@ -1,6 +1,6 @@
 import { ARCHIVE_HEIGHT, MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { CheckpointNumber, EpochNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -242,6 +242,41 @@ describe('CheckpointProver', () => {
       prover.cancel();
       expect(signal.aborted).toBe(true);
       await expect(prover.whenDone()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('priority slot', () => {
+    // Holds the sub-tree's creation until the prover is cancelled, so the test reads what the prover asked for and no
+    // block runs.
+    const requestedPrioritySlot = async (args: Partial<CheckpointProverArgs>) => {
+      // No transactions, so the provider's empty answer is a complete one.
+      checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, txsPerBlock: 0 });
+      txProvider.getTxsForBlock.mockReset();
+      txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
+      const requested = promiseWithResolvers<SlotNumber | undefined>();
+      const created = promiseWithResolvers<CheckpointSubTreeOrchestrator>();
+      proverFactory.createCheckpointSubTreeOrchestrator.mockImplementation((...factoryArgs) => {
+        requested.resolve(factoryArgs[7]);
+        return created.promise;
+      });
+      const prover = makeProver(args);
+      const prioritySlot = await requested.promise;
+      prover.cancel();
+      const subTree = mock<CheckpointSubTreeOrchestrator>();
+      subTree.getSubTreeResult.mockReturnValue(new Promise<never>(() => {}));
+      subTree.stop.mockResolvedValue();
+      created.resolve(subTree);
+      await cleanup(prover);
+      return prioritySlot;
+    };
+
+    it('starts its sub-tree with the slot it was given', async () => {
+      const given = SlotNumber(1000);
+      expect(await requestedPrioritySlot({ prioritySlot: given })).toEqual(given);
+    });
+
+    it('starts its sub-tree with the slot of its checkpoint when it was given none', async () => {
+      expect(await requestedPrioritySlot({})).toEqual(checkpoint.header.slotNumber);
     });
   });
 

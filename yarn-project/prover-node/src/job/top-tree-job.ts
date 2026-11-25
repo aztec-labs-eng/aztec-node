@@ -1,5 +1,5 @@
 import type { BatchedBlob } from '@aztec-labs/blob-lib/types';
-import type { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { type CheckpointNumber, type EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -187,8 +187,17 @@ export class TopTreeJob {
         previousArchiveSiblingPath: j.previousArchiveSiblingPath,
       }));
 
+      // The highest slot the checkpoints' block-level jobs carry, so the broker never hands out a checkpoint root
+      // ahead of a block-level job this proof still waits for.
+      const prioritySlot = SlotNumber(Math.max(...this.snapshot.map(j => j.prioritySlot)));
       const defaultProve = (): Promise<TopTreeProof> =>
-        this.topTree.prove(this.epochNumber, this.snapshot.length, finalBlobBatchingChallenges, checkpointData);
+        this.topTree.prove(
+          this.epochNumber,
+          this.snapshot.length,
+          finalBlobBatchingChallenges,
+          checkpointData,
+          prioritySlot,
+        );
 
       await this.deps.hooks?.beforeProve?.();
       const proveTimer = new Timer();

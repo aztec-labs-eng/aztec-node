@@ -14,7 +14,7 @@ import type { CheckpointProver } from './job/checkpoint-prover.js';
 
 describe('CheckpointStore', () => {
   let store: CheckpointStore;
-  let blockSource: ReturnType<typeof mock<Pick<L2BlockSource, 'getL1Constants'>>>;
+  let blockSource: ReturnType<typeof mock<Pick<L2BlockSource, 'getL1Constants' | 'isEpochComplete'>>>;
   /** Track stub provers we hand back from the factory. */
   const stubs: StubProver[] = [];
 
@@ -22,8 +22,9 @@ describe('CheckpointStore', () => {
   const l1Constants = { ...EmptyL1RollupConstants, epochDuration: 1 };
 
   beforeEach(() => {
-    blockSource = mock<Pick<L2BlockSource, 'getL1Constants'>>();
+    blockSource = mock<Pick<L2BlockSource, 'getL1Constants' | 'isEpochComplete'>>();
     blockSource.getL1Constants.mockResolvedValue(l1Constants);
+    blockSource.isEpochComplete.mockResolvedValue(false);
     stubs.length = 0;
     store = new CheckpointStore(
       blockSource,
@@ -31,7 +32,7 @@ describe('CheckpointStore', () => {
       {} as any,
       undefined,
       (args, _deps) => {
-        const stub = makeStubProver(args.checkpoint, args.epochNumber);
+        const stub = makeStubProver(args.checkpoint, args.epochNumber, args.prioritySlot);
         stubs.push(stub);
         return stub as unknown as CheckpointProver;
       },
@@ -57,6 +58,49 @@ describe('CheckpointStore', () => {
 
     const first = await store.addOrUpdate(cp, makeRegisterData());
     const second = await store.addOrUpdate(cp, makeRegisterData());
+    expect(second).toBe(first);
+    expect(stubs.length).toBe(1);
+  });
+
+  describe('the slot a checkpoint orders its proving jobs by', () => {
+    // Epoch 2 covers slots 8 to 11.
+    const slotNumber = SlotNumber(9);
+
+    beforeEach(() => {
+      blockSource.getL1Constants.mockResolvedValue({ ...EmptyL1RollupConstants, epochDuration: 4 });
+    });
+
+    it('is its own slot while its epoch is running', async () => {
+      const cp = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber });
+
+      const prover = await store.addOrUpdate(cp, makeRegisterData());
+      expect(prover.prioritySlot).toEqual(slotNumber);
+    });
+
+    it('is the last slot of its epoch once the epoch is complete', async () => {
+      blockSource.isEpochComplete.mockImplementation(epoch => Promise.resolve(epoch === EpochNumber(2)));
+      const cp = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber });
+
+      const prover = await store.addOrUpdate(cp, makeRegisterData());
+      expect(prover.prioritySlot).toEqual(SlotNumber(11));
+    });
+
+    it('is its own slot when the archiver cannot say whether the epoch is complete', async () => {
+      blockSource.isEpochComplete.mockRejectedValue(new Error('archiver read failed'));
+      const cp = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber });
+
+      const prover = await store.addOrUpdate(cp, makeRegisterData());
+      expect(prover.prioritySlot).toEqual(slotNumber);
+    });
+  });
+
+  it('addOrUpdate constructs one prover for two concurrent registrations of a checkpoint', async () => {
+    const cp = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1 });
+
+    const [first, second] = await Promise.all([
+      store.addOrUpdate(cp, makeRegisterData()),
+      store.addOrUpdate(cp, makeRegisterData()),
+    ]);
     expect(second).toBe(first);
     expect(stubs.length).toBe(1);
   });
@@ -209,6 +253,7 @@ type StubProver = {
   id: string;
   checkpoint: Checkpoint;
   slotNumber: SlotNumber;
+  prioritySlot: SlotNumber | undefined;
   epochNumber: EpochNumber;
   cancelled: boolean;
   isCancelled(): boolean;
@@ -216,12 +261,13 @@ type StubProver = {
   whenDone(): Promise<void>;
 };
 
-function makeStubProver(checkpoint: Checkpoint, epochNumber: EpochNumber): StubProver {
+function makeStubProver(checkpoint: Checkpoint, epochNumber: EpochNumber, prioritySlot?: SlotNumber): StubProver {
   const id = `${checkpoint.number}:${checkpoint.header.slotNumber}:${checkpoint.archive.root.toString()}`;
   return {
     id,
     checkpoint,
     slotNumber: checkpoint.header.slotNumber,
+    prioritySlot,
     epochNumber,
     cancelled: false,
     isCancelled() {

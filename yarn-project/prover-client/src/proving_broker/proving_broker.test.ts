@@ -1,4 +1,4 @@
-import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from '@aztec-labs/stdlib/interfaces/server';
@@ -559,6 +559,169 @@ describe.each([
       // epoch's remaining jobs must complete rather than starve behind newer epochs' work.
       await getAndAssertNextJobId(publicVm1, ProvingRequestType.PUBLIC_VM, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP);
       await getAndAssertNextJobId(baseRollup2, ProvingRequestType.PUBLIC_VM, ProvingRequestType.PRIVATE_TX_BASE_ROLLUP);
+    });
+
+    describe('priority slots', () => {
+      const epoch = EpochNumber(1);
+      const enqueue = async (type: ProvingRequestType, prioritySlot?: number, id = makeRandomProvingJobId()) => {
+        await broker.enqueueProvingJob({
+          id,
+          type,
+          epochNumber: epoch,
+          inputsUri: makeInputsUri(),
+          prioritySlot: prioritySlot === undefined ? undefined : SlotNumber(prioritySlot),
+        });
+        return id;
+      };
+      const restartBroker = async () => {
+        await broker.stop();
+        broker = new ProvingBroker(database);
+        await broker.start();
+      };
+      const nextJobId = async (...allowList: ProvingRequestType[]) =>
+        (await broker.getProvingJob({ allowList }))?.job.id;
+      const nextJobIds = async (count: number) => {
+        const ids: (ProvingJobId | undefined)[] = [];
+        for (let i = 0; i < count; i++) {
+          ids.push(await nextJobId());
+        }
+        return ids;
+      };
+
+      it('gives a job of a lower slot before a job of a higher slot whose proof type ranks higher', async () => {
+        // A partial proof ends at slot 5. The block root of slot 6 belongs to a checkpoint that landed afterwards.
+        const laterBlockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 6);
+        const neededVm = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        expect(await nextJobIds(2)).toEqual([neededVm, laterBlockRoot]);
+      });
+
+      it('orders the jobs of one slot by proof type', async () => {
+        // The checkpoint root carries the last slot of its proof, which is also the slot of the proof's last blocks.
+        const laterBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+        const checkpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const neededBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+
+        expect(await nextJobIds(3)).toEqual([neededBase, checkpointRoot, laterBase]);
+      });
+
+      it('serves the epoch proof that ends first', async () => {
+        const laterRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 6);
+        const earlierMerge = await enqueue(ProvingRequestType.CHECKPOINT_MERGE_ROLLUP, 5);
+
+        expect(await nextJobIds(2)).toEqual([earlierMerge, laterRoot]);
+      });
+
+      it('gives the root rollup of a proof that ends later after the jobs of a proof that ends earlier', async () => {
+        const earlierCheckpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const laterRoot = await enqueue(ProvingRequestType.ROOT_ROLLUP, 6);
+
+        expect(await nextJobIds(2)).toEqual([earlierCheckpointRoot, laterRoot]);
+      });
+
+      it('gives a job of a higher slot to an agent that accepts none of the jobs before it', async () => {
+        await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        const laterBase = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect(await nextJobId(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP)).toEqual(laterBase);
+      });
+
+      it('gives a job without a slot before the jobs of its epoch that have one', async () => {
+        const blockRoot = await enqueue(ProvingRequestType.BLOCK_ROOT_ROLLUP, 5);
+        const unslottedCheckpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP);
+
+        expect(await nextJobIds(2)).toEqual([unslottedCheckpointRoot, blockRoot]);
+      });
+
+      it('gives the jobs of an older epoch before a job of a newer epoch that has no slot', async () => {
+        const newer = makeRandomProvingJobId(EpochNumber(2));
+        await broker.enqueueProvingJob({
+          id: newer,
+          type: ProvingRequestType.BLOCK_ROOT_ROLLUP,
+          epochNumber: EpochNumber(2),
+          inputsUri: makeInputsUri(),
+        });
+        const older = await enqueue(ProvingRequestType.PUBLIC_VM, 5);
+
+        expect(await nextJobIds(2)).toEqual([older, newer]);
+      });
+
+      it('keeps the slot a job was first requested under', async () => {
+        // The inbox parity proof of slot 6 has the same inputs as the one a proof ending at slot 5 needs.
+        const parity = await enqueue(ProvingRequestType.INBOX_PARITY, 6);
+        const checkpointRoot = await enqueue(ProvingRequestType.CHECKPOINT_ROOT_ROLLUP, 5);
+        await enqueue(ProvingRequestType.INBOX_PARITY, 5, parity);
+
+        expect(await nextJobIds(3)).toEqual([checkpointRoot, parity, undefined]);
+      });
+
+      it('skips the queue entry a cancelled job left behind once it is revived with another slot', async () => {
+        const revived = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+        await broker.cancelProvingJob(revived);
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, revived);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7);
+
+        expect(await nextJobIds(3)).toEqual([other, revived, undefined]);
+      });
+
+      it('hands out a job once, under its first slot, when it is requested again while it is being saved', async () => {
+        const id = makeRandomProvingJobId();
+        const saving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7, id);
+        const again = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const beforeSaved = await nextJobId();
+        await Promise.all([saving, again]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 6);
+
+        expect([beforeSaved, ...(await nextJobIds(3))]).toEqual([undefined, other, id, undefined]);
+      });
+
+      it('keeps the slot and the inputs a job was first saved with after a restart', async () => {
+        const id = makeRandomProvingJobId();
+        const job = { id, type: ProvingRequestType.INBOX_PARITY, epochNumber: epoch, inputsUri: makeInputsUri() };
+        await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(7) });
+        await broker.enqueueProvingJob({ ...job, prioritySlot: SlotNumber(5), inputsUri: makeInputsUri() });
+
+        await restartBroker();
+        expect((await broker.getProvingJob())?.job).toEqual({ ...job, prioritySlot: SlotNumber(7) });
+      });
+
+      it('does not hand out a cancelled job again before its revival is saved', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        const reviving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+        const beforeRevived = await nextJobId();
+        await reviving;
+
+        expect([beforeRevived, ...(await nextJobIds(2))]).toEqual([undefined, id, undefined]);
+      });
+
+      it('revives a cancelled job on the next request when saving the first revival fails', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        jest.spyOn(database, 'deleteProvingJobResult').mockRejectedValueOnce(new Error('db down'));
+        await expect(enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id)).rejects.toThrow('db down');
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+
+        expect(await nextJobIds(2)).toEqual([id, undefined]);
+      });
+
+      it('hands out a job once, under the slot of its revival, when it is requested again meanwhile', async () => {
+        const id = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9);
+        await broker.cancelProvingJob(id);
+        const reviving = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 9, id);
+        const again = enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5, id);
+        const beforeRevived = await nextJobId();
+        await Promise.all([reviving, again]);
+        const other = await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 7);
+
+        expect([beforeRevived, ...(await nextJobIds(3))]).toEqual([undefined, other, id, undefined]);
+      });
+
+      it('hands the slot to the agent with the job', async () => {
+        await enqueue(ProvingRequestType.PRIVATE_TX_BASE_ROLLUP, 5);
+
+        expect((await broker.getProvingJob())?.job.prioritySlot).toEqual(SlotNumber(5));
+      });
     });
 
     it('returns any job if filter is empty', async () => {

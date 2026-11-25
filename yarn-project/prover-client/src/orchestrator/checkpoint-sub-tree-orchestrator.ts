@@ -5,7 +5,7 @@ import {
   MAX_BLOCKS_PER_CHECKPOINT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AbortError } from '@aztec-labs/foundation/error';
 import { inspect } from '@aztec-labs/foundation/inspect';
@@ -133,6 +133,11 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     private readonly chonkCache: ChonkCache,
     /** The epoch this sub-tree proves into. */
     private readonly epochNumber: EpochNumber,
+    /**
+     * The slot the jobs of the sub-tree carry, see `ProvingJob.prioritySlot`. The inbox parity proof of a checkpoint
+     * without messages is the exception and carries no slot, see `enqueueInboxParityCircuit`.
+     */
+    private readonly prioritySlot: SlotNumber,
     private readonly cancelJobsOnStop: boolean = false,
     deferredJobQueue: SerialQueue,
     telemetryClient: TelemetryClient = getTelemetryClient(),
@@ -200,6 +205,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
    *
    * If the internal start rejects, the partially-constructed sub-tree is stopped
    * before the error propagates, so no broker resources leak.
+   *
+   * @param prioritySlot - The slot the sub-tree's jobs carry, see `ProvingJob.prioritySlot`. Defaults to the slot
+   *   of the checkpoint.
    */
   public static async start(
     dbProvider: ReadonlyWorldStateAccess & ForkMerkleTreeOperations,
@@ -216,6 +224,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
     headerOfLastBlockInPreviousCheckpoint: BlockHeader,
     telemetryClient: TelemetryClient = getTelemetryClient(),
     bindings?: LoggerBindings,
+    prioritySlot?: SlotNumber,
   ): Promise<CheckpointSubTreeOrchestrator> {
     const subTree = new CheckpointSubTreeOrchestrator(
       dbProvider,
@@ -223,6 +232,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       proverId,
       chonkCache,
       epochNumber,
+      prioritySlot ?? checkpointConstants.slotNumber,
       cancelJobsOnStop,
       deferredJobQueue,
       telemetryClient,
@@ -274,6 +284,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       proverId,
       chonkCache,
       epochNumber,
+      checkpointConstants.slotNumber,
       /* cancelJobsOnStop */ false,
       deferredJobQueue,
       telemetryClient,
@@ -329,7 +340,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       // Fire and forget — getOrEnqueueChonkVerifier later picks up the cached promise
       // when the tx is processed inside its block.
       void this.chonkCache.getOrCompute(txHash, signal =>
-        this.prover.getPublicChonkVerifierProof(inputs, signal, this.epochNumber),
+        this.prover.getPublicChonkVerifierProof(inputs, signal, this.epochNumber, this.prioritySlot),
       );
     }
     return Promise.resolve();
@@ -718,9 +729,9 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
           : 'getPublicTxBaseRollupProof',
         signal => {
           if (inputs instanceof PrivateTxBaseRollupPrivateInputs) {
-            return this.prover.getPrivateTxBaseRollupProof(inputs, signal, provingState.epochNumber);
+            return this.prover.getPrivateTxBaseRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
           } else {
-            return this.prover.getPublicTxBaseRollupProof(inputs, signal, provingState.epochNumber);
+            return this.prover.getPublicTxBaseRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
           }
         },
         { [Attributes.TX_HASH]: processedTx.hash.toString(), [Attributes.PROTOCOL_CIRCUIT_NAME]: rollupType },
@@ -769,6 +780,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         txProvingState.getPublicChonkVerifierPrivateInputs(),
         signal,
         this.epochNumber,
+        this.prioritySlot,
       ),
     );
     void promise.then(handleResult).catch(err => {
@@ -802,7 +814,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       provingState,
       this.wrapCircuitCall(
         'getTxMergeRollupProof',
-        signal => this.prover.getTxMergeRollupProof(inputs, signal, provingState.epochNumber),
+        signal => this.prover.getTxMergeRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: 'rollup-tx-merge' satisfies CircuitName },
       ),
       result => {
@@ -837,11 +849,26 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         signal => {
           switch (rollup.rollupType) {
             case 'rollup-block-root-no-txs':
-              return this.prover.getBlockRootNoTxsRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootNoTxsRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
             case 'rollup-block-root-single-tx':
-              return this.prover.getBlockRootSingleTxRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootSingleTxRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
             case 'rollup-block-root':
-              return this.prover.getBlockRootRollupProof(rollup.inputs, signal, provingState.epochNumber);
+              return this.prover.getBlockRootRollupProof(
+                rollup.inputs,
+                signal,
+                provingState.epochNumber,
+                this.prioritySlot,
+              );
           }
         },
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: rollupType },
@@ -888,12 +915,17 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
 
     const inputs = checkpointProvingState.getInboxParityInputs();
     const circuitName = `inbox-parity-${inputs.size}` satisfies CircuitName;
+    // Consecutive checkpoints without messages have the same parity inputs and share one proof. The broker keeps
+    // the slot of the first request for it, and that request can come from a later checkpoint when an earlier one
+    // is slow to gather its transactions. Without a slot the proof goes ahead of the slotted jobs of its epoch,
+    // which is right for whichever checkpoint needs it first.
+    const prioritySlot = inputs.numMessages === 0 ? undefined : this.prioritySlot;
 
     this.deferredProving(
       checkpointProvingState,
       this.wrapCircuitCall(
         'getInboxParityProof',
-        signal => this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber),
+        signal => this.prover.getInboxParityProof(inputs, signal, checkpointProvingState.epochNumber, prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: circuitName },
       ),
       result => {
@@ -920,7 +952,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       provingState,
       this.wrapCircuitCall(
         'getBlockMergeRollupProof',
-        signal => this.prover.getBlockMergeRollupProof(inputs, signal, provingState.epochNumber),
+        signal => this.prover.getBlockMergeRollupProof(inputs, signal, provingState.epochNumber, this.prioritySlot),
         { [Attributes.PROTOCOL_CIRCUIT_NAME]: 'rollup-block-merge' satisfies CircuitName },
       ),
       result => {
@@ -1013,7 +1045,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
         'getAvmProof',
         async (signal: AbortSignal) => {
           const inputs = txProvingState.getAvmInputs();
-          return await this.prover.getAvmProof(inputs, signal, provingState.epochNumber);
+          return await this.prover.getAvmProof(inputs, signal, provingState.epochNumber, this.prioritySlot);
         },
         { [Attributes.TX_HASH]: txProvingState.processedTx.hash.toString() },
       ),

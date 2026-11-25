@@ -4,7 +4,12 @@ import {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
 } from '@aztec-labs/constants';
-import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import {
+  EpochNumber,
+  EpochNumberSchema,
+  type SlotNumber,
+  SlotNumberSchema,
+} from '@aztec-labs/foundation/branded-types';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
@@ -346,6 +351,26 @@ type ProvingJobShape = {
   type: ProvingRequestType;
   epochNumber: EpochNumber;
   inputsUri: ProofUri;
+  /**
+   * The slot the broker orders the job by within its epoch. It is not part of the job id.
+   *
+   * The broker hands out the jobs of a lower slot first and orders jobs of the same slot by proof type. A job
+   * without a slot goes ahead of the jobs of its epoch that have one.
+   *
+   * The producer chooses the slot so that a job carries the last slot of the earliest epoch proof that can need it:
+   *
+   * - A block-level job carries the slot of its block while the epoch is still running, because a partial proof
+   *   can end there.
+   * - A block-level job of an epoch that is already over carries the last slot of that epoch. Only proofs of the
+   *   whole epoch are expected then, so all its jobs share one slot and the proof type decides.
+   * - A job of the top tree carries the highest slot among the jobs of its proof's checkpoints.
+   * - The inbox parity proof of a checkpoint without messages carries no slot. Consecutive checkpoints without
+   *   messages share it, and it must not wait behind the slot of a later one.
+   *
+   * A job requested again under another slot keeps the slot it has. Its slot is the one of the request that
+   * created it, or of the request that brought it back after it was cancelled.
+   */
+  prioritySlot?: SlotNumber;
 };
 
 export const ProvingJob: z.ZodType<ProvingJobShape, any> = z.object({
@@ -353,6 +378,7 @@ export const ProvingJob: z.ZodType<ProvingJobShape, any> = z.object({
   type: z.nativeEnum(ProvingRequestType),
   epochNumber: EpochNumberSchema,
   inputsUri: ProofUri,
+  prioritySlot: SlotNumberSchema.optional(),
 });
 
 export const makeProvingJobId = (epochNumber: EpochNumber, type: ProvingRequestType, inputsHash: string) => {

@@ -1,7 +1,7 @@
 import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -119,6 +119,34 @@ describe('EpochSession', () => {
       expect(session.getState()).toBe('completed');
       expect(session.isTerminal()).toBe(true);
       await expect(session.whenDone()).resolves.toBe('completed');
+    });
+
+    it('gives the top tree the highest slot its checkpoints order their jobs by', async () => {
+      publishingService.submit.mockResolvedValue('published');
+      topTree.prove.mockResolvedValue(synthProof);
+      const nextCheckpoint = (previous: Checkpoint) =>
+        Checkpoint.random(CheckpointNumber(previous.number + 1), {
+          numBlocks: 1,
+          startBlockNumber: previous.blocks.at(-1)!.number + 1,
+          previousArchive: previous.archive,
+          slotNumber: SlotNumber(previous.header.slotNumber + 1),
+        });
+      const middleCp = await nextCheckpoint(cp);
+      const lastCp = await nextCheckpoint(middleCp);
+      // The first checkpoint was registered while the epoch was running and has its own slot. The second was
+      // registered after the epoch ended and has the epoch's last slot. For the third, the read of whether the
+      // epoch is complete failed, and it fell back to its own slot. The session is a partial one that ends there.
+      const epochLastSlot = SlotNumber(lastCp.header.slotNumber + 3);
+      const provers = [
+        makeStubProver(cp),
+        makeStubProver(middleCp, { prioritySlot: epochLastSlot }),
+        makeStubProver(lastCp),
+      ];
+      const spec: SessionSpec = { ...makeSpec(), kind: 'partial', toSlot: lastCp.header.slotNumber };
+      const deps = makeDeps({ hooks: { topTreeProveOverride: prove => prove() } });
+      await new TestEpochSession(spec, provers, deps).start();
+
+      expect(topTree.prove.mock.calls.map(call => call[4])).toEqual([epochLastSlot]);
     });
 
     it('submits a candidate whose id, kind, range, and checkpoint bounds come from the session', async () => {
@@ -565,7 +593,7 @@ class TestEpochSession extends EpochSession {
  */
 function makeStubProver(
   checkpoint: Checkpoint,
-  opts: { subTreeProofsError?: Error; isFailed?: boolean; isCancelled?: boolean } = {},
+  opts: { subTreeProofsError?: Error; isFailed?: boolean; isCancelled?: boolean; prioritySlot?: SlotNumber } = {},
 ): CheckpointProver {
   const id = CheckpointProver.idFor(checkpoint);
   // By default whenSubTreeProofsReady never resolves in these tests; the prove override
@@ -581,6 +609,7 @@ function makeStubProver(
     checkpoint,
     epochNumber: EpochNumber(5),
     slotNumber: checkpoint.header.slotNumber,
+    prioritySlot: opts.prioritySlot ?? checkpoint.header.slotNumber,
     previousBlockHeader: BlockHeader.empty(),
     l1ToL2Messages: [],
     previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),
