@@ -32,7 +32,7 @@ export interface KvSqliteStoreOptions {
   /** 32 bytes: the database is encrypted at rest (sqlite3mc's ChaCha20). Persistent stores only. */
   encryptionKey?: Uint8Array;
   /**
-   * The Kv service's backend: one of @aztec-labs/kv-sqlite's ('process', 'napi', 'wasm', or 'jsi' in React Native),
+   * The Kv service's backend: one of @aztec-labs/kv-sqlite's ('process', 'napi', or 'jsi' in React Native),
    * or a backend object. Default: the package's own choice for the platform.
    */
   backend?: KvCreateOptions['backend'];
@@ -40,7 +40,7 @@ export interface KvSqliteStoreOptions {
 
 /**
  * A key-value store over the Kv service (@aztec-labs/kv-sqlite): SQLite3 Multiple Ciphers, in whichever form the
- * platform runs it (a native library or process, a wasm module, or the library through JSI in React Native). Every
+ * platform runs it (a native library or process, or the library through JSI in React Native). Every
  * container is rows of the service's one table, so a database opens the same in each.
  *
  * Commands are ordered by a `SerialQueue`: outside a `transactionAsync` block each command takes the queue for its

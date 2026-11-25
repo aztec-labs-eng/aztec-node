@@ -14,7 +14,7 @@ import { AztecKvSqliteStore } from './store.js';
 
 // The React Native store (sqlite-opfs/react_native.ts) runs these containers over the library linked into the app;
 // these run them over each node backend, in memory.
-for (const backend of ['process', 'napi', 'wasm'] as const) {
+for (const backend of ['process', 'napi'] as const) {
   describe(`AztecKvSqliteStore (${backend})`, () => {
     const open = () => AztecKvSqliteStore.create(mockLogger, { backend });
     describeAztecMap('AztecMap', open);
