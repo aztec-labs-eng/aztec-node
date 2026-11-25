@@ -80,6 +80,7 @@ async function main() {
 
   const db = WalletDB.getInstance();
   const walletAndNodeWrapper = new CliWalletAndNodeWrapper();
+  let wallet: CLIWallet | undefined;
 
   const program = new Command('wallet');
   program
@@ -107,13 +108,10 @@ async function main() {
 
       const proverEnabled = prover !== 'none';
 
-      switch (prover) {
-        case 'native':
-          await Barretenberg.initSingleton({ backend: BackendType.NativeUnixSocket });
-          break;
-        case 'wasm':
-          await Barretenberg.initSingleton({ backend: BackendType.Wasm });
-          break;
+      const proverBackend =
+        prover === 'wasm' ? BackendType.Wasm : prover === 'native' ? BackendType.NativeUnixSocket : undefined;
+      if (proverBackend !== undefined) {
+        await Barretenberg.initSingleton({ backend: proverBackend });
       }
 
       const overridePXEConfig: Partial<PXEConfig> = {
@@ -122,7 +120,7 @@ async function main() {
       };
 
       const node = createAztecNodeClient(nodeUrl);
-      const wallet = await CLIWallet.create(node, userLog, db, overridePXEConfig);
+      wallet = await CLIWallet.create(node, userLog, db, overridePXEConfig, proverBackend);
 
       walletAndNodeWrapper.setNodeAndWallet(node, wallet);
 
@@ -132,9 +130,15 @@ async function main() {
 
   injectCommands(program, userLog, debugLogger, walletAndNodeWrapper, db);
   injectInternalCommands(program, userLog, db);
-  await program.parseAsync(process.argv);
-
-  await Barretenberg.destroySingleton();
+  try {
+    await program.parseAsync(process.argv);
+  } finally {
+    try {
+      await wallet?.stop();
+    } finally {
+      await Barretenberg.destroySingleton();
+    }
+  }
 }
 
 main().catch(err => {

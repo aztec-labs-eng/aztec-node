@@ -58,12 +58,11 @@ export async function createPXE(
   const simulator = options.simulator ?? new WASMSimulator();
   const proverLogger = loggers.prover ?? createLogger('pxe:bb:wasm:bundle', { actor });
 
-  let prover;
-  if (isPrivateKernelProver(options.proverOrOptions)) {
-    prover = options.proverOrOptions;
-  } else {
-    prover = new BBLazyPrivateKernelProver(simulator, { ...options.proverOrOptions, logger: proverLogger });
-  }
+  const proverOrOptions = options.proverOrOptions;
+  const suppliedProver = isPrivateKernelProver(proverOrOptions);
+  const prover = suppliedProver
+    ? proverOrOptions
+    : new BBLazyPrivateKernelProver(simulator, { ...proverOrOptions, logger: proverLogger });
   const protocolContractsProvider = new LazyProtocolContractsProvider();
   const preloadedContractsProvider = options.preloadedContractsProvider ?? {
     getPreloadedContracts: async () => [
@@ -80,6 +79,7 @@ export async function createPXE(
     nodeDebug: options.nodeDebug,
     store,
     proofCreator: prover,
+    ownsProofCreator: !suppliedProver,
     simulator,
     protocolContractsProvider,
     preloadedContractsProvider,

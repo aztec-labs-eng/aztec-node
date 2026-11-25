@@ -73,12 +73,11 @@ export async function createPXE(
   }
   const proverLogger = loggers.prover ?? createLogger('pxe:bb:native', { actor });
 
-  let prover;
-  if (isPrivateKernelProver(options.proverOrOptions)) {
-    prover = options.proverOrOptions;
-  } else {
-    prover = new BBBundlePrivateKernelProver(simulator, { ...options.proverOrOptions, logger: proverLogger });
-  }
+  const proverOrOptions = options.proverOrOptions;
+  const suppliedProver = isPrivateKernelProver(proverOrOptions);
+  const prover = suppliedProver
+    ? proverOrOptions
+    : new BBBundlePrivateKernelProver(simulator, { ...proverOrOptions, logger: proverLogger });
 
   const protocolContractsProvider = new BundledProtocolContractsProvider();
   const preloadedContractsProvider = options.preloadedContractsProvider ?? {
@@ -96,6 +95,7 @@ export async function createPXE(
     nodeDebug: options.nodeDebug,
     store: options.store,
     proofCreator: prover,
+    ownsProofCreator: !suppliedProver,
     simulator,
     protocolContractsProvider,
     preloadedContractsProvider,

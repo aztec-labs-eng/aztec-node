@@ -1,3 +1,5 @@
+import type { BackendType } from '@aztec-foundation/bb.js';
+
 import { EcdsaKAccountContract, EcdsaRAccountContract, EcdsaRSSHAccountContract } from '@aztec-labs/accounts/ecdsa';
 import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec-labs/accounts/ecdsa/stub';
 import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec-labs/accounts/schnorr';
@@ -57,13 +59,19 @@ export class CLIWallet extends BaseWallet {
     log: LogFn,
     db?: WalletDB,
     overridePXEConfig?: Partial<PXEConfig>,
+    proverBackend?: BackendType,
   ): Promise<CLIWallet> {
     const pxeConfig = Object.assign(getPXEConfig(), overridePXEConfig);
-    const pxe = await createPXE(node, pxeConfig);
+    const pxe = await createPXE(node, pxeConfig, { proverOrOptions: { backend: proverBackend } });
     const wallet = new CLIWallet(pxe, node, log, db);
     await wallet.initStubClasses();
     await wallet.registerAuthRegistry();
     return wallet;
+  }
+
+  /** Stops the wallet's PXE and releases its proving resources. */
+  public async stop(): Promise<void> {
+    await this.pxe.stop();
   }
 
   private async registerAuthRegistry(): Promise<void> {
