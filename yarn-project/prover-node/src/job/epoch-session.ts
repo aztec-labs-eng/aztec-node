@@ -248,8 +248,8 @@ export class EpochSession implements Traceable {
   }
 
   /**
-   * Cancels the session. Idempotent. Withdraws any submitted candidate from the
-   * publishing service so the in-flight publisher (if any) is interrupted.
+   * Cancels the session. Idempotent. Withdraws a candidate that is still queued in the publishing service. A
+   * publish already under way finishes.
    */
   public async cancel(reason = 'cancelled', { abortJobs = true }: { abortJobs?: boolean } = {}): Promise<void> {
     if (this.isTerminal()) {
@@ -351,11 +351,12 @@ export class EpochSession implements Traceable {
       0,
     );
 
-    // Reflect the publish phase. Guard against a terminal state set concurrently by cancel() — the
-    // post-submit isTerminal() check below relies on cancel still winning.
-    if (!this.isTerminal()) {
-      this.state = 'publishing-proof';
+    // cancel() may have run during the read above. It found no candidate to withdraw, so submitting now would
+    // queue a proof that nothing withdraws afterwards.
+    if (this.isTerminal()) {
+      return;
     }
+    this.state = 'publishing-proof';
 
     const outcome = await this.deps.publishingService.submit({
       id: this.uuid,
