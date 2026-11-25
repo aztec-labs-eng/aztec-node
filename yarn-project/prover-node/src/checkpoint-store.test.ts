@@ -3,6 +3,7 @@ import { makeTuple } from '@aztec-labs/foundation/array';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
@@ -146,6 +147,47 @@ describe('CheckpointStore', () => {
     store.reapExpired(EpochNumber(2));
     const remainingNumbers = store.listAll().map(p => p.checkpoint.number);
     expect(remainingNumbers).toEqual([3]);
+  });
+
+  it('stop cancels the remaining provers and waits for provers removed earlier to tear down', async () => {
+    const kept = await Checkpoint.random(CheckpointNumber(1), {
+      numBlocks: 1,
+      startBlockNumber: 1,
+      slotNumber: SlotNumber(1),
+    });
+    const pruned = await Checkpoint.random(CheckpointNumber(2), {
+      numBlocks: 1,
+      startBlockNumber: 2,
+      slotNumber: SlotNumber(2),
+    });
+    await store.addOrUpdate(kept, makeRegisterData());
+
+    // The same checkpoint is pruned, registered again and pruned again while its first teardown is still running,
+    // so two teardowns for one prover id are in flight.
+    const teardowns = [promiseWithResolvers<void>(), promiseWithResolvers<void>()];
+    for (const teardown of teardowns) {
+      await store.addOrUpdate(pruned, makeRegisterData());
+      stubs.at(-1)!.whenDone = () => teardown.promise;
+      store.cancelAndRemoveAboveBlock(BlockNumber(1));
+    }
+
+    let stopped = false;
+    const stopPromise = store.stop().then(() => {
+      stopped = true;
+    });
+    const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+    await settle();
+    expect(stubs[0].isCancelled()).toBe(true);
+    expect(stopped).toBe(false);
+
+    // Settle the later teardown first: a store that tracked teardowns by prover id would have kept only this one.
+    teardowns[1].resolve();
+    await settle();
+    expect(stopped).toBe(false);
+
+    teardowns[0].resolve();
+    await stopPromise;
+    expect(stopped).toBe(true);
   });
 
   it('listForEpoch returns only provers in the epoch slot range', async () => {
