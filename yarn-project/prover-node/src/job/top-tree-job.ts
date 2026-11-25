@@ -110,11 +110,6 @@ export class TopTreeJob {
     return this.cancelled;
   }
 
-  /** Wall-time since construction — used by the owning job for metrics. */
-  public elapsedMs(): number {
-    return this.executionTimer.ms();
-  }
-
   /** Kicks off the prove. Returns the result promise (also available as `result.promise`). */
   public start(): Promise<TopTreeProof> {
     void this.run();

@@ -36,6 +36,27 @@ export type ReconcileTrigger =
   | { kind: 'tick' }
   | { kind: 'start-proof'; spec: SessionSpec };
 
+/** Why a full session for an epoch cannot be opened right now. */
+type FullSessionBlocker =
+  | 'session-exists'
+  | 'session-limit-reached'
+  | 'epoch-incomplete'
+  | 'deadline-passed'
+  | 'checkpoint-prover-failed'
+  | 'covered-epoch-waits-for-tick'
+  | 'own-proof-registration-unavailable'
+  | 'own-proof-already-on-l1'
+  | 'archiver-has-no-checkpoints'
+  | 'checkpoints-missing-from-store';
+
+/** How a reconcile trigger may open a full session. */
+type FullSessionOptions = {
+  /** Whether an epoch the proven tip already covers may be opened. Only the tick sets this. */
+  openCovered: boolean;
+  /** Session slots to leave free for other work. */
+  reservedSlots: number;
+};
+
 /** Config bag for session lifecycle decisions. */
 export type SessionManagerConfig = {
   /** Cap on the number of non-terminal sessions (full + partial). 0 disables. */
@@ -84,10 +105,9 @@ export class SessionManager {
   private readonly fullSessions: Map<EpochNumber, EpochSession> = new Map();
   private readonly partialSessions: Map<string, EpochSession> = new Map();
   /**
-   * Serialises every reconcile call. The trigger sources (L2BlockStream events, the
-   * periodic tick, JSON-RPC `startProof`) run independently, so without this queue two
-   * reconciles could interleave on the `await session.cancel(...)` step and orphan a
-   * freshly-constructed session.
+   * Serialises every reconcile call. The trigger sources (chain events, the periodic tick, `startProof`) run
+   * independently, and a reconcile awaits archiver and L1 reads between looking at the session maps and changing
+   * them. Without this queue two reconciles could open a session for the same epoch.
    */
   private readonly reconcileQueue = new SerialQueue();
   /** Cached L1 constants, populated on first read. */
@@ -125,7 +145,7 @@ export class SessionManager {
 
   // ---------------- read-only views ----------------
 
-  /** Every live (non-terminal) session. */
+  /** Every session the manager holds: the running ones, and finished ones that have not been dropped. */
   public allSessions(): EpochSession[] {
     return [...this.fullSessions.values(), ...this.partialSessions.values()];
   }
@@ -151,18 +171,18 @@ export class SessionManager {
 
   // ---------------- event entry points ----------------
 
-  /** Called by ProverNode after a chain-checkpointed event has been added to the store. */
+  /** Called when a checkpoint of the epoch is in the store: newly registered, or seen again on a retry. */
   public onCheckpointAdded(epoch: EpochNumber): Promise<void> {
     return this.scheduleReconcile({ kind: 'checkpoint', epoch });
   }
 
-  /** Called by ProverNode after a chain-pruned event has flipped store provers to pruned. */
+  /** Called after a prune has removed provers of these epochs from the store. */
   public onPrune(affectedEpochs: EpochNumber[]): Promise<void> {
     return this.scheduleReconcile({ kind: 'prune', affectedEpochs });
   }
 
   /**
-   * Called periodically by ProverNode's ticker. Picks up epochs that have become complete
+   * Called by the periodic tick that `start()` arms. Picks up epochs that have become complete
    * by time without a fresh checkpoint event (e.g. the epoch's last slots are empty), and
    * advances to the next epoch once the previous one is proven on L1. Also revisits epochs the
    * proven tip already covers, which this prover still proves if it holds no full-epoch proof of them.
@@ -237,7 +257,7 @@ export class SessionManager {
   private async reconcile(trigger: ReconcileTrigger): Promise<void> {
     this.log.debug(`Reconciling`, { trigger });
 
-    this.recreateInvalidSessions();
+    this.replaceInvalidSessions();
 
     if (!this.deps.config.disableFullEpochProving) {
       if (trigger.kind === 'tick') {
@@ -254,53 +274,66 @@ export class SessionManager {
     }
   }
 
-  private recreateInvalidSessions(): void {
-    for (const [key, session] of Array.from(this.fullSessions.entries())) {
-      const canonical = this.checkpointsForSpec(session.getSpec());
-      const contentChanged = !this.checkpointsMatch(session.getCheckpoints(), canonical);
+  /**
+   * Brings the existing sessions in line with the store. A session proves a fixed list of checkpoints, so when the
+   * store's checkpoints for its slot range change, the session is cancelled and a new one takes its place.
+   */
+  private replaceInvalidSessions(): void {
+    this.replaceInvalidSessionsIn(this.fullSessions);
+    this.replaceInvalidSessionsIn(this.partialSessions);
+  }
 
-      if (session.isTerminal()) {
-        // Retain successful sessions until their canonical content changes: the archiver's proven tip
-        // can lag behind submission. Retain genuine failures too, to avoid repeating deterministic failures.
-        // A canonical change replaces either marker so the epoch can be proved over the new content.
-        if ((session.getState() === 'completed' || session.hasFailed()) && !contentChanged) {
-          continue;
-        }
-        this.fullSessions.delete(key);
-        if (contentChanged && this.canBuildOver(canonical)) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
-          this.fullSessions.set(key, newSession);
-          void this.runSession(newSession);
-        }
+  private replaceInvalidSessionsIn<K>(sessions: Map<K, EpochSession>): void {
+    for (const [key, session] of Array.from(sessions.entries())) {
+      // A finished partial session is dropped whatever the store holds, so its checkpoints are not looked up.
+      if (session.isTerminal() && session.getKind() !== 'full') {
+        sessions.delete(key);
         continue;
       }
-
-      if (contentChanged) {
-        this.fireAndForgetCancel(session, 'canonical content changed');
-        this.fullSessions.delete(key);
-        if (this.canBuildOver(canonical)) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
-          this.fullSessions.set(key, newSession);
-          void this.runSession(newSession);
-        }
-      }
-    }
-    for (const [key, session] of Array.from(this.partialSessions.entries())) {
-      if (session.isTerminal()) {
-        this.partialSessions.delete(key);
+      const current = this.checkpointsForSpec(session.getSpec());
+      const verdict = this.judgeSession(session, current);
+      if (verdict === 'keep') {
         continue;
       }
-      const canonical = this.checkpointsForSpec(session.getSpec());
-      if (!this.checkpointsMatch(session.getCheckpoints(), canonical)) {
+      if (!session.isTerminal()) {
         this.fireAndForgetCancel(session, 'canonical content changed');
-        this.partialSessions.delete(key);
-        if (this.canBuildOver(canonical)) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
-          this.partialSessions.set(key, newSession);
-          void this.runSession(newSession);
-        }
+      }
+      sessions.delete(key);
+      if (verdict === 'replace') {
+        const replacement = this.constructSession(session.getSpec(), current);
+        sessions.set(key, replacement);
+        void this.runSession(replacement);
       }
     }
+  }
+
+  /**
+   * Decides what happens to a session, given the store's current checkpoints for its slot range.
+   *
+   * | Session                                | Checkpoints unchanged | Checkpoints changed |
+   * | -------------------------------------- | --------------------- | ------------------- |
+   * | Still running                          | keep                  | replace             |
+   * | Full, ended `completed` or `failed`    | keep                  | replace             |
+   * | Full, ended in any other state         | drop                  | replace             |
+   * | Partial, ended in any state            | drop                  | drop                |
+   *
+   * A full session that completed is kept because the archiver's proven tip can lag the submission, and without the
+   * session the tick would prove the epoch again. One that failed with healthy provers is kept so the same checkpoints
+   * are not proven again to the same failure. "Replace" becomes "drop" when no session can be built over the new
+   * checkpoints; a dropped full session is opened again later by the normal rules for opening one.
+   */
+  private judgeSession(session: EpochSession, current: readonly CheckpointProver[]): 'keep' | 'drop' | 'replace' {
+    const isFull = session.getKind() === 'full';
+    if (this.checkpointsMatch(session.getCheckpoints(), current)) {
+      if (!session.isTerminal()) {
+        return 'keep';
+      }
+      return isFull && (session.getState() === 'completed' || session.hasFailed()) ? 'keep' : 'drop';
+    }
+    if (session.isTerminal() && !isFull) {
+      return 'drop';
+    }
+    return this.canBuildOver(current) ? 'replace' : 'drop';
   }
 
   /** A session may be built over a checkpoint set only when it is non-empty and contains no failed prover. */
@@ -308,82 +341,85 @@ export class SessionManager {
     return canonical.length > 0 && !this.hasFailedProver(canonical);
   }
 
-  /**
-   * Opens a full session for the epoch once it is complete and fully in the store. An epoch the proven tip already
-   * covers opens only when `openCovered` is set, which only the tick does. `reservedSlots` session slots are left
-   * free for other work.
-   */
-  private async openFullSessionIfReady(
-    epoch: EpochNumber,
-    opts: { openCovered: boolean; reservedSlots: number },
-  ): Promise<void> {
-    // A session present here already covers the epoch: either live, or a retained completed/failed
-    // session kept by `recreateInvalidSessions` as a "do not re-prove" marker. Retained sessions are
-    // replaced only when their canonical content changes.
-    if (this.fullSessions.has(epoch)) {
+  /** Opens a full session for the epoch unless something blocks it. A later reconcile tries again. */
+  private async openFullSessionIfReady(epoch: EpochNumber, opts: FullSessionOptions): Promise<void> {
+    const result = await this.checkFullSession(epoch, opts);
+    if ('blocker' in result) {
+      // These two hold for most epochs on most ticks, so logging them would drown the others.
+      if (result.blocker !== 'session-exists' && result.blocker !== 'epoch-incomplete') {
+        this.log.debug(`Not opening a full session for epoch ${epoch}: ${result.blocker}`, { epoch, ...result });
+      }
       return;
+    }
+    const session = this.constructSession(result.spec, result.checkpoints);
+    this.fullSessions.set(epoch, session);
+    void this.runSession(session);
+  }
+
+  /**
+   * Returns the checkpoints a full session for the epoch would prove, or the first reason it cannot be opened now.
+   * Every check that can reject the epoch from the store and the cached registration read runs before the epoch's
+   * checkpoints are loaded from the archiver: a covered epoch that stays stored without a session is visited on
+   * every tick, and a restart catch-up registers one checkpoint at a time.
+   */
+  private async checkFullSession(
+    epoch: EpochNumber,
+    opts: FullSessionOptions,
+  ): Promise<
+    | { blocker: FullSessionBlocker; archiverCount?: number; storeCount?: number }
+    | { spec: SessionSpec; checkpoints: CheckpointProver[] }
+  > {
+    // A session present here is running, or is a finished session kept by `judgeSession`.
+    if (this.fullSessions.has(epoch)) {
+      return { blocker: 'session-exists' };
     }
     if (this.atMaxSessionLimit(opts.reservedSlots)) {
-      this.log.debug(`Skipping full-session open for epoch ${epoch}: max pending jobs reached`);
-      return;
+      return { blocker: 'session-limit-reached' };
     }
     if (!(await this.deps.l2BlockSource.isEpochComplete(epoch))) {
-      return;
+      return { blocker: 'epoch-incomplete' };
     }
     const l1Constants = await this.getL1Constants();
     const deadline = this.computeDeadline(epoch);
     if (deadline && deadline.getTime() <= this.deps.dateProvider.now()) {
-      // L1 no longer accepts a proof of the epoch; its checkpoints stay in the store until the expiry sweep reaps them.
-      return;
+      // L1 no longer accepts a proof of the epoch. Its checkpoints stay in the store until the expiry sweep.
+      return { blocker: 'deadline-passed' };
     }
     const [fromSlot, toSlot] = getSlotRangeForEpoch(epoch, l1Constants);
-    const canonical = this.deps.checkpointStore.listInSlotRange(fromSlot, toSlot);
-    if (this.hasFailedProver(canonical)) {
-      // A checkpoint prover in the set has failed (a sub-tree fault or a prune-induced fork fault), so a
-      // session over it would fail immediately. Don't re-create it every tick — it recovers when a
-      // prune/re-add replaces the failed prover with a fresh one, or fails for good at expiry.
-      this.log.debug(`Skipping full-session open for epoch ${epoch}: a checkpoint prover has failed`, { epoch });
-      return;
+    const checkpoints = this.deps.checkpointStore.listInSlotRange(fromSlot, toSlot);
+    if (this.hasFailedProver(checkpoints)) {
+      // A session over a failed prover would fail at once. The epoch recovers when a prune and re-registration
+      // replace the prover.
+      return { blocker: 'checkpoint-prover-failed' };
     }
     // The proven tip can cover an epoch for which this prover holds no full-epoch proof: a proof landed while the
     // epoch was still open, which L1 registers as non-full. L1 still accepts and rewards our full-epoch proof until
-    // the submission window closes, so the tip alone does not make the epoch done. These store-only checks and the
-    // cached registration read come before loading the epoch's full checkpoints from the archiver: a covered epoch
-    // that stays stored without a session is visited on every tick, and a restart catch-up registers one checkpoint
-    // at a time. While the store holds only part of the epoch, the read uses the wrong count and is rejected below.
-    if (canonical.length > 0 && (await this.isProvenChainEncompassing(canonical))) {
+    // the submission window closes, so the tip alone does not make the epoch done. While the store holds only part
+    // of the epoch, the registration is read with the wrong count; the archiver comparison below then blocks.
+    if (checkpoints.length > 0 && (await this.isProvenChainEncompassing(checkpoints))) {
       if (!opts.openCovered) {
-        return;
+        return { blocker: 'covered-epoch-waits-for-tick' };
       }
-      const registered = await this.deps.proofStatus.readOwnFullEpochProof(epoch, canonical.length);
+      const registered = await this.deps.proofStatus.readOwnFullEpochProof(epoch, checkpoints.length);
       if (registered === undefined) {
-        this.log.debug(`Skipping full-session open for epoch ${epoch}: our full-epoch proof registration is unread`, {
-          epoch,
-        });
-        return;
+        return { blocker: 'own-proof-registration-unavailable' };
       }
       if (registered) {
-        this.log.debug(`Skipping full-session open for epoch ${epoch}: our full-epoch proof is already on L1`, {
-          epoch,
-        });
-        return;
+        return { blocker: 'own-proof-already-on-l1' };
       }
     }
     const archiverCps = await this.deps.l2BlockSource.getCheckpoints({ epoch });
     if (archiverCps.length === 0) {
-      return;
+      return { blocker: 'archiver-has-no-checkpoints' };
     }
-    if (!this.archiverFullyCovered(archiverCps, canonical)) {
-      this.log.debug(`Skipping full-session open for epoch ${epoch}: archiver checkpoints not all in store`, {
+    if (!this.archiverFullyCovered(archiverCps, checkpoints)) {
+      return {
+        blocker: 'checkpoints-missing-from-store',
         archiverCount: archiverCps.length,
-        storeCount: canonical.length,
-      });
-      return;
+        storeCount: checkpoints.length,
+      };
     }
-    const spec: SessionSpec = { kind: 'full', epochNumber: epoch, fromSlot, toSlot };
-    const session = this.constructSession(spec, canonical);
-    this.fullSessions.set(epoch, session);
-    void this.runSession(session);
+    return { spec: { kind: 'full', epochNumber: epoch, fromSlot, toSlot }, checkpoints };
   }
 
   private openPartialSession(spec: SessionSpec): void {
@@ -462,11 +498,9 @@ export class SessionManager {
     const state = await session.start();
     this.log.info(`Session ${session.getId()} exited with state ${state}`);
 
-    // A full session that failed on its own account (top-tree/submit failed with every prover healthy)
-    // is a genuine, race-free failure: upload its post-mortem once. `recreateInvalidSessions` retains
-    // the terminal session so this fires exactly once (it is never re-run over the same content). A
-    // `stopped` session (a prover under it failed) is not uploaded — it may be a prune, and recovers on
-    // re-add.
+    // A full session that ended `failed` had healthy provers, so the failure was not caused by a prune. Its
+    // data is uploaded once: `judgeSession` keeps the session, so the same checkpoints are not run again. A
+    // `stopped` session may have failed because of a prune and is not uploaded.
     if (session.getKind() === 'full' && session.hasFailed() && this.deps.onSessionFailed) {
       try {
         await this.deps.onSessionFailed(session);

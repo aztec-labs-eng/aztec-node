@@ -31,7 +31,7 @@ export type SessionKind = 'full' | 'partial';
  * concrete prover set the session holds is the *implementation* of the spec — frozen
  * at construction time, derived from the canonical content for `[fromSlot, toSlot]`.
  *
- * Reconciliation in `ProverNode` is uniform across kinds: whenever the canonical
+ * Reconciliation in `SessionManager` is uniform across kinds: whenever the canonical
  * content for the slot range changes, the session is cancelled and replaced with a
  * fresh session that **preserves the slot range** but adopts the new checkpoints.
  *
@@ -174,10 +174,6 @@ export class EpochSession implements Traceable {
 
   public getKind(): SessionKind {
     return this.spec.kind;
-  }
-
-  public getDeadline(): Date | undefined {
-    return this.deps.deadline;
   }
 
   public getCheckpoints(): readonly CheckpointProver[] {
@@ -464,9 +460,9 @@ export class EpochSession implements Traceable {
   private toTopTreeHooks(): TopTreeJobHooks {
     const hooks = this.deps.hooks;
     return {
-      // `beforeProve` fires once the sub-tree (checkpoint block) proofs are ready and the root prove is
-      // about to start — the boundary between `awaiting-checkpoints` and proving the top tree. Don't
-      // clobber a terminal state set concurrently by cancel().
+      // `beforeProve` fires once the top-tree job has built its blob challenges and is about to prove. The
+      // block-level proofs of some checkpoints may still be pending then: the top tree takes them as they
+      // arrive. Don't clobber a terminal state set concurrently by cancel().
       beforeProve: async () => {
         if (!this.isTerminal()) {
           this.state = 'awaiting-root';

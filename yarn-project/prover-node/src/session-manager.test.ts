@@ -1273,7 +1273,7 @@ describe('SessionManager', () => {
       {
         checkpointStore: store,
         l2BlockSource,
-        proverFactory: {} as any,
+        proverFactory: mock<SessionManagerDeps['proverFactory']>(),
         proverId: EthAddress.ZERO,
         proofStatus,
         publishingService,
