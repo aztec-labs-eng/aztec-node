@@ -228,6 +228,9 @@ function bench_cmds {
   for client_flow in client_flows/bridging client_flows/deployments client_flows/amm client_flows/account_deployments client_flows/transfers client_flows/storage_proof; do
     echo "$hash:ISOLATE=1:CPUS=8:NAME=$client_flow BENCHMARK_CONFIG=key_flows LOG_LEVEL=error BENCH_OUTPUT=bench-out/ yarn-project/end-to-end/scripts/run_test.sh simple $client_flow"
   done
+  for environment in node browser; do
+    echo "$hash:ISOLATE=1:CPUS=8:TIMEOUT=20m:NAME=pxe_simulation/$environment LOG_LEVEL=error BENCH_OUTPUT=bench-out/pxe_simulation_$environment.bench.json yarn-project/end-to-end/scripts/run_test.sh simple pxe_simulation/$environment"
+  done
 }
 
 # Live-capture Chonk IVC inputs from the e2e stack into $bench_fixtures_dir.

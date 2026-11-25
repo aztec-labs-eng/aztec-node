@@ -212,7 +212,7 @@ Core libraries used by both server and client:
 - **noir-protocol-circuits-types**: TypeScript bindings for Noir protocol circuits
 - **bb-prover**: Barretenberg prover integration for generating ZK proofs
 - **ethereum**: L1 contract interactions, deployment, and rollup publishing
-- **kv-store**: Key-value storage abstraction (LMDB for server, IndexedDB for browser)
+- **kv-store**: Key-value storage abstraction (LMDB for server, SQLite on OPFS for browser)
 
 ## Git & PR Guidelines
 
