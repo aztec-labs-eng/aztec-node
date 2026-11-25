@@ -93,7 +93,7 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Deprecations
 
-- **`try_get_sk_app` replaces `get_nhk_app`, `get_ovsk_app` and `get_key_validation_request`.** The old functions still work and are deprecated. `try_get_sk_app`, in `aztec::keys::getters`, takes the type of the key (`KeyType::nullifier_hiding()`, `incoming_viewing()`, `outgoing_viewing()` or `tagging()`), and returns `None` instead of failing when no account in scope has the key. Code that relied on the failure calls `expect` on the result. Code that needs the whole `KeyValidationRequest` can call `try_get_key_validation_request`, which takes the key index like `get_key_validation_request` and also returns `None`.
+- **`try_get_sk_app` replaces `get_nhk_app`, `get_ovsk_app` and `get_key_validation_request`.** The old functions still work and are deprecated. `try_get_sk_app`, in `aztec::keys::getters`, takes the type of the key (`KeyType::nullifier_hiding()`, `incoming_viewing()`, `outgoing_viewing()` or `tagging()`), and returns `None` instead of failing when no account in scope has the key. Code that relied on the failure calls `expect` on the result.
 
   ```diff
   - let secret = get_nhk_app(npk_m_hash);
