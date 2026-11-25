@@ -15,7 +15,7 @@ pub unconstrained fn get_key_validation_request(pk_m_hash: Field, key_index: Fie
 }
 
 /// Returns `None` if no account in scope has the key.
-pub unconstrained fn try_get_key_validation_request(
+pub(crate) unconstrained fn try_get_key_validation_request(
     pk_m_hash: Field,
     key_index: Field,
 ) -> Option<KeyValidationRequest> {
