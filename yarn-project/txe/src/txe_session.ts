@@ -493,7 +493,18 @@ export class TXESession implements TXESessionStateHandler {
     }
   }
 
-  /** Ends the current operation (committing its change set, or discarding it on failure) and begins a new one. */
+  /**
+   * Commits the current operation's change set and begins the next.
+   *
+   * Every top-level call and every {@link getPrivateEvents} is one operation, and so is each private, public or utility
+   * context, from entering it until the session returns to the top-level state. The operation's writes are staged in
+   * the session's open change set and committed here, so the next operation reads them back from the database.
+   *
+   * An operation that fails never reaches this, so its change set stays open with the failed operation's writes, and
+   * the next commit would include them. That commit never happens: Noir cannot recover from a failed oracle call, so
+   * the failure ends the test, and nargo sends no further calls to this session. It closes the test's connection
+   * instead, which disposes the session (see {@link dispose}) and drops the open change set with it.
+   */
   private async cycleOperation(): Promise<string> {
     const operationArgs = {
       stagedWriteCoordinator: this.stagedWriteCoordinator,
@@ -658,9 +669,9 @@ export class TXESession implements TXESessionStateHandler {
   async getPrivateEvents(selector: EventSelector, contractAddress: AztecAddress, scope: AztecAddress): Promise<Fr[][]> {
     const handler = this.handlerAsTxe();
     await handler.syncContractNonOracleMethod(contractAddress, scope, this.currentChangeSetId);
-    // Cycle the change set to commit the stores after the contract sync.
+    const events = await handler.getPrivateEvents(selector, contractAddress, scope, this.currentChangeSetId);
     await this.cycleOperation();
-    return handler.getPrivateEvents(selector, contractAddress, scope, this.currentChangeSetId);
+    return events;
   }
 
   private handlerAsTxe(): ITxeExecutionOracle {
