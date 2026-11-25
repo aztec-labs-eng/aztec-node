@@ -1,607 +1,461 @@
 # Prover Node
 
-The prover node turns sequenced checkpoints into epoch proofs that get submitted to the L1
-rollup contract.  It runs alongside an Aztec validator/full-node and consumes the
-canonical chain view those nodes emit, proving epochs **optimistically** — sub-tree
-work begins the moment a checkpoint lands on L1, not when the epoch closes.
+The prover node works on generating epoch proofs for checkpoints that have been sequenced (submitted to L1). The proofs get submitted to the L1 rollup contract. The prover node needs an Aztec validator/full-node to access the canonical chain view. The prover node starts proving work on a checkpoint immediately when it lands on L1, it doesn't wait for the epoch to close. This is called **optimistic proving**.
 
-This document describes the internal architecture: the state held by the prover-node,
-the events that drive it, and the data flow from a fresh `chain-checkpointed` event
-through to a `submitEpochRootProof` on L1.
+This document describes the internal architecture. Paths are relative to `yarn-project/prover-node/src`.
 
 ## Contents
 
-1. [Architecture](#architecture)
-2. [CheckpointProver lifecycle](#checkpointprover-lifecycle)
-3. [EpochSession lifecycle](#epochsession-lifecycle)
-4. [Event flow](#event-flow)
-5. [Walkthroughs](#walkthroughs)
-6. [Design rationale](#design-rationale)
-7. [Configuration](#configuration)
-8. [Failure handling and observability](#failure-handling-and-observability)
+1. [Background](#background)
+2. [Components](#components)
+3. [Proving one epoch](#proving-one-epoch)
+4. [States](#states)
+5. [When things do not go to plan](#when-things-do-not-go-to-plan)
+6. [The `startProof` and `getJobs` API](#the-startproof-and-getjobs-api)
+7. [Proving blocks before their checkpoint lands](#proving-blocks-before-their-checkpoint-lands)
+8. [Configuration](#configuration)
+9. [Logs, metrics and failure uploads](#logs-metrics-and-failure-uploads)
+10. [Design decisions](#design-decisions)
+11. [Known limitations](#known-limitations)
 
-## Architecture
+## Background
 
-```mermaid
-flowchart TB
-  L2BlockStream -->|chain-checkpointed| ProverNode
-  L2BlockStream -->|chain-pruned| ProverNode
-  L2BlockStream -->|chain-proven| ProverNode
-  L2BlockStream -->|any event| ProverNode
-  ProverNode --> CheckpointStore
-  ProverNode --> ChonkCache
-  ProverNode --> SessionManager
-  ProverNode --> ProofPublishingService
-  SessionManager --> EpochTicker[(periodic tick)]
-  SessionManager --> FullSessions[(fullSessions)]
-  SessionManager --> PartialSessions[(partialSessions)]
-  FullSessions -.referenced checkpoints.-> CheckpointStore
-  PartialSessions -.referenced checkpoints.-> CheckpointStore
-  FullSessions --> TopTreeJob
-  PartialSessions --> TopTreeJob
-  TopTreeJob -->|PublishCandidate| ProofPublishingService
-  ProofPublishingService -->|fresh per publish| ProverNodePublisher
-  ProverNodePublisher --> L1[L1 Rollup]
+A **checkpoint** is the set of blocks built in one L2 slot, posted to L1 together. An **epoch** is a fixed number of
+consecutive slots. The **proven tip** is the highest block L1 has accepted a proof for.
+
+L1 accepts a proof of an epoch until the **proof-submission window** closes, at the start of epoch
+`E + proofSubmissionEpochs + 1`. After that the epoch is **expired**.
+
+An epoch proof covers the first `k` checkpoints of an epoch.
+
+- A **full proof** covers every checkpoint of an epoch that has ended. L1 records it per prover and rewards every
+  prover that submits one inside the window.
+- A **partial proof** covers a prefix of an epoch that may still be open. It moves the proven tip. L1 does not count
+  it as that prover's full proof.
+
+L1 decides which of the two a proof is when the proof is submitted, from the epoch and the checkpoints it covers.
+
+Because of partial proofs, the proven tip can pass an epoch for which this prover holds no full proof. This document
+calls that a **covered epoch**. The prover node still proves it in full while the window is open.
+
+Proving has two levels:
+
+- **Block-level proofs**, one set per checkpoint: transaction proofs, a block root per block, block merges, and one
+  inbox parity proof. They need the checkpoint's transactions and a world-state fork per block.
+- **The top tree**, one per epoch proof: a checkpoint root per checkpoint, merged up to the epoch root.
+
+Proving jobs run on agents that take them from the **proving broker**. The broker identifies a job by its epoch, its
+type and a hash of its inputs, so a job requested twice is proved once.
+
+## Components
+
+| Component | File | What it owns |
+| --- | --- | --- |
+| `ProverNode` | `prover-node.ts` | Builds the others, starts and stops them in order, serves the RPC API |
+| `CheckpointFollower` | `checkpoint-follower.ts` | The block stream and the cursor of processed checkpoints |
+| `CheckpointStore` | `checkpoint-store.ts` | One `CheckpointProver` per checkpoint the node may still prove |
+| `CheckpointProver` | `job/checkpoint-prover.ts` | Block-level proving of one checkpoint |
+| `SessionManager` | `session-manager.ts` | Every `EpochSession`, and the decision to create, keep or replace one |
+| `EpochSession` | `job/epoch-session.ts` | One attempt to prove and publish a range of slots |
+| `TopTreeJob` | `job/top-tree-job.ts` | One top-tree proving run |
+| `ProofPublishingService` | `proof-publishing-service.ts` | The queue of finished proofs waiting to go to L1 |
+| `ProverNodePublisher` | `prover-node-publisher.ts` | One L1 submission |
+| `EpochProofStatus` | `epoch-proof-status.ts` | Reads of what L1 has proven |
+| `EpochExpirySweep` | `epoch-expiry-sweep.ts` | Removal of expired epochs |
+| `FailureUploader` | `failure-uploader.ts` | Uploads of failed proving data |
+| `EarlyBlockProver` | `early-block-prover.ts` | Optional proving of blocks before their checkpoint lands |
+
+Who calls whom:
+
+```
+archiver ──events──▶ CheckpointFollower ──▶ CheckpointStore ──▶ CheckpointProver ──jobs──▶ broker
+                          │                      ▲                    │
+                          │ callbacks            │ reads              │ block-level proofs
+                          ▼                      │                    ▼
+                     SessionManager ──────▶ EpochSession ──▶ TopTreeJob ──jobs──▶ broker
+                                                 │
+                                                 ▼ epoch proof
+                                       ProofPublishingService ──▶ ProverNodePublisher ──▶ L1
 ```
 
-The prover-node splits responsibility between four classes:
-
-- **`ProverNode`** — owns the long-lived collections, wires the L2BlockStream, and
-  translates each chain event into a single method call on the `SessionManager` or
-  `ProofPublishingService`. It also performs side effects that don't belong on an
-  `EpochSession`: registering new checkpoints with the store per event, and sweeping expired
-  epochs out of the cache and the store on a periodic ticker (see below). It uploads post-mortem
-  snapshots on failure at two levels: per checkpoint when a `CheckpointProver` fails (its `onFailed`
-  callback), and per session when a full session fails on its own account (`onSessionFailed` /
-  `EpochSession.hasFailed()`).
-- **`CheckpointStore`** — a registry of `CheckpointProver` instances keyed by
-  `(checkpointNumber, slot, archiveRoot)`. Each `CheckpointProver` runs its own sub-tree pipeline
-  (tx gather → block processing → block-rollup proofs), starting eagerly the moment a
-  checkpoint is registered. The store holds the canonical checkpoint content that
-  `EpochSession`s query when assembling their subsets; a prune cancels and removes the affected
-  provers, so every prover in the store is canonical.
-- **`SessionManager`** — owns every live `EpochSession`, the serial reconcile queue,
-  the periodic tick, and all `EpochSession` lifecycle decisions. `ProverNode` calls into it
-  via `onCheckpointAdded`, `onPrune`, and `startProof`. Every trigger it receives is
-  translated into a `reconcile(trigger)` call, a single idempotent function that walks
-  all `EpochSession`s, cancels any whose canonical content has shifted, re-creates them with
-  the new content, and opens fresh full `EpochSession`s for any epoch that has become provable.
-  It never builds a session over a **failed** `CheckpointProver` (one whose block proofs rejected —
-  a sub-tree fault or a prune-induced fork fault): a session over it could only fail, so the epoch is
-  cheaply skipped until a prune/re-add installs a fresh prover in its place, at which point a rebuilt
-  session reuses every already-completed sub-proof from the content-addressed broker. Reconcile runs on
-  a `SerialQueue` (from `@aztec-labs/foundation/queue`), so two concurrent triggers can never interleave on an
-  `await` and race on the `EpochSession` maps.
-- **`ProofPublishingService`** — central owner of L1 proof submission. `EpochSession`s hand
-  their top-tree proofs to the service as `PublishCandidate`s; the service serialises
-  one publish at a time against a freshly-created `ProverNodePublisher`, gates eligibility
-  on the proven block tip, picks the longest candidate per epoch as the winner
-  (others resolve `'superseded'`), and enforces a per-candidate `deadline`. It runs its
-  own `drain()` on a separate `SerialQueue`: submits, withdrawals, chain-proven advances,
-  and per-candidate deadline expiries all enqueue a drain pass, so the eligibility
-  re-check and the L1 publish never interleave with each other.
-
-## CheckpointProver lifecycle
-
-A `CheckpointProver` is content-addressed by `(checkpoint.number, slot, archiveRoot)`,
-where `archiveRoot` is the checkpoint's own archive root (its post-state). Keying on the
-post-state makes the identity precise: two checkpoints are "the same" iff they produce
-the same archive — so a reorg branch, or a replacement built on the same predecessor but
-with different content, yields a different archive root and a distinct `CheckpointProver`. A prune
-cancels and removes a prover — its sub-tree work forks world-state per block and cannot survive the
-prune — so a re-add, even of identical content, constructs a fresh `CheckpointProver` (block-rollup
-jobs already completed in the proving broker are still reused, as they are content-addressed).
-
-```mermaid
-stateDiagram-v2
-  [*] --> Created
-  Created --> Proving: gather + execute
-  Proving --> Proven: sub-tree resolves blockProofs
-  Proving --> Cancelled: cancel() (prune / shutdown / epoch-session error)
-  Proven --> Cancelled: cancel() (prune / reap)
-  Proven --> Reaped: reapExpired(epoch)
-  Cancelled --> [*]
-```
-
-A prune **cancels and removes** the affected `CheckpointProver`s from the store: a prover's
-sub-tree work forks world-state per block, and an L1 prune of a base block faults those reads,
-so there is nothing to preserve across a reorg. A re-add — even of identical content — therefore
-constructs a fresh `CheckpointProver`. `EpochSession`s ask the store for the checkpoints in a slot
-range; every prover in the store is canonical.
-
-### Removal rules
-
-- **Pruned**: `CheckpointStore.cancelAndRemoveAboveBlock(target)` cancels and removes every
-  `CheckpointProver` whose last block is above the prune target, the moment a `chain-pruned`
-  event arrives.
-- **Expired**: `CheckpointStore.reapExpired(expiredEpoch)` drops any `CheckpointProver` whose
-  epoch is at or below the supplied expired epoch. Once an epoch's proof-submission window has
-  closed, its proof can no longer be accepted on L1, so the `CheckpointProver` is no longer needed.
-- **Shutdown**: `CheckpointStore.stop()` cancels every remaining prover and awaits its teardown
-  (including teardowns still in flight for provers already removed by a prune or reap).
-
-### Eager tx gathering
-
-A `CheckpointProver` starts its tx gather + sub-tree pipeline **in its constructor**.
-The tx provider is injected as a dependency,
-and the `CheckpointProver` pulls its own txs via `txProvider.getTxsForBlock(block)` for each
-block in its checkpoint.
-
-This means the moment a checkpoint lands on L1, sub-tree proving is already in flight.
-By the time the epoch closes (and the `EpochSession` is constructed), most or all of the
-block-rollup proofs are already done — the `EpochSession` only has to drive the top tree.
-
-## EpochSession lifecycle
-
-An `EpochSession` is identified by a slot-based **spec**:
-
-```ts
-interface SessionSpec {
-  kind: 'full' | 'partial';
-  epochNumber: EpochNumber;
-  fromSlot: SlotNumber;
-  toSlot: SlotNumber;
-}
-```
-
-The spec declares *what to prove* (a slot range).  The concrete checkpoint set the
-`EpochSession` holds is the *implementation* of the spec — frozen at construction time,
-derived from the canonical content for that slot range.
-
-```mermaid
-stateDiagram-v2
-  [*] --> initialized
-  initialized --> awaiting_checkpoints: start()
-  awaiting_checkpoints --> awaiting_root: sub-tree proofs ready, top-tree prove begins
-  awaiting_root --> publishing_proof: epoch proof ready, submit to L1
-  publishing_proof --> completed: publish succeeds
-  publishing_proof --> superseded: longer same-epoch candidate wins
-  publishing_proof --> failed: L1 submission errored (provers healthy)
-  awaiting_checkpoints --> stopped: a checkpoint prover failed
-  awaiting_root --> failed: top-tree prove errored (provers healthy)
-  initialized --> timed_out: deadline
-  awaiting_checkpoints --> timed_out: deadline (EpochSession or candidate)
-  awaiting_root --> timed_out: deadline (EpochSession or candidate)
-  awaiting_checkpoints --> cancelled: cancel()
-  awaiting_root --> cancelled: cancel()
-  completed --> [*]
-  superseded --> [*]
-  cancelled --> [*]
-  timed_out --> [*]
-  stopped --> [*]
-  failed --> [*]
-```
-
-A fault settles the `EpochSession` in one of two terminal states:
-
-- **`stopped`** — a `CheckpointProver` under the session failed (its block proofs rejected). This may
-  be a prune-induced fork fault, so it is *not* a verdict on the epoch and is *not* uploaded. The
-  reconciler drops the session and, guarded by `isFailed()`, does not rebuild over the failed prover;
-  a prune/re-add installs a fresh prover and the epoch is retried.
-- **`failed`** — the session's own work (top-tree prove or L1 submit) failed while *every* checkpoint
-  prover succeeded. Because healthy provers rule out a prune, this is a genuine, race-free failure
-  (`EpochSession.hasFailed()`). The reconciler retains such a full session (so the tick does not
-  re-prove a deterministically-failing epoch) and uploads a post-mortem exactly once. No prune/fault
-  classification is needed — the two states carry it.
-
-The non-terminal states track the window between `start()` and the L1 submission:
-
-- `awaiting-checkpoints` — a `TopTreeJob` is awaiting each checkpoint's sub-tree result
-  (`CheckpointProver.whenBlockProofsReady`) before the top-tree prove can begin.
-- `awaiting-root` — the sub-tree proofs are ready and the top-tree (root) prove is running,
-  assembling the epoch proof (set via the `TopTreeJob` `beforeProve` hook).
-- `publishing-proof` — the epoch proof is being submitted to L1 via `ProofPublishingService`.
-
-`cancel()` and the deadline can fire during any of these pre-submit phases; a terminal state
-set that way wins over the phase transitions (which are guarded by `isTerminal()`).
-
-The `EpochSession` does three sequential things: (1) run a `TopTreeJob` over the frozen
-checkpoint subset, (2) hand the resulting proof to `ProofPublishingService` as a
-`PublishCandidate`, (3) translate the service's outcome into a terminal state.
-Predecessor gating, same-epoch dedup, deadline enforcement, and the L1 tx are all
-the `ProofPublishingService`'s concern; the `EpochSession` is just the producer of one
-candidate and the observer of its outcome.
-
-Outcome → state mapping:
-
-| `PublishOutcome` | `EpochSession` state |
-|---|---|
-| `published` | `completed` |
-| `superseded` | `superseded` |
-| `failed` | `failed` |
-| `expired` | `timed-out` |
-| `withdrawn` | `cancelled` |
-
-There is a single deadline — the proof submission window — that applies across both
-proving and publishing. Before submission, the `EpochSession` arms its own timer against
-it: if proving doesn't finish in time, the `EpochSession` enters `timed-out` via
-`cancel('deadline')`. After submission, the publishing service enforces the same deadline
-on the candidate. It's the same instant throughout; only which component enforces it
-changes once the candidate has been handed off.
-
-### Full vs partial
-
-Every `EpochSession` — full or partial — has `fromSlot = firstSlotOfEpoch(N)`. The L1 rollup
-contract requires every proof to extend from the previous epoch's proven tip, so
-there's no value in starting later than the epoch boundary. The two kinds differ
-only in `toSlot` and in how the publishing service treats their candidate:
-
-- **Full** `EpochSession`s are opened by reconcile when the epoch is complete on L1 *and*
-  every archiver-reported checkpoint is present in the store. If the proven tip already covers
-  the epoch, reconcile also requires that L1 holds no full-epoch proof of it under our prover id
-  (see [Periodic tick](#periodic-tick)). Their `toSlot` is
-  the epoch's last slot. The publishing service never auto-supersedes a `full`
-  candidate on proven-tip subsumption — the L1 contract records a `(epoch, prover-id)`
-  submission for every full-epoch proof, so even after another prover-node has
-  landed first, this prover's submission is still worthwhile.
-- **Partial** `EpochSession`s are constructed by an explicit `startProof(epochNumber)` API
-  call. Their `toSlot` is the last canonical slot present at request time, which may
-  be earlier than the epoch's last slot. Partial candidates are an early-finish
-  optimisation: if the proven chain has caught up to or past `endBlock` by the time
-  the publishing service picks the winner, the partial resolves `'superseded'`
-  without spending L1 gas. Dedup: if the partial's spec collapses to the full's spec
-  (canonical content already covers the whole epoch), `startProof` awaits the
-  existing full `EpochSession` instead of opening a duplicate.
-
-## ProofPublishingService
-
-The service is a single per-prover-node owner of L1 submission. `EpochSession`s call
-`submit(candidate)` and await one of five outcomes:
-
-| Outcome | Meaning |
-|---|---|
-| `published` | L1 accepted the proof. |
-| `superseded` | A longer same-epoch candidate won, or (for `partial` candidates) the proven tip has caught up to `endBlock`. |
-| `failed` | L1 submission errored. |
-| `expired` | The candidate's `deadline` elapsed before publishing started. |
-| `withdrawn` | An `EpochSession` called `withdraw(uuid)` on a still-queued candidate. |
-
-Key invariants:
-
-- **One publish at a time** via a `SerialQueue` drain.
-- **Fresh publisher per publish.** Each drain call constructs a new `ProverNodePublisher`
-  via the factory. There is no shared in-memory state across publishes.
-- **Once an L1 publish starts, it runs to completion.** `withdraw` is a queue-only
-  operation: it removes a candidate that hasn't started publishing. An in-flight
-  candidate is left alone and its outcome reports whatever L1 returned. The
-  originating `EpochSession` has already moved to a terminal state via `cancel()` and
-  ignores the late outcome.
-- **Drain reads the proven block number afresh** from `l2BlockSource` inside the
-  serial queue, so the eligibility
-  check is consistent with the publish that follows it on the same drain pass.
-- **Per-candidate `deadline`** arms a `setTimeout` (against the injected `DateProvider`).
-  When it fires, a still-queued candidate resolves `'expired'`. An in-flight publish
-  is left alone (its outcome reports the natural L1 result).
-- **Transient `publisherFactory.create()` failures are retried.** Instead of resolving
-  the candidate as `'failed'`, the service schedules another drain after a 1s backoff
-  and leaves the candidate in the queue. The candidate's `deadline` caps the total
-  retry window — persistent acquire failure resolves as `'expired'`.
-
-### Eligibility
-
-A candidate is eligible to publish when its **predecessor block is proven**
-(`startBlock - 1 <= proven`). Among eligible candidates for the same epoch, the
-one with the **highest `endBlock`** wins; the others resolve `'superseded'`.
-Partial candidates whose `endBlock <= proven` are dropped before this check
-(early-finish optimisation no longer helps); full candidates are never
-auto-superseded on the proven tip.
-
-## Event flow
-
-### chain-checkpointed
-
-```mermaid
-sequenceDiagram
-  participant L2 as L2BlockStream
-  participant PN as ProverNode
-  participant CS as CheckpointStore
-  participant CP as CheckpointProver
-  participant SM as SessionManager
-
-  L2->>PN: chain-checkpointed{checkpoint}
-  PN->>PN: collectRegisterData (prev-header, l1ToL2 messages, sibling path)
-  PN->>CS: addOrUpdate(checkpoint, data)
-  alt content key new
-    CS->>CP: new CheckpointProver(args)
-    CP->>CP: eager gather + sub-tree start
-  else content key already live
-    CS->>CP: reuse existing prover
-  end
-  PN->>SM: onCheckpointAdded(epoch)
-  SM->>SM: queue reconcile({kind:'checkpoint', epoch})
-  SM->>SM: walk EpochSessions, recreate invalid
-  SM->>SM: open full EpochSession if epoch ready
-```
-
-### chain-pruned
-
-```mermaid
-sequenceDiagram
-  participant L2 as L2BlockStream
-  participant PN as ProverNode
-  participant CS as CheckpointStore
-  participant SM as SessionManager
-
-  L2->>PN: chain-pruned{block}
-  PN->>CS: cancelAndRemoveAboveBlock(prunedToBlock)
-  CS->>CS: cancel + remove every CheckpointProver whose last block is above the target
-  PN->>SM: onPrune(affectedEpochs)
-  SM->>SM: queue reconcile({kind:'prune', affectedEpochs})
-  SM->>SM: walk EpochSessions, cancel-and-recreate those with shifted content
-```
-
-### chain-proven
-
-```mermaid
-sequenceDiagram
-  participant L2 as L2BlockStream
-  participant PN as ProverNode
-  participant PS as ProofPublishingService
-
-  L2->>PN: chain-proven{block}
-  PN->>PS: onChainProven(blockNumber)
-  PS->>PS: scheduleDrain (wake-up only, no state cached)
-  PS->>PS: drain reads proven afresh, re-checks eligibility
-```
-
-### Periodic expiry sweep
-
-```mermaid
-sequenceDiagram
-  participant T as expiryTicker (RunningPromise)
-  participant PN as ProverNode
-  participant L2 as L2BlockStream
-  participant CC as ChonkCache
-  participant CS as CheckpointStore
-
-  T->>PN: checkEpochExpiry() (every poll interval)
-  PN->>L2: getSyncedL2SlotNumber()
-  PN->>PN: latestEpoch = getEpochAtSlot(latestSlot)
-  PN->>PN: newlyExpiredUpTo = latestEpoch - (proofSubmissionEpochs + 1)
-  loop for each newly-expired epoch
-    PN->>L2: getBlocks({epoch, onlyCheckpointed})
-    PN->>CC: releaseForBlocks(blocks)
-    PN->>CS: reapExpired(epoch)
-  end
-```
-
-The sweep is driven solely by the `expiryTicker` (a `RunningPromise` armed in `start()`), which
-calls `checkEpochExpiry()` every poll interval whether or not block-stream events arrive. It is
-deliberately **not** run from `handleBlockStreamEvent` — expiry is a background sweep keyed off the
-archiver's synced slot, not part of event processing — and because a `RunningPromise` never overlaps
-its own runs, no two sweeps can race. An epoch `E` is expired once the chain reaches the start of epoch
-`E + proofSubmissionEpochs + 1` — the deadline beyond which an L1 submission for `E` would be rejected.
-Expiry only releases the chonk cache and reaps `E`'s provers.
-A monotonic high-water mark (`lastExpiredEpoch`) makes the sweep cheap: it only
-advances after a sweep completes and never revisits an epoch. It is seeded at `start()` from the catch-up
-start epoch (`resolveCatchUpStartEpoch`), the same epoch the catch-up cursor resumes after: the last
-fully-proven epoch, lowered to the last epoch whose proof-submission window has closed. While the archiver
-reports no synced slot, that window is computed from the earliest possible current epoch, the last
-fully-proven one. A restart therefore revisits proven epochs that are still in their window, and the sweep
-reaps them once their window closes.
-
-### Periodic tick
-
-`SessionManager.start()` arms a `RunningPromise` that fires
-`reconcile({ kind: 'tick' })` every `tickIntervalMs`. The tick picks up epochs that
-became complete by time alone (no fresh checkpoint event) and advances to the
-next unproven epoch once the previous one lands on L1.
-
-The tick also revisits every epoch in the `CheckpointStore` that the proven tip already covers. A proof
-that lands while its epoch is still open (another prover's, an early-withdrawal proof, or our own
-`startProof`) moves the tip over the epoch, but L1 registers it as non-full. L1 still accepts and rewards
-a full-epoch proof from every prover until the submission window closes, and only a full-epoch proof
-raises the prover's activity score. So `openFullSessionIfReady` skips a covered epoch only while
-`RollupContract.getHasSubmittedFullEpochProof` reports our own full-epoch proof of it, or while that read
-fails (retried after one slot). The checkpoint catch-up registers a fully-proven epoch's checkpoints until
-our full-epoch proof is on L1 (a node with full-epoch proving disabled still skips them). It also skips a
-fully-proven epoch when world state has pruned a snapshot that proving its checkpoints not yet in the store needs,
-which a small `WS_HISTORY_RETENTION` can do once the epoch is finalized: registering it would fail and stall the
-catch-up.
-
-Only the tick opens a new session for a covered epoch, and it tries the next unproven epoch first. While
-that epoch is complete but has no session, for example because its checkpoints are still being registered
-during a restart catch-up, the tick keeps one session slot free for it, unless one of its checkpoint provers
-has failed, which blocks it until a prune or re-add replaces that prover. A checkpoint event for a covered
-epoch leaves it to the next tick. A retained session whose checkpoints change after a prune is still replaced
-straight away by reconcile, as for any other epoch. A covered session that is already running can still hold
-the last slot when the next epoch completes later, as the previous epoch's session does in normal operation.
-
-A registered or unread answer is reused for one L2 slot, then read again. The answer only matters while the
-tip covers the epoch: if an L1 reorg rolls the tip back below a stored epoch with no retained session, the
-epoch is proven like any other unproven epoch.
-
-Apart from that cached answer, the tick keeps no per-epoch bookkeeping; two things keep it from re-proving a
-doomed epoch:
-
-- `openFullSessionIfReady` refuses to build a session when any `CheckpointProver` in the set has
-  **failed** (`isFailed()`). So a prover fault (possibly a prune) skips the epoch cheaply each tick —
-  no session, no proving — until a prune/re-add installs a fresh prover.
-- A session that failed on its own account (`hasFailed()` — top-tree/submit failed with every prover
-  healthy) is **retained** by `recreateInvalidSessions` rather than deleted, so the tick's
-  `fullSessions.has(epoch)` check skips it. It is replaced only when its canonical content changes (a
-  re-add), so a deterministically-failing epoch is not re-proved every tick.
-
-Transient blockers (max-pending-jobs reached, archiver still indexing, a failed L1 read of our full-epoch
-proof registration) create no session and no failed prover, so a later tick tries again. A failed read is
-retried after one L2 slot, so an L1 outage costs at most one slow read per slot for each covered epoch. The
-checkpoint catch-up treats a failed read the other way: it registers the epoch's checkpoints rather than
-stalling, and reconcile checks again before proving.
-
-## Walkthroughs
-
-### checkpoint-added → prune → checkpoint-added (reorg resilience)
-
-State: epoch N has checkpoints c1..c4 (slots s1..s4).  `fullSessions[N]` holds `EpochSession`
-**A** with spec `{kind:'full', N, fromSlot:s1, toSlot:s4}`, referencing `[c1, c2, c3, c4]`.
-
-1. **chain-pruned arrives, target c3.**  The store cancels and removes c4 (its last block is
-   above the prune target).  Reconcile fires: `EpochSession` A's frozen set `[c1, c2, c3, c4]`
-   includes the now-cancelled c4, so it no longer matches the store's `[c1, c2, c3]` →
-   `A.cancel('canonical content changed')`.  Epoch N still complete on L1 → reconcile constructs
-   `EpochSession` **B** with the same spec `{full, N, s1, s4}` but checkpoints `[c1, c2, c3]`.
-
-2. **`EpochSession` B starts top-tree proving over [c1, c2, c3].**
-
-3. **chain-checkpointed arrives, target c4_re (same content key as old c4).**  The old c4
-   prover was removed on the prune, so the store constructs a **fresh** `CheckpointProver` for
-   c4_re and starts its sub-tree work from scratch.  (Its block-rollup jobs are content-addressed
-   in the proving broker, so any the old c4 already completed are reused rather than re-proved.)
-
-4. **Reconcile fires.**  `EpochSession` B's content for `(s1, s4)` is now `[c1, c2, c3, c4_re]`,
-   doesn't match its frozen `[c1, c2, c3]` → `B.cancel(...)`.  Construct `EpochSession` **C** with
-   the same spec but checkpoints `[c1, c2, c3, c4_re]`.
-
-5. **`EpochSession` C reuses the long-lived c1..c3 `CheckpointProver` instances and the fresh
-   c4_re.**  Only c4_re's witnesses are regenerated; the top-tree is recomputed.  The chonk cache
-   survived the reorg because no epoch in this range has expired yet.
-
-
-### Partial request dedups against a running full `EpochSession`
-
-The operator calls `startProof(N)` while the full `EpochSession` for epoch N is running with
-c1..c4.  Current canonical slot range is `(s1, s4)`, so the partial's computed spec is
-`{partial, N, s1, s4}` — its `fromSlot`/`toSlot` exactly match the running full `EpochSession`'s. `startProof`
-detects this and awaits the existing full instead of opening a duplicate: no partial
-`EpochSession` is created and no second `TopTreeJob` is built. The caller simply blocks on the
-full session's result and the epoch is proven once.
-
-### True partial proof
-
-The operator calls `startProof(N)` when only c1, c2 are canonical (epoch incomplete).
-`fromSlot` is the epoch's first slot; `toSlot` is `s2` (the last canonical slot).
-Partial `EpochSession` created with spec `{partial, N, firstSlotOfEpoch(N), s2}` and
-checkpoints `[c1, c2]`.
-
-When c3 later arrives in slot s3, the partial is **not** invalidated — c3's slot is
-outside its range. If c2 is then pruned, the partial **is** invalidated (canonical
-content for the same slot range is now just `[c1]`) and recreated with the same
-spec but checkpoints `[c1]`. If c2 re-adds, the partial is invalidated again and
-recreated with `[c1, c2]`.
-
-## Design rationale
-
-### Why slot-based specs (not checkpoint-based)?
-
-A spec like "prove checkpoints 7..10" is invalidated by any reorg that renumbers
-those checkpoints.  A spec like "prove slots 350..399" survives renumbering — the
-slot range is determined by epoch math and L1 constants, not by which checkpoints
-happen to be canonical at the moment.  Reconciliation preserves the slot range
-across cancel-and-recreate cycles.
-
-### Why does every `EpochSession` start at the epoch's first slot?
-
-The L1 rollup contract validates that every submitted proof extends from the previous
-proven tip — the `fromCheckpoint` of any submission must be the checkpoint immediately
-after the current L1 proven head. Starting a partial `EpochSession` at a later slot would
-mean the partial's `fromCheckpoint` lies past the proven tip, which the contract
-rejects. Fixing `fromSlot` to `firstSlotOfEpoch(N)` for both kinds means partials and
-fulls always share the same starting point; they differ only in `toSlot` and in the
-submission decision.
-
-### Why does a publishing service own L1 submission instead of the `EpochSession`?
-
-Concentrating L1 submission gives us three properties for free that were awkward
-or impossible when each `EpochSession` called the publisher directly:
-
-1. **Atomic same-epoch dedup.** Multiple candidates for the same epoch (full +
-   partial, or partial-then-full as canonical content extends) can be in flight
-   at once; the service picks the winner under the serial drain so only one L1
-   tx is ever sent for the longer candidate.
-2. **One source of truth for the proven tip.** Reading the proven block number
-   inside the drain means the eligibility check and the publish that follows are
-   guaranteed to use the same value. `EpochSession`s can't race each other on stale
-   reads.
-3. **Per-candidate deadline and retry.** The service owns expiry timers and the
-   `publisherFactory.create()` retry loop. `EpochSession`s don't need to know about
-   either — they just await the outcome.
-
-### Why is the chonk cache keyed by tx hash and released on finality?
-
-Chonk-verifier proofs are tx-scoped: they prove a transaction's chonk circuit is
-valid, independently of which block or epoch the tx lands in.  A tx that gets
-reorged out of one block and re-mined into another should not need to be re-proved.
-Keying by tx hash makes the cache survive any reorg up to finality; releasing on
-finality means we don't grow the cache indefinitely while still keeping every
-reorg-relevant proof.
-
-### Why is a pruned `CheckpointProver` removed rather than kept for a possible re-add?
-
-A prover's sub-tree work forks world-state per block, and an L1 prune of a base block faults
-those in-flight reads — so the work cannot survive the prune, and there is nothing to preserve
-by keeping the prover around.  Removing it on prune and rebuilding on re-add is therefore both
-correct and simpler; the expensive block-rollup proofs are still reused when content re-appears,
-because the proving broker is content-addressed independently of the prover's lifetime.
-
-### How is a genuine failure told apart from a prune, without a racy classification?
-
-Knowledge of an L1 reorg reaches the prover-node on two causally unordered channels: the control
-plane (`chain-pruned` → `onPrune`) and the data plane (world-state unwinds, and an in-flight fork
-read faults inside a `CheckpointProver` mid-proof). If the `EpochSession` reacted to a fault by asking
-"was this a prune or a genuine failure?", every answer would sample control-plane state that lags the
-data-plane unwind — racy by construction. We remove the question by pushing the fact down to where it
-is unambiguous: a `CheckpointProver` records `isFailed()` when *its* block proofs reject. The session
-then reads a clean signal: if any prover failed, the fault might be a prune (`stopped`) — don't upload,
-don't rebuild over it, recover on re-add; if *no* prover failed yet the session's own top-tree/submit
-work failed, that is definitively **not** a prune (`failed`) — a genuine, race-free failure that is
-retained (so a deterministic failure isn't re-proved every tick) and uploaded once. No control-plane
-sampling, no timing race — the two prover-level and session-level facts carry the whole decision.
+These run concurrently, and each is serialised on its own:
+
+- The block stream delivers one event at a time to `CheckpointFollower`.
+- `SessionManager` runs every reconcile on one queue.
+- `ProofPublishingService` runs every drain on another queue, so at most one L1 submission is in flight.
+- `EpochExpirySweep` and the session manager's tick each run on a timer that never overlaps itself.
+- `EarlyBlockProver`, when enabled, handles chain events on its own queue and proves the blocks of each slot in
+  order.
+
+## Proving one epoch
+
+1. The archiver reports a new checkpointed tip. `CheckpointFollower` receives a `chain-checkpointed` event.
+2. The follower walks from its cursor to the tip. For each checkpoint it collects what proving needs (the previous
+   block header, the checkpoint's L1-to-L2 messages, the previous archive sibling path) and registers the
+   checkpoint with `CheckpointStore`.
+3. The store creates a `CheckpointProver`, which starts at once. It fetches the checkpoint's transactions,
+   re-executes them block by block, and enqueues the block-level proving jobs.
+4. The follower tells `SessionManager` that the epoch has a new checkpoint. The manager runs a reconcile. The epoch
+   has not ended, so no session is created.
+5. Steps 1 to 4 repeat for each checkpoint. Block-level proving runs while the epoch is still open.
+6. The epoch ends. The manager tries an epoch when one of its own checkpoints is registered and on every tick, so
+   an epoch whose last slots are empty is picked up by the tick. Once the epoch is complete and the store holds
+   every checkpoint the archiver reports for it, the manager creates a full `EpochSession` over those provers.
+7. The session runs a `TopTreeJob`, which proves each checkpoint root as that checkpoint's block-level proofs
+   arrive, and then the merges and the epoch root.
+8. The session hands the epoch proof to `ProofPublishingService`.
+9. The service waits until the block before the proof's first block is proven, then submits the proof through a
+   `ProverNodePublisher`.
+10. L1 accepts the proof and the session ends `completed`. The archiver reports the new proven tip, and the next
+    tick moves on to the next epoch.
+11. When the epoch expires, `EpochExpirySweep` removes its provers from the store.
+
+A session holds a fixed list of provers, taken from the store when the session is created. It never changes the
+list. When the store's content for the session's slots changes, the manager replaces the session.
+
+## States
+
+### `CheckpointProver`
+
+A prover has three flags.
+
+| Flag | Set when | Meaning |
+| --- | --- | --- |
+| `completed` | Every block is re-executed and its jobs are enqueued | Proofs may still be pending |
+| `failed` | Block-level proving failed for any reason other than a cancel | The prover will never have its proofs |
+| `cancelled` | The store removed the prover (prune, expiry, shutdown) | The prover is torn down |
+
+A prover can be `completed` and later `failed` or `cancelled`. A cancelled prover is never marked failed afterwards.
+
+### `EpochSession`
+
+| State | Meaning |
+| --- | --- |
+| `initialized` | Created, top-tree job not started |
+| `awaiting-checkpoints` | The top-tree job is preparing its inputs |
+| `awaiting-root` | The top tree is proving. Block-level proofs of some checkpoints may still be pending |
+| `publishing-proof` | The proof is with the publishing service |
+| `completed` | The proof was published, or L1 already held it |
+| `superseded` | Another proof of the same epoch was chosen instead |
+| `cancelled` | The manager cancelled the session |
+| `timed-out` | The proof-submission window closed first |
+| `stopped` | The attempt failed while one of its provers was failed or cancelled |
+| `failed` | The attempt failed while every prover was healthy |
+
+The last six are final. `stopped` and `failed` differ in cause. A prover fails the same way for a proving fault and
+for a prune that removed its base block, so a `stopped` session says nothing about the epoch. A `failed` session
+means the top tree or the L1 submission failed on its own.
+
+### Publishing a proof
+
+A proof handed to the publishing service ends with one of these outcomes.
+
+| Outcome | Meaning | Session state |
+| --- | --- | --- |
+| `published` | L1 accepted the proof | `completed` |
+| `already-submitted` | L1 already held this prover's proof of this length. For a full proof only a full-proof registration counts; a non-full one is replaced | `completed` |
+| `superseded` | A longer proof of the epoch was chosen, or the proven tip passed a partial proof | `superseded` |
+| `withdrawn` | The session was cancelled while the proof was queued | `cancelled` |
+| `expired` | The window closed while the proof was queued | `timed-out` |
+| `failed` | A pre-check failed, the transaction reverted, or it was not mined in time | `failed` or `stopped` |
+
+Among the proofs of one epoch whose predecessor block is proven, the service publishes the one that ends at the
+highest block. A full proof is published even when the proven tip is already past it, because L1 rewards it. A
+partial proof in that position is `superseded`.
+
+## When things do not go to plan
+
+### A checkpoint is pruned
+
+The follower receives `chain-pruned` with the highest surviving block.
+
+- The store cancels and removes every prover whose last block is above that block.
+- The follower moves its cursor back to one below the checkpoint that holds that block, so a replacement checkpoint
+  with the same number is registered again.
+- The manager cancels every session that used a removed prover. If what is left is not empty and holds no failed
+  prover, it starts a session over it at once, with the same slot range. The checks for opening a new full session
+  do not apply to this replacement.
+
+When the replacement checkpoint arrives it gets a new prover, even if its content is identical. The session is
+replaced once more, now including the new prover.
+
+What happens to the proving jobs:
+
+- Block-level jobs of a removed prover are left with the broker, finished or not, unless `PROVER_CANCEL_JOBS_ON_STOP`
+  is set. A new prover for identical content requests the same jobs and gets them.
+- The top-tree jobs of a cancelled session are aborted. The replacement session requests them again where its
+  checkpoints are the same, and the broker starts them again.
+
+If the archiver has no data for the surviving block, the prune throws before changing anything, and the block stream
+delivers it again.
+
+### Registering a checkpoint fails
+
+Registration throws when any of its steps fails:
+
+- The checkpoint or its predecessor is missing from the archiver.
+- The message source returns messages that do not match the checkpoint's inbox rolling hash.
+- World state cannot sync to the checkpoint.
+- The store already holds a different checkpoint for the same slot. A prune has to remove that one first.
+
+The follower leaves its cursor before that checkpoint and does not acknowledge the event. The block stream delivers
+the event again on its next poll, and the follower retries from the same checkpoint.
+
+### A checkpoint prover fails
+
+The prover is marked failed and its checkpoint data is uploaded (see [failure uploads](#failure-uploads)).
+
+- A session waiting on it ends `stopped` and is removed.
+- No session is created over a failed prover. The epoch is tried again only after a prune and re-registration
+  replace the prover.
+
+### The top tree or the L1 submission fails
+
+The session ends `failed`.
+
+- The manager keeps a `failed` full session, so the same checkpoints are not proven again to the same failure, and
+  uploads the session's data once. A change to the epoch's checkpoints replaces it.
+- A `failed` partial session is dropped on the next reconcile and nothing is uploaded. `startProof` can request it
+  again.
+
+### A proof lands before the epoch ends
+
+A partial proof, from this node or another prover, moves the proven tip over an epoch that this prover holds no full
+proof of. The manager still opens a full session for such an epoch, with three differences:
+
+- Only the tick opens it. A checkpoint or prune event does not.
+- Before opening, the manager reads from L1 whether this prover's full proof of the epoch is registered. It skips
+  the epoch if it is, or if L1 cannot be read. Those two answers are reused for one L2 slot. "Not registered" is
+  read again each time, since it leads to a session.
+- The next unproven epoch goes first. While that epoch is complete and has no session, covered epochs leave
+  capacity for one session free for it.
+
+### The node restarts
+
+`CheckpointFollower` places its cursor before it starts the block stream.
+
+- It finds the last epoch that is fully proven. If that epoch is still inside its proof-submission window, it goes
+  back to the last epoch whose window has closed, because this prover may hold no full proof of the epochs in
+  between.
+- The cursor is the last checkpoint at or before that epoch's last slot.
+- `EpochExpirySweep` starts from the same epoch.
+
+The catch-up then registers every later checkpoint, with these exceptions for a whole epoch:
+
+- The epoch is expired.
+- The epoch is fully proven and the node has full-epoch proving disabled.
+- The epoch is fully proven and L1 already holds this prover's full proof of it.
+- The epoch is fully proven and world state has pruned a snapshot that one of its unregistered checkpoints needs.
+
+If the cursor is more than `(proofSubmissionEpochs + 1) * epochDuration` checkpoints behind the tip, the older ones
+are skipped without being fetched.
+
+### The proof-submission window closes
+
+- A session's own timer cancels it, and it ends `timed-out`.
+- A queued proof resolves `expired`.
+- A submission already sent to L1 is not withdrawn. The publisher stops retrying it at the same moment. If the
+  transaction is mined after all, L1 holds the proof while the session reports `timed-out`.
+- The node opens no new full session for the epoch. `startProof` can still open a partial session until the sweep
+  removes the epoch's provers; its timer cancels it at once.
+- `EpochExpirySweep` removes the epoch's provers and releases its chonk-verifier cache entries. The sweep runs on a
+  timer, so it also runs while no chain events arrive.
+
+### Too many sessions
+
+`PROVER_NODE_MAX_PENDING_JOBS` limits how many sessions run at once. Finished sessions do not count. At the limit,
+the manager does not open a full session and tries again on a later reconcile, and `startProof` throws. A session
+that replaces another one after a prune is not held back by the limit.
+
+### Shutdown
+
+`ProverNode.stop` stops the follower, the sweep and the early prover first, then the sessions, then publishing, then
+the provers.
+
+- Sessions are cancelled without aborting their broker jobs, so a restarted node reuses them.
+- The publishing service waits up to 30 seconds for a submission in flight.
+
+## The `startProof` and `getJobs` API
+
+`startProof(epoch)` asks for a proof of the checkpoints the store holds for the epoch right now. It returns a session
+id at once and does not wait for the proof.
+
+- It creates a partial session from the epoch's first slot to the slot of the last stored checkpoint.
+- If a running partial session already proves those checkpoints, it returns that session's id. A running full
+  session counts only when its slot range ends at the same slot. When the epoch ended with empty slots, the full
+  session's range ends later, and `startProof` opens a second session over the same checkpoints.
+- It throws when the store holds no checkpoint of the epoch, when the proven tip already covers them, when one of
+  their provers has failed, or when the session limit is reached.
+
+`getJobs()` lists the sessions the manager holds, with their state.
+
+- A full session that ended `completed` or `failed` stays listed until its checkpoints change or expire.
+- Any other finished session, and every finished partial session, leaves the list on the next reconcile, which is
+  at most one tick later. A caller that polls `getJobs()` for the outcome of `startProof` can therefore miss it.
+
+`PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` stops the node from opening full sessions on its own, so only `startProof`
+produces epoch proofs. Checkpoints are still registered, and their block-level proving still starts as they land.
+
+## Proving blocks before their checkpoint lands
+
+A partial proof is usually requested right after a checkpoint lands, and then waits for that checkpoint's block-level
+proofs. With `PROVER_NODE_EARLY_BLOCK_PROVING` set, `EarlyBlockProver` starts those proofs when each block is
+proposed.
+
+The node's archiver has to hold proposed blocks for this to do anything. A node that does not re-execute block
+proposals learns of blocks only from their checkpoints, and then nothing is proven early.
+
+1. The follower passes each move of the proposed tip to the early prover.
+2. The early prover fetches the new blocks. For each slot it runs the blocks, in order, through a blocks-only
+   sub-tree, which enqueues each block's jobs up to its block root.
+3. When the checkpoint lands, the node proves it through a `CheckpointProver` as usual. That prover requests jobs
+   with the same inputs, and the broker serves them from the work already started.
+
+Early proofs reach an epoch proof only when a `CheckpointProver` requests the same broker jobs:
+
+- A block pruned before its checkpoint lands has its slot dropped. Its jobs can reach an epoch proof only if a
+  block with the same inputs is proposed again. The slot is proven again from its first block when the proposed
+  tip moves.
+- A failure in early proving is logged and the slot is left to its checkpoint. That covers a block that cannot be
+  executed and a proving job that fails after its block was executed.
+- Early proving never aborts a broker job, because a `CheckpointProver` may be waiting on the same one.
+- At most four slots are in progress. A slot normally leaves when its checkpoint lands.
+- A block is proven early only once a checkpoint of its epoch has landed. A block can be proposed shortly before
+  its epoch starts. The broker drops the jobs of old epochs when it sees a job of a newer epoch, so proving that
+  block early would drop jobs of an epoch that can still be proven. On a new chain the genesis block stands in
+  for that checkpoint, so blocks of epoch 0 are proven early from the start.
+- A slot is proven early from its first block or not at all. If its first block was proposed before a checkpoint
+  of the epoch landed, the later blocks of that slot are left to the checkpoint too.
+
+What it costs:
+
+- Each block's transactions are executed once more when the checkpoint lands.
+- The jobs of a pruned block run to completion on the agents. A proposer that proposes blocks and never posts
+  their checkpoint makes the agents prove blocks nobody pays for.
+- The broker keeps a job that failed after all its retries. If a job started early fails that way, the
+  `CheckpointProver`'s request for the same job fails with it, and the prover is marked failed.
+
+The time from a block reaching the early prover to its block root proof is logged, for blocks whose proofs are ready
+before their checkpoint lands.
 
 ## Configuration
 
-| Env var | Description |
-|---|---|
-| `PROVER_NODE_POLLING_INTERVAL_MS` | Polling interval for the L2BlockStream and the SessionManager periodic tick.  Default 1000 ms. |
-| `PROVER_NODE_MAX_PENDING_JOBS` | Cap on the number of non-terminal `EpochSession`s (full + partial).  When at limit, reconcile defers opening new full `EpochSession`s; explicit `startProof` calls throw. |
-| `PROVER_NODE_EPOCH_PROVING_DELAY_MS` | Optional sleep at the start of each `EpochSession`, before the TopTreeJob is constructed.  Used in tests to give late events time to land. |
-| `TX_GATHERING_TIMEOUT_MS` | Per-block tx gather deadline used by each `CheckpointProver`. |
-| `PROVER_NODE_FAILED_EPOCH_STORE` | If set, a full session that fails on its own account (top-tree/submit, provers healthy) uploads its proving data (every `CheckpointProver`'s txs + register-time data, regardless of sub-tree completion) to this file store. |
-| `PROVER_NODE_DISABLE_PROOF_PUBLISH` | If true, the publishing service runs `analyzeEpochProofSubmission` (estimates L1 fees) instead of actually submitting. |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PROVER_NODE_POLLING_INTERVAL_MS` | 1000 | Interval of the block stream, the session tick and the expiry sweep |
+| `PROVER_NODE_MAX_PENDING_JOBS` | 10 | Most sessions running at once. 0 removes the limit |
+| `PROVER_NODE_TX_GATHERING_TIMEOUT_MS` | 120000 | How long a prover waits for a checkpoint's transactions |
+| `PROVER_NODE_FAILED_EPOCH_STORE` | unset | Where failed proving data is uploaded |
+| `PROVER_NODE_DISABLE_PROOF_PUBLISH` | false | Estimate the L1 cost of each proof without submitting it |
+| `PROVER_NODE_DISABLE_FULL_EPOCH_PROVING` | false | Prove only the epochs requested through `startProof` |
+| `PROVER_NODE_EARLY_BLOCK_PROVING` | false | Start block-level proving when a block is proposed |
+| `PROVER_NODE_PROOF_SUBMISSION_TARGET_ADDRESS` | rollup address | L1 address the proof transaction is sent to |
+| `PROVER_NODE_TX_GATHERING_INTERVAL_MS`, `_BATCH_SIZE`, `_MAX_PARALLEL_REQUESTS_PER_NODE` | 1000, 10, 100 | Not read. Fetching from peers is set by the p2p `TX_COLLECTION_*` variables |
+| `PROVER_CANCEL_JOBS_ON_STOP` | false | Abort the block-level jobs of a prover when it is removed |
 
-## Failure handling and observability
+`PROVER_NODE_FAILED_EPOCH_STORE` also needs a data directory, the L1 chain id and the rollup version. The node refuses
+to start without them.
 
-Loggers:
+## Logs, metrics and failure uploads
 
-- `prover-node` — `ProverNode` itself (event dispatch, lifecycle).
-- `prover-node:session-manager` — reconcile decisions, `EpochSession` opens / drops, tick.
-- `prover-node:epoch-session` — per-`EpochSession` lifecycle (`Created EpochSession`,
-  `Top-tree proof ready`, `Submitted proof for epoch N`, etc.).
-- `prover-node:proof-publishing-service` — candidate submit / withdraw / expire,
-  drain, publish attempts, transient acquire retries.
-- `prover-node:l1-tx-publisher` — the per-publish `ProverNodePublisher`'s L1 work.
-- `prover-node:checkpoint-store` — content-key collisions, reap decisions.
-- `prover-node:checkpoint-prover` — sub-tree pipeline (gather, block processing).
-- `prover-client:chonk-cache` — chonk-verifier cache enqueue / release events.
+### Loggers
 
-Failed proving data is uploaded to the configured file store (`PROVER_NODE_FAILED_EPOCH_STORE`) at two
-levels, and re-proved offline by the matching downloader/rerunner: an epoch job via
-`downloadEpochProvingJob` + `rerunEpochProvingJob`, and a single checkpoint via the same download plus
-`rerunCheckpointProvingJob` (which rebuilds just that checkpoint's sub-tree prover and awaits its block
-proofs — no epoch top-tree or L1 submit). Both upload levels build an `EpochProvingJobData` snapshot with
-`SessionManager.buildProvingData(...)` — every `CheckpointProver`'s txs and register-time data, even if
-its sub-tree never reached `isCompleted()` — and ship it via `uploadEpochProofFailure` alongside a
-world-state + archiver backup:
+| Logger | Covers |
+| --- | --- |
+| `prover-node` | Start and stop |
+| `prover-node:checkpoint-follower` | New checkpoints, skipped epochs, prunes |
+| `prover-node:checkpoint-store` | Provers created and removed, and everything a `CheckpointProver` logs: checkpoint processing, block-level proofs ready, failures |
+| `prover-node:session-manager` | Sessions opened, replaced and dropped, and why a full session was not opened |
+| `prover-node:epoch-session` | One session's progress |
+| `prover-node:proof-publishing-service` | Proofs queued, published, expired |
+| `prover-node:l1-tx-publisher` | The L1 transaction |
+| `prover-node:epoch-proof-status` | Failed reads of this prover's proof registration |
+| `prover-node:epoch-expiry-sweep` | Expired epochs |
+| `prover-node:failure-uploader` | Uploads |
+| `prover-node:early-block-prover` | Early proving, including the time to each block root proof |
 
-- **Per checkpoint.** When a `CheckpointProver`'s block proofs reject for a non-cancel reason (a sub-tree
-  fault or a prune-induced fork fault), it fires its `onFailed` callback and `ProverNode` uploads that one
-  checkpoint via `tryUploadCheckpointFailure(prover)`. This fires for prune-induced faults too — that is
-  intentional; a prune-caused checkpoint snapshot is harmless, and *not* trying to tell prune from genuine
-  failure is exactly what keeps this race-free. A cancelled prover (control-plane prune / shutdown) is not
-  a failure and does not upload.
-- **Per session.** When a full session ends in its own genuine failure (`EpochSession.hasFailed()` —
-  top-tree/submit failed with every prover healthy), the session manager fires `onSessionFailed` and
-  `ProverNode` uploads all the session's checkpoints via `tryUploadEpochFailure(...)`. This is race-free
-  (healthy provers rule out a prune) and fires once, since the failed session is retained and never re-run.
+### Metrics
 
-A `stopped` session (a prover under it failed) does not upload at the session level — its failed checkpoint
-already uploaded itself. Each backup is a full world-state + archiver snapshot, so a prune that faults
-several in-flight provers produces several uploads; this is accepted for the diagnostic value.
+| Metric | Recorded by |
+| --- | --- |
+| `aztec.prover_node.job_duration`, `job_checkpoints`, `job_blocks`, `job_transactions` | A session whose proof was published, or estimated when publishing is disabled |
+| `aztec.prover_node.checkpoint_processing.duration`, `checkpoint_blocks`, `checkpoint_transactions` | A prover that finished re-executing its checkpoint |
+| `aztec.prover_node.block_processing.duration` | A prover, per block |
+| `aztec.prover_node.checkpoint_proving.duration` | A prover whose block-level proofs are ready |
+| `aztec.prover_node.blob_processing.last_duration` | A top-tree job |
+| `aztec.prover_node.active_checkpoints`, `active_epoch_sessions` | Gauges: provers in the store, and running sessions by kind |
+| `aztec.prover_node.proof_submission_unaffordable_count` | The publishing service, when no publisher can pay |
+| `aztec.prover_node.estimated_submission.*` | The publisher, when publishing is disabled |
+| `aztec.prover_node.rewards_per_epoch`, `rewards_total` | Read from the rollup contract |
 
-Metrics emitted by `EpochSession`s:
+### Failure uploads
 
-- `aztec.prover_node.execution_duration` — wall-clock time from `EpochSession` start to terminal.
-- `aztec.prover_node.job_duration` — same, in seconds.
-- `aztec.prover_node.job_checkpoints` / `_blocks` / `_transactions` — sizes of the
-  proven range.
-- `aztec.prover_node.block_processing_duration` /
-  `aztec.prover_node.checkpoint_processing_duration` — sub-tree breakdown.
+With `PROVER_NODE_FAILED_EPOCH_STORE` set, the node uploads what is needed to run a failed attempt again offline,
+together with a world-state and archiver backup.
+
+- When a `CheckpointProver` fails, its checkpoint is uploaded, provided the archiver still holds the checkpoint. A
+  pruned checkpoint is not uploaded.
+- When a full session ends `failed`, all its checkpoints are uploaded, once.
+
+`downloadEpochProvingJob` fetches an upload. `rerunEpochProvingJob` proves an epoch from it and
+`rerunCheckpointProvingJob` proves a single checkpoint.
+
+## Design decisions
+
+### A session is defined by slots
+
+A reorg can replace the checkpoints of a slot range. The range itself does not change, so a replaced session keeps
+it. Checkpoint numbers would not survive the reorg.
+
+### Every session starts at the first slot of its epoch
+
+L1 accepts a proof when the checkpoint before its first checkpoint is proven. It also accepts a range whose
+beginning is already proven. A proof that starts at the epoch's first slot meets both conditions wherever the proven
+tip is by the time it is submitted.
+
+### A pruned prover is removed
+
+Its re-execution reads world-state forks that the prune invalidates. The expensive part, the proving jobs, stays
+with the broker.
+
+### The publishing service owns L1 submission
+
+Several sessions can hold a proof of the same epoch. Choosing between them and reading the proven tip happen in one
+serial queue, so only one transaction is sent.
+
+### `stopped` and `failed` are told apart by the provers
+
+A prune reaches the node twice: as a chain event, and as a failed world-state read inside a prover. The two are not
+ordered. The session does not ask which came first. It asks whether any of its provers failed or was cancelled.
+
+### The L1 constants are read from the archiver each time
+
+`CheckpointFollower`, `EpochExpirySweep`, `EpochProofStatus`, `EarlyBlockProver` and `CheckpointStore` call
+`l2BlockSource.getL1Constants()` whenever they need the constants and keep no copy. The prover node's block source
+is the in-process `Archiver`, whose `getL1Constants` returns a field set when the archiver is created. The call
+does not reach L1 and cannot fail, so a copy would add state without removing a failure. `ProverNode` kept a
+memoized copy before it was split. `SessionManager` keeps one because it computes a session's deadline in a
+synchronous method.
+
+## Known limitations
+
+- A failed `CheckpointProver` is not retried. A transaction fetch that times out leaves the epoch unproven by this
+  node until a prune or a restart.
+- A `failed` full session is not retried either, including when the cause was a transient L1 or archiver error.
+- A `completed` full session is kept without checking L1 again. If an L1 reorg removes the proof transaction and
+  leaves the epoch's checkpoints in place, the node does not submit the proof again.
+- The publisher looks up its registration on L1 under the prover id in the proof's public inputs, which the
+  proving agent returns. It does not compare that id with the node's own.
+- The tick opens the next unproven epoch and covered epochs. A later epoch that ended without a new checkpoint
+  waits until the epoch before it is proven.
+- A full session and a partial session over the same checkpoints can both prove the top tree. The publishing
+  service publishes one of them.
+- The publishing service marks the other proofs of an epoch `superseded` before the chosen one is on L1. If the
+  chosen one then fails, nothing is published for the epoch.
+- If the session manager throws while handling a prune, the prune is delivered again, finds no prover left to
+  remove, and does not reach the session manager a second time. The next tick still replaces the affected
+  sessions. What is lost is the attempt to open a full session for the affected epochs on the prune itself.
+- Cancelling a session aborts its top-tree jobs. A replacement session that already requested the same jobs gets
+  the abort too and ends `failed`.
+- The broker proves block-level jobs before checkpoint roots. Checkpoints that land in the same epoch after a
+  partial proof was requested therefore delay that proof's checkpoint roots.
