@@ -2,6 +2,7 @@ import { type MessagingSecret, OnchainDeliveryMode, SiloedTag } from '@aztec-lab
 import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 
 import { reconcileTaggingIndexRangesAgainstSurvivingTags } from './reconcile_tagging_index_ranges.js';
+import { SiloedTagCache } from './siloed_tag_cache.js';
 
 describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
   let secret1: MessagingSecret;
@@ -21,7 +22,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
   }
 
   it('returns empty when given no ranges', async () => {
-    const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags([], new Set());
+    const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags([], new Set(), new SiloedTagCache());
     expect(reconciled).toEqual([]);
   });
 
@@ -29,6 +30,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 3 }],
       new Set(),
+      new SiloedTagCache(),
     );
     expect(reconciled).toEqual([]);
   });
@@ -43,6 +45,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 3 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 3 }]);
@@ -57,6 +60,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 5 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 2 }]);
@@ -71,6 +75,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 5 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 4, highestIndex: 5 }]);
@@ -85,6 +90,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 6 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 3, highestIndex: 4 }]);
@@ -99,6 +105,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 5 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 5 }]);
@@ -110,6 +117,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 1, highestIndex: 5 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 3, highestIndex: 3 }]);
@@ -127,6 +135,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
         { extendedSecret: secret2, lowestIndex: 1, highestIndex: 2 },
       ],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret2, lowestIndex: 1, highestIndex: 2 }]);
@@ -145,6 +154,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
         { extendedSecret: secret2, lowestIndex: 4, highestIndex: 6 },
       ],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([
@@ -159,6 +169,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 7, highestIndex: 7 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([{ extendedSecret: secret1, lowestIndex: 7, highestIndex: 7 }]);
@@ -170,6 +181,7 @@ describe('reconcileTaggingIndexRangesAgainstSurvivingTags', () => {
     const reconciled = await reconcileTaggingIndexRangesAgainstSurvivingTags(
       [{ extendedSecret: secret1, lowestIndex: 7, highestIndex: 7 }],
       survivingTags,
+      new SiloedTagCache(),
     );
 
     expect(reconciled).toEqual([]);

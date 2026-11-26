@@ -1,9 +1,10 @@
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
-import { MessagingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import { MessagingSecret, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
+import type { SiloedTagCache } from '../../tagging/siloed_tag_cache.js';
 import { BaseStagingStore, type ReadonlyDb } from '../base_staging_store.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';
 
@@ -437,10 +438,15 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
    * TxEffect's private logs (i.e., which ones made it onchain). Those that survived are finalized; those that
    * didn't are dropped.
    * @param txEffect - The tx effect of the partially reverted transaction.
+   * @param siloedTagCache - Computes the siloed tags of the pending indexes.
    * @param changeSetId - change set to stage this store's writes under. See {@link StagedWriteCoordinator} for more
    * details.
    */
-  finalizePendingIndexesOfAPartiallyRevertedTx(txEffect: TxEffect, changeSetId: ChangeSetId): Promise<void> {
+  finalizePendingIndexesOfAPartiallyRevertedTx(
+    txEffect: TxEffect,
+    siloedTagCache: SiloedTagCache,
+    changeSetId: ChangeSetId,
+  ): Promise<void> {
     const txHashStr = txEffect.txHash.toString();
 
     // Build a set of all siloed tag values that made it onchain (first field of each private log).
@@ -470,7 +476,7 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
         let highestSurvivingIndex: number | undefined;
 
         for (let index = pendingEntry.lowestIndex; index <= pendingEntry.highestIndex; index++) {
-          const siloedTag = await SiloedTag.compute({ extendedSecret: messagingSecret, index });
+          const siloedTag = await siloedTagCache.compute({ extendedSecret: messagingSecret, index });
           if (onChainTags.has(siloedTag.value.toString())) {
             highestSurvivingIndex =
               highestSurvivingIndex !== undefined ? Math.max(highestSurvivingIndex, index) : index;

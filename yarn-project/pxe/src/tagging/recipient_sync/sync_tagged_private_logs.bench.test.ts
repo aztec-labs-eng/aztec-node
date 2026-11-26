@@ -15,6 +15,7 @@ import path from 'path';
 import { withRecording } from '../../node/benchmarked_node.js';
 import { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, syncTaggedPrivateLogs } from '../index.js';
+import { SiloedTagCache } from '../siloed_tag_cache.js';
 import { computeSiloedTagForIndex, extractTags } from '../testing/tag_query_test_utils.js';
 
 /**
@@ -200,6 +201,7 @@ describeBench('syncTaggedPrivateLogs constrained-sync bench', () => {
       secrets,
       benchmarkedNode,
       taggingStore,
+      new SiloedTagCache(),
       ANCHOR_BLOCK_HEADER,
       FINALIZED_BLOCK_NUMBER,
       CHANGE_SET_ID,

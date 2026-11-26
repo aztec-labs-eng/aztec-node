@@ -24,6 +24,7 @@ describe('TXESession.processFunction', () => {
       senderTaggingStore: {} as any,
       recipientTaggingStore: {} as any,
       messagingSecretSourcesStore: {} as any,
+      caches: {} as any,
       capsuleStore: {} as any,
       factStore: {} as any,
       privateEventStore: {} as any,

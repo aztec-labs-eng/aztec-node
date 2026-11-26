@@ -1,4 +1,6 @@
-import { type MessagingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import type { MessagingSecret, TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+
+import type { SiloedTagCache } from './siloed_tag_cache.js';
 
 /**
  * Reconciles tagging index ranges recorded by the PXE during private execution against the set of siloed tags whose
@@ -31,11 +33,13 @@ import { type MessagingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-
  *
  * @param ranges - The tagging index ranges as recorded during private execution (pre-squash).
  * @param survivingTags - The set of siloed tag values (as strings) of private logs that survived kernel squashing.
+ * @param siloedTagCache - Computes the siloed tags of the ranges' indexes.
  * @returns The reconciled ranges, with bounds tightened to surviving indexes and fully-squashed ranges removed.
  */
 export async function reconcileTaggingIndexRangesAgainstSurvivingTags(
   ranges: TaggingIndexRange[],
   survivingTags: Set<string>,
+  siloedTagCache: SiloedTagCache,
 ): Promise<TaggingIndexRange[]> {
   const reconciled: TaggingIndexRange[] = [];
 
@@ -45,6 +49,7 @@ export async function reconcileTaggingIndexRangesAgainstSurvivingTags(
       range.lowestIndex,
       range.highestIndex,
       survivingTags,
+      siloedTagCache,
     );
     if (newLowestIndex === undefined) {
       // No index in this range corresponds to a surviving log: the entire range was squashed.
@@ -57,6 +62,7 @@ export async function reconcileTaggingIndexRangesAgainstSurvivingTags(
       newLowestIndex,
       range.highestIndex,
       survivingTags,
+      siloedTagCache,
     );
 
     reconciled.push({
@@ -75,9 +81,10 @@ async function findFirstSurvivingIndex(
   start: number,
   end: number,
   survivingTags: Set<string>,
+  siloedTagCache: SiloedTagCache,
 ): Promise<number | undefined> {
   for (let index = start; index <= end; index++) {
-    const tag = await SiloedTag.compute({ extendedSecret: secret, index });
+    const tag = await siloedTagCache.compute({ extendedSecret: secret, index });
     if (survivingTags.has(tag.value.toString())) {
       return index;
     }
@@ -91,9 +98,10 @@ async function findLastSurvivingIndex(
   start: number,
   end: number,
   survivingTags: Set<string>,
+  siloedTagCache: SiloedTagCache,
 ): Promise<number | undefined> {
   for (let index = end; index >= start; index--) {
-    const tag = await SiloedTag.compute({ extendedSecret: secret, index });
+    const tag = await siloedTagCache.compute({ extendedSecret: secret, index });
     if (survivingTags.has(tag.value.toString())) {
       return index;
     }

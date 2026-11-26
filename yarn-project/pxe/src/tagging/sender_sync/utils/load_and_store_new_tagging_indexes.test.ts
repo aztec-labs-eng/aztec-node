@@ -14,6 +14,7 @@ import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { SenderTaggingStore } from '../../../storage/tagging_store/sender_tagging_store.js';
+import { SiloedTagCache } from '../../siloed_tag_cache.js';
 import { computeSiloedTagForIndex, extractTags } from '../../testing/tag_query_test_utils.js';
 import { loadAndStoreNewTaggingIndexes } from './load_and_store_new_tagging_indexes.js';
 
@@ -23,6 +24,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
   let secret: MessagingSecret;
   let aztecNode: MockProxy<AztecNode>;
   let taggingStore: MockProxy<SenderTaggingStore>;
+  let siloedTagCache: SiloedTagCache;
 
   function makeLog(txHash: TxHash, _tag: Fr) {
     return { ...randomLogResult(), txHash };
@@ -35,6 +37,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
   beforeEach(() => {
     aztecNode = mock<AztecNode>();
     taggingStore = mock<SenderTaggingStore>();
+    siloedTagCache = new SiloedTagCache();
   });
 
   it('no logs found for the given window', async () => {
@@ -43,7 +46,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       return Promise.resolve(tags.map(() => []));
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).not.toHaveBeenCalled();
   });
@@ -58,7 +61,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       return Promise.resolve(tags.map((t: SiloedTag) => (t.equals(tag) ? [makeLog(txHash, tag.value)] : [])));
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(1);
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledWith(
@@ -89,7 +92,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       );
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(1);
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledWith(
@@ -121,7 +124,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       );
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(2);
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledWith(
@@ -150,7 +153,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       );
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(2);
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledWith(
@@ -202,7 +205,7 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       );
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(secret, 0, 10, aztecNode, taggingStore, siloedTagCache, MOCK_ANCHOR, 'test');
 
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(3);
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledWith(
@@ -246,7 +249,16 @@ describe('loadAndStoreNewTaggingIndexes', () => {
       );
     });
 
-    await loadAndStoreNewTaggingIndexes(secret, start, end, aztecNode, taggingStore, MOCK_ANCHOR, 'test');
+    await loadAndStoreNewTaggingIndexes(
+      secret,
+      start,
+      end,
+      aztecNode,
+      taggingStore,
+      siloedTagCache,
+      MOCK_ANCHOR,
+      'test',
+    );
 
     // Only the log at start should be stored; end is exclusive
     expect(taggingStore.mergePendingIndexes).toHaveBeenCalledTimes(1);

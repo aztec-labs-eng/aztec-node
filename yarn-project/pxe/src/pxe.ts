@@ -79,6 +79,7 @@ import {
   type PrivateKernelExecutionProverConfig,
 } from './private_kernel/private_kernel_execution_prover.js';
 import { PrivateKernelInputsProvider } from './private_kernel/private_kernel_inputs_provider.js';
+import { type PxeCaches, createPxeCaches } from './pxe_caches.js';
 import { AddressStore } from './storage/address_store/address_store.js';
 import { AnchorBlockStore } from './storage/anchor_block_store/anchor_block_store.js';
 import { CapsuleStore } from './storage/capsule_store/capsule_store.js';
@@ -263,6 +264,7 @@ export class PXE {
     private senderTaggingStore: SenderTaggingStore,
     private messagingSecretSourcesStore: MessagingSecretSourcesStore,
     private recipientTaggingStore: RecipientTaggingStore,
+    private caches: PxeCaches,
     private addressStore: AddressStore,
     private privateEventStore: PrivateEventStore,
     private contractSyncService: ContractSyncService,
@@ -400,6 +402,7 @@ export class PXE {
       senderTaggingStore,
       messagingSecretSourcesStore,
       recipientTaggingStore,
+      createPxeCaches(),
       addressStore,
       privateEventStore,
       contractSyncService,
@@ -445,6 +448,7 @@ export class PXE {
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleStore: this.capsuleStore,
       factStore: this.factStore,
       privateEventStore: this.privateEventStore,
@@ -865,6 +869,7 @@ export class PXE {
     // actually used to being reduced.
     await persistSenderTaggingIndexRangesForTx(
       this.senderTaggingStore,
+      this.caches.siloedTags,
       privateExecutionResult.entrypoint.taggingIndexRanges,
       publicInputs,
       () => txProvingResult.getTxHash(),

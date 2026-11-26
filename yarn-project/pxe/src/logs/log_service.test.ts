@@ -22,6 +22,7 @@ import { Option } from '../contract_function_simulator/noir-structs/option.js';
 import { AddressStore } from '../storage/address_store/address_store.js';
 import { MessagingSecretSourcesStore } from '../storage/tagging_store/messaging_secret_sources_store.js';
 import { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
+import { SiloedTagCache } from '../tagging/siloed_tag_cache.js';
 import { LogService } from './log_service.js';
 
 describe('LogService', () => {
@@ -633,6 +634,7 @@ async function createTestLogService(
     l2TipsProvider,
     keyStore,
     recipientTaggingStore,
+    new SiloedTagCache(),
     messagingSecretSourcesStore,
     addressStore,
     scopes,

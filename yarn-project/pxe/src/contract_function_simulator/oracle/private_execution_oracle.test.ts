@@ -29,6 +29,7 @@ import {
   defaultMessagingSecretStrategy,
 } from '../../hooks/resolve_messaging_secret_strategy.js';
 import type { TxResolverService } from '../../messages/tx_resolver_service.js';
+import { createPxeCaches } from '../../pxe_caches.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
 import { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../../storage/capsule_store/capsule_store.js';
@@ -442,6 +443,7 @@ describe('PrivateExecutionOracle', () => {
       senderTaggingStore: mock<SenderTaggingStore>(),
       recipientTaggingStore: mock<RecipientTaggingStore>(),
       messagingSecretSourcesStore: mock<MessagingSecretSourcesStore>(),
+      caches: createPxeCaches(),
       capsuleService: new CapsuleService(mock<CapsuleStore>(), []),
       factService: new FactService(mock<FactStore>(), []),
       privateEventStore: mock<PrivateEventStore>(),

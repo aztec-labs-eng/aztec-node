@@ -62,6 +62,7 @@ import type { ContractClassService } from '../../contract/contract_class_service
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import { syncScope } from '../../contract/helpers.js';
 import type { TxResolverService } from '../../messages/tx_resolver_service.js';
+import { createPxeCaches } from '../../pxe_caches.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
 import type { CapsuleStore } from '../../storage/capsule_store/capsule_store.js';
 import type { ContractStore } from '../../storage/contract_store/contract_store.js';
@@ -492,6 +493,7 @@ describe('Private Execution test suite', () => {
       senderTaggingStore,
       recipientTaggingStore,
       messagingSecretSourcesStore,
+      caches: createPxeCaches(),
       capsuleStore,
       factStore,
       privateEventStore,

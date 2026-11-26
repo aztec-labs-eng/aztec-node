@@ -21,6 +21,7 @@ import {
   NoteStore,
   ORACLE_VERSION_MAJOR,
   PrivateEventStore,
+  type PxeCaches,
   RecipientTaggingStore,
   SenderTaggingStore,
   composeHooks,
@@ -124,6 +125,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
   private senderTaggingStore: SenderTaggingStore;
   private recipientTaggingStore: RecipientTaggingStore;
   private messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  private readonly caches: PxeCaches;
   private capsuleStore: CapsuleStore;
   private factStore: FactStore;
   private privateEventStore: PrivateEventStore;
@@ -147,6 +149,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
     this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
+    this.caches = args.caches;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -550,6 +553,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,
@@ -995,6 +999,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
         aztecNode: this.stateMachine.node,
         recipientTaggingStore: this.recipientTaggingStore,
         messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+        caches: this.caches,
         capsuleService: new CapsuleService(this.capsuleStore, scopes),
         factService: new FactService(this.factStore, scopes),
         privateEventStore: this.privateEventStore,
@@ -1094,6 +1099,7 @@ type TXEOracleTopLevelContextCtorArgs = {
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
   messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  caches: PxeCaches;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;

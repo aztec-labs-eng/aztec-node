@@ -2,12 +2,13 @@ import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
-import { type LogResult, type MessagingSecret, SiloedTag } from '@aztec-labs/stdlib/logs';
+import type { LogResult, MessagingSecret } from '@aztec-labs/stdlib/logs';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../../../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../../../storage/tagging_store/sender_tagging_store.js';
 import { type LogQueryAnchor, getAllPrivateLogsByTags } from '../../get_all_logs_by_tags.js';
+import type { SiloedTagCache } from '../../siloed_tag_cache.js';
 
 /**
  * Loads tagging indexes from the Aztec node and stores them in the tagging data provider. Returns the txs the
@@ -20,6 +21,7 @@ import { type LogQueryAnchor, getAllPrivateLogsByTags } from '../../get_all_logs
  * @param end - The ending index (exclusive) of the window to process.
  * @param aztecNode - The Aztec node instance to query for logs.
  * @param taggingStore - The data provider to store pending indexes.
+ * @param siloedTagCache - Computes the window's siloed tags.
  * @param anchor - Block the log query is anchored to.
  * @param changeSetId - Change set identifier, used to keep writes in-memory until they can be persisted in a data
  * integrity preserving way.
@@ -30,12 +32,13 @@ export async function loadAndStoreNewTaggingIndexes(
   end: number,
   aztecNode: AztecNode,
   taggingStore: SenderTaggingStore,
+  siloedTagCache: SiloedTagCache,
   anchor: LogQueryAnchor,
   changeSetId: ChangeSetId,
 ): Promise<Map<string, TxInLogs>> {
   // We compute the tags for the current window of indexes
   const siloedTagsForWindow = await allToCompletion(
-    times(end - start, i => SiloedTag.compute({ extendedSecret, index: start + i })),
+    times(end - start, i => siloedTagCache.compute({ extendedSecret, index: start + i })),
   );
 
   const allLogs = await getAllPrivateLogsByTags(aztecNode, siloedTagsForWindow, anchor);

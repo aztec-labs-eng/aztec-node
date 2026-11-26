@@ -1,3 +1,4 @@
+import { getOrComputeAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -220,7 +221,7 @@ class AztecNodeCache {
     read: () => Promise<T>,
     { shouldCache }: { shouldCache?: (value: T) => boolean } = {},
   ): Promise<T> {
-    return this.#get<T>(key) ?? this.#set(key, read(), shouldCache);
+    return getOrComputeAsync(this.cache as Map<string, Promise<T>>, key, read, { shouldCache });
   }
 
   /**
@@ -240,25 +241,6 @@ class AztecNodeCache {
 
   #get<T>(key: string): Promise<T> | undefined {
     return this.cache.get(key) as Promise<T> | undefined;
-  }
-
-  #set<T>(key: string, promise: Promise<T>, shouldCache?: (value: T) => boolean): Promise<T> {
-    const evict = () => {
-      if (this.cache.get(key) === promise) {
-        this.cache.delete(key);
-      }
-    };
-    // A rejected read is evicted so callers can retry; a `shouldCache` that throws is treated the same way. The
-    // trailing catch keeps a throwing predicate from surfacing as an unhandled rejection on this detached promise.
-    promise
-      .then(value => {
-        if (shouldCache && !shouldCache(value)) {
-          evict();
-        }
-      }, evict)
-      .catch(evict);
-    this.cache.set(key, promise);
-    return promise;
   }
 }
 

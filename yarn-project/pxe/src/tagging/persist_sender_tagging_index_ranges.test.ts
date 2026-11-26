@@ -8,6 +8,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { SenderTaggingStore } from '../storage/tagging_store/sender_tagging_store.js';
 import { persistSenderTaggingIndexRangesForTx } from './persist_sender_tagging_index_ranges.js';
+import { SiloedTagCache } from './siloed_tag_cache.js';
 
 describe('persistSenderTaggingIndexRangesForTx', () => {
   let secret: MessagingSecret;
@@ -38,7 +39,7 @@ describe('persistSenderTaggingIndexRangesForTx', () => {
   it('does nothing when no recorded ranges are provided', async () => {
     publicInputs.getNonEmptyPrivateLogs.mockReturnValue([]);
 
-    await persistSenderTaggingIndexRangesForTx(store, [], publicInputs, getTxHash, 'test', log);
+    await persistSenderTaggingIndexRangesForTx(store, new SiloedTagCache(), [], publicInputs, getTxHash, 'test', log);
 
     expect(store.storePendingIndexes).not.toHaveBeenCalled();
     expect(getTxHash).not.toHaveBeenCalled();
@@ -49,6 +50,7 @@ describe('persistSenderTaggingIndexRangesForTx', () => {
 
     await persistSenderTaggingIndexRangesForTx(
       store,
+      new SiloedTagCache(),
       [{ extendedSecret: secret, lowestIndex: 1, highestIndex: 3 }],
       publicInputs,
       getTxHash,
@@ -69,6 +71,7 @@ describe('persistSenderTaggingIndexRangesForTx', () => {
 
     await persistSenderTaggingIndexRangesForTx(
       store,
+      new SiloedTagCache(),
       [{ extendedSecret: secret, lowestIndex: 1, highestIndex: 3 }],
       publicInputs,
       getTxHash,
@@ -90,6 +93,7 @@ describe('persistSenderTaggingIndexRangesForTx', () => {
 
     await persistSenderTaggingIndexRangesForTx(
       store,
+      new SiloedTagCache(),
       [{ extendedSecret: secret, lowestIndex: 1, highestIndex: 5 }],
       publicInputs,
       getTxHash,

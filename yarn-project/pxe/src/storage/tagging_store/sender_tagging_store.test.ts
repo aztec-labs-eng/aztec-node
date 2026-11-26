@@ -13,6 +13,7 @@ import { randomMessagingSecret } from '@aztec-labs/stdlib/testing';
 import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
+import { SiloedTagCache } from '../../tagging/siloed_tag_cache.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';
 import { SenderTaggingStore, windowExceededError } from './sender_tagging_store.js';
 
@@ -636,7 +637,7 @@ describe('SenderTaggingStore', () => {
       const survivingTag = await SiloedTag.compute({ extendedSecret: secret1, index: 3 });
       const txEffect = makeTxEffect(txHash, [survivingTag]);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // Index 3 should be finalized (it was onchain)
       expect(await taggingStore.getLastFinalizedIndex(secret1, 'test')).toBe(3);
@@ -653,7 +654,7 @@ describe('SenderTaggingStore', () => {
       // TxEffect with no matching private logs (empty)
       const txEffect = makeTxEffect(txHash, []);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // No finalized index should be set
       expect(await taggingStore.getLastFinalizedIndex(secret1, 'test')).toBeUndefined();
@@ -672,7 +673,7 @@ describe('SenderTaggingStore', () => {
       const survivingTag = await SiloedTag.compute({ extendedSecret: secret1, index: 3 });
       const txEffect = makeTxEffect(txHash, [survivingTag]);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // secret1: index 3 should be finalized
       expect(await taggingStore.getLastFinalizedIndex(secret1, 'test')).toBe(3);
@@ -694,7 +695,7 @@ describe('SenderTaggingStore', () => {
       // TxEffect with no surviving tags for the reverted tx
       const txEffect = makeTxEffect(revertedTxHash, []);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // No finalized index (nothing survived from the reverted tx)
       expect(await taggingStore.getLastFinalizedIndex(secret1, 'test')).toBeUndefined();
@@ -719,7 +720,7 @@ describe('SenderTaggingStore', () => {
       const survivingTag = await SiloedTag.compute({ extendedSecret: secret1, index: 4 });
       const txEffect = makeTxEffect(revertedTxHash, [survivingTag]);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // Finalized index should be updated to 4 (higher than previous 2)
       expect(await taggingStore.getLastFinalizedIndex(secret1, 'test')).toBe(4);
@@ -736,7 +737,7 @@ describe('SenderTaggingStore', () => {
       const survivingTag = await SiloedTag.compute({ extendedSecret: constrainedSecret, index: 4 });
       const txEffect = makeTxEffect(txHash, [survivingTag]);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       expect(await taggingStore.getLastFinalizedIndex(constrainedSecret, 'test')).toBe(4);
       expect(await pendingTxHashes(constrainedSecret, 0, 10, 'test')).toHaveLength(0);
@@ -765,7 +766,7 @@ describe('SenderTaggingStore', () => {
       });
       const txEffect = makeTxEffect(txHash, [wrongDomSepTag]);
 
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, 'test');
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(txEffect, new SiloedTagCache(), 'test');
 
       // No constrained index survived (the domain separator mismatch means the tag doesn't reconstruct).
       expect(await taggingStore.getLastFinalizedIndex(constrainedSecret, 'test')).toBeUndefined();

@@ -24,6 +24,7 @@ import type { MessagingSecretSourcesStore } from '../storage/tagging_store/messa
 import type { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
 import {
   type LogQueryAnchor,
+  type SiloedTagCache,
   getAllPrivateLogsByTags,
   getAllPublicLogsByTagsFromContract,
   syncTaggedPrivateLogs,
@@ -45,6 +46,7 @@ export class LogService {
     private readonly l2TipsStore: L2TipsProvider,
     private readonly keyStore: KeyStore,
     private readonly recipientTaggingStore: RecipientTaggingStore,
+    private readonly siloedTagCache: SiloedTagCache,
     private readonly messagingSecretSourcesStore: MessagingSecretSourcesStore,
     private readonly addressStore: AddressStore,
     private readonly scopes: AztecAddress[],
@@ -228,6 +230,7 @@ export class LogService {
       secrets,
       this.aztecNode,
       this.recipientTaggingStore,
+      this.siloedTagCache,
       this.anchorBlockHeader,
       l2Tips.finalized.block.number,
       this.changeSetId,

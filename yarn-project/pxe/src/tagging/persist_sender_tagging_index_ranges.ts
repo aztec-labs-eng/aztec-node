@@ -6,6 +6,7 @@ import type { TxHash } from '@aztec-labs/stdlib/tx';
 import type { ChangeSetId } from '../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../storage/tagging_store/sender_tagging_store.js';
 import { reconcileTaggingIndexRangesAgainstSurvivingTags } from './reconcile_tagging_index_ranges.js';
+import type { SiloedTagCache } from './siloed_tag_cache.js';
 
 /**
  * Persists the tagging index ranges that a tx used as a sender, after reconciling them against the kernel's surviving
@@ -22,6 +23,7 @@ import { reconcileTaggingIndexRangesAgainstSurvivingTags } from './reconcile_tag
  * would reuse the tag and the transactions would be linked. Persisting in the DB prevents that linkage.
  *
  * @param store - The sender tagging store.
+ * @param siloedTagCache - Computes the siloed tags of the recorded ranges' indexes.
  * @param recordedRanges - The tagging index ranges as recorded during private execution (pre-squash).
  * @param publicInputs - The final kernel public inputs, used to determine which private logs survived squashing.
  * @param getTxHash - Lazy accessor for the tx hash. Called only when there is something to persist, since computing
@@ -32,6 +34,7 @@ import { reconcileTaggingIndexRangesAgainstSurvivingTags } from './reconcile_tag
  */
 export async function persistSenderTaggingIndexRangesForTx(
   store: SenderTaggingStore,
+  siloedTagCache: SiloedTagCache,
   recordedRanges: TaggingIndexRange[],
   publicInputs: PrivateKernelTailCircuitPublicInputs,
   getTxHash: () => Promise<TxHash>,
@@ -46,7 +49,11 @@ export async function persistSenderTaggingIndexRangesForTx(
   const survivingTags = new Set(
     publicInputs.getNonEmptyPrivateLogs().map(privateLog => privateLog.fields[0].toString()),
   );
-  const reconciledRanges = await reconcileTaggingIndexRangesAgainstSurvivingTags(recordedRanges, survivingTags);
+  const reconciledRanges = await reconcileTaggingIndexRangesAgainstSurvivingTags(
+    recordedRanges,
+    survivingTags,
+    siloedTagCache,
+  );
 
   if (reconciledRanges.length === 0) {
     log.debug(`All tagging index ranges used in the tx were squashed by the kernel`, { recordedRanges });

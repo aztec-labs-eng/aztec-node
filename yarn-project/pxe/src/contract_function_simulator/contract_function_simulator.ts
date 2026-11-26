@@ -105,6 +105,7 @@ import {
   getUpdatedClassIdHints,
   getUpdatedClassIdHintsOfCalledContracts,
 } from '../private_kernel/private_kernel_inputs_provider.js';
+import type { PxeCaches } from '../pxe_caches.js';
 import type { AddressStore } from '../storage/address_store/address_store.js';
 import { CapsuleService } from '../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../storage/capsule_store/capsule_store.js';
@@ -155,6 +156,7 @@ export type ContractFunctionSimulatorArgs = {
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
   messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  caches: PxeCaches;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;
@@ -180,6 +182,7 @@ export class ContractFunctionSimulator {
   private readonly senderTaggingStore: SenderTaggingStore;
   private readonly recipientTaggingStore: RecipientTaggingStore;
   private readonly messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  private readonly caches: PxeCaches;
   private readonly capsuleStore: CapsuleStore;
   private readonly factStore: FactStore;
   private readonly privateEventStore: PrivateEventStore;
@@ -200,6 +203,7 @@ export class ContractFunctionSimulator {
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
     this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
+    this.caches = args.caches;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -299,6 +303,7 @@ export class ContractFunctionSimulator {
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,
@@ -414,6 +419,7 @@ export class ContractFunctionSimulator {
       aztecNode: this.aztecNode,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: new CapsuleService(this.capsuleStore, scopes),
       factService: new FactService(this.factStore, scopes),
       privateEventStore: this.privateEventStore,
