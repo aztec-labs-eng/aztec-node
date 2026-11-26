@@ -64,6 +64,7 @@ import {
 import { type TxOnchainContext, TxResolverService } from '../../messages/tx_resolver_service.js';
 import { NoteService, type NoteValidationTxData } from '../../notes/note_service.js';
 import { ORACLE_VERSION_MAJOR } from '../../oracle_version.js';
+import type { PxeCaches } from '../../pxe_caches.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
@@ -118,6 +119,7 @@ export type UtilityExecutionOracleArgs = {
   aztecNode: AztecNode;
   recipientTaggingStore: RecipientTaggingStore;
   messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  caches: PxeCaches;
   capsuleService: CapsuleService;
   factService: FactService;
   privateEventStore: PrivateEventStore;
@@ -170,6 +172,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   protected readonly aztecNode: AztecNode;
   protected readonly recipientTaggingStore: RecipientTaggingStore;
   protected readonly messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  protected readonly caches: PxeCaches;
   protected readonly capsuleService: CapsuleService;
   protected readonly factService: FactService;
   protected readonly privateEventStore: PrivateEventStore;
@@ -195,6 +198,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     this.aztecNode = args.aztecNode;
     this.recipientTaggingStore = args.recipientTaggingStore;
     this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
+    this.caches = args.caches;
     this.capsuleService = args.capsuleService;
     this.factService = args.factService;
     this.privateEventStore = args.privateEventStore;
@@ -716,6 +720,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       this.l2TipsStore,
       this.keyStore,
       this.recipientTaggingStore,
+      this.caches.siloedTags,
       this.messagingSecretSourcesStore,
       this.addressStore,
       this.scopes,
@@ -1183,6 +1188,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       aztecNode: this.aztecNode,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: this.capsuleService,
       factService: this.factService,
       privateEventStore: this.privateEventStore,

@@ -4,7 +4,7 @@ import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { isDefined } from '@aztec-labs/foundation/types';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import type { LogResult, MessagingSecret } from '@aztec-labs/stdlib/logs';
-import { OnchainDeliveryMode, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
@@ -15,6 +15,7 @@ import {
   unfinalizedTaggingIndexesWindowEnd,
 } from '../constants.js';
 import { type LogQueryAnchor, getAllPrivateLogsByTags } from '../get_all_logs_by_tags.js';
+import type { SiloedTagCache } from '../siloed_tag_cache.js';
 import { findHighestIndexes } from './utils/find_highest_indexes.js';
 
 /**
@@ -88,6 +89,7 @@ export async function syncTaggedPrivateLogs(
   secrets: MessagingSecret[],
   aztecNode: AztecNode,
   taggingStore: RecipientTaggingStore,
+  siloedTagCache: SiloedTagCache,
   anchorBlockHeader: BlockHeader,
   finalizedBlockNumber: BlockNumber,
   changeSetId: ChangeSetId,
@@ -105,7 +107,7 @@ export async function syncTaggedPrivateLogs(
 
   while (pending.length > 0) {
     // Compute tags for all pending secrets and fetch logs in batched RPC calls
-    const logsPerSecret = await fetchLogsForSecrets(pending, aztecNode, anchor);
+    const logsPerSecret = await fetchLogsForSecrets(pending, aztecNode, siloedTagCache, anchor);
 
     const nextRound = await allToCompletion(
       pending.map(async (pendingSecret, i) => {
@@ -192,6 +194,7 @@ function getIndexRangesForSecrets(
 async function fetchLogsForSecrets(
   pending: PendingSecret[],
   aztecNode: AztecNode,
+  siloedTagCache: SiloedTagCache,
   anchor: LogQueryAnchor,
 ): Promise<LogWithIndex[][]> {
   // Determine the index range for each secret
@@ -200,7 +203,7 @@ async function fetchLogsForSecrets(
   // Compute siloed tags for all indexes
   const tagsPerSecret = await allToCompletion(
     pending.map(({ secret }, i) =>
-      allToCompletion(indexesPerSecret[i].map(index => SiloedTag.compute({ extendedSecret: secret, index }))),
+      allToCompletion(indexesPerSecret[i].map(index => siloedTagCache.compute({ extendedSecret: secret, index }))),
     ),
   );
 

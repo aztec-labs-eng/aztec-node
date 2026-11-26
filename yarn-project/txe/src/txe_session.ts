@@ -21,9 +21,10 @@ import {
   SenderTaggingStore,
   StagedWriteCoordinator,
   composeHooks,
+  createPxeCaches,
   runOperation,
 } from '@aztec-labs/pxe/server';
-import type { ChangeSetId, OperationContributor } from '@aztec-labs/pxe/server';
+import type { ChangeSetId, OperationContributor, PxeCaches } from '@aztec-labs/pxe/server';
 import {
   ExecutionNoteCache,
   ExecutionTaggingIndexCache,
@@ -266,6 +267,7 @@ export class TXESession implements TXESessionStateHandler {
   private senderTaggingStore: SenderTaggingStore;
   private recipientTaggingStore: RecipientTaggingStore;
   private messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  private readonly caches: PxeCaches;
   private capsuleStore: CapsuleStore;
   private factStore: FactStore;
   private privateEventStore: PrivateEventStore;
@@ -292,6 +294,7 @@ export class TXESession implements TXESessionStateHandler {
     this.senderTaggingStore = args.senderTaggingStore;
     this.recipientTaggingStore = args.recipientTaggingStore;
     this.messagingSecretSourcesStore = args.messagingSecretSourcesStore;
+    this.caches = args.caches;
     this.capsuleStore = args.capsuleStore;
     this.factStore = args.factStore;
     this.privateEventStore = args.privateEventStore;
@@ -353,6 +356,7 @@ export class TXESession implements TXESessionStateHandler {
     const senderTaggingStore = new SenderTaggingStore(store);
     const recipientTaggingStore = new RecipientTaggingStore(store);
     const messagingSecretSourcesStore = new MessagingSecretSourcesStore(store);
+    const caches = createPxeCaches();
     const capsuleStore = new CapsuleStore(store);
     const factStore = new FactStore(store);
     const keyStore = new KeyStore(store);
@@ -385,6 +389,7 @@ export class TXESession implements TXESessionStateHandler {
       senderTaggingStore,
       recipientTaggingStore,
       messagingSecretSourcesStore,
+      caches,
       capsuleStore,
       factStore,
       privateEventStore,
@@ -414,6 +419,7 @@ export class TXESession implements TXESessionStateHandler {
       senderTaggingStore,
       recipientTaggingStore,
       messagingSecretSourcesStore,
+      caches,
       capsuleStore,
       factStore,
       privateEventStore,
@@ -720,6 +726,7 @@ export class TXESession implements TXESessionStateHandler {
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleStore: this.capsuleStore,
       factStore: this.factStore,
       privateEventStore: this.privateEventStore,
@@ -800,6 +807,7 @@ export class TXESession implements TXESessionStateHandler {
       senderTaggingStore: this.senderTaggingStore,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: new CapsuleService(this.capsuleStore, await this.keyStore.getAccounts()),
       factService: new FactService(this.factStore, await this.keyStore.getAccounts()),
       privateEventStore: this.privateEventStore,
@@ -899,6 +907,7 @@ export class TXESession implements TXESessionStateHandler {
       aztecNode: this.stateMachine.node,
       recipientTaggingStore: this.recipientTaggingStore,
       messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+      caches: this.caches,
       capsuleService: new CapsuleService(this.capsuleStore, await this.keyStore.getAccounts()),
       factService: new FactService(this.factStore, await this.keyStore.getAccounts()),
       privateEventStore: this.privateEventStore,
@@ -1027,6 +1036,7 @@ export class TXESession implements TXESessionStateHandler {
           aztecNode: this.stateMachine.node,
           recipientTaggingStore: this.recipientTaggingStore,
           messagingSecretSourcesStore: this.messagingSecretSourcesStore,
+          caches: this.caches,
           capsuleService: new CapsuleService(this.capsuleStore, scopes),
           factService: new FactService(this.factStore, scopes),
           privateEventStore: this.privateEventStore,
@@ -1094,6 +1104,7 @@ type TXESessionCtorArgs = {
   senderTaggingStore: SenderTaggingStore;
   recipientTaggingStore: RecipientTaggingStore;
   messagingSecretSourcesStore: MessagingSecretSourcesStore;
+  caches: PxeCaches;
   capsuleStore: CapsuleStore;
   factStore: FactStore;
   privateEventStore: PrivateEventStore;

@@ -59,6 +59,7 @@ import type { _MockProxy } from 'jest-mock-extended/lib/Mock.js';
 import type { ContractClassService } from '../../contract/contract_class_service.js';
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import { TxResolverService } from '../../messages/tx_resolver_service.js';
+import { createPxeCaches } from '../../pxe_caches.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
 import { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../../storage/capsule_store/capsule_store.js';
@@ -161,6 +162,7 @@ describe('Utility Execution test suite', () => {
       senderTaggingStore,
       recipientTaggingStore,
       messagingSecretSourcesStore,
+      caches: createPxeCaches(),
       capsuleStore,
       factStore,
       privateEventStore,
@@ -1341,6 +1343,7 @@ describe('Utility Execution test suite', () => {
         aztecNode,
         recipientTaggingStore,
         messagingSecretSourcesStore,
+        caches: createPxeCaches(),
         capsuleService: new CapsuleService(capsuleStore, scopes),
         factService: new FactService(factStore, scopes),
         privateEventStore,

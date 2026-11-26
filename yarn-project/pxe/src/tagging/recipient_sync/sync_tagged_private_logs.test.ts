@@ -21,6 +21,7 @@ import {
   UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN,
   syncTaggedPrivateLogs,
 } from '../index.js';
+import { SiloedTagCache } from '../siloed_tag_cache.js';
 import { computeSiloedTagForIndex, extractTags } from '../testing/tag_query_test_utils.js';
 
 const FAR_FUTURE_BLOCK_NUMBER = BlockNumber(100);
@@ -82,7 +83,15 @@ describe('syncTaggedPrivateLogs', () => {
     finalizedBlockNumber = FINALIZED_BLOCK_NUMBER,
     header = ANCHOR_BLOCK_HEADER,
   ) {
-    return syncTaggedPrivateLogs(secrets, aztecNode, taggingStore, header, finalizedBlockNumber, CHANGE_SET_ID);
+    return syncTaggedPrivateLogs(
+      secrets,
+      aztecNode,
+      taggingStore,
+      new SiloedTagCache(),
+      header,
+      finalizedBlockNumber,
+      CHANGE_SET_ID,
+    );
   }
 
   /** The tags queried by the `callIndex`-th RPC call. */

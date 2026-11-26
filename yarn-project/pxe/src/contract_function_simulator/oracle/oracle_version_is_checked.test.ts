@@ -15,6 +15,7 @@ import type { ContractClassService } from '../../contract/contract_class_service
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import type { TxResolverService } from '../../messages/tx_resolver_service.js';
 import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR } from '../../oracle_version.js';
+import { createPxeCaches } from '../../pxe_caches.js';
 import type { AddressStore } from '../../storage/address_store/address_store.js';
 import { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../../storage/capsule_store/capsule_store.js';
@@ -124,6 +125,7 @@ describe('Oracle Version Check test suite', () => {
         aztecNode,
         recipientTaggingStore,
         messagingSecretSourcesStore,
+        caches: createPxeCaches(),
         capsuleService: new CapsuleService(capsuleStore, []),
         factService: new FactService(factStore, []),
         privateEventStore,

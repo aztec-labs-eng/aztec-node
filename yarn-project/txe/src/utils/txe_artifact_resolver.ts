@@ -1,3 +1,4 @@
+import { getOrComputeAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { ContractStore } from '@aztec-labs/pxe/client/lazy';
@@ -22,37 +23,6 @@ export interface ResolvedArtifact {
 }
 
 /**
- * Cache + in-flight map pair. Lookup hits the cache, then awaits an in-flight `compute()` if one
- * exists, otherwise starts one and stores it. Guarantees `compute()` runs at most once per `key`
- * across concurrent callers, which matters because `computeArtifactHash` is expensive.
- */
-class AsyncCache<K, V> {
-  #cache = new Map<K, V>();
-  #inFlight = new Map<K, Promise<V>>();
-
-  getOrCompute(key: K, compute: () => Promise<V>): Promise<V> {
-    const cached = this.#cache.get(key);
-    if (cached !== undefined) {
-      return Promise.resolve(cached);
-    }
-    let pending = this.#inFlight.get(key);
-    if (!pending) {
-      pending = (async () => {
-        try {
-          const value = await compute();
-          this.#cache.set(key, value);
-          return value;
-        } finally {
-          this.#inFlight.delete(key);
-        }
-      })();
-      this.#inFlight.set(key, pending);
-    }
-    return pending;
-  }
-}
-
-/**
  * Resolves and caches contract artifacts and their associated instances.
  *
  * Artifact hash computation is expensive, so this service deduplicates both completed and in-flight computations.
@@ -61,8 +31,8 @@ class AsyncCache<K, V> {
  * deployer reuse the same `ContractArtifactWithHash`.
  */
 export class TXEArtifactResolver {
-  #deployments = new AsyncCache<string, ResolvedArtifact>();
-  #artifacts = new AsyncCache<string, ContractArtifactWithHash>();
+  #deployments = new Map<string, Promise<ResolvedArtifact>>();
+  #artifacts = new Map<string, Promise<ContractArtifactWithHash>>();
   #logger = createLogger('txe:artifact_resolver');
 
   constructor(
@@ -72,7 +42,7 @@ export class TXEArtifactResolver {
 
   /** Resolves the Schnorr account contract artifact and instance for the given secret, caching the result. */
   resolveAccountArtifact(secret: Fr): Promise<ResolvedArtifact> {
-    return this.#deployments.getOrCompute(`SchnorrAccountContract-${secret}`, () =>
+    return getOrComputeAsync(this.#deployments, `SchnorrAccountContract-${secret}`, () =>
       this.#computeAccountArtifact(secret),
     );
   }
@@ -110,7 +80,7 @@ export class TXEArtifactResolver {
       .map(arg => arg.toString())
       .join('-')}-${publicKeysHash}-${salt}-${deployer}-${immutablesHash}-${fileHash}`;
 
-    return this.#deployments.getOrCompute(cacheKey, () =>
+    return getOrComputeAsync(this.#deployments, cacheKey, () =>
       this.#computeDeployArtifact(
         artifactPath,
         fileHash,
@@ -184,7 +154,7 @@ export class TXEArtifactResolver {
   ): Promise<ResolvedArtifact> {
     // Inner cache: artifact load + hash depends only on the compiled bytecode (`fileHash`), so subsequent deploys of
     // the same contract — regardless of constructor args / deployer / salt — reuse the same `ContractArtifactWithHash`.
-    const artifact = await this.#artifacts.getOrCompute(fileHash, async () => {
+    const artifact = await getOrComputeAsync(this.#artifacts, fileHash, async () => {
       this.#logger.debug(`Loading compiled artifact ${artifactPath}`);
       const artifactJSON = JSON.parse(await readFile(artifactPath, 'utf-8')) as NoirCompiledContract;
       const artifactWithoutHash = loadContractArtifact(artifactJSON);

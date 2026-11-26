@@ -11,6 +11,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
 import { type MessagingSecret, UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN } from '../index.js';
+import { SiloedTagCache } from '../siloed_tag_cache.js';
 import { computeSiloedTagForIndex, extractTags } from '../testing/tag_query_test_utils.js';
 import { syncSenderTaggingIndexes } from './sync_sender_tagging_indexes.js';
 import { minedReceipt } from './utils/test_utils.js';
@@ -512,6 +513,14 @@ describe('syncSenderTaggingIndexes', () => {
   }
 
   function sync({ finalizedAt = MOCK_FINALIZED_BLOCK_NUMBER }: { finalizedAt?: BlockNumber } = {}) {
-    return syncSenderTaggingIndexes(secret, aztecNode, taggingStore, finalizedAt, MOCK_ANCHOR, 'test');
+    return syncSenderTaggingIndexes(
+      secret,
+      aztecNode,
+      taggingStore,
+      new SiloedTagCache(),
+      finalizedAt,
+      MOCK_ANCHOR,
+      'test',
+    );
   }
 });

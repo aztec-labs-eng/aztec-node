@@ -6,6 +6,7 @@ import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
 import { unfinalizedTaggingIndexesWindowEnd } from '../constants.js';
 import type { LogQueryAnchor } from '../get_all_logs_by_tags.js';
+import type { SiloedTagCache } from '../siloed_tag_cache.js';
 import { loadAndStoreNewTaggingIndexes } from './utils/load_and_store_new_tagging_indexes.js';
 import { resolvePendingTxs } from './utils/resolve_pending_txs.js';
 
@@ -25,6 +26,7 @@ export async function syncSenderTaggingIndexes(
   secret: MessagingSecret,
   aztecNode: AztecNode,
   taggingStore: SenderTaggingStore,
+  siloedTagCache: SiloedTagCache,
   finalizedBlockNumber: BlockNumber,
   anchor: LogQueryAnchor,
   changeSetId: ChangeSetId,
@@ -65,6 +67,7 @@ export async function syncSenderTaggingIndexes(
       end,
       aztecNode,
       taggingStore,
+      siloedTagCache,
       anchor,
       changeSetId,
     );
@@ -84,7 +87,7 @@ export async function syncSenderTaggingIndexes(
     await taggingStore.finalizePendingIndexes(txHashesFinalizedFromReceipts, changeSetId);
 
     for (const receipt of receiptsWithExecutionReverted) {
-      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(receipt.txEffect, changeSetId);
+      await taggingStore.finalizePendingIndexesOfAPartiallyRevertedTx(receipt.txEffect, siloedTagCache, changeSetId);
     }
 
     // We check if the finalized index has been updated.

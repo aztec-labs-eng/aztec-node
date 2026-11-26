@@ -14,4 +14,5 @@ export { type ChangeSetId, StagedWriteCoordinator } from '../../storage/staged_w
 export { runOperation, type OperationContributor } from '../../operation_lifecycle.js';
 export { ContractSyncService } from '../../contract/contract_sync_service.js';
 export { ContractClassService } from '../../contract/contract_class_service.js';
+export { type PxeCaches, createPxeCaches } from '../../pxe_caches.js';
 export { AnchoredContractData } from '../../contract_function_simulator/anchored_contract_data.js';
