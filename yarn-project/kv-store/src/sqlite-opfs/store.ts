@@ -262,7 +262,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
    */
   runAsync(sql: string, bind?: SqlValue[]): Promise<{ changes: number }> {
     const send = () =>
-      this.#sendRequest({ type: 'run', id: this.#allocId(), sql, bind }).then(r => ({
+      this.#sendRequest({ type: 'run', id: this.#allocId(), sql, bind: withExactSizeBytes(bind) }).then(r => ({
         changes: 'changes' in r ? (r.changes ?? 0) : 0,
       }));
     return this.#inTx ? send() : this.#txQueue.put(send);
@@ -271,7 +271,9 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
   /** Runs a SELECT statement and returns rows in array row-mode. */
   allAsync(sql: string, bind?: SqlValue[]): Promise<ResultRow[]> {
     const send = () =>
-      this.#sendRequest({ type: 'all', id: this.#allocId(), sql, bind }).then(r => ('rows' in r ? (r.rows ?? []) : []));
+      this.#sendRequest({ type: 'all', id: this.#allocId(), sql, bind: withExactSizeBytes(bind) }).then(r =>
+        'rows' in r ? (r.rows ?? []) : [],
+      );
     return this.#inTx ? send() : this.#txQueue.put(send);
   }
 
@@ -328,4 +330,16 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
       }
     });
   }
+}
+
+/**
+ * Returns statement parameters whose byte arrays each own exactly their bytes. Posting a typed array to the worker
+ * copies its whole backing buffer, so a short view into a large reusable buffer, such as an encoder's output, would
+ * otherwise send the entire buffer.
+ */
+function withExactSizeBytes(bind: SqlValue[] | undefined): SqlValue[] | undefined {
+  return bind?.map(value =>
+    // Not `slice`: on a `Buffer` it returns a view of the same memory.
+    value instanceof Uint8Array && value.byteLength !== value.buffer.byteLength ? new Uint8Array(value) : value,
+  );
 }
