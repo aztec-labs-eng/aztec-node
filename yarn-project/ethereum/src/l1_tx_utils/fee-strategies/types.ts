@@ -15,6 +15,8 @@ export const HISTORICAL_BLOCK_COUNT = 5;
 export interface PriorityFeeStrategyResult {
   /** The calculated priority fee in wei */
   priorityFee: bigint;
+  /** Median mined tip over the complete history window, when above the strategy sanity cap. */
+  historicalTipAboveCap?: bigint;
   /** The latest block (fetched as part of the strategy) */
   latestBlock: Block;
   /** The blob base fee (only present for blob transactions) */

@@ -118,6 +118,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
   /** The last target slot for which we logged that its committee is not stable on L1 yet, to avoid per-tick log spam. */
   private lastSlotForCommitteeNotStableLog: SlotNumber | undefined;
 
+  private lastFeeMismatchSlot?: SlotNumber;
+
   /** The last slot for which we triggered a checkpoint proposal job, to prevent duplicate attempts. */
   protected lastSlotForCheckpointProposalJob: SlotNumber | undefined;
 
@@ -722,6 +724,34 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     const { attestorAddress, publisher } = created;
     using cleanup = new DisposableStack();
     cleanup.use(publisher);
+    const quote = created.feeQuote;
+    if (quote && !this.config.fishermanMode) {
+      const { bid, baseFee, competitiveTip, blobBaseFee } = quote;
+      const executionLimited = bid.maxFeePerGas < baseFee + competitiveTip || bid.maxPriorityFeePerGas < competitiveTip;
+      const blobLimited =
+        blobBaseFee !== undefined && bid.maxFeePerBlobGas !== undefined && bid.maxFeePerBlobGas < blobBaseFee;
+      if (executionLimited || blobLimited) {
+        const skipEnabled = this.config.skipProposingOnFeeMismatch;
+        if (this.lastFeeMismatchSlot !== targetSlot) {
+          this.lastFeeMismatchSlot = targetSlot;
+          this.metrics.recordFeeMismatch(skipEnabled);
+          this.log.info(`Publisher bid below estimated L1 market for slot ${targetSlot}`, {
+            ...logCtx,
+            ...quote,
+            executionLimited,
+            blobLimited,
+            skipEnabled,
+            publisher: publisher.getSenderAddress(),
+          });
+        }
+        if (skipEnabled) {
+          this.metrics.recordCheckpointPrecheckFailed('l1_fee_mismatch');
+          await this.tryVoteAndPruneWhenCannotBuild({ slot, targetSlot });
+          this.lastSlotForCheckpointProposalJob = targetSlot;
+          return undefined;
+        }
+      }
+    }
     this.log.verbose(`Created publisher at address ${publisher.getSenderAddress()} for attestor ${attestorAddress}`);
 
     // Simulate an invalidation if the pending chain is invalid (returns undefined if no need). Only done when there's no

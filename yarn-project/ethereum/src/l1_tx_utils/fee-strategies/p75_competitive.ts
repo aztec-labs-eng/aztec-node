@@ -140,7 +140,15 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
     );
     const estimateForCap = networkEstimate > minimumEstimateForCap ? networkEstimate : minimumEstimateForCap;
     const maxReasonableFee = estimateForCap * 100n;
+    let historicalTipAboveCap: bigint | undefined;
     if (competitiveFee > maxReasonableFee) {
+      // A pending bid alone is not evidence that the sanity cap underprices the market.
+      if (feeHistory?.reward?.length === HISTORICAL_BLOCK_COUNT) {
+        const minedTip = median(feeHistory.reward.map(rewards => rewards[0] ?? 0n));
+        if (minedTip !== undefined && minedTip > maxReasonableFee) {
+          historicalTipAboveCap = minedTip;
+        }
+      }
       logger?.debug('Competitive fee exceeds sanity cap, using capped value', {
         competitiveFee: formatGwei(competitiveFee),
         networkEstimate: formatGwei(networkEstimate),
@@ -162,6 +170,7 @@ export const P75AllTxsPriorityFeeStrategy: PriorityFeeStrategy = {
 
     return {
       priorityFee: competitiveFee,
+      historicalTipAboveCap,
       latestBlock,
       blobBaseFee,
       debugInfo,
