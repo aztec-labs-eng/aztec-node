@@ -3,7 +3,7 @@
 #
 # This is release.yml with a different target. The two workflows differ in the tag pattern, the
 # environment, the RELEASE_TARGET literal, the credentials named, and REF_NAME — everything else
-# about a release is the same code (ci.sh release), driven by ci3/source_release_target.
+# about a release is the same code (ci.sh release), driven by scripts/source_release_target.
 #
 # The environments are what keep the two apart: release-private holds the Artifact Registry
 # credential and nothing that can publish publicly, `release` holds the npmjs and DockerHub
@@ -30,12 +30,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     environment: release-private
-    # Nothing a private build produces may reach the build cache: it is served over plain HTTP with
-    # no credentials. The build itself gets this from ci3/source_release_target; this covers the
-    # runner's own cache write in ci3_success.sh.
+    # Nothing a private build produces may reach the shared build cache or its logs, which anyone
+    # can read: both go to the private cache. The build selects the bucket itself
+    # (scripts/source_release_target); this covers the runner, and the logs, which ci3 writes
+    # wherever CI_LOGS_S3_LOCATION points from the runner and the build instances alike.
     env:
-      NO_CACHE_UPLOAD: 1
-      NO_CACHE: 1
+      CI3_CACHE_BUCKET: aztec-ci-private-cache
+      CI_LOGS_S3_LOCATION: s3://aztec-ci-private-cache/logs
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token

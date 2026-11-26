@@ -145,7 +145,7 @@ function test_cmds {
 function release {
   echo_header "release-image release"
 
-  source $ci3/source_release_target
+  source $root/scripts/source_release_target
   docker_login
   local repo=${DOCKER_REGISTRY%/}
 
@@ -164,7 +164,7 @@ function release {
 function release_docker_manifest {
   echo_header "release-image manifest"
 
-  source $ci3/source_release_target
+  source $root/scripts/source_release_target
   docker_login
   local repo=${DOCKER_REGISTRY%/}
 
@@ -197,7 +197,7 @@ function release_docker_manifest {
 function push_pr {
   echo_header "release-image push_pr"
 
-  source $ci3/source_release_target
+  source $root/scripts/source_release_target
   docker_login
   local image=$(pr_image_name)
   docker tag azteclabs/aztec:$COMMIT_HASH $image
@@ -207,7 +207,7 @@ function push_pr {
 # The name push_pr publishes, for the deploys that consume it: one definition, so the image a
 # deploy asks for is the image that was pushed.
 function pr_image_name {
-  source $ci3/source_release_target
+  source $root/scripts/source_release_target
   echo "${DOCKER_REGISTRY%/}/aztec-dev:$COMMIT_HASH"
 }
 

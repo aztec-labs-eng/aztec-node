@@ -540,7 +540,7 @@ function release {
   echo_header "release all"
   # RELEASE_PROJECTS is what the target publishes; a private release names neither aztec-up nor
   # playground, whose artifacts are public by nature.
-  source $ci3/source_release_target
+  source $root/scripts/source_release_target
   set -x
 
   local projects=($RELEASE_PROJECTS)
@@ -956,7 +956,8 @@ case "$cmd" in
     if ! semver check $REF_NAME; then
       exit 1
     fi
-    source $ci3/source_release_target   # Source vars for public or private releases.
+    source $root/scripts/source_release_target   # Source vars for public or private releases.
+    source $ci3/source_cache_bucket $RELEASE_CACHE_BUCKET
     ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;
