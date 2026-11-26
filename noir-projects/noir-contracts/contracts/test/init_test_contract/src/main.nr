@@ -54,6 +54,12 @@ pub contract InitTest {
     #[noinitcheck]
     fn priv_no_init_check(owner: AztecAddress, value: Field) {}
 
+    #[external("private")]
+    fn priv_calling_utility_init_check(owner: AztecAddress) {
+        // Safety: the result is discarded, only whether the call succeeds matters.
+        let _ = unsafe { self.utility.call_self.utility_init_check(owner) };
+    }
+
     #[external("public")]
     fn pub_init_check(owner: AztecAddress, value: Field) {}
 

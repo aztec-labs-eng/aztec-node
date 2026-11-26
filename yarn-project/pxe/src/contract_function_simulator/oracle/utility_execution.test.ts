@@ -219,7 +219,7 @@ describe('Utility Execution test suite', () => {
     const contractAddress = await computeContractAddressFromInstance(instanceFields);
 
     aztecNode.getPublicStorageAt.mockResolvedValue(Fr.ZERO);
-    // The init check calls check_nullifier_exists, which queries findLeavesIndexes.
+    // The init check looks up the settled initialization nullifier with findLeavesIndexes.
     aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
       Promise.resolve(leaves.map(() => ({ data: 1n, l2BlockNumber: BlockNumber(1), l2BlockHash: BlockHash.random() }))),
     );
@@ -586,8 +586,9 @@ describe('Utility Execution test suite', () => {
       });
     });
 
-    // `summed_values` asserts that its contract is initialized, then sums the owner's notes. Whether it succeeds and
-    // what it returns show which of the transaction's nullifiers and notes a utility function it calls sees.
+    // `summed_values` asserts that its contract is initialized, then sums the owner's notes. How its initialization
+    // check fails and what it returns show which of the transaction's nullifiers and notes a utility function it calls
+    // sees.
     describe('utility calls within a transaction', () => {
       const summedValues = {
         ...getFunctionArtifactByName(StatefulTestContractArtifact, 'summed_values'),
@@ -642,14 +643,15 @@ describe('Utility Execution test suite', () => {
         noteCache = new ExecutionNoteCache(Fr.ZERO);
       });
 
+      // The initialization check requires a settled initialization nullifier, and fails with `Not initialized` instead
+      // when it sees none at all.
       it('sees the nullifiers the transaction emitted', async () => {
         aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
           Promise.resolve(leaves.map(() => undefined)),
         );
-        noteStore.getNotes.mockResolvedValue([await settledNote(3n)]);
         await noteCache.nullifierCreated(instance.address, initializationNullifier);
 
-        await expect(callSummedValues()).resolves.toEqual([new Fr(3n)]);
+        await expect(callSummedValues()).rejects.toThrow('Contract initialization is not yet settled');
       });
 
       it('sees the notes the transaction created, and not the settled notes it nullified', async () => {

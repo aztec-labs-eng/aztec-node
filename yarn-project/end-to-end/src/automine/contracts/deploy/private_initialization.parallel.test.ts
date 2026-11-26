@@ -161,6 +161,20 @@ describe('automine/contracts/deploy/private_initialization', () => {
     expect(result.result).toEqual(2n);
   });
 
+  // The private initialization nullifier is already pending when the utility function runs, but the public part of
+  // initialization has not run yet.
+  it('refuses to call a utility function that requires initialization from private in the initializing tx', async () => {
+    const { contract, initArgs } = await deployUninitialized();
+    const owner = defaultAccountAddress;
+    const batch = new BatchCall(wallet, [
+      contract.methods.constructor(...initArgs),
+      contract.methods.priv_calling_utility_init_check(owner),
+    ]);
+    await expect(batch.simulate({ from: defaultAccountAddress })).rejects.toThrow(
+      /Contract initialization is not yet settled/,
+    );
+  });
+
   // A public call enqueued before the private constructor should fail the init check, even though the
   // private constructor emits the init nullifier in the same tx.
   it('refuses to call a public function enqueued before private initialization in same tx', async () => {
