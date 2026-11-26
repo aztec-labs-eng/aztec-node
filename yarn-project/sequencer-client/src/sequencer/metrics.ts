@@ -40,6 +40,7 @@ export class SequencerMetrics {
 
   private blockProposalFailed: UpDownCounter;
   private checkpointProposalSuccess: UpDownCounter;
+  private feeMismatch: UpDownCounter;
   private checkpointPrecheckFailed: UpDownCounter;
   private checkpointProposalFailed: UpDownCounter;
   private checkpointSuccess: UpDownCounter;
@@ -122,6 +123,9 @@ export class SequencerMetrics {
 
     this.checkpointSuccess = createUpDownCounterWithDefault(this.meter, Metrics.SEQUENCER_CHECKPOINT_SUCCESS_COUNT);
 
+    this.feeMismatch = createUpDownCounterWithDefault(this.meter, Metrics.SEQUENCER_L1_FEE_MISMATCH_COUNT, {
+      [Attributes.FEE_MISMATCH_SKIP_ENABLED]: [false, true],
+    });
     this.checkpointPrecheckFailed = createUpDownCounterWithDefault(
       this.meter,
       Metrics.SEQUENCER_CHECKPOINT_PRECHECK_FAILED_COUNT,
@@ -132,6 +136,7 @@ export class SequencerMetrics {
           'slot_mismatch',
           'block_number_mismatch',
           'insufficient_publisher_balance',
+          'l1_fee_mismatch',
         ],
       },
     );
@@ -317,6 +322,11 @@ export class SequencerMetrics {
     this.checkpointProposalSuccess.add(1);
   }
 
+  /** Counts target slots with an observed fee mismatch, whether or not it prevented building. */
+  public recordFeeMismatch(skipEnabled: boolean): void {
+    this.feeMismatch.add(1, { [Attributes.FEE_MISMATCH_SKIP_ENABLED]: skipEnabled });
+  }
+
   recordCheckpointPrecheckFailed(
     checkType:
       | 'slot_already_taken'
@@ -324,7 +334,8 @@ export class SequencerMetrics {
       | 'slot_mismatch'
       | 'block_number_mismatch'
       | 'no_peers'
-      | 'insufficient_publisher_balance',
+      | 'insufficient_publisher_balance'
+      | 'l1_fee_mismatch',
   ) {
     this.checkpointPrecheckFailed.add(1, { [Attributes.ERROR_TYPE]: checkType });
   }

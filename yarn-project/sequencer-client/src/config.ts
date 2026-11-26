@@ -71,6 +71,7 @@ export const DefaultSequencerConfig = {
   skipPublishingCheckpointsPercent: 0,
   maxBlocksPerCheckpoint: DEFAULT_MAX_BLOCKS_PER_CHECKPOINT,
   minPeersToPropose: 1,
+  skipProposingOnFeeMismatch: true,
   allowUnsafeInboxCatchupCapacity: false,
 } satisfies ResolvedSequencerConfig;
 
@@ -287,6 +288,11 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
   pauseProposingForSlots: {
     description:
       'List of slots for which the sequencer will not produce a proposal (for testing only). Attestation paths are unaffected.',
+  },
+  skipProposingOnFeeMismatch: {
+    env: 'SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH',
+    description: 'Skip building when the publisher cannot cover the current L1 base fees and competitive tip.',
+    ...booleanConfigHelper(DefaultSequencerConfig.skipProposingOnFeeMismatch),
   },
   minPeersToPropose: {
     env: 'SEQ_MIN_PEERS_TO_PROPOSE',

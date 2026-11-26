@@ -80,7 +80,7 @@ describe('PublisherManager', () => {
       mockPublishers[2].state = TxUtilsState.NOT_MINED;
 
       publisherManager = new PublisherManager(mockPublishers, { publisherAllowInvalidStates: true });
-      await expect(publisherManager.getAvailablePublisher(p => p.state === TxUtilsState.CANCELLED)).resolves.toBe(
+      expect((await publisherManager.getAvailablePublisher(p => p.state === TxUtilsState.CANCELLED)).publisher).toBe(
         mockPublishers[1],
       );
     });
@@ -94,7 +94,7 @@ describe('PublisherManager', () => {
       mockPublishers[1].balance = 500n;
       mockPublishers[2].balance = 1500n;
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).toBe(mockPublishers[2]);
     });
@@ -109,9 +109,9 @@ describe('PublisherManager', () => {
       mockPublishers[2].balance = 1000n;
 
       publisherManager = new PublisherManager(mockPublishers, { publisherAllowInvalidStates: true });
-      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[2]);
+      expect((await publisherManager.getAvailablePublisher()).publisher).toBe(mockPublishers[2]);
       mockPublishers[2].state = TxUtilsState.NOT_MINED;
-      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[1]);
+      expect((await publisherManager.getAvailablePublisher()).publisher).toBe(mockPublishers[1]);
     });
 
     it('should sort by balance when states are equal', async () => {
@@ -123,7 +123,7 @@ describe('PublisherManager', () => {
       mockPublishers[1].balance = 2000n;
       mockPublishers[2].balance = 500n;
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).toBe(mockPublishers[1]); // Highest balance
     });
@@ -141,7 +141,7 @@ describe('PublisherManager', () => {
       mockPublishers[1].lastMinedAtBlockNumber = 50n;
       mockPublishers[2].lastMinedAtBlockNumber = undefined;
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).toBe(mockPublishers[2]); // undefined (0n) is lowest
     });
@@ -157,7 +157,7 @@ describe('PublisherManager', () => {
       mockPublishers[2].state = TxUtilsState.MINED;
       mockPublishers[2].balance = 1000n;
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).not.toBe(mockPublishers[1]);
     });
@@ -171,7 +171,7 @@ describe('PublisherManager', () => {
       mockPublishers[1].state = TxUtilsState.IDLE;
       mockPublishers[1].balance = 1000n;
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).toBe(mockPublishers[0]);
     });
@@ -179,7 +179,7 @@ describe('PublisherManager', () => {
     it('falls back to zero-balance publishers when none are funded', async () => {
       mockPublishers.forEach(p => (p.balance = 0n));
 
-      const result = await publisherManager.getAvailablePublisher();
+      const { publisher: result } = await publisherManager.getAvailablePublisher();
 
       expect(result).toBeDefined();
     });
@@ -202,7 +202,7 @@ describe('PublisherManager', () => {
         return !publisher.getSenderAddress().equals(addresses[0]); // Filter out the first publisher
       };
 
-      const result = await publisherManager.getAvailablePublisher(filter);
+      const { publisher: result } = await publisherManager.getAvailablePublisher(filter);
       expect(result).toBe(mockPublishers[1]); // First valid after filtering
     });
 
@@ -236,7 +236,7 @@ describe('PublisherManager', () => {
       mockPublishers[4].balance = 600n;
       mockPublishers[4].lastMinedAtBlockNumber = 50n;
 
-      const result = await publisherManager.getAvailablePublisher(filter);
+      const { publisher: result } = await publisherManager.getAvailablePublisher(filter);
 
       // IDLE and MINED rank equally, so the highest balance among them wins
       expect(result).toBeDefined();
@@ -246,7 +246,7 @@ describe('PublisherManager', () => {
       mockPublishers[3].balance = 600n;
 
       // Priority should now go to the one that is least recently used, index 4
-      const result2 = await publisherManager.getAvailablePublisher(filter);
+      const { publisher: result2 } = await publisherManager.getAvailablePublisher(filter);
       expect(result2).toBeDefined();
       expect(result2!.getSenderAddress()).toEqual(mockPublishers[4].getSenderAddress());
     });
@@ -276,7 +276,9 @@ describe('PublisherManager', () => {
       mockPublishers[2].state = TxUtilsState.IDLE;
       mockPublishers[2].balance = 0n;
 
-      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[0]);
+      expect((await publisherManager.getAvailablePublisher(undefined, { requirement })).publisher).toBe(
+        mockPublishers[0],
+      );
     });
 
     it('throws a NoAffordablePublisherError with balances when no publisher can afford the send', async () => {
@@ -317,7 +319,9 @@ describe('PublisherManager', () => {
       mockPublishers[2].state = TxUtilsState.IDLE;
       mockPublishers[2].balance = 0n;
 
-      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[1]);
+      expect((await publisherManager.getAvailablePublisher(undefined, { requirement })).publisher).toBe(
+        mockPublishers[1],
+      );
     });
 
     it('skips a publisher backed off for insufficient funds until its balance increases', async () => {
@@ -326,12 +330,16 @@ describe('PublisherManager', () => {
       mockPublishers[1].balance = 2n * required;
       mockPublishers[2].balance = 0n;
 
-      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[1]);
-      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[1]);
+      expect((await publisherManager.getAvailablePublisher(undefined, { requirement })).publisher).toBe(
+        mockPublishers[1],
+      );
+      expect((await publisherManager.getAvailablePublisher()).publisher).toBe(mockPublishers[1]);
 
       mockPublishers[0].balance = 10n * required + 1n;
 
-      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[0]);
+      expect((await publisherManager.getAvailablePublisher(undefined, { requirement })).publisher).toBe(
+        mockPublishers[0],
+      );
     });
 
     it('still returns a backed off publisher in lenient mode when it is the only candidate', async () => {
@@ -339,7 +347,7 @@ describe('PublisherManager', () => {
       publisherManager = new PublisherManager(mockPublishers, {});
       mockPublishers[0].backoffBalance = mockPublishers[0].balance;
 
-      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[0]);
+      expect((await publisherManager.getAvailablePublisher()).publisher).toBe(mockPublishers[0]);
     });
 
     it('does not record metrics when selecting a publisher', async () => {
@@ -932,6 +940,15 @@ class TestL1TxUtils {
 
   public getSenderAddress() {
     return this.senderAddress;
+  }
+
+  public async getFeeQuote() {
+    return {
+      bid: await this.getFeesPerGas(),
+      blockNumber: 1n,
+      baseFee: 0n,
+      competitiveTip: this.fees.maxPriorityFeePerGas,
+    };
   }
 
   public getFeesPerGas() {

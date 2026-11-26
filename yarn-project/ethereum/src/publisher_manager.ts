@@ -7,6 +7,7 @@ import { Multicall3 } from './contracts/multicall.js';
 import {
   type FeesPerGas,
   INSUFFICIENT_FUNDS_BACKOFF_MS,
+  type L1FeeQuote,
   L1TxUtils,
   type SendCostRequirement,
   TxUtilsState,
@@ -276,11 +277,12 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
    * With a `requirement`, only publishers whose balance covers the worst-case cost of that send are eligible, and a
    * {@link NoAffordablePublisherError} is thrown if there are none. Without one, selection is lenient: it prefers funded
    * publishers but falls back to unfunded ones rather than failing, for sends that are fine to attempt and lose.
+   * Returns the quote used for affordability, or undefined when no fees were requested.
    */
   public async getAvailablePublisher(
     filter: PublisherFilter<UtilsType> = () => true,
     opts?: { requirement?: SendCostRequirement },
-  ): Promise<UtilsType> {
+  ): Promise<{ publisher: UtilsType; feeQuote?: L1FeeQuote }> {
     this.log.debug(`Getting available publisher`, {
       publishers: this.publishers.map(p => ({
         address: p.getSenderAddress(),
@@ -310,8 +312,11 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     const withBalance = await this.getBalances(validPublishers);
 
     let candidates: PublisherWithBalance<UtilsType>[];
+    let feeQuote: L1FeeQuote | undefined;
     if (opts?.requirement) {
-      candidates = await this.getAffordable(withBalance, opts.requirement);
+      // All publishers share the same L1 fee configuration.
+      feeQuote = await validPublishers[0].getFeeQuote(undefined, opts.requirement.blobCount > 0);
+      candidates = this.getAffordable(withBalance, opts.requirement, feeQuote.bid);
     } else {
       candidates = this.getLenientCandidates(withBalance);
     }
@@ -330,7 +335,7 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
       return lastUsedComparison;
     });
 
-    return sortedPublishers[0].publisher;
+    return { publisher: sortedPublishers[0].publisher, feeQuote };
   }
 
   /**
@@ -383,15 +388,11 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
   }
 
   /** Returns the publishers that can afford the requirement, or throws NoAffordablePublisherError if none. */
-  private async getAffordable(
+  private getAffordable(
     publishers: PublisherWithBalance<UtilsType>[],
     requirement: SendCostRequirement,
-  ): Promise<PublisherWithBalance<UtilsType>[]> {
-    if (publishers.length === 0) {
-      throw new Error(`Failed to find an available publisher.`);
-    }
-    // All publishers share the L1 network, so fees are fetched once rather than per publisher.
-    const fees = await publishers[0].publisher.getFeesPerGas(undefined, requirement.blobCount > 0, 0);
+    fees: FeesPerGas,
+  ): PublisherWithBalance<UtilsType>[] {
     const required = computeSendCost(fees, requirement);
 
     const affordable = publishers.filter(

@@ -46,7 +46,7 @@ describe('SequencerPublisherFactory', () => {
     mockGovernanceProposerContract = mock<GovernanceProposerContract>();
 
     mockL1TxUtils.getSenderAddress.mockReturnValue(publisherAddress);
-    mockPublisherManager.getAvailablePublisher.mockResolvedValue(mockL1TxUtils);
+    mockPublisherManager.getAvailablePublisher.mockResolvedValue({ publisher: mockL1TxUtils });
     mockRollupContract.getSlashingProposer.mockResolvedValue({} as any);
 
     factory = new SequencerPublisherFactory(mockConfig, {
@@ -217,10 +217,16 @@ describe('SequencerPublisherFactory', () => {
     beforeEach(() => {
       // Fees as getFeesPerGas derives them at a 1 gwei base fee with the default config: the base fee bumped 12.5% for
       // one stalled block plus a 1 gwei priority fee bumped 20%. The blob fee is taken equally high to be conservative.
-      mockL1TxUtils.getFeesPerGas.mockResolvedValue({
-        maxFeePerGas: (1125n * gwei) / 1000n + (12n * gwei) / 10n,
-        maxPriorityFeePerGas: (12n * gwei) / 10n,
-        maxFeePerBlobGas: (1125n * gwei) / 1000n,
+      mockL1TxUtils.getFeeQuote.mockResolvedValue({
+        baseFee: gwei,
+        competitiveTip: gwei,
+        blobBaseFee: gwei,
+        blockNumber: 1n,
+        bid: {
+          maxFeePerGas: (1125n * gwei) / 1000n + (12n * gwei) / 10n,
+          maxPriorityFeePerGas: (12n * gwei) / 10n,
+          maxFeePerBlobGas: (1125n * gwei) / 1000n,
+        },
       });
       mockL1TxUtils.getSenderBalance.mockResolvedValue(parseEther('0.02'));
       Object.defineProperty(mockL1TxUtils, 'state', { get: () => TxUtilsState.IDLE });
