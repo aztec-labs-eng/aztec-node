@@ -1648,6 +1648,7 @@ __metadata:
     "@aztec-labs/sqlite3mc-wasm": "workspace:^"
     "@aztec-labs/stdlib": "workspace:^"
     "@jest/globals": "npm:^30.0.0"
+    "@op-engineering/op-sqlite": "npm:19.0.5"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^22.15.17"
     "@typescript/native-preview": "npm:7.0.0-dev.20260113.1"
@@ -1664,6 +1665,11 @@ __metadata:
     typescript: "npm:^5.3.3"
     util: "npm:^0.12.5"
     vitest: "npm:^4.0.0"
+  peerDependencies:
+    "@op-engineering/op-sqlite": ^19.0.5
+  peerDependenciesMeta:
+    "@op-engineering/op-sqlite":
+      optional: true
   languageName: unknown
   linkType: soft
 
@@ -6007,6 +6013,20 @@ __metadata:
   dependencies:
     semver: "npm:^7.3.5"
   checksum: 10/4935c7719d17830d0f9fa46c50be17b2a3c945cec61760f6d0909bce47677c42e1810ca673305890f9e84f008ec4d8e841182f371e42100a8159d15f22249208
+  languageName: node
+  linkType: hard
+
+"@op-engineering/op-sqlite@npm:19.0.5":
+  version: 19.0.5
+  resolution: "@op-engineering/op-sqlite@npm:19.0.5"
+  peerDependencies:
+    "@sqlite.org/sqlite-wasm": "*"
+    react: "*"
+    react-native: "*"
+  peerDependenciesMeta:
+    "@sqlite.org/sqlite-wasm":
+      optional: true
+  checksum: 10/9cb3816025db16efc57c1279bf8916ae6b29a27dafd35e054a2930e8f53bbc76af7049bafa76830ff1dfb5c55d2ad5314f2e8205b4b755d52a899c3519ac7d09
   languageName: node
   linkType: hard
 

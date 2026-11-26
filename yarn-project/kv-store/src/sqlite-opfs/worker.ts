@@ -1,24 +1,10 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule, { type Database, type SAHPoolUtil, type Sqlite3Static } from '@aztec-labs/sqlite3mc-wasm';
 
-import { SqliteEncryptionError, type SqliteEncryptionErrorCode, isDecryptFailureMessage } from './errors.js';
+import { SqliteEncryptionError, detectEncryptionCode } from './errors.js';
 import type { ResultRow, SqlValue, WorkerRequest, WorkerResponse } from './messages.js';
 import { DEFAULT_SAH_POOL_DIRECTORY } from './pool_lock.js';
-
-const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS data (
-    slot TEXT NOT NULL PRIMARY KEY,
-    container TEXT NOT NULL,
-    key BLOB NOT NULL,
-    key_count INTEGER NOT NULL,
-    hash TEXT NOT NULL,
-    value BLOB
-  ) WITHOUT ROWID;
-
-  CREATE INDEX IF NOT EXISTS idx_container_key ON data(container, key);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_container_key_count ON data(container, key, key_count);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_container_key_hash ON data(container, key, hash);
-`;
+import { SCHEMA_SQL } from './schema.js';
 
 const SAH_POOL_VFS_NAME = 'aztec-kv-opfs';
 const MC_SAH_POOL_VFS_NAME = `multipleciphers-${SAH_POOL_VFS_NAME}`;
@@ -232,31 +218,3 @@ function respond(msg: WorkerResponse): void {
     respond({ type: 'err', id: req.id, message, encryptionCode });
   }
 };
-
-/**
- * Maps a thrown error during request handling to a typed encryption code, so the
- * main thread can re-hydrate it as a {@link SqliteEncryptionError}. Returns
- * `undefined` for non-encryption errors (preserves the existing untyped path).
- *
- * Two sources:
- *   - The error was already a `SqliteEncryptionError` (pre-flight throws inside
- *     this worker — e.g. ephemeral + encryptionKey). Forward its code as-is.
- *   - The error came from SQLite/sqlite3mc with a known decrypt-failure message
- *     during an `init` request. Both "wrong key supplied" and "no key supplied
- *     to an encrypted DB" surface as SQLITE_NOTADB ("file is not a database") —
- *     we don't constrain on `req.encryptionKey` because the no-key-on-encrypted-DB
- *     case is exactly when the caller most needs the typed signal.
- */
-function detectEncryptionCode(
-  req: WorkerRequest,
-  err: unknown,
-  message: string,
-): SqliteEncryptionErrorCode | undefined {
-  if (err instanceof SqliteEncryptionError) {
-    return err.code;
-  }
-  if (req.type === 'init' && isDecryptFailureMessage(message)) {
-    return 'decrypt_failed';
-  }
-  return undefined;
-}

@@ -1,3 +1,4 @@
+import { connectSqliteWorker } from '#sqlite-worker';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 
@@ -19,6 +20,14 @@ import { type PoolLockLease, acquirePoolLock, normalizePoolDirectory } from './p
 import { SQLiteOPFSAztecSet } from './set.js';
 import { SQLiteOPFSAztecSingleton } from './singleton.js';
 
+/** Runs the store's requests: the OPFS worker in a browser, op-sqlite on React Native. */
+export interface SqlitePort {
+  /** Runs a request and resolves with its response. `transfer` lists buffers the port may take rather than copy. */
+  request(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse>;
+  /** Stops the port and rejects the requests still running. */
+  terminate(): void;
+}
+
 /**
  * Main-thread handle for a SQLite database persisted to OPFS via the `opfs-sahpool`
  * VFS. Owns a dedicated Web Worker (the SAH Pool VFS requires Worker context) and
@@ -30,41 +39,24 @@ import { SQLiteOPFSAztecSingleton } from './singleton.js';
  * nested ops bypass it to avoid deadlock.
  */
 export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
-  readonly #worker: Worker;
-  readonly #pending = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (err: Error) => void }>();
+  readonly #port: SqlitePort;
   readonly #txQueue = new SerialQueue();
   readonly #name: string;
   readonly #log: Logger;
   #nextId = 0;
   #inTx = false;
   #closed = false;
-  #workerFailed = false;
 
-  private constructor(
-    worker: Worker,
+  protected constructor(
+    port: SqlitePort,
     name: string,
     log: Logger,
     public readonly isEphemeral: boolean,
     private readonly poolLock?: PoolLockLease,
   ) {
-    this.#worker = worker;
     this.#name = name;
     this.#log = log;
-    this.#worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
-      const { id } = ev.data;
-      const handler = this.#pending.get(id);
-      if (!handler) {
-        this.#log.warn(`SQLite worker: no pending handler for id ${id}`);
-        return;
-      }
-      this.#pending.delete(id);
-      handler.resolve(ev.data);
-    };
-    this.#worker.onerror = ev => {
-      this.#workerFailed = true;
-      this.#log.error(`SQLite worker crashed: ${ev.message}`);
-      this.#rejectPending(`SQLite worker crashed: ${ev.message}`);
-    };
+    this.#port = port;
     this.#txQueue.start();
   }
 
@@ -95,25 +87,9 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     poolDirectory?: string,
     encryptionKey?: Uint8Array,
   ): Promise<AztecSQLiteOPFSStore> {
-    if (encryptionKey !== undefined && encryptionKey.length !== 32) {
-      throw new SqliteEncryptionError(
-        'invalid_key_length',
-        `encryptionKey must be 32 bytes (got ${encryptionKey.length})`,
-      );
-    }
-    if (encryptionKey !== undefined && ephemeral) {
-      throw new SqliteEncryptionError(
-        'encryption_not_supported_for_ephemeral',
-        'encryptionKey is not supported for ephemeral (:memory:) stores',
-      );
-    }
-    const dbName = name && !ephemeral ? name : `tmp-${globalThis.crypto.getRandomValues(new Uint8Array(8)).join('')}`;
-    log.debug(
-      `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
-    );
+    const dbName = validateOpen(name, ephemeral, encryptionKey);
     const effectivePoolDirectory = ephemeral ? undefined : normalizePoolDirectory(poolDirectory);
     const poolLock = effectivePoolDirectory ? await acquirePoolLock(effectivePoolDirectory) : undefined;
-    let worker: Worker | undefined;
     try {
       if (effectivePoolDirectory) {
         const quarantine = await quarantineDuplicatePool(effectivePoolDirectory);
@@ -121,21 +97,63 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
           log.warn(`Quarantined SQLite-OPFS pool with duplicate logical file mappings`, quarantine);
         }
       }
-      // @dependency ./worker.ts
-      worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-      const store = new AztecSQLiteOPFSStore(worker, dbName, log, ephemeral, poolLock);
+      return await AztecSQLiteOPFSStore.#init(
+        connectSqliteWorker(log),
+        log,
+        dbName,
+        ephemeral,
+        effectivePoolDirectory,
+        encryptionKey,
+        poolLock,
+      );
+    } catch (err) {
+      await poolLock?.release();
+      throw err;
+    }
+  }
+
+  /**
+   * Opens a store whose requests go to `port`, rather than to an OPFS worker. The store takes no OPFS pool lock: the
+   * port's owner keeps one store per database. `poolDirectory` reaches the port in the init request. The key rules are
+   * those of {@link AztecSQLiteOPFSStore.open}.
+   */
+  protected static openOnPort(
+    port: SqlitePort,
+    log: Logger,
+    name?: string,
+    ephemeral: boolean = false,
+    poolDirectory?: string,
+    encryptionKey?: Uint8Array,
+  ): Promise<AztecSQLiteOPFSStore> {
+    const dbName = validateOpen(name, ephemeral, encryptionKey);
+    return AztecSQLiteOPFSStore.#init(port, log, dbName, ephemeral, poolDirectory, encryptionKey);
+  }
+
+  static async #init(
+    port: SqlitePort,
+    log: Logger,
+    dbName: string,
+    ephemeral: boolean,
+    poolDirectory: string | undefined,
+    encryptionKey: Uint8Array | undefined,
+    poolLock?: PoolLockLease,
+  ): Promise<AztecSQLiteOPFSStore> {
+    log.debug(
+      `Opening SQLite-OPFS ${ephemeral ? 'ephemeral ' : ''}${encryptionKey ? 'encrypted ' : ''}database ${dbName}`,
+    );
+    const store = new AztecSQLiteOPFSStore(port, dbName, log, ephemeral, poolLock);
+    try {
       // Transfer (not clone) the key buffer to the worker so we don't leave a
       // second copy on the main thread. Caveat: this detaches the caller's
       // encryptionKey.buffer — subsequent reads from the same Uint8Array are empty.
       const transfer = encryptionKey ? [encryptionKey.buffer as ArrayBuffer] : undefined;
       await store.#sendRequest(
-        { type: 'init', id: store.#allocId(), dbName, ephemeral, poolDirectory: effectivePoolDirectory, encryptionKey },
+        { type: 'init', id: store.#allocId(), dbName, ephemeral, poolDirectory, encryptionKey },
         transfer,
       );
       return store;
     } catch (err) {
-      worker?.terminate();
-      await poolLock?.release();
+      port.terminate();
       throw err;
     }
   }
@@ -205,8 +223,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
         this.#log.warn(`SQLite deleteDb failed: ${err instanceof Error ? err.message : err}`),
       );
     } finally {
-      this.#worker.terminate();
-      this.#rejectPending('SQLite store deleted');
+      this.#port.terminate();
       await this.poolLock?.release();
     }
   }
@@ -232,8 +249,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
       await this.#txQueue.end();
       await this.#sendRequest({ type: 'close', id: this.#allocId() }).catch(() => {});
     } finally {
-      this.#worker.terminate();
-      this.#rejectPending('SQLite store closed');
+      this.#port.terminate();
       await this.poolLock?.release();
     }
   }
@@ -279,53 +295,37 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     return ++this.#nextId;
   }
 
-  /**
-   * Reject any in-flight requests with `reason`, so callers awaiting a response to a
-   * request sent to a now-terminated worker don't hang forever. Called from
-   * close()/delete() and from the worker.onerror handler.
-   */
-  #rejectPending(reason: string): void {
-    if (this.#pending.size === 0) {
-      return;
+  async #sendRequest(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse> {
+    const resp = await this.#port.request(req, transfer);
+    if (resp.type !== 'err') {
+      return resp;
     }
-    const err = new Error(reason);
-    for (const { reject } of this.#pending.values()) {
-      reject(err);
+    // Re-hydrate typed errors so consumers can pattern-match on `instanceof`. Encryption is tagged on the wire (some
+    // cases are pre-flight throws with no message to match); corruption is a single unambiguous message, so we classify
+    // it here rather than adding a redundant wire field. Everything else stays a plain Error.
+    if (resp.encryptionCode !== undefined) {
+      throw new SqliteEncryptionError(resp.encryptionCode, resp.message);
     }
-    this.#pending.clear();
+    if (isCorruptionMessage(resp.message)) {
+      throw new SqliteCorruptionError(resp.message);
+    }
+    throw new Error(resp.message);
   }
+}
 
-  #sendRequest(req: WorkerRequest, transfer?: Transferable[]): Promise<WorkerResponse> {
-    if (this.#workerFailed) {
-      return Promise.reject(new Error('SQLite worker has crashed'));
-    }
-    return new Promise<WorkerResponse>((resolve, reject) => {
-      this.#pending.set(req.id, {
-        resolve: resp => {
-          if (resp.type === 'err') {
-            // Re-hydrate typed errors so consumers can pattern-match on
-            // `instanceof`. Encryption is tagged on the wire (some cases are
-            // pre-flight throws with no message to match); corruption is a
-            // single unambiguous message, so we classify it here rather than
-            // adding a redundant wire field. Everything else stays a plain Error.
-            if (resp.encryptionCode !== undefined) {
-              reject(new SqliteEncryptionError(resp.encryptionCode, resp.message));
-            } else if (isCorruptionMessage(resp.message)) {
-              reject(new SqliteCorruptionError(resp.message));
-            } else {
-              reject(new Error(resp.message));
-            }
-          } else {
-            resolve(resp);
-          }
-        },
-        reject,
-      });
-      if (transfer && transfer.length > 0) {
-        this.#worker.postMessage(req, transfer);
-      } else {
-        this.#worker.postMessage(req);
-      }
-    });
+/** Checks the key and returns the database name: `name`, or a random one for an ephemeral or unnamed store. */
+function validateOpen(name: string | undefined, ephemeral: boolean, encryptionKey?: Uint8Array): string {
+  if (encryptionKey !== undefined && encryptionKey.length !== 32) {
+    throw new SqliteEncryptionError(
+      'invalid_key_length',
+      `encryptionKey must be 32 bytes (got ${encryptionKey.length})`,
+    );
   }
+  if (encryptionKey !== undefined && ephemeral) {
+    throw new SqliteEncryptionError(
+      'encryption_not_supported_for_ephemeral',
+      'encryptionKey is not supported for ephemeral (:memory:) stores',
+    );
+  }
+  return name && !ephemeral ? name : `tmp-${globalThis.crypto.getRandomValues(new Uint8Array(8)).join('')}`;
 }
