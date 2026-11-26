@@ -113,6 +113,7 @@ export const POOL_NAME = 'aztec.pool.name';
 
 export const PEER_ID = 'aztec.p2p.peer_id';
 
+export const FEE_MISMATCH_SKIP_ENABLED = 'aztec.sequencer.fee_mismatch_skip_enabled';
 export const SEQUENCER_STATE = 'aztec.sequencer.state';
 
 export const SIMULATOR_PHASE = 'aztec.simulator.phase';

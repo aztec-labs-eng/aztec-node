@@ -570,6 +570,11 @@ export const SEQUENCER_CHECKPOINT_PROPOSAL_SUCCESS_COUNT: MetricDefinition = {
   description: 'The number of times checkpoint proposal succeeded',
   valueType: ValueType.INT,
 };
+export const SEQUENCER_L1_FEE_MISMATCH_COUNT: MetricDefinition = {
+  name: 'aztec.sequencer.l1_fee_mismatch_count',
+  description: 'Number of target slots where the publisher bid fell short of estimated L1 fees before building',
+  valueType: ValueType.INT,
+};
 export const SEQUENCER_CHECKPOINT_PRECHECK_FAILED_COUNT: MetricDefinition = {
   name: 'aztec.sequencer.checkpoint.precheck_failed_count',
   description: 'The number of times checkpoint pre-build checks failed',
