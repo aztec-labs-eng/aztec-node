@@ -119,6 +119,18 @@ function get_latest_run_id {
 # Jobs in the ci dashboards are grouped on a single line by RUN_ID.
 export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
+# What ci3/bootstrap_ec2 passes into the build container beyond ci3's own settings: these
+# variables as they are, and these files (paths on this machine, passed as paths to a copy).
+export CI3_PASS_ENV="${CI3_PASS_ENV:-} RELEASE_TARGET GCP_PROJECT_ID NAMESPACE NETWORK R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
+  CHONK_INPUTS_STATE_DIR NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION"
+export CI3_PASS_FILES="${CI3_PASS_FILES:-} GOOGLE_APPLICATION_CREDENTIALS NETWORK_ENV_FILE AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
+# The release workflow supplies the aztec-nr mirror's deploy key as the secret's contents.
+if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:-}" ] && [ -z "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
+  export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE=$(mktemp)
+  chmod 600 "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
+  printf '%s\n' "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY" > "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
+fi
+
 case "$cmd" in
   dash)
     watch_ci -s main,prs --user --watch

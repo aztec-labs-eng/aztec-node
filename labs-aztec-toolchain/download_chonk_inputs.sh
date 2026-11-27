@@ -55,6 +55,12 @@ if ! curl -sSf "$url" -o "$tmp/inputs.tar.gz"; then
   echo "The pin in $hash_file may be stale." >&2
   exit 1
 fi
+# The pin is the tarball's sha256 prefix, so it says what to expect, not only where to look.
+actual=$(sha256sum "$tmp/inputs.tar.gz" | cut -c1-16)
+if [ "$actual" != "$hash" ]; then
+  echo "ERROR: pinned chonk inputs from $url have sha256 prefix $actual, not the pinned $hash" >&2
+  exit 1
+fi
 rm -rf "$dest"
 mkdir -p "$dest"
 tar -xzf "$tmp/inputs.tar.gz" -C "$dest"
