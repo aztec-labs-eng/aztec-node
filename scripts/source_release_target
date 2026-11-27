@@ -6,7 +6,8 @@
 # literal in the release workflow, never a GitHub variable, so no variable edit can flip a flow;
 # everything else is either supplied by the workflow's environment or derived here.
 #
-#   public   npmjs + DockerHub, plus the aztec-up and playground assets. release.yml states both
+#   public   npmjs + DockerHub, plus the aztec-nr mirror and the aztec-up and playground assets,
+#            staged by the build and published by release.yml's publish job. release.yml states both
 #            URLs as literals rather than GitHub variables, so no variable edit can retarget a
 #            public release.
 #   private  one GCP Artifact Registry for both the @aztec-foundation reads and the @aztec-labs
@@ -29,9 +30,9 @@ export NPM_REGISTRY DOCKER_REGISTRY
 
 case "$RELEASE_TARGET" in
   public)
-    # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
-    # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
-    export RELEASE_PROJECTS="noir-projects/aztec-nr yarn-project aztec-up playground release-image"
+    # These stage what they publish for the root `publish`, which also pushes the aztec-nr mirror
+    # (from its checkout, so nothing is staged for it). Only release-image pushes from the build.
+    export RELEASE_PROJECTS="yarn-project aztec-up playground release-image"
 
     # Sanity check the registry. NPM_REGISTRY is both where the build reads our scopes from and
     # where it publishes them, so a public release pointed elsewhere would bake private packages

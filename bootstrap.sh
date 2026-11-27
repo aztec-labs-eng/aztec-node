@@ -535,29 +535,81 @@ function versions {
 
 function release {
   # Releases are triggered when REF_NAME is a valid semver (but can have a leading v).
-  # We ensure there is a github release for our REF_NAME.
   # We derive a dist tag from our prerelease portion of our REF_NAME semver. It is latest if no prerelease.
-  echo_header "release all"
-  # RELEASE_PROJECTS is what the target publishes; a private release names neither aztec-up nor
+  echo_header "stage release artifacts"
+  # RELEASE_PROJECTS is what the target releases; a private release names neither aztec-up nor
   # playground, whose artifacts are public by nature.
   source $root/scripts/source_release_target
-  set -x
 
-  local projects=($RELEASE_PROJECTS)
+  # The arm64 job builds and pushes only its own docker images.
   if [ $(arch) == arm64 ]; then
-    projects=(
-      release-image
-    )
+    denoise "release-image/bootstrap.sh release"
+    return
   fi
 
-  # Generates the installer lock that aztec-up's release uploads, before any project publishes.
-  if [[ " ${projects[*]} " == *" aztec-up "* ]]; then
-    aztec-up/bootstrap.sh release_preflight
+  # A public release publishes nothing from here but the per-arch docker images: this machine runs
+  # the whole build, so it holds no other publishing credential. The projects stage what they
+  # publish under RELEASE_DIR (npm tarballs in deploy_npm's pack mode, the playground, the
+  # installer lock), and `publish`, run by release.yml's publish job on the GitHub runner, publishes
+  # the bundle from the release cache. A private release still publishes from here.
+  if [ "$RELEASE_TARGET" = public ]; then
+    export RELEASE_DIR=$root/release-out
+    export NPM_PACK_DIR=$RELEASE_DIR/npm
+    rm -rf "$RELEASE_DIR"
+    # Generates the installer lock aztec-up stages.
+    denoise "aztec-up/bootstrap.sh release_preflight"
   fi
 
-  for project in "${projects[@]}"; do
-    $project/bootstrap.sh release
+  for project in $RELEASE_PROJECTS; do
+    denoise "$project/bootstrap.sh release"
   done
+
+  # Keyed by the release tag and force-uploaded so a re-run of the release refreshes the bundle.
+  # A dry run stages but does not upload.
+  if [ "$RELEASE_TARGET" = public ] && [ "${DRY_RUN:-0}" != 1 ]; then
+    S3_FORCE_UPLOAD=1 cache_upload "release-$REF_NAME.tar.gz" release-out
+  fi
+}
+
+function publish {
+  # The publish step of a public release: publishes the bundle `release` staged, from the machine
+  # that holds the publishing credentials (release.yml's publish job on the GitHub runner, in the
+  # release environment) rather than the one that built it. Needs the release role's AWS
+  # credentials (the release cache, the install and playground buckets), npm trusted publishing,
+  # the aztec-nr mirror's deploy key and DockerHub credentials. DRY_RUN=1 prints what it would
+  # publish.
+  echo_header "publish release"
+  source $root/scripts/source_release_target
+  if [ "$RELEASE_TARGET" != public ]; then
+    echo_stderr "Only a public release publishes from a staged bundle; a $RELEASE_TARGET release publishes as it builds."
+    exit 1
+  fi
+  if ! semver check "$REF_NAME"; then
+    echo_stderr "Nothing to publish for $REF_NAME: not a release version."
+    exit 1
+  fi
+  local work dir
+  work=$(mktemp -d)
+  # This runs on a GitHub runner, with no instance profile for ci3 to take the bucket from.
+  source $ci3/source_cache_bucket aztec-ci-release-cache
+  cache_download "release-$REF_NAME.tar.gz" "$work"
+  dir=$work/release-out
+
+  # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
+  # scaffold pins an aztec-nr tag that does not exist is worse than no release at all. It is pushed
+  # from this checkout, which is the tagged commit. The workflow supplies the mirror's deploy key
+  # as the secret's contents.
+  if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:-}" ] && [ -z "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
+    export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE=$work/aztec-nr-deploy-key
+    (umask 077 && printf '%s\n' "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY" > "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE")
+  fi
+  noir-projects/aztec-nr/bootstrap.sh release
+  NPM_PUBLISH_SCOPES=@aztec-labs EXPECTED_VERSION=${REF_NAME#v} npm_publish_packed "$dir/npm"
+  # The installer resolves the npm packages, so it goes up after them.
+  aztec-up/bootstrap.sh publish "$dir/aztec-up"
+  playground/bootstrap.sh publish "$dir/playground"
+  # Both arch jobs pushed their images before this job started.
+  release-image/bootstrap.sh release_docker_manifest
 }
 
 function release_dryrun {

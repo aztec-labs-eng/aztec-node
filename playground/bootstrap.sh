@@ -25,15 +25,25 @@ function test_cmds {
   done
 }
 
+# Stages the built site for the root `publish`.
 function release {
   echo_header "playground release"
+  mkdir -p "${RELEASE_DIR:?set by the root release}"
+  rm -rf "$RELEASE_DIR/playground"
+  cp -r dist "$RELEASE_DIR/playground"
+}
 
-  do_or_dryrun aws s3 sync ./dist s3://play.aztec.network/$(dist_tag) --quiet
-  do_or_dryrun aws s3 sync ./dist s3://play.aztec.network/$REF_NAME --quiet
+# <dir>: uploads the site staged in <dir> under this release's version and dist-tag.
+function publish {
+  echo_header "playground publish"
+  local dist=${1:?usage: publish <staged-dir>}
+
+  do_or_dryrun aws s3 sync "$dist" s3://play.aztec.network/$(dist_tag) --quiet
+  do_or_dryrun aws s3 sync "$dist" s3://play.aztec.network/$REF_NAME --quiet
 
   # We want the root to redirect to the latest master version.
-  echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=/latest"></head></html>' | \
-    do_or_dryrun aws s3 cp - s3://play.aztec.network/index.html --content-type text/html
+  do_or_dryrun aws s3 cp - s3://play.aztec.network/index.html --content-type text/html \
+    <<< '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=/latest"></head></html>'
 
   invalidate_cloudfront
 }
