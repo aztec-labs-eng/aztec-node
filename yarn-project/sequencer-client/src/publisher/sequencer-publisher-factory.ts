@@ -1,7 +1,7 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
-import type { L1FeeQuote, L1TxUtils, SendCostRequirement } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxUtils, SendCostRequirement } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { PublisherFilter, PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -16,7 +16,6 @@ import { type Action, SequencerPublisher } from './sequencer-publisher.js';
 
 export type AttestorPublisherPair = {
   attestorAddress: EthAddress;
-  feeQuote?: L1FeeQuote;
   publisher: SequencerPublisher;
 };
 
@@ -78,7 +77,7 @@ export class SequencerPublisherFactory {
           return allowedPublishers.some(allowedPublisher => allowedPublisher.equals(publisherAddress));
         };
 
-    const { publisher: l1Publisher, feeQuote } = await this.deps.publisherManager.getAvailablePublisher(filter, {
+    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher(filter, {
       requirement: opts?.requirement,
     });
     const attestorAddress =
@@ -98,8 +97,7 @@ export class SequencerPublisherFactory {
         return filter(utils);
       };
       try {
-        const { publisher } = await this.deps.publisherManager.getAvailablePublisher(exclusionFilter, { requirement });
-        return publisher;
+        return await this.deps.publisherManager.getAvailablePublisher(exclusionFilter, { requirement });
       } catch (err) {
         this.logger.debug(`No replacement publisher available`, { err, requirement });
         return undefined;
@@ -124,7 +122,6 @@ export class SequencerPublisherFactory {
     return {
       attestorAddress,
       publisher,
-      feeQuote,
     };
   }
 
