@@ -30,13 +30,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     environment: release-private
-    # Nothing a private build produces may reach the shared build cache or its logs, which anyone
-    # can read: both go to the private cache. The build selects the bucket itself
-    # (scripts/source_release_target); this covers the runner, and the logs, which ci3 writes
-    # wherever CI_LOGS_S3_LOCATION points from the runner and the build instances alike.
+    # Nothing a private build produces may reach the shared build cache, which anyone can read: it
+    # uses the private cache. The build selects the bucket itself (scripts/source_release_target);
+    # this covers the runner. Its logs go with every other log, which only the dashboard serves.
     env:
       CI3_CACHE_BUCKET: aztec-ci-private-cache
-      CI_LOGS_S3_LOCATION: s3://aztec-ci-private-cache/logs
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token

@@ -99,7 +99,7 @@ case "$RELEASE_TARGET" in
     # public cache would restore a public run's entries and skip both installs, publishing
     # artifacts built against npmjs while reporting success. Its other writer, the
     # aztec-packages-private CI, builds this tree only with its manifests rewritten, so under other
-    # keys. Its logs go there too (CI_LOGS_S3_LOCATION, set by private-release.yml).
+    # keys.
     export RELEASE_CACHE_BUCKET=aztec-ci-private-cache
     ;;
   *)
