@@ -136,18 +136,18 @@ describe('aztec_start_options commander integration', () => {
 
   it('reads listen hosts from flags and environment variables', () => {
     const defaults = buildCommandWith(['API']).parse(['node', 'cli']).opts();
-    expect(defaults.host).toBeUndefined();
-    expect(defaults.adminHost).toBeUndefined();
+    expect(defaults.host).toBe('127.0.0.1');
+    expect(defaults.adminHost).toBe('127.0.0.1');
 
-    process.env.AZTEC_HOST = '127.0.0.1';
-    process.env.AZTEC_ADMIN_HOST = '127.0.0.1';
+    process.env.AZTEC_HOST = '0.0.0.0';
+    process.env.AZTEC_ADMIN_HOST = '0.0.0.0';
     expect(buildCommandWith(['API']).parse(['node', 'cli']).opts()).toMatchObject({
-      host: '127.0.0.1',
-      adminHost: '127.0.0.1',
+      host: '0.0.0.0',
+      adminHost: '0.0.0.0',
     });
 
-    const opts = buildCommandWith(['API']).parse(['node', 'cli', '--host', '0.0.0.0', '--admin-host', '::1']).opts();
-    expect(opts).toMatchObject({ host: '0.0.0.0', adminHost: '::1' });
+    const opts = buildCommandWith(['API']).parse(['node', 'cli', '--host', '10.0.0.1', '--admin-host', '::1']).opts();
+    expect(opts).toMatchObject({ host: '10.0.0.1', adminHost: '::1' });
   });
 
   it('respects TEST_ACCOUNTS env var for local network', () => {

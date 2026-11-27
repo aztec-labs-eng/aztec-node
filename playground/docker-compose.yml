@@ -18,6 +18,7 @@ services:
     command: 'node ./dest/bin start --local-network'
     environment:
       ETHEREUM_HOSTS: http://ethereum:8545
+      AZTEC_HOST: 0.0.0.0
       HARDWARE_CONCURRENCY: 4
       L1_CHAIN_ID: 31337
       FORCE_COLOR: ${FORCE_COLOR:-1}

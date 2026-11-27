@@ -142,8 +142,8 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
   API: [
     {
       flag: '--host <value>',
-      description: 'Host or IP address to bind the Aztec Services to. Listens on all interfaces when unset',
-      defaultValue: undefined,
+      description: 'Host or IP address to bind the Aztec Services to. Use 0.0.0.0 to listen on all interfaces',
+      defaultValue: '127.0.0.1',
       env: 'AZTEC_HOST',
     },
     {
@@ -156,8 +156,8 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
     {
       flag: '--admin-host <value>',
       description:
-        'Host or IP address to bind the admin APIs of Aztec Services to. Listens on all interfaces when unset',
-      defaultValue: undefined,
+        'Host or IP address to bind the admin APIs of Aztec Services to. Use 0.0.0.0 to listen on all interfaces',
+      defaultValue: '127.0.0.1',
       env: 'AZTEC_ADMIN_HOST',
     },
     {
