@@ -95,7 +95,7 @@ export async function startNode(
   await waitForCompatibleRollup(
     nodeConfig,
     { genesisArchiveRoot, vkTreeRoot: getVKTreeRoot(), protocolContractsHash },
-    options.port,
+    { host: options.host, port: options.port },
     userLog,
   );
 

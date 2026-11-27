@@ -240,8 +240,12 @@ spec:
         {{- end }}
         - name: NODE_OPTIONS
           value: {{ join " " .Values.node.nodeJsOptions | quote }}
+        - name: AZTEC_HOST
+          value: "0.0.0.0"
         - name: AZTEC_PORT
           value: "{{ .Values.service.rpc.port }}"
+        - name: AZTEC_ADMIN_HOST
+          value: "0.0.0.0"
         - name: AZTEC_ADMIN_PORT
           value: "{{ .Values.service.admin.port }}"
         {{- if .Values.node.adminApiKeyHash }}

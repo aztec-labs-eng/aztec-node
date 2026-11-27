@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### The RPC and admin servers listen on `127.0.0.1` by default ([#800](https://github.com/aztec-labs-eng/aztec-node/pull/800))
+
+`aztec start` now binds its JSON-RPC server and its admin JSON-RPC server to `127.0.0.1`, set by the new `--host` / `AZTEC_HOST` and `--admin-host` / `AZTEC_ADMIN_HOST` options. `AZTEC_HOST` also applies to the standby status server that `--node` and `--prover-broker` run while the canonical rollup is incompatible. Before, all of them listened on all interfaces. A node in a container, or one reached from another machine, is no longer reachable on either port until the host is set.
+
+**Migration**: set `AZTEC_HOST=0.0.0.0` to keep the RPC reachable from outside the machine or container, and `AZTEC_ADMIN_HOST=0.0.0.0` for the admin API (a specific interface address also works). The `aztec-node` Helm chart sets both to `0.0.0.0`.
+
 ### `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH` defaults to `true`
 
 Sequencers now log when their publisher bid cannot cover the observed L1 execution base fee plus the estimated competitive tip, or the blob base fee. If the RPC-based tip sanity cap binds, a higher median tip from the last five mined blocks is also considered. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).

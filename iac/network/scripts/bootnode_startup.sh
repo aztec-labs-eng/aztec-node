@@ -146,6 +146,7 @@ docker run \
  --env P2P_PORT \
  --env PEER_ID_PRIVATE_KEY \
  --env L1_CHAIN_ID \
+ --env AZTEC_HOST=0.0.0.0 \
  --env AZTEC_PORT \
  --env BOOTSTRAP_NODES \
  --env LOG_LEVEL \
