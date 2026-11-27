@@ -75,7 +75,7 @@ import {
   PrivateToPublicAccumulatedData,
   PublicCallRequest,
 } from '@aztec-labs/stdlib/kernel';
-import { deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
+import { deriveKeys, derivePostQuantumKeyPair, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { OnchainDeliveryMode } from '@aztec-labs/stdlib/logs';
 import { L1Actor, L1ToL2Message, L2Actor } from '@aztec-labs/stdlib/messaging';
 import { ChonkProof } from '@aztec-labs/stdlib/proofs';
@@ -379,6 +379,11 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.logger.debug(`Created account ${completeAddress.address}`);
 
     return completeAddress;
+  }
+
+  async derivePostQuantumPublicKey(account: AztecAddress) {
+    const { publicKey } = derivePostQuantumKeyPair(await this.keyStore.getMasterTaggingSecretKey(account));
+    return { fields: publicKey.toFields() };
   }
 
   async addAuthWitness(address: AztecAddress, messageHash: Fr) {

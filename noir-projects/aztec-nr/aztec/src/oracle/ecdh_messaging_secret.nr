@@ -39,12 +39,6 @@ pub unconstrained fn get_ecdh_messaging_secret(
 ///
 /// where `contract` is `contract_address`, which must be the address of the calling contract.
 ///
-/// Without app-siloing, a malicious contract could call this oracle with public information (address, ephPk) and
-/// obtain the same raw secret as the legitimate contract, letting it find the legitimate contract's tagged logs and
-/// decrypt its messages. By including the contract address in the hash, each contract receives its own messaging
-/// secret, preventing this attack. For the same reason, requesting messaging secrets for another contract is not
-/// currently supported: it would need a mechanism for a contract to explicitly allow trusted contracts to do so.
-///
 /// Returns an empty array when the PXE does not hold `address`'s ivsk in scope, and therefore cannot derive any
 /// secrets.
 pub unconstrained fn get_ecdh_messaging_secrets(

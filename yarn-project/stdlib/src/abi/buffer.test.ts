@@ -2,7 +2,13 @@ import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Buffer } from 'buffer';
 
-import { bufferAsFields, bufferFromFieldChunks, bufferFromFields, bufferToFieldChunks } from './buffer.js';
+import {
+  bufferAsFields,
+  bufferFromExactFieldChunks,
+  bufferFromFieldChunks,
+  bufferFromFields,
+  bufferToFieldChunks,
+} from './buffer.js';
 
 describe('buffer', () => {
   it('converts buffer back and forth from fields', () => {
@@ -68,5 +74,38 @@ describe('buffer', () => {
 
     expect(fields).toHaveLength(Math.ceil(length / 31));
     expect(bufferFromFieldChunks(fields).subarray(0, length)).toEqual(buffer);
+  });
+
+  const bytes = (length: number) => Buffer.from(times(length, i => i + 1));
+
+  it.each([0, 1, 31, 32, 62, 63])('recovers a %i-byte buffer from its field chunks', length => {
+    const buffer = bytes(length);
+
+    expect(bufferFromExactFieldChunks(bufferToFieldChunks(buffer), length, 'test value')).toEqual(buffer);
+  });
+
+  it.each([
+    [31, 0],
+    [31, 2],
+    [32, 1],
+    [32, 3],
+  ])('rejects %i bytes encoded in %i fields', (length, count) => {
+    const fields = [...bufferToFieldChunks(bytes(length)), Fr.ZERO].slice(0, count);
+
+    expect(() => bufferFromExactFieldChunks(fields, length, 'test value')).toThrow(`got ${count}`);
+  });
+
+  it('rejects a field with bits above its 31-byte chunk', () => {
+    const fields = bufferToFieldChunks(bytes(62));
+    fields[1] = fields[1].add(new Fr(1n << 248n));
+
+    expect(() => bufferFromExactFieldChunks(fields, 62, 'test value')).toThrow('Field 1 of a test value');
+  });
+
+  it('rejects a last field with bytes past the end of the buffer', () => {
+    const fields = bufferToFieldChunks(bytes(32));
+    fields[1] = fields[1].add(Fr.ONE);
+
+    expect(() => bufferFromExactFieldChunks(fields, 32, 'test value')).toThrow('Field 1 of a test value');
   });
 });

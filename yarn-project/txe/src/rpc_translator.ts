@@ -202,6 +202,15 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
+  aztec_txe_derivePostQuantumPublicKey(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_txe_derivePostQuantumPublicKey',
+      inputs,
+      handler: ([account]) => this.handlerAsTxe().derivePostQuantumPublicKey(account),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
   aztec_txe_addAuthWitness(...inputs: ForeignCallArgs) {
     return callTxeHandler({
       oracle: 'aztec_txe_addAuthWitness',
@@ -884,6 +893,25 @@ export class RPCTranslator {
       inputs,
       handler: ([address, ephPksSlot, contractAddress]) =>
         this.handlerAsUtility().getEcdhMessagingSecrets(address, ephPksSlot, contractAddress),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
+  aztec_utl_mlKemEncapsulate(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_mlKemEncapsulate',
+      inputs,
+      handler: ([publicKey, seed]) => this.handlerAsUtility().mlKemEncapsulate(publicKey, seed),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
+  aztec_utl_getHybridMessagingSecret(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_getHybridMessagingSecret',
+      inputs,
+      handler: ([address, ephPk, kemCiphertext, contractAddress]) =>
+        this.handlerAsUtility().getHybridMessagingSecret(address, ephPk, kemCiphertext, contractAddress),
     });
   }
 
