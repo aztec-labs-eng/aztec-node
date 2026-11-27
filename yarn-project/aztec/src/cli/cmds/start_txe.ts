@@ -7,6 +7,7 @@ export async function startTXE(options: any, signalHandlers: Array<() => Promise
 
   const txeServer = await createTXERpcServer(debugLogger);
   const httpServer = await startHttpRpcServer(txeServer, {
+    host: options.host,
     port: options.port,
     timeoutMs: 1e3 * 60 * 5,
   });

@@ -142,7 +142,8 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
   API: [
     {
       flag: '--host <value>',
-      description: 'Host or IP address to bind the Aztec Services to. Use 0.0.0.0 to listen on all interfaces',
+      description:
+        'Host or IP address to bind the Aztec Services to, including the TXE and the standby status server. Use 0.0.0.0 to listen on all interfaces',
       defaultValue: '127.0.0.1',
       env: 'AZTEC_HOST',
     },

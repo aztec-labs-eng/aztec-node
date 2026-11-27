@@ -78,7 +78,7 @@ export async function waitForCompatibleRollup(
     rollupVersion?: number;
   },
   expected: { genesisArchiveRoot: Fr; vkTreeRoot: Fr; protocolContractsHash: Fr },
-  port: number | undefined,
+  listen: { host?: string; port?: number },
   userLog: LogFn,
 ): Promise<void> {
   const publicClient = getPublicClient(config);
@@ -104,7 +104,7 @@ export async function waitForCompatibleRollup(
       `Entering standby mode. Will poll every ${ROLLUP_POLL_INTERVAL_S}s for a compatible rollup...`,
   );
 
-  const standbyServer = await startHttpRpcServer({ getApp: () => new Koa(), isHealthy: () => true }, { port });
+  const standbyServer = await startHttpRpcServer({ getApp: () => new Koa(), isHealthy: () => true }, listen);
   userLog(`Standby status server listening on port ${standbyServer.port}`);
 
   try {

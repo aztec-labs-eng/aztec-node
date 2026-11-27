@@ -43,7 +43,7 @@ export async function startProverBroker(
   await waitForCompatibleRollup(
     baseConfig,
     { genesisArchiveRoot, vkTreeRoot: getVKTreeRoot(), protocolContractsHash },
-    options.port,
+    { host: options.host, port: options.port },
     userLog,
   );
 
