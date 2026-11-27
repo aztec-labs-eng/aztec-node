@@ -40,10 +40,6 @@ case "$RELEASE_TARGET" in
       echo_stderr "A public release must read and publish npm from npmjs, not $NPM_REGISTRY."
       exit 1
     fi
-
-    # Never the shared build cache, which any CI build can write. Only ci-release switches to it:
-    # the network jobs source this file for the registry, on instances that cannot read it.
-    export RELEASE_CACHE_BUCKET=aztec-ci-release-cache
     ;;
   private)
     # What gets published is code, not configuration: the projects that publish public artifacts
@@ -92,15 +88,15 @@ case "$RELEASE_TARGET" in
       unset release_channel
     fi
 
-    # The private cache, which nothing public can read or write. It has to be a cache of its own,
-    # not only for privacy: no cache key mentions the registry. node_modules is keyed on yarn.lock
+    # ci3 builds a private release in the private cache, which nothing public can read or write,
+    # because it runs on the private release instance profile. It has to be a cache of its own, not
+    # only for privacy: no cache key mentions the registry. node_modules is keyed on yarn.lock
     # plus package.json and the release-image base layer on the Dockerfiles plus yarn.lock, all
     # identical between a public and a private build of the same tree, so a private run reading the
     # public cache would restore a public run's entries and skip both installs, publishing
     # artifacts built against npmjs while reporting success. Its other writer, the
     # aztec-packages-private CI, builds this tree only with its manifests rewritten, so under other
     # keys.
-    export RELEASE_CACHE_BUCKET=aztec-ci-private-cache
     ;;
   *)
     echo_stderr "Unknown RELEASE_TARGET '$RELEASE_TARGET' (expected public or private)."

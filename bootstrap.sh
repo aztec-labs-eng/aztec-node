@@ -957,7 +957,6 @@ case "$cmd" in
       exit 1
     fi
     source $root/scripts/source_release_target   # Source vars for public or private releases.
-    source $ci3/source_cache_bucket $RELEASE_CACHE_BUCKET
     ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;
