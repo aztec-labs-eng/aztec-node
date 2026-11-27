@@ -489,8 +489,9 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
       ...this.options,
       logger: this.options.logger?.verbose,
     });
+    const { bytecodes, witnesses } = prepareChonkProofInputs(executionSteps);
     const backend = new AztecClientBackend(
-      executionSteps.map(step => ungzip(step.bytecode)),
+      bytecodes,
       barretenberg,
       executionSteps.map(step => step.functionName),
       executionSteps.map(step => step.kind),
@@ -498,7 +499,7 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
 
     // Use compressed prove path to get both proof fields and compressed proof bytes
     const result = await backend.prove(
-      executionSteps.map(step => ungzip(serializeWitness(step.witness))),
+      witnesses,
       executionSteps.map(step => step.vk),
       { compress: true },
     );
@@ -534,4 +535,15 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
     const gateCount = await backend.gates();
     return gateCount[0];
   }
+}
+
+/** Decodes execution steps into the bytecodes and witnesses that bb proves a Chonk proof from. */
+export function prepareChonkProofInputs(executionSteps: PrivateExecutionStep[]): {
+  bytecodes: Uint8Array[];
+  witnesses: Uint8Array[];
+} {
+  return {
+    bytecodes: executionSteps.map(step => ungzip(step.bytecode)),
+    witnesses: executionSteps.map(step => ungzip(serializeWitness(step.witness))),
+  };
 }
