@@ -210,6 +210,20 @@ describe('ProofPublishingService', () => {
     expect(publishers).toHaveLength(0);
   });
 
+  it('resolves queued candidates as withdrawn on stop, and any submitted afterwards', async () => {
+    startService();
+    l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber(0));
+    const queued = makeCandidate({ startBlock: BlockNumber(5), endBlock: BlockNumber(8) }); // not eligible.
+
+    const outcomePromise = service.submit(queued);
+    await service.drainSyncPoint();
+    await service.stop();
+
+    expect(await outcomePromise).toEqual('withdrawn');
+    expect(await service.submit(makeCandidate())).toEqual('withdrawn');
+    expect(publishers).toHaveLength(0);
+  });
+
   it('lets an in-flight publish run to completion when withdraw is called on it', async () => {
     // Once a publish starts, withdraw is a no-op for the in-flight candidate — the L1
     // submission runs naturally and the outcome reports whatever the publisher returned.
