@@ -138,8 +138,10 @@ function test_cmds {
     exit 0
   fi
 
-  # Very simple sanity test.
+  # Very simple sanity tests. The wallet is not reached through the image's entrypoint, so it gets its own check that
+  # all of its modules resolve.
   echo "$hash docker run --rm azteclabs/aztec --version"
+  echo "$hash docker run --rm --entrypoint node azteclabs/aztec /usr/src/yarn-project/cli-wallet/dest/bin/index.js --version"
 }
 
 function release {

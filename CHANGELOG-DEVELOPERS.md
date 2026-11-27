@@ -222,4 +222,5 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Fixes
 
+- **`aztec-wallet` runs from the `azteclabs/aztec` image** ([#763](https://github.com/aztec-labs-eng/aztec-node/pull/763)). The image shipped the wallet's code without its `inquirer` dependency, so `node /usr/src/yarn-project/cli-wallet/dest/bin/index.js` failed with `ERR_MODULE_NOT_FOUND: Cannot find package 'inquirer'` before running any command. Every image up to this one is affected. The wallet installed from npm as `@aztec-labs/cli-wallet` was not.
 - **`aztec test` no longer crashes on a slow reader or hangs when the TXE dies** ([#592](https://github.com/aztec-labs-eng/aztec-node/pull/592)). When its output went to a pipe that filled up, nargo exited with code 101. It now also fails up front when port 8081 is taken, and reports the TXE's exit status if the TXE dies before it starts listening.
