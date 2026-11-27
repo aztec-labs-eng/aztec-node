@@ -298,7 +298,7 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
   },
   skipProposingOnFeeMismatch: {
     env: 'SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH',
-    description: 'Skip building when the publisher cannot cover the current L1 base fees and competitive tip.',
+    description: 'Skip building when estimated L1 execution or blob fees exceed the configured publisher limits.',
     ...booleanConfigHelper(DefaultSequencerConfig.skipProposingOnFeeMismatch),
   },
   minPeersToPropose: {

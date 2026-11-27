@@ -20,7 +20,7 @@ const makeUtils = (fetchFn: (url: string, init: RequestInit) => Promise<Response
 };
 
 describe('ReadOnlyL1TxUtils fee quote', () => {
-  it('uses mined tips, not a pending spike alone, to flag an underbid without raising the bid', async () => {
+  it('keeps the publisher strategy’s recommended tip when mined tips exceed its sanity cap', async () => {
     const lowTip = 5000n;
     const highTip = 500_000_000n;
     const quoteWithHistory = (tips: bigint[]) =>
@@ -62,7 +62,7 @@ describe('ReadOnlyL1TxUtils fee quote', () => {
     const sustained = await quoteWithHistory([lowTip, highTip, highTip, highTip, lowTip]);
 
     expect(pendingOnly.competitiveTip).toBeLessThanOrEqual(pendingOnly.bid.maxPriorityFeePerGas);
-    expect(sustained.competitiveTip).toBe(highTip);
+    expect(sustained.competitiveTip).toBe(pendingOnly.competitiveTip);
     expect(sustained.bid.maxPriorityFeePerGas).toBeLessThan(highTip);
     expect(sustained.bid).toEqual(pendingOnly.bid);
   });

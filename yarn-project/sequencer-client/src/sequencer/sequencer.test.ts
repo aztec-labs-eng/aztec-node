@@ -843,23 +843,28 @@ describe('sequencer', () => {
     });
 
     describe('L1 fee mismatch', () => {
-      const coveringBid = { maxFeePerGas: 12n, maxPriorityFeePerGas: 2n, maxFeePerBlobGas: 5n };
-
-      function quoteBid(bid: typeof coveringBid) {
+      function quoteWithLimits(gasPriceLimit?: bigint, blobGasPriceLimit?: bigint) {
         publisherFactory.create.mockResolvedValueOnce({
           attestorAddress: publisher.getSenderAddress(),
           publisher,
-          feeQuote: { blockNumber: 1n, baseFee: 10n, competitiveTip: 2n, blobBaseFee: 5n, bid },
+          feeQuote: {
+            blockNumber: 1n,
+            baseFee: 10n,
+            competitiveTip: 2n,
+            blobBaseFee: 5n,
+            bid: { maxFeePerGas: 11n, maxPriorityFeePerGas: 1n, maxFeePerBlobGas: 4n },
+            gasPriceLimit,
+            blobGasPriceLimit,
+          },
         });
       }
 
       it.each([
-        ['execution base fee plus tip', { ...coveringBid, maxFeePerGas: 11n }],
-        ['competitive tip', { ...coveringBid, maxPriorityFeePerGas: 1n }],
-        ['blob base fee', { ...coveringBid, maxFeePerBlobGas: 4n }],
-      ] as const)('skips before gossip but still votes when the bid cannot cover the %s', async (_, bid) => {
+        ['execution base fee plus tip', 11n, undefined],
+        ['blob base fee', undefined, 4n],
+      ] as const)('skips before gossip but still votes when the %s exceeds its ceiling', async (_, execution, blob) => {
         await setupSingleTxBlock();
-        quoteBid(bid);
+        quoteWithLimits(execution, blob);
         const payload = EthAddress.random();
         sequencer.updateConfig({ governanceProposerPayload: payload });
         validatorClient.getValidatorAddresses.mockReturnValue([signer.address]);
@@ -880,10 +885,10 @@ describe('sequencer', () => {
         );
       });
 
-      it('proposes despite an underbid when skipping is disabled', async () => {
+      it('proposes above the execution ceiling when skipping is disabled', async () => {
         sequencer.updateConfig({ skipProposingOnFeeMismatch: false });
         await setupSingleTxBlock();
-        quoteBid({ ...coveringBid, maxFeePerGas: 11n });
+        quoteWithLimits(11n);
 
         await sequencer.work();
         await sequencer.awaitLastProposalSubmission();
@@ -891,9 +896,12 @@ describe('sequencer', () => {
         expectPublisherProposeL2Block();
       });
 
-      it('proposes when the bid exactly covers execution and blob fees with skipping enabled', async () => {
+      it.each([
+        ['the ceilings exactly cover the estimate', 12n, 5n],
+        ['both fees are uncapped', undefined, undefined],
+      ] as const)('proposes despite a lower initial bid when %s', async (_, execution, blob) => {
         await setupSingleTxBlock();
-        quoteBid(coveringBid);
+        quoteWithLimits(execution, blob);
 
         await sequencer.work();
         await sequencer.awaitLastProposalSubmission();
