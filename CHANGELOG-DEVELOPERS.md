@@ -221,4 +221,5 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### Fixes
 
+- **A wallet can send a transaction right after a time warp of 24 hours on the local network** ([#769](https://github.com/aztec-labs-eng/aztec-node/pull/769)). On a network started with `aztec start --local-network`, after `warpL2TimeAtLeastTo` or `warpL2TimeAtLeastBy` moved the time by 24 hours or more, the first transaction of each wallet failed with `Highest aged index (57) must not exceed highest finalized index (49)` until about 32 more blocks were mined. The warp now also makes the earlier blocks final, so a test needs no extra blocks after it.
 - **`aztec test` no longer crashes on a slow reader or hangs when the TXE dies** ([#592](https://github.com/aztec-labs-eng/aztec-node/pull/592)). When its output went to a pipe that filled up, nargo exited with code 101. It now also fails up front when port 8081 is taken, and reports the TXE's exit status if the TXE dies before it starts listening.
