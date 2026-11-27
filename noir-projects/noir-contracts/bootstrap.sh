@@ -207,6 +207,11 @@ function test_cmds {
   # Test bb aztec_process command
   echo "$AZTEC_TOOLCHAIN_HASH noir-projects/noir-contracts/scripts/test_aztec_process.sh"
 
+  # The TXE benchmark package only runs as a bench, so check here that it still compiles.
+  local txe_bench_hash=$(hash_str $AZTEC_TOOLCHAIN_HASH \
+    $(cache_content_hash "^noir-projects/noir-contracts/" "^noir-projects/aztec-nr/" "^noir-projects/txe-bench/"))
+  echo "$txe_bench_hash labs-aztec-toolchain/bin/nargo check --program-dir noir-projects/txe-bench/account_scaling"
+
   # Chunks spread over the NUM_TXES TXEs on consecutive ports from $txe_port.
   local -A cache
   $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
@@ -293,6 +298,16 @@ function bench_cmds {
       "^noir-projects/aztec-nr/" \
       "^noir-projects/noir-contracts/scripts/bench_artifact_sizes.sh"))
   echo "$hash noir-projects/noir-contracts/scripts/bench_artifact_sizes.sh"
+
+  # Keyed on the TXE's dependency closure and the Noir sources the benchmark runs.
+  local txe_hash=$(hash_str \
+    $AZTEC_TOOLCHAIN_HASH \
+    $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts) \
+    $(cache_content_hash \
+      "^noir-projects/noir-contracts/" \
+      "^noir-projects/aztec-nr/" \
+      "^noir-projects/txe-bench/"))
+  echo "$txe_hash:CPUS=4 noir-projects/noir-contracts/scripts/bench_txe.sh"
 }
 
 # Force-builds standard contracts and tar-balls their artifacts into pinned-standard-contracts.tar.gz.
