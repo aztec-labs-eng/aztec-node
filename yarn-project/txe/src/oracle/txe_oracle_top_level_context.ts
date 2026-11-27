@@ -1002,6 +1002,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
         contractSyncService: this.stateMachine.contractSyncService,
         l2TipsStore: this.stateMachine.l2TipsProvider,
         changeSetId,
+        noteCache: undefined,
         scopes,
         simulator,
         hooks: composeHooks({

@@ -11,6 +11,7 @@ use std::meta::{ctstring::AsCtString, unquote};
 
 use crate::{
     context::{PrivateContext, PublicContext, UtilityContext},
+    ephemeral::EphemeralArray,
     macros::{
         internals_functions_generation::external_functions_registry::get_public_functions, utils::fn_has_noinitcheck,
     },
@@ -19,7 +20,7 @@ use crate::{
         get_contract_instance::{
             get_contract_instance, get_contract_instance_deployer_avm, get_contract_instance_initialization_hash_avm,
         },
-        nullifiers::check_nullifier_exists,
+        nullifiers::get_nullifier_statuses,
     },
 };
 
@@ -124,14 +125,18 @@ pub fn assert_is_initialized_private(context: &mut PrivateContext) {
 
 /// Asserts that the contract has been initialized, from a utility function's perspective.
 ///
-/// Only checks the private initialization nullifier in the settled nullifier tree. Since both nullifiers are
-/// emitted in the same transaction, the private nullifier's presence in settled state guarantees the public one
-/// is also settled.
+/// Only checks the private initialization nullifier, and requires it to be settled. Since both nullifiers are emitted
+/// in the same transaction, the private nullifier's presence in settled state guarantees the public one is also
+/// settled. A pending private nullifier gives no such guarantee, as the public part of initialization runs after all
+/// private execution, so a utility function called from private in the transaction that initializes the contract
+/// fails this check.
 pub unconstrained fn assert_is_initialized_utility(context: UtilityContext) {
     let address = context.this_address();
     let instance = get_contract_instance(address);
     let initialization_nullifier = compute_private_initialization_nullifier(address, instance.initialization_hash);
-    assert(check_nullifier_exists(initialization_nullifier), "Not initialized");
+    let status = get_nullifier_statuses(EphemeralArray::from_array([initialization_nullifier])).get(0);
+    assert(status.exists, "Not initialized");
+    assert(status.origin_block.is_some(), "Contract initialization is not yet settled");
 }
 
 /// Computes the private initialization nullifier for a contract.

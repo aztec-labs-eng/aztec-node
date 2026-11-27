@@ -18,9 +18,7 @@
 //! Concurrent sends on one sequence collide on its nullifiers or fail the predecessor check. Concurrent first sends on
 //! different sequences can collide too: anchoring an existing handshake calls the registry's `validate_handshake`,
 //! which nullifies and recreates the handshake's note, so first sends for the same `(sender, recipient)` from different
-//! contracts collide on that note. Batching onto a handshake sequence needs a committed handshake, as a send only finds
-//! handshakes from earlier transactions (see
-//! [`get_existing_app_siloed_handshake_secrets`](super::handshake::get_existing_app_siloed_handshake_secrets)).
+//! contracts collide on that note.
 //!
 //! ## Protection from third parties
 //!

@@ -76,6 +76,7 @@ import type { MessagingSecretSourcesStore } from '../../storage/tagging_store/me
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
 import type { AnchoredContractData } from '../anchored_contract_data.js';
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
+import type { ExecutionNoteCache } from '../execution_note_cache.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
@@ -125,6 +126,11 @@ export type UtilityExecutionOracleArgs = {
   contractSyncService: ContractSyncService;
   l2TipsStore: L2TipsProvider;
   changeSetId: ChangeSetId;
+  /**
+   * The pending notes and nullifiers of the transaction this function runs in, or `undefined` when it runs outside of
+   * one, as a top-level utility function does.
+   */
+  noteCache: ExecutionNoteCache | undefined;
   log?: ReturnType<typeof createLogger>;
   scopes: AztecAddress[];
   simulator: CircuitSimulator;
@@ -177,6 +183,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   protected readonly contractSyncService: ContractSyncService;
   protected readonly l2TipsStore: L2TipsProvider;
   protected readonly changeSetId: ChangeSetId;
+  protected readonly noteCache: ExecutionNoteCache | undefined;
   protected logger: ReturnType<typeof createLogger>;
   protected readonly scopes: AztecAddress[];
   protected readonly simulator: CircuitSimulator;
@@ -202,6 +209,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     this.contractSyncService = args.contractSyncService;
     this.l2TipsStore = args.l2TipsStore;
     this.changeSetId = args.changeSetId;
+    this.noteCache = args.noteCache;
     this.logger = args.log ?? createLogger('simulator:client_view_context');
     this.scopes = args.scopes;
     this.simulator = args.simulator;
@@ -497,10 +505,15 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     maxNotes: number,
     packedHintedNoteLength: number,
   ): Promise<BoundedVec<NoteData>> {
-    const noteService = new NoteService(this.noteStore, this.aztecNode, this.anchorBlockHeader, this.changeSetId);
+    // Nullified pending notes are already removed from the list.
+    const pendingNotes = this.noteCache?.getNotes(this.contractAddress, owner.value, storageSlot) ?? [];
+    const pendingNullifiers = this.noteCache?.getNullifiers(this.contractAddress) ?? new Set<bigint>();
 
+    const noteService = new NoteService(this.noteStore, this.aztecNode, this.anchorBlockHeader, this.changeSetId);
     const dbNotes = await noteService.getNotes(this.contractAddress, owner.value, storageSlot, status, this.scopes);
-    const picked = pickNotes<NoteData>(dbNotes, {
+    const dbNotesFiltered = dbNotes.filter(n => !pendingNullifiers.has((n.siloedNullifier as Fr).value));
+
+    const picked = pickNotes<NoteData>([...dbNotesFiltered, ...pendingNotes], {
       selects: selectByIndexes.slice(0, numSelects).map((index, i) => ({
         selector: { index, offset: selectByOffsets[i], length: selectByLengths[i] },
         value: selectValues[i],
@@ -513,6 +526,13 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       limit,
       offset,
     });
+
+    this.logger.debug(
+      `Returning ${picked.length} notes for ${this.contractAddress} at ${storageSlot}: ${picked
+        .map(n => `${n.noteNonce.toString()}:[${n.note.items.map(i => i.toString()).join(',')}]`)
+        .join(', ')}`,
+    );
+
     return BoundedVec.from({ data: picked, maxLength: maxNotes, elementSize: packedHintedNoteLength });
   }
 
@@ -544,8 +564,9 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
-   * Returns the status of each inner nullifier: whether it exists in the nullifier tree at the anchor block and, if
-   * so, the block it was inserted in. Results are aligned with the input.
+   * Returns the status of each inner nullifier, aligned with the input. A nullifier in the nullifier tree at the anchor
+   * block exists, with the block it was inserted in. A nullifier the transaction this function runs in emitted before
+   * this call exists, with no origin block.
    */
   public async getNullifierStatuses(innerNullifiers: EphemeralArray<Fr>): Promise<EphemeralArray<NullifierStatus>> {
     const siloedNullifiers = await allToCompletion(
@@ -553,12 +574,24 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
         .readAll(this.ephemeralArrayService)
         .map(innerNullifier => siloNullifier(this.contractAddress, innerNullifier)),
     );
-    const statuses = await this.getSiloedNullifierStatuses(siloedNullifiers);
+
+    this.logger.debug(`Checking existence of ${siloedNullifiers.length} nullifiers`, {
+      contractAddress: this.contractAddress,
+      siloedNullifiers,
+    });
+
+    const pendingNullifiers = this.noteCache?.getNullifiers(this.contractAddress) ?? new Set<bigint>();
+    const isPending = siloedNullifiers.map(nullifier => pendingNullifiers.has(nullifier.toBigInt()));
+    const settledStatuses = await this.#getSettledNullifierStatuses(siloedNullifiers.filter((_, i) => !isPending[i]));
+
+    const pendingStatus: NullifierStatus = { exists: true, originBlock: Option.none() };
+    let nextSettled = 0;
+    const statuses = isPending.map(pending => (pending ? pendingStatus : settledStatuses[nextSettled++]));
     return EphemeralArray.fromValues(this.ephemeralArrayService, statuses);
   }
 
   /** Looks up siloed nullifiers in the nullifier tree at the anchor block, returning one status per input. */
-  protected async getSiloedNullifierStatuses(siloedNullifiers: Fr[]): Promise<NullifierStatus[]> {
+  async #getSettledNullifierStatuses(siloedNullifiers: Fr[]): Promise<NullifierStatus[]> {
     const anchor = await this.anchorBlockHeader.toBlockParameter();
     const leaves = (
       await allToCompletion(
@@ -1188,6 +1221,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       contractSyncService: this.contractSyncService,
       l2TipsStore: this.l2TipsStore,
       changeSetId: this.changeSetId,
+      noteCache: this.noteCache,
       scopes: this.scopes,
       simulator: this.simulator,
       hooks: this.hooks,

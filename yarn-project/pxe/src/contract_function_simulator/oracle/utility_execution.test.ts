@@ -1,7 +1,8 @@
-import { ARCHIVE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { ARCHIVE_HEIGHT, DomainSeparator, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
@@ -73,6 +74,7 @@ import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagg
 import { AnchoredContractData } from '../anchored_contract_data.js';
 import { ContractFunctionSimulator } from '../contract_function_simulator.js';
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
+import { ExecutionNoteCache } from '../execution_note_cache.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
@@ -217,7 +219,7 @@ describe('Utility Execution test suite', () => {
     const contractAddress = await computeContractAddressFromInstance(instanceFields);
 
     aztecNode.getPublicStorageAt.mockResolvedValue(Fr.ZERO);
-    // The init check calls check_nullifier_exists, which queries findLeavesIndexes.
+    // The init check looks up the settled initialization nullifier with findLeavesIndexes.
     aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
       Promise.resolve(leaves.map(() => ({ data: 1n, l2BlockNumber: BlockNumber(1), l2BlockHash: BlockHash.random() }))),
     );
@@ -581,6 +583,95 @@ describe('Utility Execution test suite', () => {
             expect(nestedSimulator.executeUserCircuit).not.toHaveBeenCalled();
           }
         });
+      });
+    });
+
+    // `summed_values` asserts that its contract is initialized, then sums the owner's notes. How its initialization
+    // check fails and what it returns show which of the transaction's nullifiers and notes a utility function it calls
+    // sees.
+    describe('utility calls within a transaction', () => {
+      const summedValues = {
+        ...getFunctionArtifactByName(StatefulTestContractArtifact, 'summed_values'),
+        contractName: StatefulTestContractArtifact.name,
+      };
+      const notesSlot = StatefulTestContractArtifact.storageLayout['notes'].slot;
+
+      let instance: ContractInstanceWithAddress;
+      let initializationNullifier: Fr;
+      let noteCache: ExecutionNoteCache;
+
+      const settledNote = (value: bigint, siloedNullifier = Fr.random()) =>
+        NoteDao.random({
+          note: buildNote(value),
+          contractAddress: instance.address,
+          owner,
+          storageSlot: notesSlot,
+          siloedNullifier,
+        });
+
+      const addPendingNote = (value: bigint, counter: number) =>
+        noteCache.addNewNote(
+          {
+            contractAddress: instance.address,
+            owner,
+            storageSlot: notesSlot,
+            randomness: Fr.random(),
+            noteNonce: Fr.ZERO,
+            note: buildNote(value),
+            siloedNullifier: undefined,
+            noteHash: Fr.random(),
+            isPending: true,
+          },
+          counter,
+        );
+
+      const callSummedValues = async () => {
+        const oracle = makeOracle({ contractAddress: instance.address, scopes: [owner], noteCache });
+        const selector = await FunctionSelector.fromNameAndParameters(summedValues.name, summedValues.parameters);
+        return oracle.callUtilityFunction(instance.address, selector, encodeArguments(summedValues, [owner]));
+      };
+
+      beforeEach(async () => {
+        // The initialization check requires the instance to be a valid preimage of the contract address.
+        instance = await randomContractInstanceWithAddress({ contractClassId: new Fr(42) });
+        initializationNullifier = await poseidon2HashWithSeparator(
+          [instance.address, instance.initializationHash],
+          DomainSeparator.PRIVATE_INITIALIZATION_NULLIFIER,
+        );
+        contractStore.getContractInstance.mockResolvedValue(instance);
+        contractStore.getFunctionArtifactWithDebugMetadata.mockResolvedValue(summedValues);
+        noteCache = new ExecutionNoteCache(Fr.ZERO);
+      });
+
+      // The initialization check requires a settled initialization nullifier, and fails with `Not initialized` instead
+      // when it sees none at all.
+      it('sees the nullifiers the transaction emitted', async () => {
+        aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
+          Promise.resolve(leaves.map(() => undefined)),
+        );
+        await noteCache.nullifierCreated(instance.address, initializationNullifier);
+
+        await expect(callSummedValues()).rejects.toThrow('Contract initialization is not yet settled');
+      });
+
+      it('sees the notes the transaction created, and not the settled notes it nullified', async () => {
+        aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
+          Promise.resolve(
+            leaves.map(() => ({ data: 1n, l2BlockNumber: BlockNumber(1), l2BlockHash: BlockHash.random() })),
+          ),
+        );
+        const nullifiedSettledValue = 1n;
+        const settledValue = 2n;
+        const pendingValue = 4n;
+        const nullifiedInner = Fr.random();
+        noteStore.getNotes.mockResolvedValue([
+          await settledNote(nullifiedSettledValue, await siloNullifier(instance.address, nullifiedInner)),
+          await settledNote(settledValue),
+        ]);
+        await noteCache.nullifyNote(instance.address, nullifiedInner, Fr.ZERO);
+        addPendingNote(pendingValue, 1);
+
+        await expect(callSummedValues()).resolves.toEqual([new Fr(settledValue + pendingValue)]);
       });
     });
 
@@ -1347,6 +1438,7 @@ describe('Utility Execution test suite', () => {
         txResolver,
         contractSyncService,
         changeSetId: 'test-change-set-id',
+        noteCache: undefined,
         scopes,
         l2TipsStore,
         simulator,

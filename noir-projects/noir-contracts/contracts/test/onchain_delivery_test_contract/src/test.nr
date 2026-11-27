@@ -138,6 +138,28 @@ unconstrained fn rehandshake_replaces_registry_secret_for_future_delivery() {
     assert_eq(next_index, 1);
 }
 
+#[test]
+unconstrained fn a_tx_with_two_sends_reuses_the_handshake_of_the_first() {
+    let (env, registry_address, test_address, sender, recipient) = setup();
+    let test_contract = OnchainDeliveryTest::at(test_address);
+    let registry = HandshakeRegistry::at(registry_address);
+
+    env.call_private_opts(sender, authorizing(registry_address), test_contract.emit_two_events(recipient));
+
+    let secret = env
+        .execute_utility_opts(
+            ExecuteUtilityOptions::new().with_from(test_address),
+            registry.get_app_siloed_secrets(sender, recipient),
+        )
+        .expect(f"the first send should have stored a handshake")
+        .shared;
+    let next_index = env.call_private(
+        sender,
+        test_contract.next_index_for_secret(secret, MessageDelivery::onchain_constrained().into()),
+    );
+    assert_eq(next_index, 2);
+}
+
 // The TXE environment configures no `resolveCustomRequest` resolver, so a fresh interactive handshake fails at the
 // registry's signature request. Reaching that failure proves the builder option dispatches through the delivery stack
 // to the registry's `interactive_handshake` entrypoint.
