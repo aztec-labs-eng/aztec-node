@@ -80,13 +80,7 @@ locals {
       lighthouse_extra_args = []
     }
     mainnet = {
-      reth_image          = "ghcr.io/paradigmxyz/reth:v2.3.0"
-      lighthouse_image    = "sigp/lighthouse:v8.2.0"
       checkpoint_sync_url = "https://mainnet.checkpoint.sigp.io"
-      reth_p2p_port       = 32300
-      lighthouse_p2p_port = 32301
-      reth_storage        = "3.25Ti"
-      lighthouse_storage  = "512Gi"
       reth_resources = {
         requests = { cpu = "1", memory = "48Gi" }
         limits   = { cpu = "8", memory = "96Gi" }
@@ -116,20 +110,33 @@ locals {
 
   consumers = merge(local.simple_consumers, var.CONSUMERS)
 
-  internal_load_balancer_addresses = merge([
-    for chain in keys(local.ethereum_chains) : {
-      "${chain}-reth"       = "${local.release_prefix}-${chain}-execution-internal"
-      "${chain}-lighthouse" = "${local.release_prefix}-${chain}-beacon-internal"
+  internal_load_balancer_addresses = {
+    sepolia-reth       = "${local.release_prefix}-sepolia-execution-internal"
+    sepolia-lighthouse = "${local.release_prefix}-sepolia-beacon-internal"
+  }
+
+  serving_nodes = {
+    mainnet = {
+      reth_service       = local.mainnet_serving_clients.reth.service_name
+      reth_port          = local.mainnet_serving_services.reth.ports.http-rpc
+      lighthouse_service = local.mainnet_serving_clients.lighthouse.service_name
+      lighthouse_port    = local.mainnet_serving_services.lighthouse.ports.http-api
     }
-  ]...)
+    sepolia = {
+      reth_service       = module.ethereum_nodes["sepolia"].reth_service_name
+      reth_port          = module.ethereum_nodes["sepolia"].reth_http_port
+      lighthouse_service = module.ethereum_nodes["sepolia"].lighthouse_service_name
+      lighthouse_port    = module.ethereum_nodes["sepolia"].lighthouse_http_port
+    }
+  }
 
   gateway_routes = merge([
-    for chain, node in module.ethereum_nodes : {
+    for chain, node in local.serving_nodes : {
       "${chain}-execution" = {
         hosts                       = local.ethereum_chains[chain].execution_hosts
         route_namespace             = local.namespace
-        upstream_service_name       = chain == "mainnet" && local.mainnet_serving_slot != null ? module.mainnet_instances[local.mainnet_serving_slot].clients.reth.service_name : node.reth_service_name
-        upstream_service_port       = node.reth_http_port
+        upstream_service_name       = node.reth_service
+        upstream_service_port       = node.reth_port
         auth_mode                   = "keyed_only"
         anonymous_rate_limit_minute = 0
         path                        = "/"
@@ -139,8 +146,8 @@ locals {
       "${chain}-beacon" = {
         hosts                       = local.ethereum_chains[chain].beacon_hosts
         route_namespace             = local.namespace
-        upstream_service_name       = chain == "mainnet" && local.mainnet_serving_slot != null ? module.mainnet_instances[local.mainnet_serving_slot].clients.lighthouse.service_name : node.lighthouse_service_name
-        upstream_service_port       = node.lighthouse_http_port
+        upstream_service_name       = node.lighthouse_service
+        upstream_service_port       = node.lighthouse_port
         auth_mode                   = "keyed_only"
         anonymous_rate_limit_minute = 0
         path                        = "/"
@@ -156,7 +163,17 @@ data "google_compute_subnetwork" "default" {
   region = local.gcp_region
 }
 
-resource "google_compute_address" "internal_load_balancer" {
+moved {
+  from = google_compute_address.internal_load_balancer["sepolia-reth"]
+  to   = google_compute_address.sepolia_internal_load_balancer["sepolia-reth"]
+}
+
+moved {
+  from = google_compute_address.internal_load_balancer["sepolia-lighthouse"]
+  to   = google_compute_address.sepolia_internal_load_balancer["sepolia-lighthouse"]
+}
+
+resource "google_compute_address" "sepolia_internal_load_balancer" {
   for_each = local.internal_load_balancer_addresses
 
   name         = each.value
@@ -178,7 +195,7 @@ resource "kubernetes_namespace_v1" "ethereum" {
 }
 
 module "ethereum_nodes" {
-  for_each = local.ethereum_chains
+  for_each = { sepolia = local.ethereum_chains.sepolia }
 
   source = "../modules/ethereum-node"
 
@@ -208,7 +225,7 @@ module "ethereum_nodes" {
   }
   RETH_EXTRA_ARGS = each.value.reth_extra_args
   RETH_INTERNAL_LOAD_BALANCER = {
-    ip = google_compute_address.internal_load_balancer["${each.key}-reth"].address
+    ip = google_compute_address.sepolia_internal_load_balancer["${each.key}-reth"].address
   }
 
   LIGHTHOUSE_IMAGE    = each.value.lighthouse_image
@@ -226,7 +243,7 @@ module "ethereum_nodes" {
   }
   LIGHTHOUSE_EXTRA_ARGS = each.value.lighthouse_extra_args
   LIGHTHOUSE_INTERNAL_LOAD_BALANCER = {
-    ip = google_compute_address.internal_load_balancer["${each.key}-lighthouse"].address
+    ip = google_compute_address.sepolia_internal_load_balancer["${each.key}-lighthouse"].address
   }
 
   depends_on = [kubernetes_namespace_v1.ethereum]
@@ -322,12 +339,12 @@ module "ethereum_metrics_collector" {
       }
     ],
     flatten([
-      for chain, node in module.ethereum_nodes : [
+      for chain, node in local.serving_nodes : [
         {
           job_name        = "ethereum-reth-${chain}"
           scrape_interval = "15s"
           metrics_path    = "/"
-          targets         = ["${node.reth_service_name}.${node.namespace}.svc.cluster.local:9001"]
+          targets         = ["${node.reth_service}.${local.namespace}.svc.cluster.local:9001"]
           labels = {
             component    = "ethereum-node"
             network      = local.release_prefix
@@ -340,7 +357,7 @@ module "ethereum_metrics_collector" {
           job_name        = "ethereum-lighthouse-${chain}"
           scrape_interval = "15s"
           metrics_path    = "/metrics"
-          targets         = ["${node.lighthouse_service_name}.${node.namespace}.svc.cluster.local:5054"]
+          targets         = ["${node.lighthouse_service}.${local.namespace}.svc.cluster.local:5054"]
           labels = {
             component    = "ethereum-node"
             network      = local.release_prefix

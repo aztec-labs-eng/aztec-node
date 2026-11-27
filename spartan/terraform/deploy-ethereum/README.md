@@ -8,12 +8,8 @@ Do not run Terraform, Helm upgrades, or another snapshot/restore concurrently.
 
 Mainnet can run more than one Reth/Lighthouse pair side by side:
 
-- `mainnet` is the legacy pair from `modules/ethereum-node`. Its module address,
-  Helm releases, PVCs, and internal LoadBalancers are unchanged by the instance
-  mechanism below; its Kong routes follow `local.mainnet_serving_slot`. Do not
-  rename it.
-- `mainnet-blue` and `mainnet-green` come from `modules/ethereum-node-instance`
-  and are declared in `local.mainnet_instances` in `mainnet-instances.tf`.
+`mainnet-blue` and `mainnet-green` come from `modules/ethereum-node-instance`
+and are declared in `local.mainnet_instances` in `mainnet-instances.tf`.
 
 `local.mainnet_instances` is the version-controlled record of which instances
 exist, with their pinned client images, P2P ports, and source snapshots. Every
@@ -24,13 +20,15 @@ instance's Helm releases, PVCs, PVs, and disks; see the
 before doing so.
 
 `local.mainnet_serving_slot` selects which slot backs the public mainnet Kong
-execution and beacon routes and the in-cluster `mainnet-execution` (`:8545`
-HTTP, `:8546` WebSocket) and `mainnet-beacon` (`:5052`) Services; `null` points
-them at the legacy pair. In-cluster consumers should use those Service names
-(listed in the `mainnet_serving_urls` output) so a swap needs no consumer change.
-The internal API LoadBalancers and the metrics collector always target the
-legacy pair.
-Instance endpoints and storage identifiers are in the `mainnet_instances` output.
+execution and beacon routes, the metrics collector, and the in-cluster
+`mainnet-execution` (`:8545` HTTP, `:8546` WebSocket) and `mainnet-beacon` (`:5052`)
+Services. In-cluster consumers should use those Service names (listed in the
+`mainnet_serving_urls` output) so a swap needs no consumer change. Instance
+endpoints and storage identifiers are in the `mainnet_instances` output.
+
+The legacy `mainnet` pair no longer provides private LoadBalancer endpoints.
+Deleting its PVCs also deletes their backing disks under the PVs' `Delete`
+reclaim policy.
 
 ### Upgrade by cloning the serving pair
 
@@ -39,11 +37,16 @@ client versions on the clones, and moves traffic only once the clones have
 recovered and synced. The source pair keeps serving throughout. Alternate between
 `blue` and `green`, so the new slot is always the one not serving traffic.
 
+On the next upgrade, create `green` and switch `mainnet_serving_slot` only after
+it is synced and validated. Once green serves traffic, remove blue's obsolete
+`avoid_release_prefixes = ["mainnet"]` override, or drop it when retiring blue.
+Changing the affinity before the switch can restart the serving blue pods.
+
 1. **Snapshot the source pair while it runs** (see
    [Live snapshots](#live-snapshots)):
 
    ```bash
-   ./snapshot-live-mainnet.sh <mainnet|mainnet-blue|mainnet-green> /path/outside/repo/<run-name>
+   ./snapshot-live-mainnet.sh <mainnet-blue|mainnet-green> /path/outside/repo/<run-name>
    ```
 
 2. **Open the new pair's P2P ports.** The `ethereum_p2p` rule in
@@ -67,8 +70,8 @@ recovered and synced. The source pair keeps serving throughout. Alternate betwee
    }
    ```
 
-   There are no default client versions. `avoid_release_prefixes` (default
-   `["mainnet"]`) keeps the new pods off the nodes running the listed pairs; list
+   There are no default client versions. `avoid_release_prefixes` keeps the
+   new pods off the nodes running the listed pairs; list
    every pair that is still serving. Disk sizes default to 3328/512 GiB and must be
    at least the snapshots' source disk sizes. P2P ports must differ from every
    other Ethereum instance in this root, which Terraform checks, and from any other
@@ -94,9 +97,10 @@ recovered and synced. The source pair keeps serving throughout. Alternate betwee
 
 6. **Move public traffic** by setting `local.mainnet_serving_slot` to the new
    slot. The plan should only change the backend Service of the two mainnet Kong
-   Ingresses and the selectors of `mainnet-execution` and `mainnet-beacon`. Node-local state does not move: clients must recreate filters and
-   reconnect subscriptions. To roll back, set it to the previous slot (or `null`
-   for the legacy pair) and apply again.
+   Ingresses, the metrics scrape targets, and the selectors of `mainnet-execution`
+   and `mainnet-beacon`. Node-local state does not move: clients must recreate
+   filters and reconnect subscriptions. To roll back while the previous slot
+   still exists, set it as the serving slot and apply again.
 
 7. **Retire the old pair** only after traffic has moved and the new pair has run
    in production for several days. Keep its disks or snapshots until then. Never
@@ -162,26 +166,24 @@ also carries the Engine API.
 ### Extending blue/green to Sepolia
 
 `modules/ethereum-node-instance` already accepts `CHAIN = "sepolia"`, but this
-root's wiring is mainnet-only. Making the change is a state refactor, so do it in
-its own change, separate from any client upgrade:
+root's wiring is mainnet-only. For the next Sepolia upgrade cycle, prepare
+blue/green support as a separate state refactor before changing client versions:
 
 1. **Key instances by chain.** Replace `mainnet_instances` and
    `mainnet_serving_slot` with per-chain maps (for example
    `ethereum_instances = { mainnet = { blue = {...} }, sepolia = {...} }` and
    `serving_slots = { mainnet = "blue", sepolia = null }`), flattened to
    `"<chain>-<slot>"` keys for the module's `for_each`. The `chain == "mainnet"`
-   guard in `gateway_routes` then becomes a lookup of that chain's serving slot.
-   Keep an unknown slot name a plan error rather than a silent fallback to the
-   legacy pair.
+   distinction in `serving_nodes` then becomes a lookup of that chain's serving
+   slot. Keep an unknown slot name a plan error.
 2. **Add `moved` blocks** for every existing instance, for example from
    `module.mainnet_instances["blue"]` to `module.ethereum_instances["mainnet-blue"]`.
    Without them, Terraform plans to destroy and recreate the instance;
    `prevent_destroy` blocks that plan for the disks, PVs, and PVCs. The plan for
    the refactor must show only moves.
 3. **Take per-chain values from `local.ethereum_chains`.** `mainnet-instances.tf`
-   hard-codes mainnet's resources, extra arguments, checkpoint URL, disk sizes,
-   and `avoid_release_prefixes = ["mainnet"]`; Sepolia's Reth disk, for example,
-   is 1792 GiB.
+   uses mainnet's resources, extra arguments, checkpoint URL, and disk sizes;
+   Sepolia's Reth disk, for example, is 1792 GiB.
 4. **Parameterize the chain in `snapshot-live-mainnet.sh`,** which accepts only
    `mainnet*` releases and labels snapshots `eth-network=mainnet`.
 5. **Allocate distinct P2P NodePorts** for each Sepolia slot and open them in the
