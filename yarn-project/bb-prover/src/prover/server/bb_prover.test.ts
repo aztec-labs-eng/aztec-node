@@ -71,12 +71,12 @@ describe('BBNativeRollupProver', () => {
       telemetry = new InMemoryMetrics();
       const binDirectory = path.resolve('../../labs-aztec-toolchain/bin');
       const bbBinaryPath = path.resolve(process.env.BB_BINARY_PATH || path.join(binDirectory, 'bb-avm'));
-      const bbProvingBinaryPath = path.join(workingDirectory, 'alternate-bb');
-      await fs.symlink(bbBinaryPath, bbProvingBinaryPath);
+      const bbBoostedBinaryPath = path.join(workingDirectory, 'boosted-bb');
+      await fs.symlink(bbBinaryPath, bbBoostedBinaryPath);
       config = {
         ...makeProverConfig(process.env.NOIR_EXECUTE_BINARY_PATH || path.join(binDirectory, 'noir-execute')),
         bbBinaryPath,
-        bbProvingBinaryPath,
+        bbBoostedBinaryPath,
       };
     });
 
@@ -84,11 +84,11 @@ describe('BBNativeRollupProver', () => {
       await telemetry.stop();
     });
 
-    it('returns a valid stable proof after rejecting an invalid alternate proof', async () => {
+    it('returns a valid stable proof after rejecting an invalid boosted proof', async () => {
       const create = BBJsInstance.create.bind(BBJsInstance);
       jest.spyOn(BBJsInstance, 'create').mockImplementation(async (binaryPath, ...options) => {
         const instance = await create(binaryPath, ...options);
-        if (binaryPath === config.bbProvingBinaryPath) {
+        if (binaryPath === config.bbBoostedBinaryPath) {
           const generate = instance.generateProof.bind(instance);
           jest.spyOn(instance, 'generateProof').mockImplementation(async (...args) => {
             const result = await generate(...args);

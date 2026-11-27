@@ -92,8 +92,8 @@ const logger = createLogger('bb-prover');
 class InvalidProofError extends ProvingError {}
 
 export interface BBProverConfig extends BBConfig, ACVMConfig {
-  /** Optional alternate bb for proof generation only. Verification always uses bbBinaryPath. */
-  bbProvingBinaryPath?: string;
+  /** Optional boosted bb for proof generation only. Verification always uses bbBinaryPath. */
+  bbBoostedBinaryPath?: string;
   // list of circuits supported by this prover. defaults to all circuits if empty
   circuitFilter?: ServerProtocolArtifact[];
 }
@@ -103,7 +103,7 @@ export interface BBProverConfig extends BBConfig, ACVMConfig {
  */
 export class BBNativeRollupProver implements ServerCircuitProver {
   private instrumentation: ProverInstrumentation;
-  private readonly alternateFactory?: BBJsFactory;
+  private readonly boostedFactory?: BBJsFactory;
   private readonly stableFactory: BBJsFactory;
 
   constructor(
@@ -113,8 +113,8 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     this.instrumentation = new ProverInstrumentation(telemetry, 'BBNativeRollupProver');
     const options = { logger, debugDir: config.bbDebugOutputDir };
     this.stableFactory = new BBJsFactory(config.bbBinaryPath, options);
-    if (config.bbProvingBinaryPath) {
-      this.alternateFactory = new BBJsFactory(config.bbProvingBinaryPath, options);
+    if (config.bbBoostedBinaryPath) {
+      this.boostedFactory = new BBJsFactory(config.bbBoostedBinaryPath, options);
     }
   }
 
@@ -128,10 +128,10 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     await fs.access(config.bbBinaryPath, fs.constants.R_OK);
     await fs.mkdir(config.bbWorkingDirectory, { recursive: true });
     logger.info(`Using bb.js API with binary at ${config.bbBinaryPath}`);
-    if (config.bbProvingBinaryPath) {
-      await fs.access(config.bbProvingBinaryPath, fs.constants.X_OK);
-      logger.info(`Using alternate bb at ${config.bbProvingBinaryPath} for proof generation only`, {
-        bbProvingBinaryPath: config.bbProvingBinaryPath,
+    if (config.bbBoostedBinaryPath) {
+      await fs.access(config.bbBoostedBinaryPath, fs.constants.X_OK);
+      logger.info(`Using boosted bb at ${config.bbBoostedBinaryPath} for proof generation only`, {
+        bbBoostedBinaryPath: config.bbBoostedBinaryPath,
       });
     }
     logger.info(`Using noir-execute at ${config.noirExecuteBinaryPath}`, {
@@ -373,10 +373,10 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     generate: (factory: BBJsFactory) => Promise<T>,
     verify: (result: T) => Promise<void>,
   ): Promise<T> {
-    if (this.alternateFactory) {
+    if (this.boostedFactory) {
       let stage: 'generation' | 'verification' = 'generation';
       try {
-        const result = await generate(this.alternateFactory);
+        const result = await generate(this.boostedFactory);
         stage = 'verification';
         await verify(result);
         return result;
@@ -384,10 +384,10 @@ export class BBNativeRollupProver implements ServerCircuitProver {
         if (stage === 'verification' && !(error instanceof InvalidProofError) && !(error instanceof BBApiException)) {
           throw error;
         }
-        logger.error('Alternate bb failed to produce a valid proof; retrying with stable bb', error, {
+        logger.error('Boosted bb failed to produce a valid proof; retrying with stable bb', error, {
           circuitName,
           stage,
-          bbProvingBinaryPath: this.config.bbProvingBinaryPath,
+          bbBoostedBinaryPath: this.config.bbBoostedBinaryPath,
         });
         this.instrumentation.recordProvingFallback(circuitName);
       }
@@ -458,7 +458,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
 
     // Server circuits have private arguments and a public return. Bind the proof to this job's ACVM return,
     // not to public inputs supplied by the alternate prover alongside its proof.
-    const expectedPublicInputs = this.config.bbProvingBinaryPath
+    const expectedPublicInputs = this.config.bbBoostedBinaryPath
       ? Array.from(abiEncode({ ...artifact.abi, parameters: [] }, {}, witnessResult.returnValue).values(), hexToBuffer)
       : undefined;
     return { output, witness, bytecode, expectedPublicInputs };

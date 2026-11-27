@@ -26,6 +26,7 @@ import { CheckpointSubTreeOrchestrator } from '../orchestrator/checkpoint-sub-tr
 import type { ChonkCache } from '../orchestrator/chonk-cache.js';
 import { TopTreeOrchestrator } from '../orchestrator/top-tree-orchestrator.js';
 import { BrokerCircuitProverFacade } from '../proving_broker/broker_prover_facade.js';
+import type { ProverAgentConfig } from '../proving_broker/config.js';
 import { InlineProofStore, type ProofStore, createProofStore } from '../proving_broker/proof_store/index.js';
 import { ProvingAgent } from '../proving_broker/proving_agent.js';
 
@@ -270,11 +271,15 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
 }
 
 export function buildServerCircuitProver(
-  config: Omit<ActualProverConfig, 'enqueueConcurrency'> & BBProverConfig,
+  config: Omit<ActualProverConfig, 'enqueueConcurrency'> & BBProverConfig & Pick<ProverAgentConfig, 'bbUseBoosted'>,
   telemetry: TelemetryClient,
 ): Promise<ServerCircuitProver> {
   if (config.realProofs) {
-    return BBNativeRollupProver.new(config, telemetry);
+    const bbBoostedBinaryPath = config.bbUseBoosted ? config.bbBoostedBinaryPath : undefined;
+    if (config.bbUseBoosted && !bbBoostedBinaryPath) {
+      throw new Error('BB_BOOSTED_BINARY_PATH is required when BB_USE_BOOSTED is enabled');
+    }
+    return BBNativeRollupProver.new({ ...config, bbBoostedBinaryPath }, telemetry);
   }
 
   const logger = createLogger('prover-client:acvm-native');

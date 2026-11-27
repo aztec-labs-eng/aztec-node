@@ -99,8 +99,10 @@ export const ProverAgentConfig = z.object({
   proverAgentPollIntervalMs: z.number(),
   /** The URL where this agent takes jobs from */
   proverBrokerUrl: z.string().optional(),
-  /** Optional alternate bb for native proof generation. */
-  bbProvingBinaryPath: z.string().optional(),
+  /** Enable the boosted bb for native proof generation. */
+  bbUseBoosted: z.boolean().optional(),
+  /** Path to the boosted bb for native proof generation. */
+  bbBoostedBinaryPath: z.string().optional(),
   /** Whether to construct real proofs */
   realProofs: z.boolean(),
   /** The type of artificial delay to introduce */
@@ -143,9 +145,14 @@ export const proverAgentConfigMappings: ConfigMappingsType<ProverAgentConfig> = 
     env: 'PROVER_BROKER_HOST',
     description: 'The URL where this agent takes jobs from',
   },
-  bbProvingBinaryPath: {
-    env: 'BB_PROVING_BINARY_PATH',
-    description: 'Optional alternate bb for proof generation. Verification always uses BB_BINARY_PATH.',
+  bbUseBoosted: {
+    env: 'BB_USE_BOOSTED',
+    description: 'Use the boosted bb at BB_BOOSTED_BINARY_PATH for proof generation.',
+    ...booleanConfigHelper(false),
+  },
+  bbBoostedBinaryPath: {
+    env: 'BB_BOOSTED_BINARY_PATH',
+    description: 'Path to the boosted bb enabled by BB_USE_BOOSTED. Verification always uses BB_BINARY_PATH.',
   },
   realProofs: {
     env: 'PROVER_REAL_PROOFS',
