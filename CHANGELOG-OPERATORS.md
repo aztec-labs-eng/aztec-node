@@ -34,7 +34,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ### `BB_PROVING_BINARY_PATH` selects an alternate bb for proof generation
 
-Set `BB_PROVING_BINARY_PATH` (or `--proverAgent.bbProvingBinaryPath <path>`) to an operator-supplied bb binary to generate rollup and AVM proofs. Keep `BB_BINARY_PATH` pointed at vanilla bb: it still verifies every proof. If the alternate binary fails to produce a valid proof, the job fails without retrying on vanilla bb.
+Set `BB_PROVING_BINARY_PATH` (or `--proverAgent.bbProvingBinaryPath <path>`) to an operator-supplied bb binary to generate rollup and AVM proofs. Keep `BB_BINARY_PATH` pointed at vanilla bb: it still verifies every proof. If the alternate binary fails to generate a proof or vanilla bb rejects it, the agent retries once with vanilla bb and verifies the replacement proof. Each fallback emits an error log and increments `aztec.circuit.proving.fallback_count` for the affected circuit.
 
 With either binary, a draining agent now preserves the error’s retry flag instead of asking the broker to retry every failed job. Errors without a retry flag remain retryable.
 

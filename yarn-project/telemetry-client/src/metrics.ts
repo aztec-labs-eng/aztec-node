@@ -172,6 +172,11 @@ export const CIRCUIT_PROVING_DURATION: MetricDefinition = {
   unit: 's',
   valueType: ValueType.DOUBLE,
 };
+export const CIRCUIT_PROVING_FALLBACK_COUNT: MetricDefinition = {
+  name: 'aztec.circuit.proving.fallback_count',
+  description: 'Number of proof attempts retried with stable bb after alternate bb failed',
+  valueType: ValueType.INT,
+};
 export const CIRCUIT_PROVING_INPUT_SIZE: MetricDefinition = {
   name: 'aztec.circuit.proving.input_size',
   description: 'Size of the input to the circuit proving',

@@ -7,6 +7,7 @@ import {
   Metrics,
   type TelemetryClient,
   type Tracer,
+  type UpDownCounter,
 } from '@aztec-labs/telemetry-client';
 
 /**
@@ -16,6 +17,7 @@ export class ProverInstrumentation {
   private simulationDuration: Histogram;
   private witGenDuration: Histogram;
   private provingDuration: Histogram;
+  private readonly provingFallbacks: UpDownCounter;
 
   private witGenInputSize: Gauge;
   private witGenOutputSize: Gauge;
@@ -36,6 +38,8 @@ export class ProverInstrumentation {
 
     this.provingDuration = meter.createHistogram(Metrics.CIRCUIT_PROVING_DURATION);
 
+    this.provingFallbacks = meter.createUpDownCounter(Metrics.CIRCUIT_PROVING_FALLBACK_COUNT);
+
     this.witGenInputSize = meter.createGauge(Metrics.CIRCUIT_WITNESS_GEN_INPUT_SIZE);
 
     this.witGenOutputSize = meter.createGauge(Metrics.CIRCUIT_WITNESS_GEN_OUTPUT_SIZE);
@@ -45,6 +49,11 @@ export class ProverInstrumentation {
     this.circuitPublicInputCount = meter.createGauge(Metrics.CIRCUIT_PUBLIC_INPUTS_COUNT);
 
     this.circuitSize = meter.createGauge(Metrics.CIRCUIT_SIZE);
+  }
+
+  /** Counts retries with stable bb, whether or not the retry succeeds. */
+  public recordProvingFallback(circuitName: CircuitName): void {
+    this.provingFallbacks.add(1, { [Attributes.PROTOCOL_CIRCUIT_NAME]: circuitName });
   }
 
   /**
