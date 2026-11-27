@@ -1,4 +1,4 @@
-import { type ACVMConfig, type BBConfig, BBNativeRollupProver, TestCircuitProver } from '@aztec-labs/bb-prover';
+import { BBNativeRollupProver, type BBProverConfig, TestCircuitProver } from '@aztec-labs/bb-prover';
 import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -270,7 +270,7 @@ export class ProverClient implements EpochProverManager, EpochProverFactory {
 }
 
 export function buildServerCircuitProver(
-  config: Omit<ActualProverConfig, 'enqueueConcurrency'> & ACVMConfig & BBConfig,
+  config: Omit<ActualProverConfig, 'enqueueConcurrency'> & BBProverConfig,
   telemetry: TelemetryClient,
 ): Promise<ServerCircuitProver> {
   if (config.realProofs) {

@@ -3,6 +3,7 @@ import { createNamespacedSafeJsonRpcServer, startHttpRpcServer } from '@aztec-la
 import { Agent, makeUndiciFetch } from '@aztec-labs/foundation/json-rpc/undici';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
+import { ProvingError } from '@aztec-labs/stdlib/errors';
 import type { ProvingJob, ProvingJobBroker } from '@aztec-labs/stdlib/interfaces/server';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { makeInboxParityPrivateInputs } from '@aztec-labs/stdlib/testing';
@@ -32,7 +33,7 @@ describe('Proving agent drain over RPC', () => {
     broker = new ProvingBroker(new InMemoryBrokerDatabase(), {
       proverBrokerJobTimeoutMs: jobTimeoutMs,
       proverBrokerPollIntervalMs: pollIntervalMs,
-      proverBrokerJobMaxRetries: 1,
+      proverBrokerJobMaxRetries: 2,
       proverBrokerMaxEpochsToKeepResultsFor: 1,
       proverBrokerDebugReplayEnabled: false,
     });
@@ -87,6 +88,27 @@ describe('Proving agent drain over RPC', () => {
     }
 
     expect(await client.getProvingJobStatus(next.id)).toEqual({ status: 'in-queue' });
+    expect((await client.getProvingJob())?.job.id).toBe(next.id);
+  });
+
+  it('does not requeue a non-retryable proof failure while draining', async () => {
+    const started = promiseWithResolvers<void>();
+    const proof = promiseWithResolvers<Awaited<ReturnType<typeof prover.getInboxParityProof>>>();
+    jest.spyOn(prover, 'getInboxParityProof').mockImplementationOnce(() => {
+      started.resolve();
+      return proof.promise;
+    });
+
+    const current = await enqueueJob();
+    const next = await enqueueJob();
+    agent.start();
+    await started.promise;
+
+    const draining = agent.drain();
+    proof.reject(new ProvingError('proof failed', undefined, false));
+    await draining;
+
+    expect(await client.getProvingJobStatus(current.id)).toEqual({ status: 'rejected', reason: 'proof failed' });
     expect((await client.getProvingJob())?.job.id).toBe(next.id);
   });
 

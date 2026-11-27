@@ -239,15 +239,13 @@ export class ProvingAgent {
       // no-op
       this.log.warn(`Job id=${jobId} was aborted. Not reporting result back to broker`, result);
     } else if (result instanceof Error) {
-      const error = this.drained
-        ? new ProvingError(`Agent shutting down (possible preemption): ${result.message}`, result, true)
-        : result;
-      const retry = shouldRetry(error);
+      const retry = shouldRetry(result);
+      const duringShutdown = this.drained ? ' during shutdown' : '';
       this.log.error(
-        `Job id=${jobId} type=${ProvingRequestType[type]} failed err=${error.message} retry=${retry}`,
-        error,
+        `Job id=${jobId} type=${ProvingRequestType[type]} failed${duringShutdown} err=${result.message} retry=${retry}`,
+        result,
       );
-      maybeJob = await this.broker.reportProvingJobError(jobId, error.message, retry, this.getJobFilter());
+      maybeJob = await this.broker.reportProvingJobError(jobId, result.message, retry, this.getJobFilter());
     } else {
       const outputUri = await this.proofStore.saveProofOutput(jobId, type, result);
       this.log.info(`Job id=${jobId} type=${ProvingRequestType[type]} completed outputUri=${truncate(outputUri)}`);
