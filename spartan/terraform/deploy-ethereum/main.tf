@@ -54,7 +54,7 @@ locals {
   ethereum_chains = {
     sepolia = {
       reth_image          = "ghcr.io/paradigmxyz/reth:v2.7.0"
-      lighthouse_image    = "sigp/lighthouse:v8.3.0-rc.0"
+      lighthouse_image    = "sigp/lighthouse:v8.3.3"
       checkpoint_sync_url = "https://checkpoint-sync.sepolia.ethpandaops.io"
       reth_p2p_port       = 32200
       lighthouse_p2p_port = 32201
