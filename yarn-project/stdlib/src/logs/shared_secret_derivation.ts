@@ -1,10 +1,12 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
-import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Fq } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, type Point } from '@aztec-labs/foundation/curves/grumpkin';
 
 import type { AztecAddress } from '../aztec-address/index.js';
+import type { CompleteAddress } from '../contract/complete_address.js';
+import { computeAddressSecret, computePreaddress } from '../keys/derivation.js';
 import type { PublicKey } from '../keys/public_key.js';
 
 /**
@@ -22,39 +24,34 @@ export function deriveEcdhSharedSecretPoint(secretKey: GrumpkinScalar, publicKey
 }
 
 /**
- * Derives an app-siloed ECDH shared secret from keys: ECDHs `S = secretKey * publicKey` via
- * {@link deriveEcdhSharedSecretPoint}, then app-silos it via {@link computeAppSiloedSharedSecretFromPoint}.
+ * Computes the shared secret point between a local address (i.e. one for which the privacy keys are known) and
+ * an external one via a Diffie-Hellman key exchange.
  *
- * @param secretKey - The secret key used to derive shared secret.
- * @param publicKey - The public key used to derive shared secret.
- * @param contractAddress - The address of the calling contract, used for app-siloing.
- * @returns The app-siloed shared secret as a Field.
- * @throws If the publicKey is zero.
+ * Returns undefined if `externalAddress` is an invalid address.
  */
-export async function appSiloEcdhSharedSecret(
-  secretKey: GrumpkinScalar,
-  publicKey: PublicKey,
-  contractAddress: AztecAddress,
-): Promise<Fr> {
-  const rawSharedSecret = await deriveEcdhSharedSecretPoint(secretKey, publicKey);
-  return computeAppSiloedSharedSecretFromPoint(rawSharedSecret, contractAddress);
+export async function computeAddressDerivedSharedSecretPoint(
+  localAddress: CompleteAddress,
+  localIvsk: Fq,
+  externalAddress: AztecAddress,
+): Promise<Point | undefined> {
+  // An invalid address has no corresponding address point
+  if (!(await externalAddress.isValid())) {
+    return undefined;
+  }
+
+  const externalAddressPoint = await externalAddress.toAddressPoint();
+
+  const localPreaddress = await computePreaddress(await localAddress.publicKeys.hash(), localAddress.partialAddress);
+  const localAddressSecret = await computeAddressSecret(localPreaddress, localIvsk);
+
+  // For a given local address A and external address B, the shared secret point S is (h_A + ivsk_A) * Addr_Point_B
+  // (conceptually, in reality we don't use h_A + ivsk_A directly but rather the actual address secret, which is the
+  // same but with an optional sign adjustment to prevent A's address point from having a negative y-coordinate).
+  return Grumpkin.mul(externalAddressPoint, localAddressSecret);
 }
 
-/**
- * App-silos a shared secret point: `s_app = h(DOM_SEP__APP_SILOED_ECDH_SHARED_SECRET, S.x, S.y, app)`.
- *
- * Mirrors `compute_app_siloed_shared_secret_from_point` in aztec-nr.
- *
- * @param point - The raw shared secret point `S`.
- * @param app - The contract address to silo to.
- */
-export function computeAppSiloedSharedSecretFromPoint(point: Point, app: AztecAddress): Promise<Fr> {
-  // The separator name is ECDH-specific, but this silos any shared secret point, not only ECDH ones.
-  return poseidon2HashWithSeparator([point.x, point.y, app], DomainSeparator.APP_SILOED_ECDH_SHARED_SECRET);
-}
-
-/** @deprecated Use {@link computeAppSiloedSharedSecretFromPoint}. */
-export const appSiloEcdhSharedSecretPoint = computeAppSiloedSharedSecretFromPoint;
+/** @deprecated Use {@link computeAddressDerivedSharedSecretPoint}. */
+export const computeSharedTaggingSecret = computeAddressDerivedSharedSecretPoint;
 
 /**
  * Protects a handshake's shared secret from being forged by the recipient: `S' = hash(ephPk, recipientPoint) * S`.

@@ -8,7 +8,7 @@ use aztec::{
         GET_NON_INTERACTIVE_HANDSHAKES_SELECTOR, INTERACTIVE_HANDSHAKE_SELECTOR, MAX_HANDSHAKES_PER_PAGE,
         NON_INTERACTIVE_HANDSHAKE_SELECTOR, VALIDATE_HANDSHAKE_SELECTOR,
     },
-    oracle::shared_secret::get_shared_secret,
+    oracle::ecdh_messaging_secret::get_ecdh_messaging_secret,
     protocol::{
         address::AztecAddress,
         constants::{DOM_SEP__NON_INTERACTIVE_HANDSHAKE_LOG_TAG, PRIVATE_LOG_SIZE_IN_FIELDS},
@@ -466,11 +466,11 @@ unconstrained fn non_interactive_handshake_is_discovered_by_recipient() {
     assert_eq(discovered.total_count, 1);
 
     // The recipient derives the same app-siloed secret from the discovered eph_pk via ECDH, applying the forgery
-    // protection to the ephemeral key before the shared-secret oracle the same way the discovery path does.
+    // protection to the ephemeral key before the ECDH messaging secrets oracle the same way the discovery path does.
     let handshake = discovered.items.get(0);
     let recipient_point = recipient.to_address_point().unwrap().inner;
     let recipient_secret = env.utility_context_at(sender, |_| {
-        get_shared_secret(
+        get_ecdh_messaging_secret(
             recipient,
             forgery_protected_eph_pk(handshake.eph_pk, recipient_point),
             sender,

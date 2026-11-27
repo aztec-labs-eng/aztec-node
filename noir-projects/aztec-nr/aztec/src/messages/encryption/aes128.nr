@@ -3,15 +3,10 @@ use crate::protocol::{
 };
 
 use crate::{
-    keys::{
-        ecdh_shared_secret::{
-            compute_app_siloed_shared_secret_from_point, derive_ecdh_shared_secret, derive_shared_secret_field_mask,
-            derive_shared_secret_subkey,
-        },
-        ephemeral::generate_positive_ephemeral_key_pair,
-    },
+    keys::{ecdh_shared_secret::derive_ecdh_shared_secret, ephemeral::generate_positive_ephemeral_key_pair},
     logging::aztecnr_warn_log_format,
     messages::{
+        delivery::messaging_secret_derivation::compute_messaging_secret_from_point,
         encoding::{
             HEADER_CIPHERTEXT_SIZE_IN_BYTES, MESSAGE_CIPHERTEXT_LEN, MESSAGE_PLAINTEXT_LEN,
             MESSAGE_PLAINTEXT_SIZE_IN_BYTES, SALT_OR_EPH_PK_X_SIZE_IN_FIELDS,
@@ -20,7 +15,7 @@ use crate::{
             get_arr_of_size__message_bytes__from_PT, get_arr_of_size__message_bytes_padding__from_PT,
         },
     },
-    oracle::{aes128_decrypt::try_aes128_decrypt, random::random, shared_secret::get_shared_secret},
+    oracle::{aes128_decrypt::try_aes128_decrypt, ecdh_messaging_secret::get_ecdh_messaging_secret, random::random},
     utils::{
         array,
         conversion::{
@@ -33,18 +28,45 @@ use crate::{
 
 use std::aes128::aes128_encrypt;
 
-/// Computes N close-to-uniformly-random 256 bits from a given app-siloed shared secret.
+// These two domain separators have legacy names because changing those would result in changing their values (due to
+// how we test uniqueness), so we keep them for compatibility. They are used with every encryption secret, ECDH-based or
+// not.
+// Without backwards compatibility they would be named `DOM_SEP__ENCRYPTION_SECRET_SUBKEY` and
+// `DOM_SEP__ENCRYPTION_SECRET_FIELD_MASK`.
+// TODO(F-961): rename to `DOM_SEP__ENCRYPTION_SECRET_SUBKEY` and `DOM_SEP__ENCRYPTION_SECRET_FIELD_MASK`.
+/// Domain separator for deriving AES subkeys from an encryption secret.
+pub(crate) global DOM_SEP__ECDH_SUBKEY: u32 = 4277646631;
+/// Domain separator for deriving field masks from an encryption secret.
+pub(crate) global DOM_SEP__ECDH_FIELD_MASK: u32 = 190532684;
+
+/// Derives an indexed subkey from an encryption secret, used for AES key/IV derivation.
 ///
-/// NEVER re-use the same iv and sym_key. DO NOT call this function more than once with the same s_app.
+/// `s_i = h(DOM_SEP__ECDH_SUBKEY + i, encryption_secret)`
+fn derive_encryption_secret_subkey(encryption_secret: Field, index: u32) -> Field {
+    poseidon2_hash_with_separator([encryption_secret], DOM_SEP__ECDH_SUBKEY + index)
+}
+
+/// Derives an indexed field mask from an encryption secret, used for masking ciphertext fields.
 ///
-/// This function is only known to be safe if s_app is derived either from combining a random ephemeral key with an
-/// address point and a contract address, or from a messaging secret and a fresh salt. See big comment within the body
-/// of the function.
-fn extract_many_close_to_uniformly_random_256_bits_using_poseidon2<let N: u32>(s_app: Field) -> [[u8; 32]; N] {
+/// `m_i = h(DOM_SEP__ECDH_FIELD_MASK + i, encryption_secret)`
+fn derive_encryption_secret_field_mask(encryption_secret: Field, index: u32) -> Field {
+    poseidon2_hash_with_separator([encryption_secret], DOM_SEP__ECDH_FIELD_MASK + index)
+}
+
+/// Computes N close-to-uniformly-random 256 bits from a given encryption secret.
+///
+/// NEVER re-use the same iv and sym_key. DO NOT call this function more than once with the same encryption_secret.
+///
+/// This function is only known to be safe if encryption_secret is derived either from combining a random ephemeral key
+/// with an address point and a contract address, or from a messaging secret and a fresh salt. See big comment within
+/// the body of the function.
+fn extract_many_close_to_uniformly_random_256_bits_using_poseidon2<let N: u32>(
+    encryption_secret: Field,
+) -> [[u8; 32]; N] {
     /*
      * Unsafe because of https://eprint.iacr.org/2010/264.pdf Page 13, Lemma 2 (and the two paragraphs below it).
     *
-    * If you call this function, you need to be careful and aware of how the arg `s_app` has been derived.
+    * If you call this function, you need to be careful and aware of how the arg `encryption_secret` has been derived.
     *
     * The paper says that the way you derive aes keys and IVs should be fine with poseidon2 (modelled as a RO),
     * as long as you _don't_ use Poseidon2 as a PRG to generate the two exponents x & y which multiply to the
@@ -69,7 +91,7 @@ fn extract_many_close_to_uniformly_random_256_bits_using_poseidon2<let N: u32>(s
     * Tl;dr: we believe it's safe to hash S = [esk * address_sk] * G using poseidon2, in order to derive a
     * symmetric key.
     *
-    * The salted derivation (`compute_app_siloed_shared_secret_from_messaging_secret`) instead hashes a messaging
+    * The salted derivation (`compute_encryption_secret_from_messaging_secret`) instead hashes a messaging
     * secret together with a fresh public salt. A messaging secret is not a group element but a Poseidon2 output, whose
     * preimage holds secret key material of one of these kinds:
     * - a shared secret point like S above (address-derived and handshake secrets), covered by the argument above
@@ -77,9 +99,9 @@ fn extract_many_close_to_uniformly_random_256_bits_using_poseidon2<let N: u32>(s
     * - the recipient's master tagging secret key, which is derived with sha512 rather than poseidon2
     * None of these feed exponents generated by poseidon2 into the hash, so the lemma's concern does not arise.
     * Modelling poseidon2 as a RO, the messaging secret is close to uniform, and hashing it with a fresh salt yields an
-    * independent `s_app` for every message.
+    * independent encryption secret for every message.
     *
-    * If you're calling this function for a differently-derived `s_app`, be careful.
+    * If you're calling this function for a differently-derived `encryption_secret`, be careful.
     */
 
     /* The output of this function needs to be 32 random bytes.
@@ -93,8 +115,8 @@ fn extract_many_close_to_uniformly_random_256_bits_using_poseidon2<let N: u32>(s
     let mut all_bytes: [[u8; 32]; N] = std::mem::zeroed();
     std::static_assert(N < 256, "N too large");
     for k in 0..N {
-        let rand1: Field = derive_shared_secret_subkey(s_app, 2 * k);
-        let rand2: Field = derive_shared_secret_subkey(s_app, 2 * k + 1);
+        let rand1: Field = derive_encryption_secret_subkey(encryption_secret, 2 * k);
+        let rand2: Field = derive_encryption_secret_subkey(encryption_secret, 2 * k + 1);
 
         let rand1_bytes: [u8; 32] = rand1.to_be_bytes();
         let rand2_bytes: [u8; 32] = rand2.to_be_bytes();
@@ -132,10 +154,21 @@ fn derive_aes_symmetric_key_and_iv_from_uniformly_random_256_bits<let N: u32>(
     many_pairs
 }
 
-pub fn derive_aes_symmetric_key_and_iv_from_shared_secret<let N: u32>(s_app: Field) -> [([u8; 16], [u8; 16]); N] {
-    let many_random_256_bits: [[u8; 32]; N] = extract_many_close_to_uniformly_random_256_bits_using_poseidon2(s_app);
+/// Derives `N` AES (key, IV) pairs from an encryption secret.
+pub fn derive_aes_symmetric_key_and_iv_from_encryption_secret<let N: u32>(
+    encryption_secret: Field,
+) -> [([u8; 16], [u8; 16]); N] {
+    let many_random_256_bits: [[u8; 32]; N] =
+        extract_many_close_to_uniformly_random_256_bits_using_poseidon2(encryption_secret);
 
     derive_aes_symmetric_key_and_iv_from_uniformly_random_256_bits(many_random_256_bits)
+}
+
+#[deprecated("use derive_aes_symmetric_key_and_iv_from_encryption_secret")]
+pub fn derive_aes_symmetric_key_and_iv_from_shared_secret<let N: u32>(
+    encryption_secret: Field,
+) -> [([u8; 16], [u8; 16]); N] {
+    derive_aes_symmetric_key_and_iv_from_encryption_secret(encryption_secret)
 }
 
 /// Encrypts a plaintext message to `recipient` via ECDH.
@@ -216,8 +249,8 @@ pub fn derive_aes_symmetric_key_and_iv_from_shared_secret<let N: u32>(s_app: Fie
 /// ```
 ///
 /// **Step 2 -- Pack and mask.** The byte array is split into 31-byte chunks, each stored in one field. A
-/// Poseidon2-derived mask (see `derive_shared_secret_field_mask`) is added to each so that the resulting
-/// fields appear as uniformly random `Field` values to any observer without knowledge of the shared secret,
+/// Poseidon2-derived mask (see `derive_encryption_secret_field_mask`) is added to each so that the resulting
+/// fields appear as uniformly random `Field` values to any observer without knowledge of the encryption secret,
 /// hiding the fact that the underlying ciphertext consists of 128-bit AES blocks.
 ///
 /// **Step 3 -- Assemble ciphertext.** The ephemeral public key x-coordinate is prepended and random field padding
@@ -233,10 +266,10 @@ pub fn derive_aes_symmetric_key_and_iv_from_shared_secret<let N: u32>(s_app: Fie
 ///
 /// ## Key Derivation
 ///
-/// The raw ECDH shared secret point is first app-siloed into a scalar `s_app` by hashing with the contract
-/// address (see [`crate::keys::ecdh_shared_secret::compute_app_siloed_shared_secret_from_point`]).
-/// Two (key, IV) pairs are then derived from `s_app` via indexed Poseidon2 hashing: one pair for the body
-/// ciphertext and one for the header ciphertext.
+/// The raw ECDH shared secret point is first app-siloed into a messaging secret by hashing with the contract address
+/// (see [`crate::messages::delivery::messaging_secret_derivation::compute_messaging_secret_from_point`]), which is
+/// used as the message's encryption secret. Two (key, IV) pairs are then derived from the encryption secret via
+/// indexed Poseidon2 hashing: one pair for the body ciphertext and one for the header ciphertext.
 pub fn encrypt_with_ecdh_secret<let PlaintextLen: u32>(
     plaintext: [Field; PlaintextLen],
     recipient: AztecAddress,
@@ -273,12 +306,12 @@ pub fn encrypt_with_ecdh_secret<let PlaintextLen: u32>(
             .inner,
     );
 
-    let s_app = compute_app_siloed_shared_secret_from_point(raw_shared_secret, contract_address);
+    let messaging_secret = compute_messaging_secret_from_point(raw_shared_secret, contract_address);
 
-    // It is safe to derive AES keys from `s_app` using Poseidon2 because `s_app` was derived from an ECDH shared
-    // secret using an AztecAddress (the recipient). See the block comment in
+    // It is safe to use the ECDH messaging secret as the encryption secret because it was derived from an ECDH shared
+    // secret using a fresh ephemeral key and an AztecAddress (the recipient). See the block comment in
     // `extract_many_close_to_uniformly_random_256_bits_using_poseidon2` for more info.
-    encrypt_with_shared_secret(plaintext, s_app, eph_pk.x)
+    encrypt_with_encryption_secret(plaintext, messaging_secret, eph_pk.x)
 }
 
 /// Decrypts a message ciphertext into its original plaintext.
@@ -302,8 +335,8 @@ pub unconstrained fn decrypt_with_ecdh_secret(
         // hold the recipient's keys (e.g. when syncing the scope of an address we don't control), in which
         // case the message is undecryptable and equally skipped.
         point_from_x_coord_and_sign(eph_pk_x, true)
-            .and_then(|eph_pk| get_shared_secret(recipient, eph_pk, contract_address))
-            .and_then(|s_app| decrypt_with_shared_secret(masked_fields, s_app))
+            .and_then(|eph_pk| get_ecdh_messaging_secret(recipient, eph_pk, contract_address))
+            .and_then(|messaging_secret| decrypt_with_encryption_secret(masked_fields, messaging_secret))
     })
 }
 
@@ -321,12 +354,12 @@ pub(crate) fn encrypt_with_messaging_secret<let PlaintextLen: u32>(
     // the message, which the sender could reveal anyway. A random address point's x-coordinate is distributed
     // like an ephemeral public key's, so the salt does not set this message apart from ECDH-encrypted ones.
     let salt = unsafe { random_address_point().inner.x };
-    let s_app = compute_app_siloed_shared_secret_from_messaging_secret(messaging_secret, salt);
 
-    // It is safe to derive AES keys from `s_app` using Poseidon2 because `s_app` was derived from a messaging
-    // secret and a fresh salt. See the block comment in
+    // It is safe to use the messaging secret hashed with a fresh salt as the encryption secret, as the salt makes it
+    // unique to this message. See the block comment in
     // `extract_many_close_to_uniformly_random_256_bits_using_poseidon2` for more info.
-    encrypt_with_shared_secret(plaintext, s_app, salt)
+    let encryption_secret = compute_encryption_secret_from_messaging_secret(messaging_secret, salt);
+    encrypt_with_encryption_secret(plaintext, encryption_secret, salt)
 }
 
 /// Decrypts a message ciphertext produced by [`encrypt_with_messaging_secret`].
@@ -338,33 +371,35 @@ pub(crate) unconstrained fn decrypt_with_messaging_secret(
     messaging_secret: Field,
 ) -> Option<BoundedVec<Field, MESSAGE_PLAINTEXT_LEN>> {
     split_first_field(ciphertext).and_then(|(salt, masked_fields)| {
-        decrypt_with_shared_secret(
+        decrypt_with_encryption_secret(
             masked_fields,
-            compute_app_siloed_shared_secret_from_messaging_secret(messaging_secret, salt),
+            compute_encryption_secret_from_messaging_secret(messaging_secret, salt),
         )
     })
 }
 
-/// Domain separator for deriving a message's app-siloed shared secret from a messaging secret and a salt.
+/// Domain separator for deriving a message's encryption secret from a messaging secret and a salt.
 pub(crate) global DOM_SEP__SALTED_MESSAGING_SECRET: u32 = 1976500292;
 
-/// Computes the app-siloed shared secret that encrypts a message.
+/// Computes a message's encryption secret from a messaging secret.
 ///
 /// The salt is the message's. Messaging secrets are already app-siloed, so no contract address is involved.
-fn compute_app_siloed_shared_secret_from_messaging_secret(messaging_secret: Field, salt: Field) -> Field {
+fn compute_encryption_secret_from_messaging_secret(messaging_secret: Field, salt: Field) -> Field {
     poseidon2_hash_with_separator([messaging_secret, salt], DOM_SEP__SALTED_MESSAGING_SECRET)
 }
 
-/// Encrypts `plaintext` under the app-siloed shared secret `s_app`.
+/// Encrypts `plaintext` under `encryption_secret`.
+///
+/// The message's AES keys, IVs and field masks are derived from `encryption_secret`.
 ///
 /// Produces the wire format documented on [`encrypt_with_ecdh_secret`].
 ///
-/// `first_field` is the public value the recipient re-derives `s_app` from, and is written unmasked as the first
-/// ciphertext field. `s_app` must be fresh for every message, and derived as
+/// `first_field` is the public value the recipient re-derives `encryption_secret` from, and is written unmasked as
+/// the first ciphertext field. `encryption_secret` must be fresh for every message, and derived as
 /// `extract_many_close_to_uniformly_random_256_bits_using_poseidon2` requires.
-fn encrypt_with_shared_secret<let PlaintextLen: u32>(
+fn encrypt_with_encryption_secret<let PlaintextLen: u32>(
     plaintext: [Field; PlaintextLen],
-    s_app: Field,
+    encryption_secret: Field,
     first_field: Field,
 ) -> [Field; MESSAGE_CIPHERTEXT_LEN] {
     std::static_assert(
@@ -376,7 +411,7 @@ fn encrypt_with_shared_secret<let PlaintextLen: u32>(
     // reversed when processing the message in `process_message_ciphertext`)
     let plaintext_bytes = encode_fields_as_bytes(plaintext);
 
-    let pairs = derive_aes_symmetric_key_and_iv_from_shared_secret::<2>(s_app);
+    let pairs = derive_aes_symmetric_key_and_iv_from_encryption_secret::<2>(encryption_secret);
     let (body_sym_key, body_iv) = pairs[0];
     let (header_sym_key, header_iv) = pairs[1];
 
@@ -452,7 +487,7 @@ fn encrypt_with_shared_secret<let PlaintextLen: u32>(
     // values
     let mut offset = 1;
     for i in 0..message_bytes_as_fields.len() {
-        let mask = derive_shared_secret_field_mask(s_app, i as u32);
+        let mask = derive_encryption_secret_field_mask(encryption_secret, i as u32);
         ciphertext[offset + i] = message_bytes_as_fields[i] + mask;
     }
     offset += message_bytes_as_fields.len();
@@ -482,16 +517,16 @@ unconstrained fn split_first_field(
     }
 }
 
-/// Decrypts a message's masked fields under the shared secret `s_app`.
+/// Decrypts a message's masked fields under `encryption_secret`.
 ///
-/// Returns `None` if decryption fails, as it does (except with negligible probability) when `s_app` is not the secret
-/// the message was encrypted under.
-unconstrained fn decrypt_with_shared_secret(
+/// Returns `None` if decryption fails, as it does (except with negligible probability) when `encryption_secret` is
+/// not the secret the message was encrypted under.
+unconstrained fn decrypt_with_encryption_secret(
     masked_fields: BoundedVec<Field, MESSAGE_CIPHERTEXT_LEN - SALT_OR_EPH_PK_X_SIZE_IN_FIELDS>,
-    s_app: Field,
+    encryption_secret: Field,
 ) -> Option<BoundedVec<Field, MESSAGE_PLAINTEXT_LEN>> {
     let unmasked_fields = masked_fields.mapi(|i, field| {
-        let unmasked = unmask_field(s_app, i, field);
+        let unmasked = unmask_field(encryption_secret, i, field);
         // If we failed to unmask the field, we are dealing with the random padding. We'll ignore it later, so we can
         // simply set it to 0
         unmasked.unwrap_or(0)
@@ -499,7 +534,7 @@ unconstrained fn decrypt_with_shared_secret(
     let ciphertext_without_first_field = decode_bytes_from_fields(unmasked_fields);
 
     // Derive symmetric keys:
-    let pairs = derive_aes_symmetric_key_and_iv_from_shared_secret::<2>(s_app);
+    let pairs = derive_aes_symmetric_key_and_iv_from_encryption_secret::<2>(encryption_secret);
     let (body_sym_key, body_iv) = pairs[0];
     let (header_sym_key, header_iv) = pairs[1];
 
@@ -558,8 +593,8 @@ global TWO_POW_248: Field = 2.pow_32(248);
 /// Removes the Poseidon2-derived mask from a ciphertext field. Returns the unmasked value if it fits in 31 bytes
 /// (a content field), or `None` if it doesn't (random padding). Unconstrained to prevent accidental use in
 /// constrained context.
-unconstrained fn unmask_field(s_app: Field, index: u32, masked: Field) -> Option<Field> {
-    let unmasked = masked - derive_shared_secret_field_mask(s_app, index);
+unconstrained fn unmask_field(encryption_secret: Field, index: u32, masked: Field) -> Option<Field> {
+    let unmasked = masked - derive_encryption_secret_field_mask(encryption_secret, index);
     if unmasked.lt(TWO_POW_248) {
         Option::some(unmasked)
     } else {
@@ -589,10 +624,13 @@ unconstrained fn random_address_point() -> AddressPoint {
 mod test {
     use crate::{
         ephemeral::EphemeralArray,
-        keys::ecdh_shared_secret::{compute_app_siloed_shared_secret_from_point, derive_ecdh_shared_secret},
-        messages::encoding::{
-            AES128_PKCS7_EXPANSION_IN_BYTES, HEADER_CIPHERTEXT_SIZE_IN_BYTES, MESSAGE_PLAINTEXT_LEN,
-            MESSAGE_PLAINTEXT_SIZE_IN_BYTES,
+        keys::ecdh_shared_secret::derive_ecdh_shared_secret,
+        messages::{
+            delivery::messaging_secret_derivation::compute_messaging_secret_from_point,
+            encoding::{
+                AES128_PKCS7_EXPANSION_IN_BYTES, HEADER_CIPHERTEXT_SIZE_IN_BYTES, MESSAGE_PLAINTEXT_LEN,
+                MESSAGE_PLAINTEXT_SIZE_IN_BYTES,
+            },
         },
         test::helpers::test_environment::TestEnvironment,
         utils::point::point_from_x_coord_and_sign,
@@ -631,20 +669,20 @@ mod test {
                 contract_address,
             ));
 
-            // Compute the same app-siloed shared secret that the oracle would return
+            // Compute the same messaging secret that the oracle would return
             let raw_shared_secret = derive_ecdh_shared_secret(
                 EmbeddedCurveScalar::from_field(eph_sk),
                 recipient.to_address_point().unwrap().inner,
             );
-            let s_app = compute_app_siloed_shared_secret_from_point(raw_shared_secret, contract_address);
+            let messaging_secret = compute_messaging_secret_from_point(raw_shared_secret, contract_address);
 
-            // The shared-secrets oracle is batched: it returns a slot pointing at an EphemeralArray
-            // populated with the per-key results. Set up that array with the single expected `s_app`
+            // The ECDH messaging secrets oracle is batched: it returns a slot pointing at an EphemeralArray
+            // populated with the per-key results. Set up that array with the single expected secret
             // and mock the oracle to return its slot.
             let response_slot: Field = 99;
             let response_array: EphemeralArray<Field> = EphemeralArray::at(response_slot);
-            response_array.push(s_app);
-            let _ = OracleMock::mock("aztec_utl_getSharedSecrets").returns(response_slot);
+            response_array.push(messaging_secret);
+            let _ = OracleMock::mock("aztec_utl_getEcdhMessagingSecrets").returns(response_slot);
 
             // Decrypt the message
             let decrypted = decrypt_with_ecdh_secret(encrypted_message, recipient, contract_address).unwrap();
@@ -692,7 +730,7 @@ mod test {
         let _ = encrypt_with_ecdh_secret([1, 2, 3, 4], invalid_address, contract_address);
     }
 
-    // Documents the PKCS#7 padding behavior that `encrypt_with_shared_secret` relies on (see its static_assert).
+    // Documents the PKCS#7 padding behavior that `encrypt_with_encryption_secret` relies on (see its static_assert).
     #[test]
     fn pkcs7_padding_always_adds_at_least_one_byte() {
         let key = [0 as u8; 16];
