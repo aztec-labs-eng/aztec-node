@@ -1,5 +1,9 @@
-# Publishes a release: npm packages to npmjs, docker images to DockerHub, and the aztec-up and
-# playground assets to S3. See RELEASES.md for how a tag gets here.
+# Publishes a release: npm packages to npmjs, docker images to DockerHub, the aztec-nr mirror, and
+# the aztec-up and playground assets to S3. See RELEASES.md for how a tag gets here.
+#
+# The release job builds on EC2 and pushes only the per-arch docker images from there; everything
+# else is staged into the release cache and published by the publish job on this runner, with npm
+# trusted publishing (no npm token).
 #
 # Split out from ci3.yml so that the `release` environment — which holds the only publish
 # credentials in the repo — is requested by exactly one workflow whose only trigger is a v* tag,
@@ -22,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Orchestrates the amd64 + arm64 EC2 jobs and assembles the multi-arch docker manifest;
+  # Orchestrates the amd64 + arm64 EC2 jobs, which push their docker images and stage the rest;
   # see ci.sh::release. Runs no tests.
   release:
     runs-on: ubuntu-latest
@@ -58,10 +62,6 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           NPM_REGISTRY: https://registry.npmjs.org
           DOCKER_REGISTRY: docker.io/azteclabs
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # Private half of the aztec-nr mirror repo's write deploy key, which github.token cannot
-          # push to.
-          AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY: ${{ secrets.AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY }}
           DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
@@ -86,22 +86,66 @@ jobs:
           TAG: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          # The release channel, not the tag name, decides whether this is worth reporting:
-          # a 'commit' tag is a per-commit build, which nobody wants alerts for.
-          channel=$(./ci3/dist_tag)
-          if [ "$channel" = "commit" ]; then
-            echo "Canary release ($TAG); not notifying."
-            exit 0
-          fi
-          case "$channel" in
-            nightly) kind="Nightly release" ;;
-            rc) kind="Release candidate" ;;
-            *) kind="Release" ;;
-          esac
-          text="$kind FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
-          # Set by ci3/bootstrap_ec2 once the build reaches the instance; absent if we failed earlier.
-          if [ -n "${CI_LOG_ID:-}" ]; then
-            text="${text} | <http://ci.aztec-labs.com/${CI_LOG_ID}|Build Log>"
-          fi
-          ./ci3/slack_notify "$text" "#team-alpha-ci"
+        run: ./.github/release_failure_notify.sh build
+
+  # Publishes what the release job staged: the aztec-nr mirror, the npm packages, the aztec-up
+  # installer and the playground, then the multi-arch docker manifests over the per-arch images the
+  # release job pushed. See bootstrap.sh::publish.
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    # The environment each package's npm trusted publisher names. Its AWS_OIDC_ROLE_ARN is the
+    # release role, which can read the release cache and write the install and playground buckets.
+    environment: release
+    permissions:
+      id-token: write # AWS OIDC, and npm trusted publishing
+      contents: read
+    steps:
+      # Do NOT bump actions/checkout to v6 (see the pinning rationale in ci3.yml). ci3 is the only
+      # submodule.
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          submodules: true
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: publish-${{ github.run_id }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1 && npm --version
+
+      # The bundle is downloaded through authenticated S3 with this job's AWS role and extracted
+      # outside the checkout; each channel then refuses anything not at exactly this tag's version.
+      - name: Publish
+        env:
+          S3_BUILD_CACHE_AWS_PARAMS: --region us-east-2
+          NPM_REGISTRY: https://registry.npmjs.org
+          DOCKER_REGISTRY: docker.io/azteclabs
+          # Private half of the aztec-nr mirror repo's write deploy key, which github.token cannot
+          # push to.
+          AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY: ${{ secrets.AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY }}
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+        run: ./bootstrap.sh publish
+
+      - name: Notify Slack on publish failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./.github/release_failure_notify.sh publish

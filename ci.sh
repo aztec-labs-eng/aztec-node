@@ -123,13 +123,7 @@ export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 # variables as they are, and these files (paths on this machine, passed as paths to a copy).
 export CI3_PASS_ENV="${CI3_PASS_ENV:-} RELEASE_TARGET GCP_PROJECT_ID NAMESPACE NETWORK R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
   CHONK_INPUTS_STATE_DIR NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION"
-export CI3_PASS_FILES="${CI3_PASS_FILES:-} GOOGLE_APPLICATION_CREDENTIALS NETWORK_ENV_FILE AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
-# The release workflow supplies the aztec-nr mirror's deploy key as the secret's contents.
-if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:-}" ] && [ -z "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
-  export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE=$(mktemp)
-  chmod 600 "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
-  printf '%s\n' "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY" > "$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE"
-fi
+export CI3_PASS_FILES="${CI3_PASS_FILES:-} GOOGLE_APPLICATION_CREDENTIALS NETWORK_ENV_FILE"
 
 case "$cmd" in
   dash)
@@ -357,21 +351,25 @@ case "$cmd" in
   # RELEASES #
   ############
   release)
-    # Spin up ec2 instances (amd64 + arm64) and run the full release flow: build and publish.
-    # Set DRY_RUN=1 to exercise the whole flow without publishing.
+    # Spin up ec2 instances (amd64 + arm64) to build the release: each pushes its arch's docker
+    # images, and the amd64 job stages everything else for release.yml's publish job (see
+    # bootstrap.sh publish). Set DRY_RUN=1 to exercise the build and staging without publishing.
     export CI_DASHBOARD="tags"
-    # Roomier instance lifetime than a standard run: the amd64 job builds and then publishes,
+    # Roomier instance lifetime than a standard run: the amd64 job builds and then stages,
     # which together exceed the default 75 min shutdown.
     export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-180}
-    # Not exec'd, as the manifest step follows, so cancelling a release leaves its instances to
-    # their shutdown timers.
+    # Not exec'd, as a private release's manifest step follows, so cancelling a release leaves its
+    # instances to their shutdown timers.
     bootstrap_ec2_multi \
       'x-release amd64 ci-release' \
       'a-release arm64 ci-release'
     # Both arch jobs have pushed their per-arch images (bootstrap_ec2_multi fails fast if either
-    # died), so assemble the multi-arch manifest lists from here. imagetools only talks to
-    # the registry: no local images or extra instance needed.
-    release-image/bootstrap.sh release_docker_manifest
+    # died), so a private release assembles the multi-arch manifest lists from here. imagetools only
+    # talks to the registry: no local images or extra instance needed. A public release does this
+    # last in its publish job.
+    if [ "${RELEASE_TARGET:-public}" = private ]; then
+      release-image/bootstrap.sh release_docker_manifest
+    fi
     ;;
 
   ##################

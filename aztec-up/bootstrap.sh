@@ -280,31 +280,49 @@ function release_preflight {
     "$root/yarn-project" "$build_lock" "$version" "$(deps_hash)" "$(dirname "$release_lock")"
 }
 
+# Stages the installer lock release_preflight generated, for the root `publish`.
 function release {
   echo_header "aztec-up release"
+  check_release_lock "$release_lock"
+  mkdir -p "${RELEASE_DIR:?set by the root release}/aztec-up"
+  cp "$release_lock" "$RELEASE_DIR/aztec-up/packages.tar.gz"
+}
+
+# <lock>: refuses an installer lock that is not for this release's version.
+function check_release_lock {
+  local version=${REF_NAME#v} lock_version
+  if [ ! -f "$1" ]; then
+    echo_stderr "No installer lock at $1. Run release_preflight first."
+    exit 1
+  fi
+  lock_version=$(tar -xzOf "$1" package.json | jq -r .version)
+  if [ "$lock_version" != "$version" ]; then
+    echo_stderr "$1 is for $lock_version, not $version. Run release_preflight again."
+    exit 1
+  fi
+}
+
+# <dir>: uploads the installer for this release, with the lock staged in <dir>, and moves its aliases.
+function publish {
+  echo_header "aztec-up publish"
+  local lock=${1:?usage: publish <staged-dir>}/packages.tar.gz
   local version=${REF_NAME#v}
   # e.g. "nightly", or "latest" for bare releases
   local dist_tag=$(dist_tag)
   # e.g. "4" from v4.1.0-nightly.20260319
   local major=$(semver major $REF_NAME)
 
-  if [ ! -f "$release_lock" ]; then
-    echo_stderr "No installer lock at aztec-up/$release_lock. Run release_preflight first."
-    exit 1
-  fi
-  local lock_version
-  lock_version=$(tar -xzOf "$release_lock" package.json | jq -r .version)
-  if [ "$lock_version" != "$version" ]; then
-    echo_stderr "aztec-up/$release_lock is for $lock_version, not $version. Run release_preflight again."
-    exit 1
-  fi
-  do_or_dryrun aws s3 cp "$release_lock" "s3://install.aztec.network/$version/packages.tar.gz"
+  check_release_lock "$lock"
+  do_or_dryrun aws s3 cp "$lock" "s3://install.aztec.network/$version/packages.tar.gz"
 
-  # Upload each file in bin/0.0.1/, replacing VERSION= lines with the release version.
+  # Upload each file in bin/0.0.1/, replacing VERSION= lines with the release version. Through a
+  # file, not a pipe: a dry run reads no input, so the writer of a pipe would die of SIGPIPE.
+  local versioned
+  versioned=$(mktemp -d)
   for file in bin/0.0.1/*; do
     [[ "$file" == *.tar.gz ]] && continue
-    sed "s/^VERSION=.*/VERSION=$version/" "$file" | \
-      do_or_dryrun aws s3 cp - "s3://install.aztec.network/$version/$(basename $file)"
+    sed "s/^VERSION=.*/VERSION=$version/" "$file" > "$versioned/$(basename $file)"
+    do_or_dryrun aws s3 cp "$versioned/$(basename $file)" "s3://install.aztec.network/$version/$(basename $file)"
   done
 
   # Update versioned alias (e.g. v4-nightly, v5-latest).

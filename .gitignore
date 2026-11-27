@@ -39,3 +39,5 @@ __pycache__
 
 # Local opt-in: install nargo from the matching official noir release instead of building from source.
 noir-from-release.flag
+# What a release stages (bootstrap.sh release), and the aztec-nr mirror push's working tree.
+release-out
