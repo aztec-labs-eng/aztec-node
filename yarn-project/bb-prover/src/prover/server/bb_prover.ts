@@ -72,7 +72,7 @@ import {
   type TxMergeRollupPrivateInputs,
   type TxRollupPublicInputs,
 } from '@aztec-labs/stdlib/rollup';
-import type { CircuitProvingStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
+import type { CircuitName, CircuitProvingStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
 import { Buffer } from 'buffer';
@@ -88,6 +88,9 @@ import { constructRecursiveProofFromBuffers } from '../proof_utils.js';
 
 const logger = createLogger('bb-prover');
 
+/** Stable bb rejected the proof, rather than failing to run the verifier. */
+class InvalidProofError extends ProvingError {}
+
 export interface BBProverConfig extends BBConfig, ACVMConfig {
   /** Optional alternate bb for proof generation only. Verification always uses bbBinaryPath. */
   bbProvingBinaryPath?: string;
@@ -100,8 +103,8 @@ export interface BBProverConfig extends BBConfig, ACVMConfig {
  */
 export class BBNativeRollupProver implements ServerCircuitProver {
   private instrumentation: ProverInstrumentation;
-  private readonly provingFactory: BBJsFactory;
-  private readonly verificationFactory: BBJsFactory;
+  private readonly alternateFactory?: BBJsFactory;
+  private readonly stableFactory: BBJsFactory;
 
   constructor(
     private config: BBProverConfig,
@@ -109,10 +112,10 @@ export class BBNativeRollupProver implements ServerCircuitProver {
   ) {
     this.instrumentation = new ProverInstrumentation(telemetry, 'BBNativeRollupProver');
     const options = { logger, debugDir: config.bbDebugOutputDir };
-    this.verificationFactory = new BBJsFactory(config.bbBinaryPath, options);
-    this.provingFactory = config.bbProvingBinaryPath
-      ? new BBJsFactory(config.bbProvingBinaryPath, options)
-      : this.verificationFactory;
+    this.stableFactory = new BBJsFactory(config.bbBinaryPath, options);
+    if (config.bbProvingBinaryPath) {
+      this.alternateFactory = new BBJsFactory(config.bbProvingBinaryPath, options);
+    }
   }
 
   get tracer() {
@@ -165,37 +168,26 @@ export class BBNativeRollupProver implements ServerCircuitProver {
   @trackSpan('BBNativeRollupProver.getAvmProof', inputs => ({
     [Attributes.APP_CIRCUIT_NAME]: inputs.hints.tx.hash,
   }))
-  public async getAvmProof(inputs: AvmCircuitInputs): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>> {
-    let proof: RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>;
-    try {
-      proof = await this.createAvmProof(inputs);
-    } catch (error) {
-      this.rethrowProvingFailure(error);
-    }
-    await this.verifyAvmProof(proof.binaryProof, inputs.publicInputs);
-    return proof;
+  public getAvmProof(inputs: AvmCircuitInputs): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>> {
+    return this.proveWithFallback(
+      'avm-circuit',
+      factory => this.createAvmProof(inputs, factory),
+      proof => this.verifyAvmProof(proof.binaryProof, inputs.publicInputs),
+    );
   }
 
-  public async getPublicChonkVerifierProof(
+  public getPublicChonkVerifierProof(
     inputs: PublicChonkVerifierPrivateInputs,
   ): Promise<
     PublicInputsAndRecursiveProof<PublicChonkVerifierPublicInputs, typeof NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH>
   > {
-    const artifactName = 'PublicChonkVerifier';
-
-    const { circuitOutput, proof } = await this.createRecursiveProof(
+    return this.createRecursiveProofAndVerify(
       inputs,
-      artifactName,
+      'PublicChonkVerifier',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertPublicChonkVerifierPrivateInputsToNoir,
       mapPublicChonkVerifierPublicInputsFromNoir,
     );
-
-    const verificationKey = this.getVerificationKeyDataForCircuit(artifactName);
-
-    await this.verifyProof(artifactName, proof.binaryProof);
-
-    return makePublicInputsAndRecursiveProof(circuitOutput, proof, verificationKey);
   }
 
   /**
@@ -376,38 +368,34 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     return { ...output, proof: recursiveProof };
   }
 
-  private async createRecursiveProofAndVerify<
-    PROOF_LENGTH extends number,
-    CircuitInputType extends { toBuffer: () => Buffer },
-    CircuitOutputType extends { toBuffer: () => Buffer },
-    CircuitReturnType extends InputMap,
-  >(
-    input: CircuitInputType,
-    artifactName: ServerProtocolArtifact,
-    proofLength: PROOF_LENGTH,
-    convertInput: (input: CircuitInputType) => InputMap,
-    convertOutput: (returnValue: CircuitReturnType) => CircuitOutputType,
-  ) {
-    const { circuitOutput, proof } = await this.createRecursiveProof(
-      input,
-      artifactName,
-      proofLength,
-      convertInput,
-      convertOutput,
-    );
-
-    await this.verifyProof(artifactName, proof.binaryProof);
-
-    const verificationKey = this.getVerificationKeyDataForCircuit(artifactName);
-
-    return makePublicInputsAndRecursiveProof(circuitOutput, proof, verificationKey);
-  }
-
-  private rethrowProvingFailure(error: unknown): never {
-    if (this.config.bbProvingBinaryPath) {
-      throw new ProvingError(`Alternate bb failed to produce a valid proof: ${error}`, error);
+  private async proveWithFallback<T>(
+    circuitName: CircuitName,
+    generate: (factory: BBJsFactory) => Promise<T>,
+    verify: (result: T) => Promise<void>,
+  ): Promise<T> {
+    if (this.alternateFactory) {
+      let stage: 'generation' | 'verification' = 'generation';
+      try {
+        const result = await generate(this.alternateFactory);
+        stage = 'verification';
+        await verify(result);
+        return result;
+      } catch (error) {
+        if (stage === 'verification' && !(error instanceof InvalidProofError) && !(error instanceof BBApiException)) {
+          throw error;
+        }
+        logger.error('Alternate bb failed to produce a valid proof; retrying with stable bb', error, {
+          circuitName,
+          stage,
+          bbProvingBinaryPath: this.config.bbProvingBinaryPath,
+        });
+        this.instrumentation.recordProvingFallback(circuitName);
+      }
     }
-    throw error;
+
+    const result = await generate(this.stableFactory);
+    await verify(result);
+    return result;
   }
 
   private async generateWitness<
@@ -477,6 +465,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
   }
 
   private async generateRollupProof<PROOF_LENGTH extends number>(
+    factory: BBJsFactory,
     circuitType: ServerProtocolArtifact,
     bytecode: Uint8Array,
     witness: Uint8Array,
@@ -489,7 +478,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
 
     let proofResult: BBJsProofResult;
     try {
-      await using instance = await this.provingFactory.getInstance();
+      await using instance = await factory.getInstance();
       proofResult = await instance.generateProof(
         circuitType,
         bytecode,
@@ -514,11 +503,14 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     };
   }
 
-  private async createAvmProof(input: AvmCircuitInputs): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>> {
+  private async createAvmProof(
+    input: AvmCircuitInputs,
+    factory: BBJsFactory,
+  ): Promise<RecursiveProof<typeof AVM_V2_PROOF_LENGTH_IN_FIELDS>> {
     logger.info(`Proving avm-circuit for TX ${input.hints.tx.hash}...`);
 
     const inputsBuffer = input.serializeWithMessagePack();
-    await using instance = await this.provingFactory.getInstance();
+    await using instance = await factory.getInstance();
     const { proof: proofFieldArrays, durationMs } = await instance.generateAvmProof(inputsBuffer);
 
     // Convert Uint8Array[] (32-byte field elements) to Fr[]
@@ -561,7 +553,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
    * @param convertOutput - Function for parsing the output witness to it's corresponding object
    * @returns The circuits output object and it's proof
    */
-  private async createRecursiveProof<
+  private async createRecursiveProofAndVerify<
     PROOF_LENGTH extends number,
     CircuitInputType extends { toBuffer: () => Buffer },
     CircuitOutputType extends { toBuffer: () => Buffer },
@@ -572,7 +564,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     proofLength: PROOF_LENGTH,
     convertInput: (input: CircuitInputType) => InputMap,
     convertOutput: (returnValue: CircuitReturnType) => CircuitOutputType,
-  ): Promise<{ circuitOutput: CircuitOutputType; proof: RecursiveProof<PROOF_LENGTH> }> {
+  ): Promise<PublicInputsAndRecursiveProof<CircuitOutputType, PROOF_LENGTH>> {
     // Still need runInDirectory for ACVM witness generation temp files
     const operation = async (workingDirectory: string) => {
       const { witness, bytecode, output, expectedPublicInputs } = await this.generateWitness(
@@ -584,22 +576,14 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       );
 
       const vkData = this.getVerificationKeyDataForCircuit(circuitType);
-      let proof: RecursiveProof<PROOF_LENGTH>;
-      let durationMs: number;
-      try {
-        ({ proof, durationMs } = await this.generateRollupProof(
-          circuitType,
-          bytecode,
-          witness,
-          vkData,
-          proofLength,
-          expectedPublicInputs,
-        ));
-      } catch (error) {
-        this.rethrowProvingFailure(error);
-      }
-
       const circuitName = mapProtocolArtifactNameToCircuitName(circuitType);
+      const { proof, durationMs } = await this.proveWithFallback(
+        circuitName,
+        factory =>
+          this.generateRollupProof(factory, circuitType, bytecode, witness, vkData, proofLength, expectedPublicInputs),
+        result => this.verifyProof(circuitType, result.proof.binaryProof),
+      );
+
       this.instrumentation.recordDuration('provingDuration', circuitName, durationMs);
       this.instrumentation.recordSize('proofSize', circuitName, proof.binaryProof.buffer.length);
       this.instrumentation.recordSize('circuitPublicInputCount', circuitName, vkData.numPublicInputs);
@@ -617,10 +601,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
         } satisfies CircuitProvingStats,
       );
 
-      return {
-        circuitOutput: output,
-        proof,
-      };
+      return makePublicInputsAndRecursiveProof(output, proof, vkData);
     };
     return await this.runInDirectory(operation);
   }
@@ -641,7 +622,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     let verified: boolean;
     let durationMs: number;
     try {
-      await using instance = await this.verificationFactory.getInstance();
+      await using instance = await this.stableFactory.getInstance();
       ({ verified, durationMs } = await instance.verifyProof(
         proofFields,
         verificationKey.keyAsBytes,
@@ -651,15 +632,15 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     } catch (error) {
       // Preserve retryability of the underlying failure (e.g. a transient bb startup error).
       const retry = isRetryableError(error);
-      const verificationError = new ProvingError(`Failed to verify proof for ${circuitType}: ${error}`, error, retry);
+      const message = `Failed to verify proof for ${circuitType}: ${error}`;
       if (error instanceof BBApiException) {
-        this.rethrowProvingFailure(verificationError);
+        throw new InvalidProofError(message, error, retry);
       }
-      throw verificationError;
+      throw new ProvingError(message, error, retry);
     }
 
     if (!verified) {
-      this.rethrowProvingFailure(new ProvingError('Failed to verify proof from key!'));
+      throw new InvalidProofError('Failed to verify proof from key!');
     }
 
     logger.info(`Successfully verified proof from key in ${durationMs} ms`);
@@ -676,20 +657,11 @@ export class BBNativeRollupProver implements ServerCircuitProver {
     }
     const piBuffer = publicInputs.serializeWithMessagePack();
 
-    await using instance = await this.verificationFactory.getInstance();
-    let verified: boolean;
-    let durationMs: number;
-    try {
-      ({ verified, durationMs } = await instance.verifyAvmProof(proofFields, piBuffer));
-    } catch (error) {
-      if (error instanceof BBApiException) {
-        this.rethrowProvingFailure(error);
-      }
-      throw error;
-    }
+    await using instance = await this.stableFactory.getInstance();
+    const { verified, durationMs } = await instance.verifyAvmProof(proofFields, piBuffer);
 
     if (!verified) {
-      this.rethrowProvingFailure(new ProvingError('Failed to verify AVM proof!'));
+      throw new InvalidProofError('Failed to verify AVM proof!');
     }
 
     logger.info(`Successfully verified AVM proof in ${durationMs} ms`);

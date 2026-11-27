@@ -2,7 +2,8 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 import { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import { makeInboxParityPrivateInputs } from '@aztec-labs/stdlib/testing';
-import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { Attributes, Metrics, getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { InMemoryMetrics } from '@aztec-labs/telemetry-client/test';
 import { jest } from '@jest/globals';
 import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
@@ -61,36 +62,66 @@ describe('BBNativeRollupProver', () => {
     throw new Error('Expected proving to fail');
   }
 
-  it('rejects an invalid proof returned by alternate bb', async () => {
-    const binDirectory = path.resolve('../../labs-aztec-toolchain/bin');
-    const bbBinaryPath = path.resolve(process.env.BB_BINARY_PATH || path.join(binDirectory, 'bb-avm'));
-    const bbProvingBinaryPath = path.join(workingDirectory, 'alternate-bb');
-    await fs.symlink(bbBinaryPath, bbProvingBinaryPath);
-
-    const create = BBJsInstance.create.bind(BBJsInstance);
-    jest.spyOn(BBJsInstance, 'create').mockImplementation(async (binaryPath, ...options) => {
-      const instance = await create(binaryPath, ...options);
-      if (binaryPath === bbProvingBinaryPath) {
-        const generate = instance.generateProof.bind(instance);
-        jest.spyOn(instance, 'generateProof').mockImplementation(async (...args) => {
-          const result = await generate(...args);
-          const i = Math.floor(result.proofFields.length / 2);
-          result.proofFields[i] = Fr.fromBuffer(Buffer.from(result.proofFields[i])).add(Fr.ONE).toBuffer();
-          return result;
-        });
-      }
-      return instance;
-    });
-
-    const prover = await BBNativeRollupProver.new({
-      ...makeProverConfig(process.env.NOIR_EXECUTE_BINARY_PATH || path.join(binDirectory, 'noir-execute')),
-      bbBinaryPath,
-      bbProvingBinaryPath,
-    });
+  describe('stable bb fallback', () => {
+    let config: BBProverConfig;
+    let telemetry: InMemoryMetrics;
     const inputs = InboxParityPrivateInputs.fromMessages([Fr.ONE], Fr.ZERO, Fr.ONE);
-    await expect(prover.getInboxParityProof(inputs)).rejects.toMatchObject({
-      retry: false,
-      cause: expect.objectContaining({ message: expect.stringMatching(/^Failed to verify proof\b/) }),
+
+    beforeEach(async () => {
+      telemetry = new InMemoryMetrics();
+      const binDirectory = path.resolve('../../labs-aztec-toolchain/bin');
+      const bbBinaryPath = path.resolve(process.env.BB_BINARY_PATH || path.join(binDirectory, 'bb-avm'));
+      const bbProvingBinaryPath = path.join(workingDirectory, 'alternate-bb');
+      await fs.symlink(bbBinaryPath, bbProvingBinaryPath);
+      config = {
+        ...makeProverConfig(process.env.NOIR_EXECUTE_BINARY_PATH || path.join(binDirectory, 'noir-execute')),
+        bbBinaryPath,
+        bbProvingBinaryPath,
+      };
+    });
+
+    afterEach(async () => {
+      await telemetry.stop();
+    });
+
+    it('returns a valid stable proof after rejecting an invalid alternate proof', async () => {
+      const create = BBJsInstance.create.bind(BBJsInstance);
+      jest.spyOn(BBJsInstance, 'create').mockImplementation(async (binaryPath, ...options) => {
+        const instance = await create(binaryPath, ...options);
+        if (binaryPath === config.bbProvingBinaryPath) {
+          const generate = instance.generateProof.bind(instance);
+          jest.spyOn(instance, 'generateProof').mockImplementation(async (...args) => {
+            const result = await generate(...args);
+            const i = Math.floor(result.proofFields.length / 2);
+            result.proofFields[i] = Fr.fromBuffer(Buffer.from(result.proofFields[i])).add(Fr.ONE).toBuffer();
+            return result;
+          });
+        }
+        return instance;
+      });
+
+      const prover = await BBNativeRollupProver.new(config, telemetry);
+      const { proof } = await prover.getInboxParityProof(inputs);
+      await expect(prover.verifyProof('InboxParity4Artifact', proof.binaryProof)).resolves.toBeUndefined();
+      expect((await telemetry.collect())[Metrics.CIRCUIT_PROVING_FALLBACK_COUNT.name]).toEqual([
+        { value: 1, attributes: { [Attributes.PROTOCOL_CIRCUIT_NAME]: 'inbox-parity-4' } },
+      ]);
+    });
+
+    it('propagates a retryable stable verifier startup failure without proving again', async () => {
+      const startupError = new ProvingError('Failed to start bb process', undefined, true);
+      const create = BBJsInstance.create.bind(BBJsInstance);
+      jest.spyOn(BBJsInstance, 'create').mockImplementation((binaryPath, ...options) => {
+        return binaryPath === config.bbBinaryPath ? Promise.reject(startupError) : create(binaryPath, ...options);
+      });
+
+      const prover = await BBNativeRollupProver.new(config, telemetry);
+      await expect(prover.getInboxParityProof(inputs)).rejects.toMatchObject({
+        retry: true,
+        cause: startupError,
+        message: expect.stringMatching(/^Failed to verify proof\b/),
+      });
+      expect((await telemetry.collect())[Metrics.CIRCUIT_PROVING_FALLBACK_COUNT.name]).toBeUndefined();
     });
   });
 
