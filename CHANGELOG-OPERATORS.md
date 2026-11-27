@@ -32,12 +32,6 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
-### `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH` defaults to `true`
-
-Sequencers now log when their publisher bid cannot cover the observed L1 execution base fee plus the estimated competitive tip, or the blob base fee. If the RPC-based tip sanity cap binds, a higher median tip from the last five mined blocks is also considered. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).
-
-**Migration**: to keep building despite a mismatch, set `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH=false`. The log and counter remain active.
-
 ### The node stops sending L1 requests to RPC URLs that fall behind ([#587](https://github.com/aztec-labs-eng/aztec-node/pull/587))
 
 With two or more URLs in `ETHEREUM_HOSTS`, the node used to send every request to the first one, and moved to the next only when a request failed. A URL that still answered but had fallen behind the chain kept getting all the traffic. The node now checks every URL's latest block every few seconds. It stops using a URL that falls behind the others or stops answering, and uses it again once it has caught up. A URL on a different L1 chain is never used, and the node logs an error naming it.
