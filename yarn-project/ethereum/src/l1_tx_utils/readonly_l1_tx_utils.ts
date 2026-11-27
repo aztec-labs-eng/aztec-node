@@ -73,13 +73,15 @@ export type L1SimulationResult = {
   result: `0x${string}`;
 };
 
-/** A bounded bid and the market observation used to calculate it, in wei per gas. */
+/** A publisher bid, its fee estimate and the configured ceilings (in wei per gas; absent when uncapped). */
 export type L1FeeQuote = {
   bid: FeesPerGas;
   blockNumber: bigint | null;
   baseFee: bigint;
   competitiveTip: bigint;
   blobBaseFee?: bigint;
+  gasPriceLimit?: bigint;
+  blobGasPriceLimit?: bigint;
 };
 
 export class ReadOnlyL1TxUtils {
@@ -281,7 +283,9 @@ export class ReadOnlyL1TxUtils {
       bid: { maxFeePerGas, maxPriorityFeePerGas, ...(maxFeePerBlobGas && { maxFeePerBlobGas }) },
       blockNumber: latestBlock.number,
       baseFee,
-      competitiveTip: strategyResult.historicalTipAboveCap ?? strategyPriorityFee,
+      competitiveTip: strategyPriorityFee,
+      gasPriceLimit: effectiveMaxGwei > 0n ? effectiveMaxGwei : undefined,
+      blobGasPriceLimit: effectiveMaxBlobGwei > 0n ? effectiveMaxBlobGwei : undefined,
       blobBaseFee,
     };
   }

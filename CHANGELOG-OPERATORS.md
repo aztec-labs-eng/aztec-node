@@ -40,7 +40,7 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ### `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH` defaults to `true`
 
-Sequencers now log when their publisher bid cannot cover the observed L1 execution base fee plus the estimated competitive tip, or the blob base fee. If the RPC-based tip sanity cap binds, a higher median tip from the last five mined blocks is also considered. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).
+Sequencers now log when the current execution base fee plus the publisher strategy’s recommended tip exceeds `L1_GAS_PRICE_MAX`, or the observed blob base fee exceeds `L1_BLOB_FEE_PER_GAS_MAX`. The check uses the configured ceilings, not the initial transaction bid; a higher historical tip does not override the publisher strategy. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).
 
 **Migration**: to keep building despite a mismatch, set `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH=false`. The log and counter remain active.
 

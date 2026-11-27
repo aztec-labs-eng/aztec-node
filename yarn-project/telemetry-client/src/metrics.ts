@@ -572,7 +572,7 @@ export const SEQUENCER_CHECKPOINT_PROPOSAL_SUCCESS_COUNT: MetricDefinition = {
 };
 export const SEQUENCER_L1_FEE_MISMATCH_COUNT: MetricDefinition = {
   name: 'aztec.sequencer.l1_fee_mismatch_count',
-  description: 'Number of target slots where the publisher bid fell short of estimated L1 fees before building',
+  description: 'Number of target slots where estimated L1 fees exceeded publisher limits before building',
   valueType: ValueType.INT,
 };
 export const SEQUENCER_CHECKPOINT_PRECHECK_FAILED_COUNT: MetricDefinition = {

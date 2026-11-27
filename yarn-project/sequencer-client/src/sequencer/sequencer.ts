@@ -726,16 +726,16 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     cleanup.use(publisher);
     const quote = created.feeQuote;
     if (quote && !this.config.fishermanMode) {
-      const { bid, baseFee, competitiveTip, blobBaseFee } = quote;
-      const executionLimited = bid.maxFeePerGas < baseFee + competitiveTip || bid.maxPriorityFeePerGas < competitiveTip;
+      const { baseFee, competitiveTip, blobBaseFee, gasPriceLimit, blobGasPriceLimit } = quote;
+      const executionLimited = gasPriceLimit !== undefined && baseFee + competitiveTip > gasPriceLimit;
       const blobLimited =
-        blobBaseFee !== undefined && bid.maxFeePerBlobGas !== undefined && bid.maxFeePerBlobGas < blobBaseFee;
+        blobGasPriceLimit !== undefined && blobBaseFee !== undefined && blobBaseFee > blobGasPriceLimit;
       if (executionLimited || blobLimited) {
         const skipEnabled = this.config.skipProposingOnFeeMismatch;
         if (this.lastFeeMismatchSlot !== targetSlot) {
           this.lastFeeMismatchSlot = targetSlot;
           this.metrics.recordFeeMismatch(skipEnabled);
-          this.log.info(`Publisher bid below estimated L1 market for slot ${targetSlot}`, {
+          this.log.info(`Estimated L1 fees exceed publisher limits for slot ${targetSlot}`, {
             ...logCtx,
             ...quote,
             executionLimited,
