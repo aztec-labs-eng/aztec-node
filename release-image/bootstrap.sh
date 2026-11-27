@@ -42,19 +42,23 @@ function build_prover_agent_image {
 }
 export -f build_prover_agent_image
 
-# The image runs these two, so a missing one fails the build rather than the container. Symlinks
+# Check the runtime binaries so a missing one fails the build rather than the container. Symlinks
 # are rejected too, since docker copies the link and not its target: even one that resolves here
 # would dangle in the image (build_monorepo provisions bin/ as symlinks).
 function check_toolchain_binaries {
   local binary path
-  for binary in bb-avm noir-execute; do
+  local -a binaries=(bb-avm noir-execute)
+  if [ -n "${BB_GOLFED_URL:-}" ] || [ -e "$root/labs-aztec-toolchain/bin/bb-golfed" ] || [ -L "$root/labs-aztec-toolchain/bin/bb-golfed" ]; then
+    binaries+=(bb-golfed)
+  fi
+  for binary in "${binaries[@]}"; do
     path=$root/labs-aztec-toolchain/bin/$binary
     if [ -L "$path" ]; then
       echo "labs-aztec-toolchain/bin/$binary is a symlink and would dangle in the image. Run labs-aztec-toolchain/bootstrap.sh first."
       exit 1
     fi
-    if [ ! -f "$path" ]; then
-      echo "Missing labs-aztec-toolchain/bin/$binary. Run labs-aztec-toolchain/bootstrap.sh first."
+    if [ ! -f "$path" ] || [ ! -x "$path" ]; then
+      echo "Missing or not executable: labs-aztec-toolchain/bin/$binary. Run labs-aztec-toolchain/bootstrap.sh first."
       exit 1
     fi
   done

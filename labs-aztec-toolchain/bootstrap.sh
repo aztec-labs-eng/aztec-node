@@ -22,6 +22,9 @@ FND_ROOT=${AZTEC_TOOLCHAIN_FND_ROOT-$(cat .fnd-root 2>/dev/null || true)}
 TARGET_DIR=bin
 BB_BINARY=bb
 BB_AVM_BINARY=bb-avm
+BB_GOLFED_BINARY=bb-golfed
+# TODO: Pin the platform-specific release asset once the golfed bb repository is known.
+BB_GOLFED_URL=${BB_GOLFED_URL:-}
 NARGO_BINARY=nargo
 NOIR_EXECUTE_BINARY=noir-execute
 NOIR_PROFILER_BINARY=noir-profiler
@@ -115,6 +118,10 @@ function build_fnd {
     fi
   done
 
+  if [ -n "$BB_GOLFED_URL" ]; then
+    install_golfed_bb
+  fi
+
   # Record the full noir version: the exact tag when the submodule sits on one,
   # otherwise the binary's base version (a bare commit is not installable, so
   # it is not a useful record). Tags may be missing in shallow CI checkouts.
@@ -139,7 +146,10 @@ function labs_pin_record {
   echo "bb=$BB_VERSION"
   echo "noir=$NOIR_VERSION"
   local name
-  for name in "$BB_BINARY" "$BB_AVM_BINARY" "$NARGO_BINARY" "$NOIR_PROFILER_BINARY" "$NOIR_EXECUTE_BINARY"; do
+  if [ -n "$BB_GOLFED_URL" ]; then
+    echo "golfed_url=$BB_GOLFED_URL"
+  fi
+  for name in "$BB_BINARY" "$BB_AVM_BINARY" "$BB_GOLFED_BINARY" "$NARGO_BINARY" "$NOIR_PROFILER_BINARY" "$NOIR_EXECUTE_BINARY"; do
     if [ -f "$TARGET_DIR/$name" ]; then
       echo "${name}_hash=$(git hash-object "$TARGET_DIR/$name")"
     fi
@@ -167,7 +177,7 @@ function is_current {
 # foundation-mode symlink, a manual copy) is unrelated to what this flow installs, and
 # keeping it would leave the record attesting contents from a different provisioning.
 function drop_unprovisionable {
-  if [ -e "$TARGET_DIR/$1" ]; then
+  if [ -e "$TARGET_DIR/$1" ] || [ -L "$TARGET_DIR/$1" ]; then
     echo "Removing $1: cannot be provisioned here, and unrelated to what was just installed."
     rm -f "$TARGET_DIR/$1"
   fi
@@ -250,6 +260,17 @@ function install_npm_binary {
   chmod +x "$TARGET_DIR/$binary"
 }
 
+function install_golfed_bb (
+  set -e
+  local tmp
+  tmp=$(mktemp "$TARGET_DIR/.bb-golfed.XXXXXX")
+  trap 'rm -f "$tmp"' EXIT
+  curl -fsSL "$BB_GOLFED_URL" -o "$tmp"
+  test -s "$tmp"
+  chmod 755 "$tmp"
+  mv -f "$tmp" "$TARGET_DIR/$BB_GOLFED_BINARY"
+)
+
 # Installs the binaries the labs components use out of the noir release archive for this
 # machine. The archive carries the whole toolchain; noir-inspector is left in it.
 function install_noir {
@@ -316,7 +337,17 @@ function build_pinned {
     drop_unprovisionable "$BB_AVM_BINARY"
   fi
 
-  if ! $fetch_bb && ! $fetch_bb_avm && ! $fetch_noir; then
+  local fetch_golfed=false
+  if [ -n "$BB_GOLFED_URL" ]; then
+    is_current "$BB_GOLFED_BINARY" golfed_url "$BB_GOLFED_URL" || fetch_golfed=true
+  else
+    drop_unprovisionable "$BB_GOLFED_BINARY"
+  fi
+
+  if ! $fetch_bb && ! $fetch_bb_avm && ! $fetch_noir && ! $fetch_golfed; then
+    if [ -z "$BB_GOLFED_URL" ] && [ -n "$(pin_value golfed_url)" ]; then
+      labs_pin_record > "$PIN_FILE"
+    fi
     echo "Toolchain matches pinned versions and hashes, nothing to download."
     return
   fi
@@ -334,6 +365,10 @@ function build_pinned {
     install_npm_binary "$tmp" "$BB_AVM_BINARY" "$BB_AVM_PLATFORMS"
   elif bb_avm_published_here; then
     echo "$BB_AVM_BINARY $BB_VERSION already provisioned."
+  fi
+
+  if $fetch_golfed; then
+    install_golfed_bb
   fi
 
   if $fetch_noir; then
@@ -428,6 +463,9 @@ function hash {
     if bb_avm_published_here; then
       expected+=" $BB_AVM_BINARY"
     fi
+  fi
+  if [ -n "$BB_GOLFED_URL" ]; then
+    expected+=" $BB_GOLFED_URL"
   fi
   hash_str "$content_hash" "$expected"
 }
