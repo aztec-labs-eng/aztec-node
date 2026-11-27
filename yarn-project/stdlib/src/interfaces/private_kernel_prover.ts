@@ -25,6 +25,9 @@ import type { ChonkProofWithPublicInputs } from '../proofs/chonk_proof.js';
  * siloed commitments necessary for maintaining transaction privacy and security on the network.
  */
 export interface PrivateKernelProver {
+  /** Drains pending proofs and releases resources owned by this prover. */
+  stop?(): Promise<void>;
+
   /**
    * Creates a proof output for a given signed transaction request and private call data for the first iteration.
    *

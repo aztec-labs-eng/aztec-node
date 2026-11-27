@@ -4,6 +4,7 @@ import type { Abi, WitnessMap } from '@aztec-foundation/noir-types';
 
 import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type LogLevel, type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import {
   convertHidingKernelPublicInputsToWitnessMapWithAbi,
@@ -76,12 +77,40 @@ export type BBPrivateKernelProverOptions = Omit<BackendOptions, 'logger'> & { lo
 export abstract class BBPrivateKernelProver implements PrivateKernelProver {
   private log: Logger;
 
+  /**
+   * The bb this prover accumulates on, created on first use and kept for the life of the prover.
+   *
+   * Its own rather than the process-wide singleton. Accumulation is a session — chonkStart, a load
+   * and an accumulate per circuit, then chonkProve — while the singleton is shared with every
+   * protocol hash on a node, so a hash would queue behind a whole proof and two proofs would
+   * interleave into one session and corrupt each other. Stateless callers, gate counting included,
+   * stay on the singleton where they belong.
+   */
+  private chonkBb: Barretenberg | undefined;
+
+  /** Serialises accumulation: bb holds one session, so two proofs cannot share a process. */
+  private readonly chonkQueue = new SerialQueue();
+  private stopPromise?: Promise<void>;
+
   constructor(
     protected artifactProvider: ArtifactProvider,
     protected simulator: CircuitSimulator,
     protected options: BBPrivateKernelProverOptions = {},
   ) {
     this.log = options.logger || createLogger('bb-prover:private-kernel');
+    this.chonkQueue.start();
+  }
+
+  /** Drains queued proofs and releases this prover's dedicated bb instance. */
+  public stop(): Promise<void> {
+    return (this.stopPromise ??= this.stopChonkProver());
+  }
+
+  private async stopChonkProver(): Promise<void> {
+    await this.chonkQueue.end();
+    const bb = this.chonkBb;
+    this.chonkBb = undefined;
+    await bb?.destroy();
   }
 
   public async generateInitOutput(
@@ -483,41 +512,56 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
   }
 
   public async createChonkProof(executionSteps: PrivateExecutionStep[]): Promise<ChonkProofWithPublicInputs> {
-    const timer = new Timer();
-    this.log.info(`Generating ClientIVC proof...`);
-    const barretenberg = await Barretenberg.initSingleton({
-      ...this.options,
-      logger: this.options.logger?.verbose,
+    const bytecodes = executionSteps.map(step => ungzip(step.bytecode));
+    const witnesses = executionSteps.map(step => ungzip(serializeWitness(step.witness)));
+    const vks = executionSteps.map(step => step.vk);
+
+    return await this.chonkQueue.put(async () => {
+      const timer = new Timer();
+      this.log.info(`Generating ClientIVC proof...`);
+      const bb = (this.chonkBb ??= await Barretenberg.new({
+        ...this.options,
+        logger: this.options.logger?.verbose,
+        // An idle prover must not hold open a host that never calls stop().
+        unref: true,
+        // A replacement process would not have the in-flight Chonk session.
+        respawn: false,
+      }));
+      const backend = new AztecClientBackend(
+        bytecodes,
+        bb,
+        executionSteps.map(step => step.functionName),
+        executionSteps.map(step => step.kind),
+      );
+
+      try {
+        // Use compressed prove path to get both proof fields and compressed proof bytes
+        const proof = await backend.prove(witnesses, vks, { compress: true });
+        this.log.info(`Generated ClientIVC proof`, {
+          eventName: 'client-ivc-proof-generation',
+          duration: timer.ms(),
+          proofSize: proof.proofFields.length,
+          compressedSize: proof.compressedProof?.length,
+        });
+
+        // Create ChonkProofWithPublicInputs from the flat field elements
+        const proofWithPubInputs = ChonkProofWithPublicInputs.fromBufferArray(proof.proofFields);
+
+        // Attach compressed proof bytes to the ChonkProof (without public inputs).
+        // The compressed bytes are for the full proof WITH public inputs from bb;
+        // when deserializing, the decompressor will strip them to match CHONK_PROOF_LENGTH.
+        proofWithPubInputs.compressedProof = proof.compressedProof ? Buffer.from(proof.compressedProof) : undefined;
+        return proofWithPubInputs;
+      } catch (err) {
+        this.chonkBb = undefined;
+        try {
+          await bb.destroy();
+        } catch (destroyError) {
+          this.log.warn('Failed to destroy Chonk prover backend', { err: destroyError });
+        }
+        throw err;
+      }
     });
-    const backend = new AztecClientBackend(
-      executionSteps.map(step => ungzip(step.bytecode)),
-      barretenberg,
-      executionSteps.map(step => step.functionName),
-      executionSteps.map(step => step.kind),
-    );
-
-    // Use compressed prove path to get both proof fields and compressed proof bytes
-    const result = await backend.prove(
-      executionSteps.map(step => ungzip(serializeWitness(step.witness))),
-      executionSteps.map(step => step.vk),
-      { compress: true },
-    );
-    this.log.info(`Generated ClientIVC proof`, {
-      eventName: 'client-ivc-proof-generation',
-      duration: timer.ms(),
-      proofSize: result.proofFields.length,
-      compressedSize: result.compressedProof?.length,
-    });
-
-    // Create ChonkProofWithPublicInputs from the flat field elements
-    const proofWithPubInputs = ChonkProofWithPublicInputs.fromBufferArray(result.proofFields);
-
-    // Attach compressed proof bytes to the ChonkProof (without public inputs).
-    // The compressed bytes are for the full proof WITH public inputs from bb;
-    // when deserializing, the decompressor will strip them to match CHONK_PROOF_LENGTH.
-    proofWithPubInputs.compressedProof = result.compressedProof ? Buffer.from(result.compressedProof) : undefined;
-
-    return proofWithPubInputs;
   }
 
   public async computeGateCountForCircuit(

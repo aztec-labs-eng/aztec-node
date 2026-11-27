@@ -193,6 +193,8 @@ export type PXECreateArgs = {
   store: AztecAsyncKVStore;
   /** The prover for generating private kernel proofs. */
   proofCreator: PrivateKernelProver;
+  /** Whether the PXE should stop the proof creator on shutdown. Defaults to false for caller-owned provers. */
+  ownsProofCreator?: boolean;
   /** The circuit simulator for executing ACIR circuits. */
   simulator: CircuitSimulator;
   /** Provider for protocol contract artifacts and instances. */
@@ -272,6 +274,7 @@ export class PXE {
     private simulator: CircuitSimulator,
     private proverEnabled: boolean,
     private proofCreator: PrivateKernelProver,
+    private readonly ownsProofCreator: boolean,
     private protocolContractsProvider: ProtocolContractsProvider,
     private preloadedContractsProvider: PreloadedContractsProvider,
     private log: Logger,
@@ -292,6 +295,7 @@ export class PXE {
     nodeDebug,
     store,
     proofCreator,
+    ownsProofCreator = false,
     simulator,
     protocolContractsProvider,
     preloadedContractsProvider,
@@ -409,6 +413,7 @@ export class PXE {
       simulator,
       proverEnabled,
       proofCreator,
+      ownsProofCreator,
       protocolContractsProvider,
       preloadedContractsProvider,
       log,
@@ -1542,11 +1547,18 @@ export class PXE {
   }
 
   /**
-   * Stops the PXE's operation queue and closes the backing store.
+   * Drains pending operations, stops the owned prover and synchronizer, and closes the backing store.
    */
   public async stop(): Promise<void> {
     await this.operationQueue.stop();
-    await this.blockStateSynchronizer.stop();
-    await this.db.close();
+    try {
+      const stopTasks = [this.blockStateSynchronizer.stop()];
+      if (this.ownsProofCreator && this.proofCreator.stop) {
+        stopTasks.push(this.proofCreator.stop());
+      }
+      await allToCompletion(stopTasks);
+    } finally {
+      await this.db.close();
+    }
   }
 }
