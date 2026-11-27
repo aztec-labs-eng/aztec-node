@@ -32,6 +32,14 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### `BB_PROVING_BINARY_PATH` selects an alternate bb for proof generation
+
+Set `BB_PROVING_BINARY_PATH` (or `--proverAgent.bbProvingBinaryPath <path>`) to an operator-supplied bb binary to generate rollup and AVM proofs. Keep `BB_BINARY_PATH` pointed at vanilla bb: it still verifies every proof. If the alternate binary fails to produce a valid proof, the job fails without retrying on vanilla bb.
+
+With either binary, a draining agent now preserves the error’s retry flag instead of asking the broker to retry every failed job. Errors without a retry flag remain retryable.
+
+**Migration**: none. Leave the new path unset to keep using `BB_BINARY_PATH` for both proving and verification.
+
 ### `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH` defaults to `true`
 
 Sequencers now log when their publisher bid cannot cover the observed L1 execution base fee plus the estimated competitive tip, or the blob base fee. If the RPC-based tip sanity cap binds, a higher median tip from the last five mined blocks is also considered. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).

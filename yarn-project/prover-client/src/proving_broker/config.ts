@@ -99,6 +99,8 @@ export const ProverAgentConfig = z.object({
   proverAgentPollIntervalMs: z.number(),
   /** The URL where this agent takes jobs from */
   proverBrokerUrl: z.string().optional(),
+  /** Optional alternate bb for native proof generation. */
+  bbProvingBinaryPath: z.string().optional(),
   /** Whether to construct real proofs */
   realProofs: z.boolean(),
   /** The type of artificial delay to introduce */
@@ -140,6 +142,10 @@ export const proverAgentConfigMappings: ConfigMappingsType<ProverAgentConfig> = 
   proverBrokerUrl: {
     env: 'PROVER_BROKER_HOST',
     description: 'The URL where this agent takes jobs from',
+  },
+  bbProvingBinaryPath: {
+    env: 'BB_PROVING_BINARY_PATH',
+    description: 'Optional alternate bb for proof generation. Verification always uses BB_BINARY_PATH.',
   },
   realProofs: {
     env: 'PROVER_REAL_PROOFS',

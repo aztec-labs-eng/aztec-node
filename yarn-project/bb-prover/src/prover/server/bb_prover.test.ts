@@ -1,12 +1,16 @@
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
+import { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import { makeInboxParityPrivateInputs } from '@aztec-labs/stdlib/testing';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { BBNativeRollupProver } from './bb_prover.js';
+import { BBJsInstance } from '../../bb/bb_js_backend.js';
+import { BBNativeRollupProver, type BBProverConfig } from './bb_prover.js';
 
 describe('BBNativeRollupProver', () => {
   let workingDirectory: string;
@@ -20,6 +24,20 @@ describe('BBNativeRollupProver', () => {
     await fs.rm(workingDirectory, { recursive: true, force: true });
   });
 
+  function makeProverConfig(noirExecuteBinaryPath: string): BBProverConfig {
+    return {
+      bbBinaryPath: path.join(workingDirectory, 'unused-bb'),
+      bbWorkingDirectory: path.join(workingDirectory, 'bb'),
+      bbSkipCleanup: false,
+      numConcurrentIVCVerifiers: 1,
+      bbIVCConcurrency: 1,
+      bbChonkVerifyMaxBatch: 1,
+      bbChonkVerifyConcurrency: 1,
+      noirExecuteBinaryPath,
+      noirExecuteWorkingDirectory: path.join(workingDirectory, 'acvm'),
+    };
+  }
+
   /**
    * Builds a prover whose `noir-execute` is a shell script, so proving fails during witness generation, before bb is
    * ever started. The script receives the prover file as `$5`, the output directory as `$8` and the witness name as
@@ -28,24 +46,10 @@ describe('BBNativeRollupProver', () => {
   async function makeProver(noirExecuteBody: string): Promise<BBNativeRollupProver> {
     const noirExecuteBinaryPath = path.join(workingDirectory, 'noir-execute.sh');
     await fs.writeFile(noirExecuteBinaryPath, `#!/bin/sh\n${noirExecuteBody}\n`, { mode: 0o755 });
-    const noirExecuteWorkingDirectory = path.join(workingDirectory, 'acvm');
-    const bbWorkingDirectory = path.join(workingDirectory, 'bb');
-    await fs.mkdir(noirExecuteWorkingDirectory);
-    await fs.mkdir(bbWorkingDirectory);
-    return new BBNativeRollupProver(
-      {
-        bbBinaryPath: path.join(workingDirectory, 'unused-bb'),
-        bbWorkingDirectory,
-        bbSkipCleanup: false,
-        numConcurrentIVCVerifiers: 1,
-        bbIVCConcurrency: 1,
-        bbChonkVerifyMaxBatch: 1,
-        bbChonkVerifyConcurrency: 1,
-        noirExecuteBinaryPath,
-        noirExecuteWorkingDirectory,
-      },
-      getTelemetryClient(),
-    );
+    const config = makeProverConfig(noirExecuteBinaryPath);
+    await fs.mkdir(config.noirExecuteWorkingDirectory);
+    await fs.mkdir(config.bbWorkingDirectory);
+    return new BBNativeRollupProver(config, getTelemetryClient());
   }
 
   async function proveWith(prover: BBNativeRollupProver): Promise<unknown> {
@@ -56,6 +60,39 @@ describe('BBNativeRollupProver', () => {
     }
     throw new Error('Expected proving to fail');
   }
+
+  it('rejects an invalid proof returned by alternate bb', async () => {
+    const binDirectory = path.resolve('../../labs-aztec-toolchain/bin');
+    const bbBinaryPath = path.resolve(process.env.BB_BINARY_PATH || path.join(binDirectory, 'bb-avm'));
+    const bbProvingBinaryPath = path.join(workingDirectory, 'alternate-bb');
+    await fs.symlink(bbBinaryPath, bbProvingBinaryPath);
+
+    const create = BBJsInstance.create.bind(BBJsInstance);
+    jest.spyOn(BBJsInstance, 'create').mockImplementation(async (binaryPath, ...options) => {
+      const instance = await create(binaryPath, ...options);
+      if (binaryPath === bbProvingBinaryPath) {
+        const generate = instance.generateProof.bind(instance);
+        jest.spyOn(instance, 'generateProof').mockImplementation(async (...args) => {
+          const result = await generate(...args);
+          const i = Math.floor(result.proofFields.length / 2);
+          result.proofFields[i] = Fr.fromBuffer(Buffer.from(result.proofFields[i])).add(Fr.ONE).toBuffer();
+          return result;
+        });
+      }
+      return instance;
+    });
+
+    const prover = await BBNativeRollupProver.new({
+      ...makeProverConfig(process.env.NOIR_EXECUTE_BINARY_PATH || path.join(binDirectory, 'noir-execute')),
+      bbBinaryPath,
+      bbProvingBinaryPath,
+    });
+    const inputs = InboxParityPrivateInputs.fromMessages([Fr.ONE], Fr.ZERO, Fr.ONE);
+    await expect(prover.getInboxParityProof(inputs)).rejects.toMatchObject({
+      retry: false,
+      cause: expect.objectContaining({ message: expect.stringMatching(/^Failed to verify proof\b/) }),
+    });
+  });
 
   it('retries a witness generation process killed by a signal', async () => {
     const err = await proveWith(await makeProver('kill -9 $$'));
