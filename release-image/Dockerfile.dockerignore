@@ -1,7 +1,8 @@
 # We include just what's needed to run the aztec cli (none of the aztec.sh extensions).
 *
 !/.version-manifest.json
-# The two toolchain binaries the image runs, via BB_BINARY_PATH and NOIR_EXECUTE_BINARY_PATH.
+# Runtime toolchain, including the optional prover-agent binary when provisioned.
+!/labs-aztec-toolchain/bin/bb-golfed
 !/labs-aztec-toolchain/bin/bb-avm
 !/labs-aztec-toolchain/bin/noir-execute
 !/yarn-project/package.json
