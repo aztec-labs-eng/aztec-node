@@ -1,5 +1,6 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
-import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import type { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
@@ -14,7 +15,7 @@ import type {
   Tag,
   TagQuery,
 } from '@aztec-labs/stdlib/logs';
-import { TxHash } from '@aztec-labs/stdlib/tx';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { BlockStore } from './block_store.js';
 import {
@@ -29,6 +30,8 @@ import {
   incKey,
   tagHexForLog,
 } from './log_store_codec.js';
+
+const TAG_SCAN_CONCURRENCY = 8;
 
 /**
  * Indexes every emitted private and public log under a composite hex-string key
@@ -190,13 +193,13 @@ export class LogStore {
   /** Returns one inner array per element of `query.tags`, in input order. */
   getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
-    return this.db.transactionAsync(() => this.#runQuery(query, /* contractHex */ undefined));
+    return this.#runQuery(query, /* contractHex */ undefined);
   }
 
   /** Returns one inner array per element of `query.tags`, in input order. */
   getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
-    return this.db.transactionAsync(() => this.#runQuery(query, fieldHex(query.contractAddress)));
+    return this.#runQuery(query, fieldHex(query.contractAddress));
   }
 
   static #validateQuery(query: { txHash?: TxHash; fromBlock?: unknown; toBlock?: unknown }): void {
@@ -209,38 +212,52 @@ export class LogStore {
     query: ResolvedLogsQuery<PrivateLogsQuery> | ResolvedLogsQuery<PublicLogsQuery>,
     contractHex: string | undefined,
   ): Promise<LogResult[][]> {
-    const isPublic = contractHex !== undefined;
-    const tags = (query.tags as ReadonlyArray<TagQuery<Tag | SiloedTag>>) ?? [];
-    const primaryMap = isPublic ? this.#publicLogs : this.#privateLogs;
-
-    // referenceBlock reorg check, in-transaction, against the same db the log primary maps live on. The
-    // genesis block is a valid anchor during early sync but is synthetic and never indexed in the block
-    // store, so resolve it directly to the genesis block number rather than mistaking it for a reorg.
-    let referenceBlockNumber: number | undefined;
-    if (query.referenceBlock) {
-      if (query.referenceBlock.equals(this.genesisBlockHash)) {
-        referenceBlockNumber = INITIAL_L2_BLOCK_NUM - 1;
-      } else {
-        const refBlk = await this.blockStore.getBlockData({ hash: query.referenceBlock });
-        if (!refBlk) {
-          throw new Error(
-            `Reference block ${query.referenceBlock.toString()} not found in the node. This might indicate a reorg has occurred.`,
-          );
-        }
-        referenceBlockNumber = refBlk.header.globalVariables.blockNumber;
+    const hash = query.referenceBlock;
+    if (!hash) {
+      // Without an anchor, keep the scans and effect lookups on the same chain so every log has its matching effects.
+      if (query.includeEffects === true) {
+        return this.db.transactionAsync(() => this.#scanQuery(query, contractHex, query.toBlock));
       }
+      return this.#scanQuery(query, contractHex, query.toBlock);
+    }
+    if (hash.equals(this.genesisBlockHash)) {
+      return this.#scanQuery(query, contractHex, Math.min(query.toBlock ?? Infinity, INITIAL_L2_BLOCK_NUM));
     }
 
-    // Compute the exclusive upper-block bound across `toBlock` and `referenceBlock`.
-    // `toBlock` is already exclusive; `referenceBlock` caps inclusively, so its exclusive form is +1.
-    let upperExclusive: number | undefined;
-    if (query.toBlock !== undefined) {
-      upperExclusive = query.toBlock;
+    const referenceBlockNumber = await this.#checkReferenceBlock(hash);
+    const upperExclusive = Math.min(query.toBlock ?? Infinity, referenceBlockNumber + 1);
+    const results = await this.#scanQuery(query, contractHex, upperExclusive);
+
+    // Pruning removes blocks and logs atomically. The anchor fixes the chain within the scan bound,
+    // unless the same block was pruned and re-added during the query.
+    await this.#checkReferenceBlock(hash, referenceBlockNumber);
+    return results;
+  }
+
+  async #checkReferenceBlock(hash: BlockHash, expectedNumber?: number): Promise<number> {
+    const block = await this.blockStore.getBlockData({ hash });
+    const number = block?.header.globalVariables.blockNumber;
+    // getBlockData reads the hash index and block metadata separately, so the height alone is not enough.
+    if (
+      !block ||
+      number === undefined ||
+      !block.blockHash.equals(hash) ||
+      (expectedNumber !== undefined && number !== expectedNumber)
+    ) {
+      throw new Error(
+        `Reference block ${hash.toString()} not found in the node. This might indicate a reorg has occurred.`,
+      );
     }
-    if (referenceBlockNumber !== undefined) {
-      const refExclusive = referenceBlockNumber + 1;
-      upperExclusive = upperExclusive === undefined ? refExclusive : Math.min(upperExclusive, refExclusive);
-    }
+    return number;
+  }
+
+  async #scanQuery(
+    query: ResolvedLogsQuery<PrivateLogsQuery> | ResolvedLogsQuery<PublicLogsQuery>,
+    contractHex: string | undefined,
+    upperExclusive: number | undefined,
+  ): Promise<LogResult[][]> {
+    const tags: TagQuery<Tag | SiloedTag>[] = query.tags ?? [];
+    const primaryMap = contractHex !== undefined ? this.#publicLogs : this.#privateLogs;
 
     // Resolve txHash -> (blockNumber, txIndexInBlock) once for the whole query.
     let txLocation: [number, number] | undefined;
@@ -258,8 +275,7 @@ export class LogStore {
     const fromBlock = query.fromBlock ?? INITIAL_L2_BLOCK_NUM;
     const includeEffects = query.includeEffects === true;
 
-    const perTagResults: LogResult[][] = [];
-    for (const tagEntry of tags) {
+    const perTagResults = await asyncPool(TAG_SCAN_CONCURRENCY, tags, async tagEntry => {
       const { tagHex, afterLog } = normalizeTagEntry(tagEntry);
       const prefix = contractHex !== undefined ? encodePublicPrefix(contractHex, tagHex) : tagHex;
 
@@ -284,6 +300,10 @@ export class LogStore {
       for await (const [rawKey, rawVal] of primaryMap.entriesAsync({ start, end, limit })) {
         const tail = decodeKeyTail(rawKey);
         const value = decodeValue(rawVal);
+        // A reorg can replace the transaction at the resolved position before the cursor opens.
+        if (query.txHash && !value.txHash.equals(query.txHash)) {
+          continue;
+        }
         out.push({
           logData: value.logData,
           blockNumber: tail.blockNumber,
@@ -294,8 +314,8 @@ export class LogStore {
           logIndexWithinTx: tail.logIndexWithinTx,
         });
       }
-      perTagResults.push(out);
-    }
+      return out;
+    });
 
     if (includeEffects) {
       // Dedupe by txHash across the entire page so a tx with many tagged logs costs one fetch.
@@ -329,14 +349,12 @@ export class LogStore {
    * counts without depending on the removed `getPublicLogs(LogFilter)` API.
    */
   getPrivateLogsForBlock(blockNumber: number): Promise<LogResult[]> {
-    return this.db.transactionAsync(() =>
-      this.#readBlockLogs(this.#privateKeysByBlock, this.#privateLogs, blockNumber),
-    );
+    return this.#readBlockLogs(this.#privateKeysByBlock, this.#privateLogs, blockNumber);
   }
 
   /** {@inheritDoc LogStore.getPrivateLogsForBlock} */
   getPublicLogsForBlock(blockNumber: number): Promise<LogResult[]> {
-    return this.db.transactionAsync(() => this.#readBlockLogs(this.#publicKeysByBlock, this.#publicLogs, blockNumber));
+    return this.#readBlockLogs(this.#publicKeysByBlock, this.#publicLogs, blockNumber);
   }
 
   async #readBlockLogs(
@@ -344,29 +362,32 @@ export class LogStore {
     primaryMap: AztecAsyncMap<string, Buffer>,
     blockNumber: number,
   ): Promise<LogResult[]> {
-    const keys = await keysByBlock.getAsync(blockNumber);
-    if (!keys || keys.length === 0) {
-      return [];
-    }
-    const results: LogResult[] = [];
-    for (const key of keys) {
-      const raw = await primaryMap.getAsync(key);
-      if (!raw) {
-        continue;
+    // Hold the writer queue so a replacement block cannot reuse primary keys from the old block's index.
+    return this.db.transactionAsync(async () => {
+      const keys = await keysByBlock.getAsync(blockNumber);
+      if (!keys || keys.length === 0) {
+        return [];
       }
-      const tail = decodeKeyTail(key);
-      const value = decodeValue(raw);
-      results.push({
-        logData: value.logData,
-        blockNumber: tail.blockNumber,
-        blockHash: value.blockHash,
-        blockTimestamp: value.blockTimestamp,
-        txHash: value.txHash,
-        txIndexWithinBlock: tail.txIndexWithinBlock,
-        logIndexWithinTx: tail.logIndexWithinTx,
-      });
-    }
-    return results;
+      const results: LogResult[] = [];
+      for (const key of keys) {
+        const raw = await primaryMap.getAsync(key);
+        if (!raw) {
+          continue;
+        }
+        const tail = decodeKeyTail(key);
+        const value = decodeValue(raw);
+        results.push({
+          logData: value.logData,
+          blockNumber: tail.blockNumber,
+          blockHash: value.blockHash,
+          blockTimestamp: value.blockTimestamp,
+          txHash: value.txHash,
+          txIndexWithinBlock: tail.txIndexWithinBlock,
+          logIndexWithinTx: tail.logIndexWithinTx,
+        });
+      }
+      return results;
+    });
   }
 }
 
