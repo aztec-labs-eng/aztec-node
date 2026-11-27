@@ -36,7 +36,7 @@ export class ProverPublisherFactory {
    * @returns A new ProverNodePublisher instance.
    */
   public async create(opts?: { requireAffordableSubmission?: boolean }): Promise<ProverNodePublisher> {
-    const { publisher: l1Publisher } = await this.deps.publisherManager.getAvailablePublisher(undefined, {
+    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher(undefined, {
       requirement: opts?.requireAffordableSubmission ? SUBMIT_EPOCH_PROOF_REQUIREMENT : undefined,
     });
     return new ProverNodePublisher(
