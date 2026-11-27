@@ -212,6 +212,8 @@ Note that changes to _internal_ interfaces, e.g. the aztec-nr <> PXE oracle inte
 
 #### New features
 
+- **`aztec start` takes `--host` / `AZTEC_HOST` and `--admin-host` / `AZTEC_ADMIN_HOST`**. They set the address the JSON-RPC server and the admin JSON-RPC server listen on. Both still listen on all interfaces by default, so a local network started with `aztec start --local-network` is reachable from the rest of the LAN. Pass `--host 127.0.0.1 --admin-host 127.0.0.1` to keep it on the machine.
+
 #### Breaking changes
 
 - **`aztec get-l1-to-l2-message-witness` takes `--private-content` in place of `--secret`** ([#689](https://github.com/aztec-labs-eng/aztec-node/pull/689)). The flag takes one or more fields, the message's private content. For a fee juice or token bridge claim, that is the claim secret. A script that still passes `--secret` fails.

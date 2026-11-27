@@ -108,6 +108,7 @@ export async function aztecStart(options: any, userLog: LogFn, debugLogger: Logg
       corsAllowedOrigins: getRpcCorsAllowedOrigins(options),
     });
     const { port } = await startHttpRpcServer(rpcServer, {
+      host: options.host,
       port: options.port,
       keepAliveTimeoutMs: options.rpcHttpKeepAliveTimeoutMs,
       headersTimeoutMs: options.rpcHttpHeadersTimeoutMs,
@@ -145,7 +146,7 @@ export async function aztecStart(options: any, userLog: LogFn, debugLogger: Logg
       maxBatchSize: options.rpcMaxBatchSize,
       maxBodySizeBytes: options.rpcMaxBodySize,
     });
-    const { port } = await startHttpRpcServer(rpcServer, { port: options.adminPort });
+    const { port } = await startHttpRpcServer(rpcServer, { host: options.adminHost, port: options.adminPort });
     debugLogger.info(`Aztec Server admin API listening on port ${port}`, versions);
 
     // Display the API key after the server has started

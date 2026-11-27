@@ -32,6 +32,12 @@ setting it starts with the default of 30s rather than the value it was given.
 
 ## Unreleased
 
+### New `--host` / `AZTEC_HOST` and `--admin-host` / `AZTEC_ADMIN_HOST` options
+
+`aztec start` can now bind its JSON-RPC server and its admin JSON-RPC server to a specific address. For example, set `AZTEC_ADMIN_HOST=127.0.0.1` to keep the admin API off the network while the public RPC stays reachable. Both default to unset, which listens on all interfaces as before.
+
+**Migration**: none.
+
 ### `SEQ_SKIP_PROPOSING_ON_FEE_MISMATCH` defaults to `true`
 
 Sequencers now log when their publisher bid cannot cover the observed L1 execution base fee plus the estimated competitive tip, or the blob base fee. If the RPC-based tip sanity cap binds, a higher median tip from the last five mined blocks is also considered. By default they forgo that slot before advertising any blocks. This is a prediction: a cheaper bid might still have landed. The setting does not change bids or stop attempts to publish work already advertised. The counter `aztec.sequencer.l1_fee_mismatch_count` counts affected target slots once, labelled by `aztec.sequencer.fee_mismatch_skip_enabled` (`false` for observation only, `true` for enforcement).
